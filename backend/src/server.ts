@@ -6,16 +6,6 @@ import { createServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 import path from 'path';
 
-// Routes
-import assistantRoutes from './routes/assistant';
-import ordersRoutes from './routes/orders';
-import inventoryRoutes from './routes/inventory';
-import menuRoutes from './routes/menu';
-import tasksRoutes from './routes/tasks';
-import syncRoutes from './routes/sync';
-import receiptsRoutes from './routes/receipts';
-import auditRoutes from './routes/audit';
-
 // Services
 import { DatabaseService } from './services/DatabaseService';
 import { logger } from './utils/logger';
@@ -32,13 +22,38 @@ const io = new SocketIOServer(server, {
 
 const PORT = process.env.PORT || 3002;
 
-// Initialize database
-DatabaseService.initialize().then(() => {
-  logger.info('Database initialized successfully');
-}).catch((error) => {
-  logger.error('Failed to initialize database:', error);
-  process.exit(1);
-});
+// Initialize database first, then load routes
+async function initializeServer() {
+  try {
+    await DatabaseService.initialize();
+    logger.info('Database initialized successfully');
+    
+    // Now load routes after database is ready
+    const { default: assistantRoutes } = await import('./routes/assistant');
+    const { default: ordersRoutes } = await import('./routes/orders');
+    const { default: inventoryRoutes } = await import('./routes/inventory');
+    const { default: menuRoutes } = await import('./routes/menu');
+    const { default: tasksRoutes } = await import('./routes/tasks');
+    const { default: syncRoutes } = await import('./routes/sync');
+    const { default: receiptsRoutes } = await import('./routes/receipts');
+    const { default: auditRoutes } = await import('./routes/audit');
+    
+    // API Routes
+    app.use('/api/assistant', assistantRoutes);
+    app.use('/api/orders', ordersRoutes);
+    app.use('/api/inventory', inventoryRoutes);
+    app.use('/api/menu', menuRoutes);
+    app.use('/api/tasks', tasksRoutes);
+    app.use('/api/sync', syncRoutes);
+    app.use('/api/receipts', receiptsRoutes);
+    app.use('/api/audit', auditRoutes);
+    
+    logger.info('Routes loaded successfully');
+  } catch (error) {
+    logger.error('Failed to initialize server:', error);
+    process.exit(1);
+  }
+}
 
 // Middleware
 app.use(helmet({
@@ -72,15 +87,7 @@ io.on('connection', (socket) => {
 // Make io available to routes
 app.set('socketio', io);
 
-// API Routes
-app.use('/api/assistant', assistantRoutes);
-app.use('/api/orders', ordersRoutes);
-app.use('/api/inventory', inventoryRoutes);
-app.use('/api/menu', menuRoutes);
-app.use('/api/tasks', tasksRoutes);
-app.use('/api/sync', syncRoutes);
-app.use('/api/receipts', receiptsRoutes);
-app.use('/api/audit', auditRoutes);
+// Routes will be loaded after database initialization
 
 // Health check
 app.get('/health', (req, res) => {
@@ -121,12 +128,17 @@ app.use('*', (req, res) => {
   });
 });
 
-// Start server
-server.listen(PORT, () => {
-  logger.info(`🚀 Servio Backend Server running on port ${PORT}`);
-  logger.info(`📱 Assistant API: http://localhost:${PORT}/api/assistant`);
-  logger.info(`🔧 Health Check: http://localhost:${PORT}/health`);
-  logger.info(`📋 API Docs: http://localhost:${PORT}/api`);
+// Initialize server and start listening
+initializeServer().then(() => {
+  server.listen(PORT, () => {
+    logger.info(`🚀 Servio Backend Server running on port ${PORT}`);
+    logger.info(`📱 Assistant API: http://localhost:${PORT}/api/assistant`);
+    logger.info(`🔧 Health Check: http://localhost:${PORT}/health`);
+    logger.info(`📋 API Docs: http://localhost:${PORT}/api`);
+  });
+}).catch((error) => {
+  logger.error('Failed to start server:', error);
+  process.exit(1);
 });
 
 // Graceful shutdown

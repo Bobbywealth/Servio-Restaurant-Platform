@@ -51,13 +51,19 @@ interface Order {
 
 export class AssistantService {
   private openai: OpenAI;
-  private db: any;
+  private _db: any = null;
 
   constructor() {
     this.openai = new OpenAI({
       apiKey: process.env.OPENAI_API_KEY || ''
     });
-    this.db = DatabaseService.getInstance().getDatabase();
+  }
+
+  private get db() {
+    if (!this._db) {
+      this._db = DatabaseService.getInstance().getDatabase();
+    }
+    return this._db;
   }
 
   async processAudio(audioBuffer: Buffer, userId: string): Promise<AssistantResponse> {
