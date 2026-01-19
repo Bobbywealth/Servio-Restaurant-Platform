@@ -58,7 +58,8 @@ const io = new socket_io_1.Server(server, {
     cors: {
         origin: [
             process.env.FRONTEND_URL || "http://localhost:3000",
-            "https://serviorestaurantplatform.netlify.app"
+            "https://serviorestaurantplatform.netlify.app",
+            "https://servio-app.onrender.com"
         ],
         methods: ["GET", "POST"],
         credentials: true
@@ -148,7 +149,8 @@ app.use((0, helmet_1.default)({
 app.use((0, cors_1.default)({
     origin: [
         process.env.FRONTEND_URL || "http://localhost:3000",
-        "https://serviorestaurantplatform.netlify.app"
+        "https://serviorestaurantplatform.netlify.app",
+        "https://servio-app.onrender.com"
     ],
     credentials: true,
     optionsSuccessStatus: 200,
