@@ -1,11 +1,41 @@
-const CACHE_NAME = 'servio-v1.0.0'
+// LIGHTNING FAST CACHING VERSION
+const CACHE_NAME = 'servio-v2.0.0-turbo'
+const STATIC_CACHE_NAME = 'servio-static-v2.0.0'
+const DYNAMIC_CACHE_NAME = 'servio-dynamic-v2.0.0'
+const API_CACHE_NAME = 'servio-api-v2.0.0'
+const IMAGE_CACHE_NAME = 'servio-images-v2.0.0'
+
+// AGGRESSIVE PRE-CACHING
 const STATIC_CACHE_URLS = [
   '/',
-  '/dashboard',
-  '/dashboard/assistant',
-  '/offline',
-  '/manifest.json'
+  '/dashboard/',
+  '/dashboard/assistant/',
+  '/dashboard/orders/',
+  '/dashboard/timeclock/',
+  '/offline/',
+  '/manifest.json',
+  // Pre-cache critical assets
+  '/_next/static/css/',
+  '/_next/static/chunks/',
+  '/_next/static/media/'
 ]
+
+// CACHE STRATEGIES
+const CACHE_STRATEGIES = {
+  CACHE_FIRST: 'cache-first',
+  NETWORK_FIRST: 'network-first', 
+  STALE_WHILE_REVALIDATE: 'stale-while-revalidate',
+  NETWORK_ONLY: 'network-only',
+  CACHE_ONLY: 'cache-only'
+}
+
+// CACHE EXPIRATION TIMES
+const CACHE_EXPIRATION = {
+  STATIC: 365 * 24 * 60 * 60 * 1000, // 1 year
+  DYNAMIC: 24 * 60 * 60 * 1000,      // 1 day
+  API: 5 * 60 * 1000,                // 5 minutes
+  IMAGES: 30 * 24 * 60 * 60 * 1000   // 30 days
+}
 
 // Install event
 self.addEventListener('install', (event) => {
