@@ -237,6 +237,24 @@ export class DatabaseService {
             error_message TEXT,
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             completed_at TIMESTAMPTZ
+          )`,
+          `CREATE TABLE IF NOT EXISTS integrations (
+            id TEXT PRIMARY KEY,
+            name TEXT UNIQUE NOT NULL,
+            api_type TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('active', 'inactive', 'pending', 'error')),
+            protocol TEXT DEFAULT 'json' CHECK (protocol IN ('json', 'xml', 'rest', 'webhook')),
+            protocol_version TEXT DEFAULT 'v1',
+            endpoint TEXT,
+            contact_email TEXT,
+            description TEXT,
+            reference_id TEXT UNIQUE NOT NULL,
+            restaurant_key TEXT NOT NULL,
+            master_key TEXT NOT NULL,
+            config TEXT NOT NULL DEFAULT '{}',
+            last_sync TIMESTAMPTZ,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
           )`
         ]
       : [
@@ -344,6 +362,24 @@ export class DatabaseService {
             error_message TEXT,
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             completed_at TEXT
+          )`,
+          `CREATE TABLE IF NOT EXISTS integrations (
+            id TEXT PRIMARY KEY,
+            name TEXT UNIQUE NOT NULL,
+            api_type TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('active', 'inactive', 'pending', 'error')),
+            protocol TEXT DEFAULT 'json' CHECK (protocol IN ('json', 'xml', 'rest', 'webhook')),
+            protocol_version TEXT DEFAULT 'v1',
+            endpoint TEXT,
+            contact_email TEXT,
+            description TEXT,
+            reference_id TEXT UNIQUE NOT NULL,
+            restaurant_key TEXT NOT NULL,
+            master_key TEXT NOT NULL,
+            config TEXT NOT NULL DEFAULT '{}',
+            last_sync TEXT,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
           )`
         ];
 
@@ -415,6 +451,15 @@ export class DatabaseService {
       'CREATE INDEX IF NOT EXISTS idx_sync_status ON sync_jobs(status)',
       'CREATE INDEX IF NOT EXISTS idx_sync_type ON sync_jobs(type)',
       'CREATE INDEX IF NOT EXISTS idx_sync_created ON sync_jobs(created_at)',
+
+      // INTEGRATION INDEXES
+      'CREATE INDEX IF NOT EXISTS idx_integrations_name ON integrations(name)',
+      'CREATE INDEX IF NOT EXISTS idx_integrations_status ON integrations(status)',
+      'CREATE INDEX IF NOT EXISTS idx_integrations_api_type ON integrations(api_type)',
+      'CREATE INDEX IF NOT EXISTS idx_integrations_reference_id ON integrations(reference_id)',
+      'CREATE INDEX IF NOT EXISTS idx_integrations_restaurant_key ON integrations(restaurant_key)',
+      'CREATE INDEX IF NOT EXISTS idx_integrations_created ON integrations(created_at)',
+      'CREATE INDEX IF NOT EXISTS idx_integrations_last_sync ON integrations(last_sync)',
 
       // BREAK INDEXES
       'CREATE INDEX IF NOT EXISTS idx_breaks_entry ON time_entry_breaks(time_entry_id)',

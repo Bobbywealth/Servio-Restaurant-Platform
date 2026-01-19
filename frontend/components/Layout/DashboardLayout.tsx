@@ -23,7 +23,8 @@ import {
   ChevronRight,
   UtensilsCrossed,
   Mail,
-  Store
+  Store,
+  Wifi
 } from 'lucide-react'
 
 interface DashboardLayoutProps {
@@ -95,6 +96,13 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       icon: Users,
       description: 'Team & schedules',
       color: 'text-purple-500'
+    },
+    {
+      name: 'Integrations',
+      href: '/dashboard/integrations',
+      icon: Wifi,
+      description: 'API connections',
+      color: 'text-cyan-500'
     },
     {
       name: 'Settings',

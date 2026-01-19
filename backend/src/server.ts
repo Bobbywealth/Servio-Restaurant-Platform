@@ -1,3 +1,7 @@
+// Load environment variables first
+import dotenv from 'dotenv';
+dotenv.config();
+
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -17,8 +21,9 @@ const app = express();
 const server = createServer(app);
 const io = new SocketIOServer(server, {
   cors: {
-    origin: process.env.FRONTEND_URL || "http://localhost:3003",
-    methods: ["GET", "POST"]
+    origin: process.env.FRONTEND_URL || "http://localhost:3000",
+    methods: ["GET", "POST"],
+    credentials: true
   }
 });
 
@@ -43,9 +48,24 @@ async function initializeServer() {
     const { default: timeclockRoutes } = await import('./routes/timeclock');
     const { default: marketingRoutes } = await import('./routes/marketing');
     const { default: restaurantRoutes } = await import('./routes/restaurant');
+    const { default: integrationsRoutes } = await import('./routes/integrations');
+    const { default: vapiRoutes } = await import('./routes/vapi');
 
     // API Routes
     app.use('/api/auth', authRoutes);
+    
+    // Vapi webhook routes (no auth required for external webhooks)
+    app.use('/api/vapi', vapiRoutes);
+    
+    // Debug: Add a test auth route to verify mounting
+    app.get('/api/auth/test', (req, res) => {
+      res.json({ message: 'Auth routes are mounted correctly' });
+    });
+    
+    // Debug: Test direct route without auth prefix
+    app.get('/debug-route', (req, res) => {
+      res.json({ message: 'Direct route works' });
+    });
 
     // Protected routes
     app.use('/api/assistant', requireAuth, assistantRoutes);
@@ -59,6 +79,15 @@ async function initializeServer() {
     app.use('/api/timeclock', requireAuth, timeclockRoutes);
     app.use('/api/marketing', requireAuth, marketingRoutes);
     app.use('/api/restaurant', requireAuth, restaurantRoutes);
+    app.use('/api/integrations', requireAuth, integrationsRoutes);
+
+    // 404 handler (must be last)
+    app.use((req, res) => {
+      res.status(404).json({
+        error: 'Not Found',
+        message: `Route ${req.method} ${req.originalUrl} not found`
+      });
+    });
 
     logger.info('Routes loaded successfully');
   } catch (error) {
@@ -86,7 +115,7 @@ app.use(helmet({
 }));
 
 app.use(cors({
-  origin: process.env.FRONTEND_URL || "http://localhost:3003",
+  origin: process.env.FRONTEND_URL || "http://localhost:3000",
   credentials: true,
   optionsSuccessStatus: 200,
   preflightContinue: false,
@@ -236,7 +265,8 @@ app.get('/api', (req, res) => {
       audit: '/api/audit',
       timeclock: '/api/timeclock',
       marketing: '/api/marketing',
-      restaurant: '/api/restaurant'
+      restaurant: '/api/restaurant',
+      integrations: '/api/integrations'
     }
   });
 });
@@ -244,13 +274,7 @@ app.get('/api', (req, res) => {
 // Error handling
 app.use(errorHandler);
 
-// 404 handler
-app.use('*', (req, res) => {
-  res.status(404).json({
-    error: 'Not Found',
-    message: `Route ${req.method} ${req.originalUrl} not found`
-  });
-});
+// 404 handler moved to initializeServer() to ensure it comes after route registration
 
 // Initialize server and start listening
 initializeServer().then(() => {

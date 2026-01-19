@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: servio-backend
+    env: node
+    region: oregon
+    plan: free
+    buildCommand: cd backend && npm install && npm run build
+    startCommand: cd backend && npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3002
+      - key: FRONTEND_URL
+        fromService:
+          type: web
+          name: servio-frontend
+          property: host
+      - key: JWT_SECRET
+        generateValue: true
+      - key: OPENAI_API_KEY
+        sync: false
+    disk:
+      name: servio-data
+      mountPath: /app/backend/data
+      sizeGB: 1

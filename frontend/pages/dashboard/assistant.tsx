@@ -5,8 +5,10 @@ import RealisticAvatar from '../../components/Assistant/RealisticAvatar'
 import MicrophoneButton from '../../components/Assistant/MicrophoneButton'
 import TranscriptFeed, { TranscriptMessage } from '../../components/Assistant/TranscriptFeed'
 import QuickCommands from '../../components/Assistant/QuickCommands'
+import ChatInput, { QuickSuggestions } from '../../components/Assistant/ChatInput'
 import { useUser } from '../../contexts/UserContext'
 import { api } from '../../lib/api'
+import { WakeWordService, isWakeWordSupported, getDefaultWakeWordConfig } from '../../lib/WakeWordService'
 
 interface AssistantState {
   isRecording: boolean
@@ -14,6 +16,9 @@ interface AssistantState {
   isSpeaking: boolean
   messages: TranscriptMessage[]
   currentAudioUrl: string | null
+  wakeWordEnabled: boolean
+  isListeningForWakeWord: boolean
+  wakeWordSupported: boolean
 }
 
 export default function AssistantPage() {
@@ -23,7 +28,10 @@ export default function AssistantPage() {
     isProcessing: false,
     isSpeaking: false,
     messages: [],
-    currentAudioUrl: null
+    currentAudioUrl: null,
+    wakeWordEnabled: false,
+    isListeningForWakeWord: false,
+    wakeWordSupported: isWakeWordSupported()
   })
 
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null)
@@ -35,6 +43,7 @@ export default function AssistantPage() {
   const analyserRef = useRef<AnalyserNode | null>(null)
   const mediaSourceRef = useRef<MediaElementAudioSourceNode | null>(null)
   const rafRef = useRef<number | null>(null)
+  const wakeWordServiceRef = useRef<WakeWordService | null>(null)
 
   const resolveAudioUrl = useCallback((audioUrl: string) => {
     // Backend returns /uploads/...; make it absolute for the browser.
@@ -308,6 +317,11 @@ export default function AssistantPage() {
         audioContextRef.current.close().catch(() => {})
         audioContextRef.current = null
       }
+      // Cleanup wake word service
+      if (wakeWordServiceRef.current) {
+        wakeWordServiceRef.current.cleanup()
+        wakeWordServiceRef.current = null
+      }
     }
   }, [stopAudio])
 
@@ -404,6 +418,124 @@ export default function AssistantPage() {
     }
   }, [user?.id, addMessage, playAudio])
 
+  // Wake word handling functions
+  const initializeWakeWordService = useCallback(async () => {
+    if (!state.wakeWordSupported) {
+      console.warn('Wake word detection not supported in this browser');
+      return false;
+    }
+
+    try {
+      const config = getDefaultWakeWordConfig();
+      
+      wakeWordServiceRef.current = new WakeWordService({
+        ...config,
+        onWakeWordDetected: (detectedPhrase: string) => {
+          console.log(`Wake word detected: "${detectedPhrase}"`);
+          
+          // Add wake word detection message
+          addMessage({
+            type: 'system',
+            content: `👂 Wake word detected: "${detectedPhrase}"`,
+            metadata: {
+              action: {
+                type: 'wake_word',
+                status: 'completed'
+              }
+            }
+          });
+
+          // Check if there's a command after the wake word
+          const colonIndex = detectedPhrase.indexOf(':');
+          if (colonIndex > -1) {
+            const command = detectedPhrase.substring(colonIndex + 1).trim();
+            if (command) {
+              // Process the command automatically
+              handleQuickCommand(command);
+            }
+          } else {
+            // Just wake word detected, start listening for command
+            startRecording();
+          }
+        },
+        onError: (error: Error) => {
+          console.error('Wake word error:', error);
+          addMessage({
+            type: 'system',
+            content: `Wake word error: ${error.message}`,
+            metadata: {
+              action: {
+                type: 'error',
+                status: 'error'
+              }
+            }
+          });
+        },
+        onListeningStateChange: (isListening: boolean) => {
+          setState(prev => ({
+            ...prev,
+            isListeningForWakeWord: isListening
+          }));
+        },
+        onPartialResult: (transcript: string) => {
+          // Optional: Show what's being heard (for debugging)
+          console.log('Wake word listening:', transcript);
+        }
+      } as any);
+
+      const initialized = await wakeWordServiceRef.current.initialize();
+      
+      if (initialized) {
+        console.log('Wake word service initialized successfully');
+        return true;
+      } else {
+        console.error('Failed to initialize wake word service');
+        return false;
+      }
+
+    } catch (error) {
+      console.error('Error initializing wake word service:', error);
+      return false;
+    }
+  }, [state.wakeWordSupported, addMessage, handleQuickCommand, startRecording]);
+
+  const toggleWakeWordListening = useCallback(async () => {
+    if (!wakeWordServiceRef.current) {
+      const initialized = await initializeWakeWordService();
+      if (!initialized) {
+        return;
+      }
+    }
+
+    if (state.isListeningForWakeWord) {
+      await wakeWordServiceRef.current?.stopListening();
+      setState(prev => ({ ...prev, wakeWordEnabled: false }));
+    } else {
+      const started = await wakeWordServiceRef.current?.startListening();
+      if (started) {
+        setState(prev => ({ ...prev, wakeWordEnabled: true }));
+        
+        addMessage({
+          type: 'system',
+          content: '👂 Wake word listening started. Say "Hey Servio" to activate!',
+          metadata: {
+            action: {
+              type: 'wake_word',
+              status: 'completed'
+            }
+          }
+        });
+      }
+    }
+  }, [state.isListeningForWakeWord, initializeWakeWordService, addMessage]);
+
+  // Auto-initialize wake word service on component mount
+  useEffect(() => {
+    if (state.wakeWordSupported) {
+      initializeWakeWordService();
+    }
+  }, [state.wakeWordSupported, initializeWakeWordService]);
+
   return (
     <>
       <Head>
@@ -443,6 +575,45 @@ export default function AssistantPage() {
                   onStopRecording={stopRecording}
                   disabled={!mediaRecorder}
                 />
+
+                {/* Wake Word Controls */}
+                {state.wakeWordSupported && (
+                  <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                        Hey Servio Wake Word
+                      </h3>
+                      <div className={`w-2 h-2 rounded-full ${
+                        state.isListeningForWakeWord ? 'bg-green-500 animate-pulse' : 'bg-gray-300'
+                      }`} />
+                    </div>
+                    
+                    <p className="text-xs text-blue-700 dark:text-blue-300 mb-3">
+                      {state.isListeningForWakeWord 
+                        ? 'Listening for &ldquo;Hey Servio&rdquo;...' 
+                        : 'Click to enable wake word detection'
+                      }
+                    </p>
+
+                    <button
+                      onClick={toggleWakeWordListening}
+                      disabled={state.isRecording || state.isProcessing}
+                      className={`w-full px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                        state.isListeningForWakeWord
+                          ? 'bg-red-500 hover:bg-red-600 text-white'
+                          : 'bg-blue-500 hover:bg-blue-600 text-white'
+                      } disabled:opacity-50 disabled:cursor-not-allowed`}
+                    >
+                      {state.isListeningForWakeWord ? 'Stop Wake Word' : 'Start Wake Word'}
+                    </button>
+
+                    {state.isListeningForWakeWord && (
+                      <div className="mt-2 text-xs text-blue-600 dark:text-blue-400">
+                        💡 Try saying: &ldquo;Hey Servio, no more jerk chicken&rdquo;
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Quick Commands */}
@@ -455,8 +626,9 @@ export default function AssistantPage() {
             </div>
 
             {/* Right Panel - Transcript & Actions */}
-            <div className="lg:col-span-2">
-              <div className="card-mobile h-[60vh] sm:h-[70vh] lg:h-[700px]">
+            <div className="lg:col-span-2 space-y-4">
+              {/* Conversation History */}
+              <div className="card-mobile h-[50vh] sm:h-[55vh] lg:h-[500px]">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100">
                     Conversation
@@ -489,6 +661,39 @@ export default function AssistantPage() {
                   messages={state.messages}
                   className="h-full mobile-scrolling"
                 />
+              </div>
+
+              {/* Chat Input */}
+              <div className="card-mobile">
+                <div className="mb-3">
+                  <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">
+                    💬 Type Command
+                  </h3>
+                  <ChatInput
+                    onSendMessage={handleQuickCommand}
+                    disabled={state.isProcessing || state.isRecording}
+                    placeholder="Type your command... (e.g., 'no more jerk chicken', 'check orders')"
+                  />
+                </div>
+
+                {/* Quick Suggestions */}
+                <QuickSuggestions
+                  suggestions={[
+                    'no more jerk chicken',
+                    'check current orders', 
+                    'what items are 86\'d',
+                    'show inventory levels',
+                    'mark order ready'
+                  ]}
+                  onSuggestionClick={handleQuickCommand}
+                  disabled={state.isProcessing || state.isRecording}
+                  className="mt-3"
+                />
+                
+                <div className="mt-3 text-xs text-gray-500 dark:text-gray-400">
+                  💡 Tip: You can use voice (microphone button) or type commands here. 
+                  {state.wakeWordSupported && ' Enable wake word to say "Hey Servio" followed by your command.'}
+                </div>
               </div>
             </div>
           </div>

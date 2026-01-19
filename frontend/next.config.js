@@ -23,7 +23,6 @@ const nextConfig = {
   // EXPERIMENTAL PERFORMANCE FEATURES
   experimental: {
     optimizePackageImports: ['lucide-react', 'framer-motion'],
-    turbotrace: {},
     scrollRestoration: true,
   },
 
@@ -36,60 +35,11 @@ const nextConfig = {
     return 'servio-' + process.env.NODE_ENV + '-' + Date.now()
   },
 
-  // AGGRESSIVE WEBPACK OPTIMIZATIONS
+  // WEBPACK OPTIMIZATIONS (Serverless-friendly)
   webpack: (config, { dev, isServer }) => {
     // PRODUCTION OPTIMIZATIONS
     if (!dev) {
-      config.optimization = {
-        ...config.optimization,
-        minimize: true,
-        sideEffects: false,
-        usedExports: true,
-        concatenateModules: true,
-        splitChunks: {
-          chunks: 'all',
-          minSize: 20000,
-          minRemainingSize: 0,
-          minChunks: 1,
-          maxAsyncRequests: 30,
-          maxInitialRequests: 30,
-          enforceSizeThreshold: 50000,
-          cacheGroups: {
-            default: {
-              minChunks: 2,
-              priority: -20,
-              reuseExistingChunk: true,
-            },
-            vendor: {
-              test: /[\\/]node_modules[\\/]/,
-              name: 'vendors',
-              priority: -10,
-              chunks: 'all',
-              enforce: true,
-            },
-            react: {
-              test: /[\\/]node_modules[\\/](react|react-dom)[\\/]/,
-              name: 'react',
-              chunks: 'all',
-              priority: 20,
-            },
-            ui: {
-              test: /[\\/]node_modules[\\/](framer-motion|lucide-react)[\\/]/,
-              name: 'ui-libs',
-              chunks: 'all',
-              priority: 15,
-            },
-            commons: {
-              name: 'commons',
-              minChunks: 2,
-              chunks: 'all',
-              priority: 10,
-            },
-          },
-        },
-      }
-
-      // AGGRESSIVE MODULE FEDERATION & TREE SHAKING
+      // Keep default Next.js optimization but ensure dependencies are properly resolved
       config.resolve.alias = {
         ...config.resolve.alias,
         '@': require('path').join(__dirname, '.'),

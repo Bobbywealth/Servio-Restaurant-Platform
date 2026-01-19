@@ -16,7 +16,12 @@ import {
   AlertTriangle,
   Check,
   Eye,
-  EyeOff
+  EyeOff,
+  Download,
+  FileSpreadsheet,
+  FileText,
+  CheckCircle,
+  XCircle
 } from 'lucide-react';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable';
@@ -31,6 +36,8 @@ interface MenuCategory {
   id: string;
   name: string;
   description: string;
+  image?: string;
+  image_alt_text?: string;
   sort_order: number;
   is_active: boolean;
   item_count: number;
@@ -65,6 +72,39 @@ interface MenuItemFormData {
   preparationTime: string;
   images: File[];
   existingImages: string[];
+  modifierGroupIds: string[];
+}
+
+interface MenuImport {
+  id: string;
+  filename: string;
+  file_type: string;
+  status: string;
+  total_rows: number;
+  processed_rows: number;
+  success_count: number;
+  error_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+interface ModifierOption {
+  id: string;
+  name: string;
+  description?: string;
+  price_modifier: number;
+  sort_order: number;
+}
+
+interface ModifierGroup {
+  id: string;
+  name: string;
+  description?: string;
+  min_selections: number;
+  max_selections: number;
+  is_required: boolean;
+  sort_order: number;
+  options: ModifierOption[];
 }
 
 const SortableCategory = ({ category, onEdit, onDelete, onToggle }: {
@@ -101,6 +141,15 @@ const SortableCategory = ({ category, onEdit, onDelete, onToggle }: {
           <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing">
             <GripVertical className="h-5 w-5 text-gray-400" />
           </div>
+          {category.image && (
+            <div className="flex-shrink-0">
+              <img
+                src={category.image}
+                alt={category.image_alt_text || category.name}
+                className="w-12 h-12 object-cover rounded-lg"
+              />
+            </div>
+          )}
           <div className="flex-1">
             <div className="flex items-center space-x-2">
               <h3 className="font-semibold text-gray-900 dark:text-gray-100">
@@ -154,12 +203,28 @@ const SortableCategory = ({ category, onEdit, onDelete, onToggle }: {
 
 const CategoryForm = ({ category, onSave, onCancel }: {
   category?: MenuCategory;
-  onSave: (data: { name: string; description: string }) => void;
+  onSave: (data: { name: string; description: string; imageFile?: File; imageAltText?: string; removeImage?: boolean }) => void;
   onCancel: () => void;
 }) => {
   const [formData, setFormData] = useState({
     name: category?.name || '',
-    description: category?.description || ''
+    description: category?.description || '',
+    imageAltText: category?.image_alt_text || ''
+  });
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(category?.image || null);
+  const [removeImage, setRemoveImage] = useState(false);
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    accept: { 'image/*': [] },
+    maxFiles: 1,
+    onDrop: (acceptedFiles) => {
+      if (acceptedFiles[0]) {
+        setImageFile(acceptedFiles[0]);
+        setImagePreview(URL.createObjectURL(acceptedFiles[0]));
+        setRemoveImage(false);
+      }
+    }
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -168,7 +233,17 @@ const CategoryForm = ({ category, onSave, onCancel }: {
       toast.error('Category name is required');
       return;
     }
-    onSave(formData);
+    onSave({
+      ...formData,
+      imageFile: imageFile || undefined,
+      removeImage
+    });
+  };
+
+  const handleRemoveImage = () => {
+    setImageFile(null);
+    setImagePreview(null);
+    setRemoveImage(true);
   };
 
   return (
@@ -204,6 +279,66 @@ const CategoryForm = ({ category, onSave, onCancel }: {
             rows={3}
           />
         </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+            Category Image
+          </label>
+          
+          {imagePreview && !removeImage && (
+            <div className="mb-4">
+              <div className="relative inline-block">
+                <img
+                  src={imagePreview}
+                  alt="Category preview"
+                  className="w-24 h-24 object-cover rounded-lg"
+                />
+                <button
+                  type="button"
+                  onClick={handleRemoveImage}
+                  className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div
+            {...getRootProps()}
+            className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
+              isDragActive
+                ? 'border-primary-400 bg-primary-50 dark:bg-primary-900/20'
+                : 'border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500'
+            }`}
+          >
+            <input {...getInputProps()} />
+            <Upload className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              {isDragActive
+                ? 'Drop image here...'
+                : 'Click or drag image here'}
+            </p>
+            <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
+              Supports: JPG, PNG, WebP
+            </p>
+          </div>
+        </div>
+
+        {(imagePreview || imageFile) && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Alt Text (for accessibility)
+            </label>
+            <input
+              type="text"
+              value={formData.imageAltText}
+              onChange={(e) => setFormData({ ...formData, imageAltText: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+              placeholder="Describe the image for screen readers"
+            />
+          </div>
+        )}
         <div className="flex items-center justify-end space-x-3">
           <button
             type="button"
@@ -303,9 +438,10 @@ const MenuItemCard = ({ item, onEdit, onToggle }: {
   </motion.div>
 );
 
-const MenuItemForm = ({ item, categories, onSave, onCancel }: {
+const MenuItemForm = ({ item, categories, modifierGroups, onSave, onCancel }: {
   item?: MenuItem;
   categories: MenuCategory[];
+  modifierGroups: ModifierGroup[];
   onSave: (data: MenuItemFormData) => void;
   onCancel: () => void;
 }) => {
@@ -318,8 +454,34 @@ const MenuItemForm = ({ item, categories, onSave, onCancel }: {
     allergens: item?.allergens || [],
     preparationTime: item?.preparation_time?.toString() || '0',
     images: [],
-    existingImages: item?.images || []
+    existingImages: item?.images || [],
+    modifierGroupIds: []
   });
+  
+  const [existingModifiers, setExistingModifiers] = useState<ModifierGroup[]>([]);
+  const [loadingModifiers, setLoadingModifiers] = useState(false);
+
+  // Fetch existing modifiers for the item
+  useEffect(() => {
+    if (item?.id) {
+      setLoadingModifiers(true);
+      fetch(`/api/menu/items/${item.id}/modifiers`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      })
+        .then(res => res.json())
+        .then(data => {
+          if (data.success) {
+            setExistingModifiers(data.data);
+            setFormData(prev => ({
+              ...prev,
+              modifierGroupIds: data.data.map((mod: any) => mod.id)
+            }));
+          }
+        })
+        .catch(console.error)
+        .finally(() => setLoadingModifiers(false));
+    }
+  }, [item?.id]);
 
   const commonAllergens = [
     'Gluten', 'Dairy', 'Eggs', 'Fish', 'Shellfish', 'Tree Nuts', 'Peanuts', 'Soy', 'Sesame'
@@ -496,6 +658,102 @@ const MenuItemForm = ({ item, categories, onSave, onCancel }: {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+                Modifiers & Add-ons
+              </label>
+              {loadingModifiers ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-500"></div>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {modifierGroups.length === 0 ? (
+                    <p className="text-gray-500 dark:text-gray-400 text-sm">
+                      No modifier groups available. Create modifier groups in the settings to add customization options.
+                    </p>
+                  ) : (
+                    modifierGroups.map(group => {
+                      const isSelected = formData.modifierGroupIds.includes(group.id);
+                      return (
+                        <div
+                          key={group.id}
+                          className={`border rounded-lg p-4 transition-colors ${
+                            isSelected
+                              ? 'border-primary-300 bg-primary-50 dark:bg-primary-900/20 dark:border-primary-700'
+                              : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
+                          }`}
+                        >
+                          <div className="flex items-start space-x-3">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={(e) => {
+                                const newIds = e.target.checked
+                                  ? [...formData.modifierGroupIds, group.id]
+                                  : formData.modifierGroupIds.filter(id => id !== group.id);
+                                setFormData({ ...formData, modifierGroupIds: newIds });
+                              }}
+                              className="mt-1 h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                            />
+                            <div className="flex-1">
+                              <div className="flex items-center space-x-2">
+                                <h4 className="font-medium text-gray-900 dark:text-gray-100">
+                                  {group.name}
+                                </h4>
+                                {group.is_required && (
+                                  <span className="text-xs bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200 px-2 py-1 rounded-full">
+                                    Required
+                                  </span>
+                                )}
+                              </div>
+                              {group.description && (
+                                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                                  {group.description}
+                                </p>
+                              )}
+                              <div className="flex items-center space-x-4 mt-2 text-xs text-gray-500 dark:text-gray-400">
+                                <span>
+                                  {group.min_selections === group.max_selections
+                                    ? `Select ${group.min_selections}`
+                                    : `Select ${group.min_selections}-${group.max_selections}`}
+                                </span>
+                                <span>{group.options.length} options</span>
+                              </div>
+                              {isSelected && group.options.length > 0 && (
+                                <div className="mt-3 p-3 bg-white dark:bg-gray-700 rounded border">
+                                  <p className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                    Available Options:
+                                  </p>
+                                  <div className="space-y-1">
+                                    {group.options.slice(0, 3).map(option => (
+                                      <div key={option.id} className="flex items-center justify-between text-sm">
+                                        <span className="text-gray-600 dark:text-gray-400">{option.name}</span>
+                                        <span className="text-green-600 font-medium">
+                                          {option.price_modifier > 0 ? `+$${option.price_modifier.toFixed(2)}` :
+                                           option.price_modifier < 0 ? `-$${Math.abs(option.price_modifier).toFixed(2)}` :
+                                           'Free'}
+                                        </span>
+                                      </div>
+                                    ))}
+                                    {group.options.length > 3 && (
+                                      <p className="text-xs text-gray-500">
+                                        +{group.options.length - 3} more options
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
                 Images
               </label>
               
@@ -594,16 +852,314 @@ const MenuItemForm = ({ item, categories, onSave, onCancel }: {
   );
 };
 
+const BulkMenuUpload = ({ onClose, onImportComplete }: {
+  onClose: () => void;
+  onImportComplete: () => void;
+}) => {
+  const [isUploading, setIsUploading] = useState(false);
+  const [importResult, setImportResult] = useState<any>(null);
+  const [importHistory, setImportHistory] = useState<MenuImport[]>([]);
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    accept: {
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
+      'application/vnd.ms-excel': ['.xls'],
+      'text/csv': ['.csv']
+    },
+    maxFiles: 1,
+    onDrop: async (acceptedFiles) => {
+      if (acceptedFiles[0]) {
+        await handleFileUpload(acceptedFiles[0]);
+      }
+    }
+  });
+
+  const fetchImportHistory = useCallback(async () => {
+    try {
+      const response = await fetch('/api/menu/imports', {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      const data = await response.json();
+      if (data.success) {
+        setImportHistory(data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching import history:', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchImportHistory();
+  }, [fetchImportHistory]);
+
+  const handleFileUpload = async (file: File) => {
+    setIsUploading(true);
+    setImportResult(null);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await fetch('/api/menu/import', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('token')}`
+        },
+        body: formData
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setImportResult(data.data);
+        toast.success(`Import completed: ${data.data.successCount} items added`);
+        onImportComplete();
+        fetchImportHistory();
+      } else {
+        toast.error(data.error?.message || 'Import failed');
+      }
+    } catch (error) {
+      console.error('Error uploading file:', error);
+      toast.error('Failed to upload file');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const downloadTemplate = () => {
+    const csvContent = `name,category,description,price,cost,preparation_time
+"Grilled Chicken Sandwich","Sandwiches","Juicy grilled chicken breast with lettuce and tomato",12.99,5.50,15
+"Caesar Salad","Salads","Fresh romaine lettuce with caesar dressing and croutons",9.99,3.25,5
+"Margherita Pizza","Pizza","Classic pizza with tomato sauce, mozzarella, and basil",15.99,6.00,20`;
+
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'menu_template.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.95 }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50"
+    >
+      <div className="bg-white dark:bg-gray-800 rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+              Bulk Menu Import
+            </h2>
+            <button
+              onClick={onClose}
+              className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-lg"
+            >
+              <X className="h-6 w-6" />
+            </button>
+          </div>
+
+          <div className="space-y-6">
+            {/* Template Download */}
+            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-medium text-blue-900 dark:text-blue-100">
+                    Need a template?
+                  </h3>
+                  <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
+                    Download our CSV template to get started with your menu import.
+                  </p>
+                </div>
+                <button
+                  onClick={downloadTemplate}
+                  className="flex items-center space-x-2 bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors"
+                >
+                  <Download className="h-4 w-4" />
+                  <span>Download Template</span>
+                </button>
+              </div>
+            </div>
+
+            {/* File Upload */}
+            <div>
+              <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">
+                Upload Menu File
+              </h3>
+              <div
+                {...getRootProps()}
+                className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
+                  isDragActive
+                    ? 'border-primary-400 bg-primary-50 dark:bg-primary-900/20'
+                    : 'border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500'
+                } ${isUploading ? 'pointer-events-none opacity-50' : ''}`}
+              >
+                <input {...getInputProps()} disabled={isUploading} />
+                {isUploading ? (
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500 mx-auto mb-4"></div>
+                ) : (
+                  <Upload className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                )}
+                <p className="text-gray-600 dark:text-gray-400 mb-2">
+                  {isDragActive
+                    ? 'Drop your file here...'
+                    : isUploading
+                    ? 'Processing your file...'
+                    : 'Click or drag your menu file here'}
+                </p>
+                <p className="text-sm text-gray-500 dark:text-gray-500">
+                  Supports: Excel (.xlsx, .xls) and CSV (.csv) files
+                </p>
+              </div>
+            </div>
+
+            {/* Import Result */}
+            {importResult && (
+              <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
+                <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-3">
+                  Import Results
+                </h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                      {importResult.totalRows}
+                    </div>
+                    <div className="text-sm text-gray-600 dark:text-gray-400">Total Rows</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-green-600">
+                      {importResult.successCount}
+                    </div>
+                    <div className="text-sm text-gray-600 dark:text-gray-400">Success</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-red-600">
+                      {importResult.errorCount}
+                    </div>
+                    <div className="text-sm text-gray-600 dark:text-gray-400">Errors</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-blue-600">
+                      {Math.round((importResult.successCount / importResult.totalRows) * 100)}%
+                    </div>
+                    <div className="text-sm text-gray-600 dark:text-gray-400">Success Rate</div>
+                  </div>
+                </div>
+
+                {importResult.errors && importResult.errors.length > 0 && (
+                  <div>
+                    <h4 className="font-medium text-red-900 dark:text-red-100 mb-2">
+                      Errors ({importResult.errors.length} shown)
+                    </h4>
+                    <div className="space-y-2 max-h-40 overflow-y-auto">
+                      {importResult.errors.map((error: any, index: number) => (
+                        <div key={index} className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded p-3">
+                          <div className="text-sm font-medium text-red-800 dark:text-red-200">
+                            Row {error.row}: {error.error}
+                          </div>
+                          {error.data && (
+                            <div className="text-xs text-red-600 dark:text-red-400 mt-1">
+                              Data: {JSON.stringify(error.data, null, 2)}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Import History */}
+            <div>
+              <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">
+                Recent Imports
+              </h3>
+              <div className="space-y-3">
+                {importHistory.length === 0 ? (
+                  <p className="text-gray-500 dark:text-gray-400 text-center py-4">
+                    No imports yet
+                  </p>
+                ) : (
+                  importHistory.slice(0, 5).map((imp) => (
+                    <div key={imp.id} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                      <div className="flex items-center space-x-3">
+                        {imp.file_type === 'excel' ? (
+                          <FileSpreadsheet className="h-5 w-5 text-green-600" />
+                        ) : (
+                          <FileText className="h-5 w-5 text-blue-600" />
+                        )}
+                        <div>
+                          <div className="font-medium text-gray-900 dark:text-gray-100">
+                            {imp.filename}
+                          </div>
+                          <div className="text-sm text-gray-600 dark:text-gray-400">
+                            {new Date(imp.created_at).toLocaleDateString()} at {new Date(imp.created_at).toLocaleTimeString()}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-4">
+                        <div className="text-right">
+                          <div className="text-sm font-medium">
+                            {imp.success_count}/{imp.total_rows} items
+                          </div>
+                          <div className={`text-xs ${
+                            imp.status === 'completed' ? 'text-green-600' : 
+                            imp.status === 'failed' ? 'text-red-600' : 'text-yellow-600'
+                          }`}>
+                            {imp.status}
+                          </div>
+                        </div>
+                        {imp.status === 'completed' ? (
+                          <CheckCircle className="h-5 w-5 text-green-600" />
+                        ) : imp.status === 'failed' ? (
+                          <XCircle className="h-5 w-5 text-red-600" />
+                        ) : (
+                          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-yellow-600"></div>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* Instructions */}
+            <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
+              <h3 className="font-medium text-gray-900 dark:text-gray-100 mb-2">
+                File Format Requirements
+              </h3>
+              <ul className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
+                <li>• <strong>Required columns:</strong> name, price, category</li>
+                <li>• <strong>Optional columns:</strong> description, cost, preparation_time</li>
+                <li>• Categories will be created automatically if they don't exist</li>
+                <li>• Price should be in decimal format (e.g., 12.99)</li>
+                <li>• Preparation time should be in minutes</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  );
+};
+
 export default function MenuManagement() {
   const { user } = useUser();
   const [categories, setCategories] = useState<MenuCategory[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [modifierGroups, setModifierGroups] = useState<ModifierGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCategoryForm, setShowCategoryForm] = useState(false);
   const [editingCategory, setEditingCategory] = useState<MenuCategory | null>(null);
   const [showItemForm, setShowItemForm] = useState(false);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [showBulkUpload, setShowBulkUpload] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -647,14 +1203,42 @@ export default function MenuManagement() {
     }
   }, []);
 
+  const fetchModifierGroups = useCallback(async () => {
+    try {
+      const response = await fetch('/api/menu/modifier-groups', {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      const data = await response.json();
+      if (data.success) {
+        // Fetch options for each group
+        const groupsWithOptions = await Promise.all(
+          data.data.map(async (group: any) => {
+            const optionsResponse = await fetch(`/api/menu/modifier-groups/${group.id}/options`, {
+              headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+            });
+            const optionsData = await optionsResponse.json();
+            return {
+              ...group,
+              options: optionsData.success ? optionsData.data : []
+            };
+          })
+        );
+        setModifierGroups(groupsWithOptions);
+      }
+    } catch (error) {
+      console.error('Error fetching modifier groups:', error);
+      toast.error('Failed to load modifier groups');
+    }
+  }, []);
+
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
-      await Promise.all([fetchCategories(), fetchMenuItems()]);
+      await Promise.all([fetchCategories(), fetchMenuItems(), fetchModifierGroups()]);
       setLoading(false);
     };
     loadData();
-  }, [fetchCategories, fetchMenuItems]);
+  }, [fetchCategories, fetchMenuItems, fetchModifierGroups]);
 
   const handleCategoryDragEnd = (event: any) => {
     const { active, over } = event;
@@ -685,21 +1269,35 @@ export default function MenuManagement() {
     }
   };
 
-  const handleSaveCategory = async (formData: { name: string; description: string }) => {
+  const handleSaveCategory = async (formData: { 
+    name: string; 
+    description: string; 
+    imageFile?: File; 
+    imageAltText?: string; 
+    removeImage?: boolean 
+  }) => {
     try {
       const url = editingCategory ? `/api/menu/categories/${editingCategory.id}` : '/api/menu/categories';
       const method = editingCategory ? 'PUT' : 'POST';
       
+      const submitData = new FormData();
+      submitData.append('name', formData.name);
+      submitData.append('description', formData.description);
+      submitData.append('imageAltText', formData.imageAltText || '');
+      submitData.append('sortOrder', (editingCategory?.sort_order || categories.length).toString());
+      
+      if (formData.removeImage) {
+        submitData.append('removeImage', 'true');
+      } else if (formData.imageFile) {
+        submitData.append('image', formData.imageFile);
+      }
+
       const response = await fetch(url, {
         method,
         headers: {
-          'Content-Type': 'application/json',
           Authorization: `Bearer ${localStorage.getItem('token')}`
         },
-        body: JSON.stringify({
-          ...formData,
-          sortOrder: editingCategory?.sort_order || categories.length
-        })
+        body: submitData
       });
 
       const data = await response.json();
@@ -790,6 +1388,20 @@ export default function MenuManagement() {
 
       const data = await response.json();
       if (data.success) {
+        const itemId = editingItem?.id || data.data.id;
+        
+        // Update modifiers if any are selected
+        if (formData.modifierGroupIds.length > 0 || editingItem) {
+          await fetch(`/api/menu/items/${itemId}/modifiers`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${localStorage.getItem('token')}`
+            },
+            body: JSON.stringify({ modifierGroupIds: formData.modifierGroupIds })
+          });
+        }
+
         toast.success(editingItem ? 'Item updated' : 'Item created');
         await fetchMenuItems();
         setShowItemForm(false);
@@ -934,13 +1546,22 @@ export default function MenuManagement() {
                   ))}
                 </select>
               </div>
-              <button
-                onClick={() => setShowItemForm(true)}
-                className="flex items-center space-x-2 bg-primary-500 text-white px-4 py-2 rounded-lg hover:bg-primary-600 transition-colors"
-              >
-                <Plus className="h-4 w-4" />
-                <span>Add Item</span>
-              </button>
+              <div className="flex items-center space-x-3">
+                <button
+                  onClick={() => setShowBulkUpload(true)}
+                  className="flex items-center space-x-2 bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 transition-colors"
+                >
+                  <Upload className="h-4 w-4" />
+                  <span>Bulk Import</span>
+                </button>
+                <button
+                  onClick={() => setShowItemForm(true)}
+                  className="flex items-center space-x-2 bg-primary-500 text-white px-4 py-2 rounded-lg hover:bg-primary-600 transition-colors"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span>Add Item</span>
+                </button>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -975,10 +1596,24 @@ export default function MenuManagement() {
               <MenuItemForm
                 item={editingItem || undefined}
                 categories={categories}
+                modifierGroups={modifierGroups}
                 onSave={handleSaveMenuItem}
                 onCancel={() => {
                   setShowItemForm(false);
                   setEditingItem(null);
+                }}
+              />
+            )}
+          </AnimatePresence>
+
+          {/* Bulk Upload Modal */}
+          <AnimatePresence>
+            {showBulkUpload && (
+              <BulkMenuUpload
+                onClose={() => setShowBulkUpload(false)}
+                onImportComplete={() => {
+                  fetchCategories();
+                  fetchMenuItems();
                 }}
               />
             )}

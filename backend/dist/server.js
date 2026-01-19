@@ -36,6 +36,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+// Load environment variables first
+const dotenv_1 = __importDefault(require("dotenv"));
+dotenv_1.default.config();
 const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
 const helmet_1 = __importDefault(require("helmet"));
@@ -53,8 +56,9 @@ const app = (0, express_1.default)();
 const server = (0, http_1.createServer)(app);
 const io = new socket_io_1.Server(server, {
     cors: {
-        origin: process.env.FRONTEND_URL || "http://localhost:3003",
-        methods: ["GET", "POST"]
+        origin: process.env.FRONTEND_URL || "http://localhost:3000",
+        methods: ["GET", "POST"],
+        credentials: true
     }
 });
 const PORT = process.env.PORT || 3002;
@@ -74,8 +78,22 @@ async function initializeServer() {
         const { default: receiptsRoutes } = await Promise.resolve().then(() => __importStar(require('./routes/receipts')));
         const { default: auditRoutes } = await Promise.resolve().then(() => __importStar(require('./routes/audit')));
         const { default: timeclockRoutes } = await Promise.resolve().then(() => __importStar(require('./routes/timeclock')));
+        const { default: marketingRoutes } = await Promise.resolve().then(() => __importStar(require('./routes/marketing')));
+        const { default: restaurantRoutes } = await Promise.resolve().then(() => __importStar(require('./routes/restaurant')));
+        const { default: integrationsRoutes } = await Promise.resolve().then(() => __importStar(require('./routes/integrations')));
+        const { default: vapiRoutes } = await Promise.resolve().then(() => __importStar(require('./routes/vapi')));
         // API Routes
         app.use('/api/auth', authRoutes);
+        // Vapi webhook routes (no auth required for external webhooks)
+        app.use('/api/vapi', vapiRoutes);
+        // Debug: Add a test auth route to verify mounting
+        app.get('/api/auth/test', (req, res) => {
+            res.json({ message: 'Auth routes are mounted correctly' });
+        });
+        // Debug: Test direct route without auth prefix
+        app.get('/debug-route', (req, res) => {
+            res.json({ message: 'Direct route works' });
+        });
         // Protected routes
         app.use('/api/assistant', auth_1.requireAuth, assistantRoutes);
         app.use('/api/orders', auth_1.requireAuth, ordersRoutes);
@@ -86,6 +104,16 @@ async function initializeServer() {
         app.use('/api/receipts', auth_1.requireAuth, receiptsRoutes);
         app.use('/api/audit', auth_1.requireAuth, auditRoutes);
         app.use('/api/timeclock', auth_1.requireAuth, timeclockRoutes);
+        app.use('/api/marketing', auth_1.requireAuth, marketingRoutes);
+        app.use('/api/restaurant', auth_1.requireAuth, restaurantRoutes);
+        app.use('/api/integrations', auth_1.requireAuth, integrationsRoutes);
+        // 404 handler (must be last)
+        app.use((req, res) => {
+            res.status(404).json({
+                error: 'Not Found',
+                message: `Route ${req.method} ${req.originalUrl} not found`
+            });
+        });
         logger_1.logger.info('Routes loaded successfully');
     }
     catch (error) {
@@ -111,7 +139,7 @@ app.use((0, helmet_1.default)({
     }
 }));
 app.use((0, cors_1.default)({
-    origin: process.env.FRONTEND_URL || "http://localhost:3003",
+    origin: process.env.FRONTEND_URL || "http://localhost:3000",
     credentials: true,
     optionsSuccessStatus: 200,
     preflightContinue: false,
@@ -243,19 +271,16 @@ app.get('/api', (req, res) => {
             sync: '/api/sync',
             receipts: '/api/receipts',
             audit: '/api/audit',
-            timeclock: '/api/timeclock'
+            timeclock: '/api/timeclock',
+            marketing: '/api/marketing',
+            restaurant: '/api/restaurant',
+            integrations: '/api/integrations'
         }
     });
 });
 // Error handling
 app.use(errorHandler_1.errorHandler);
-// 404 handler
-app.use('*', (req, res) => {
-    res.status(404).json({
-        error: 'Not Found',
-        message: `Route ${req.method} ${req.originalUrl} not found`
-    });
-});
+// 404 handler moved to initializeServer() to ensure it comes after route registration
 // Initialize server and start listening
 initializeServer().then(() => {
     server.listen(PORT, () => {

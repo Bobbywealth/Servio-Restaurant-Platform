@@ -109,8 +109,11 @@ router.post('/customers', asyncHandler(async (req: Request, res: Response) => {
     );
   }
 
+  let customerId: string;
+
   if (existingCustomer) {
     // Update existing customer
+    customerId = existingCustomer.id;
     await db.run(`
       UPDATE customers 
       SET 
@@ -148,7 +151,7 @@ router.post('/customers', asyncHandler(async (req: Request, res: Response) => {
     });
   } else {
     // Create new customer
-    const customerId = uuidv4();
+    customerId = uuidv4();
 
     await db.run(`
       INSERT INTO customers (

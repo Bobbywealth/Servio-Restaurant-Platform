@@ -54,6 +54,8 @@ router.get('/categories/all', asyncHandler(async (req: Request, res: Response) =
       id,
       name,
       description,
+      image,
+      image_alt_text,
       sort_order,
       is_active,
       created_at,
@@ -71,10 +73,10 @@ router.get('/categories/all', asyncHandler(async (req: Request, res: Response) =
 
 /**
  * POST /api/menu/categories
- * Create a new menu category
+ * Create a new menu category with optional image
  */
-router.post('/categories', asyncHandler(async (req: Request, res: Response) => {
-  const { name, description, sortOrder = 0 } = req.body;
+router.post('/categories', upload.single('image'), asyncHandler(async (req: Request, res: Response) => {
+  const { name, description, imageAltText, sortOrder = 0 } = req.body;
   const db = DatabaseService.getInstance().getDatabase();
   
   if (!name?.trim()) {
@@ -86,11 +88,27 @@ router.post('/categories', asyncHandler(async (req: Request, res: Response) => {
 
   const restaurantId = '00000000-0000-0000-0000-000000000001';
   const categoryId = uuidv4();
+  const uploadsPath = await ensureUploadsDir();
+
+  // Process uploaded image
+  let imagePath = null;
+  if (req.file) {
+    const fileName = `category-${categoryId}-${uuidv4()}.webp`;
+    const filePath = path.join(uploadsPath, fileName);
+    
+    // Resize and optimize image
+    await sharp(req.file.buffer)
+      .resize(400, 300, { fit: 'cover', withoutEnlargement: true })
+      .webp({ quality: 80 })
+      .toFile(filePath);
+    
+    imagePath = `/uploads/menu/${fileName}`;
+  }
 
   await db.run(`
-    INSERT INTO menu_categories (id, restaurant_id, name, description, sort_order, is_active)
-    VALUES (?, ?, ?, ?, ?, 1)
-  `, [categoryId, restaurantId, name.trim(), description?.trim() || null, sortOrder]);
+    INSERT INTO menu_categories (id, restaurant_id, name, description, image, image_alt_text, sort_order, is_active)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+  `, [categoryId, restaurantId, name.trim(), description?.trim() || null, imagePath, imageAltText?.trim() || null, sortOrder]);
 
   const newCategory = await db.get(`
     SELECT * FROM menu_categories WHERE id = ?
@@ -101,10 +119,10 @@ router.post('/categories', asyncHandler(async (req: Request, res: Response) => {
     'create_category',
     'menu_category',
     categoryId,
-    { name, description, sortOrder }
+    { name, description, imagePath, imageAltText, sortOrder }
   );
 
-  logger.info(`Menu category created: ${name}`);
+  logger.info(`Menu category created: ${name}${imagePath ? ' with image' : ''}`);
 
   res.status(201).json({
     success: true,
@@ -114,11 +132,11 @@ router.post('/categories', asyncHandler(async (req: Request, res: Response) => {
 
 /**
  * PUT /api/menu/categories/:id
- * Update a menu category
+ * Update a menu category with optional image
  */
-router.put('/categories/:id', asyncHandler(async (req: Request, res: Response) => {
+router.put('/categories/:id', upload.single('image'), asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { name, description, sortOrder, isActive } = req.body;
+  const { name, description, imageAltText, sortOrder, isActive, removeImage } = req.body;
   const db = DatabaseService.getInstance().getDatabase();
 
   const existingCategory = await db.get('SELECT * FROM menu_categories WHERE id = ?', [id]);
@@ -140,6 +158,10 @@ router.put('/categories/:id', asyncHandler(async (req: Request, res: Response) =
     updateFields.push('description = ?');
     updateValues.push(description?.trim() || null);
   }
+  if (imageAltText !== undefined) {
+    updateFields.push('image_alt_text = ?');
+    updateValues.push(imageAltText?.trim() || null);
+  }
   if (sortOrder !== undefined) {
     updateFields.push('sort_order = ?');
     updateValues.push(sortOrder);
@@ -147,6 +169,26 @@ router.put('/categories/:id', asyncHandler(async (req: Request, res: Response) =
   if (isActive !== undefined) {
     updateFields.push('is_active = ?');
     updateValues.push(isActive ? 1 : 0);
+  }
+
+  // Handle image updates
+  if (removeImage === 'true') {
+    updateFields.push('image = ?');
+    updateValues.push(null);
+  } else if (req.file) {
+    const uploadsPath = await ensureUploadsDir();
+    const fileName = `category-${id}-${uuidv4()}.webp`;
+    const filePath = path.join(uploadsPath, fileName);
+    
+    // Resize and optimize image
+    await sharp(req.file.buffer)
+      .resize(400, 300, { fit: 'cover', withoutEnlargement: true })
+      .webp({ quality: 80 })
+      .toFile(filePath);
+    
+    const imagePath = `/uploads/menu/${fileName}`;
+    updateFields.push('image = ?');
+    updateValues.push(imagePath);
   }
 
   if (updateFields.length > 0) {
@@ -167,7 +209,7 @@ router.put('/categories/:id', asyncHandler(async (req: Request, res: Response) =
     'update_category',
     'menu_category',
     id,
-    { name, description, sortOrder, isActive }
+    { name, description, imageAltText, sortOrder, isActive, hasNewImage: !!req.file, removeImage }
   );
 
   res.json({
@@ -755,6 +797,415 @@ router.get('/categories', asyncHandler(async (req: Request, res: Response) => {
   res.json({
     success: true,
     data: categories
+  });
+}));
+
+// ============================================================================
+// MODIFIERS MANAGEMENT
+// ============================================================================
+
+/**
+ * GET /api/menu/modifier-groups
+ * Get all modifier groups for a restaurant
+ */
+router.get('/modifier-groups', asyncHandler(async (req: Request, res: Response) => {
+  const db = DatabaseService.getInstance().getDatabase();
+  const restaurantId = '00000000-0000-0000-0000-000000000001';
+
+  const groups = await db.all(`
+    SELECT 
+      mg.*,
+      COUNT(mo.id) as option_count
+    FROM modifier_groups mg
+    LEFT JOIN modifier_options mo ON mg.id = mo.modifier_group_id AND mo.is_available = 1
+    WHERE mg.restaurant_id = ? AND mg.is_active = 1
+    GROUP BY mg.id
+    ORDER BY mg.sort_order ASC, mg.name ASC
+  `, [restaurantId]);
+
+  res.json({
+    success: true,
+    data: groups
+  });
+}));
+
+/**
+ * POST /api/menu/modifier-groups
+ * Create a new modifier group
+ */
+router.post('/modifier-groups', asyncHandler(async (req: Request, res: Response) => {
+  const { name, description, minSelections = 0, maxSelections = 1, isRequired = false } = req.body;
+  const db = DatabaseService.getInstance().getDatabase();
+
+  if (!name?.trim()) {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'Modifier group name is required' }
+    });
+  }
+
+  const restaurantId = '00000000-0000-0000-0000-000000000001';
+  const groupId = uuidv4();
+
+  await db.run(`
+    INSERT INTO modifier_groups (id, restaurant_id, name, description, min_selections, max_selections, is_required)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `, [groupId, restaurantId, name.trim(), description?.trim() || null, minSelections, maxSelections, isRequired]);
+
+  const newGroup = await db.get(`
+    SELECT * FROM modifier_groups WHERE id = ?
+  `, [groupId]);
+
+  await DatabaseService.getInstance().logAudit(
+    'system',
+    'create_modifier_group',
+    'modifier_group',
+    groupId,
+    { name, description, minSelections, maxSelections, isRequired }
+  );
+
+  logger.info(`Modifier group created: ${name}`);
+
+  res.status(201).json({
+    success: true,
+    data: newGroup
+  });
+}));
+
+/**
+ * GET /api/menu/modifier-groups/:id/options
+ * Get options for a modifier group
+ */
+router.get('/modifier-groups/:id/options', asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const db = DatabaseService.getInstance().getDatabase();
+
+  const options = await db.all(`
+    SELECT * FROM modifier_options 
+    WHERE modifier_group_id = ? AND is_available = 1
+    ORDER BY sort_order ASC, name ASC
+  `, [id]);
+
+  res.json({
+    success: true,
+    data: options
+  });
+}));
+
+/**
+ * POST /api/menu/modifier-groups/:id/options
+ * Add option to a modifier group
+ */
+router.post('/modifier-groups/:id/options', asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { name, description, priceModifier = 0 } = req.body;
+  const db = DatabaseService.getInstance().getDatabase();
+
+  if (!name?.trim()) {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'Option name is required' }
+    });
+  }
+
+  const optionId = uuidv4();
+
+  await db.run(`
+    INSERT INTO modifier_options (id, modifier_group_id, name, description, price_modifier)
+    VALUES (?, ?, ?, ?, ?)
+  `, [optionId, id, name.trim(), description?.trim() || null, parseFloat(priceModifier)]);
+
+  const newOption = await db.get(`
+    SELECT * FROM modifier_options WHERE id = ?
+  `, [optionId]);
+
+  await DatabaseService.getInstance().logAudit(
+    'system',
+    'create_modifier_option',
+    'modifier_option',
+    optionId,
+    { modifierGroupId: id, name, description, priceModifier }
+  );
+
+  res.status(201).json({
+    success: true,
+    data: newOption
+  });
+}));
+
+/**
+ * GET /api/menu/items/:id/modifiers
+ * Get modifiers assigned to a menu item
+ */
+router.get('/items/:id/modifiers', asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const db = DatabaseService.getInstance().getDatabase();
+
+  const modifiers = await db.all(`
+    SELECT 
+      mg.*,
+      mim.sort_order as assignment_order,
+      (
+        SELECT json_group_array(
+          json_object(
+            'id', mo.id,
+            'name', mo.name,
+            'description', mo.description,
+            'price_modifier', mo.price_modifier,
+            'sort_order', mo.sort_order
+          )
+        )
+        FROM modifier_options mo 
+        WHERE mo.modifier_group_id = mg.id AND mo.is_available = 1
+        ORDER BY mo.sort_order ASC, mo.name ASC
+      ) as options
+    FROM modifier_groups mg
+    INNER JOIN menu_item_modifiers mim ON mg.id = mim.modifier_group_id
+    WHERE mim.menu_item_id = ? AND mg.is_active = 1
+    ORDER BY mim.sort_order ASC, mg.sort_order ASC
+  `, [id]);
+
+  // Parse JSON options for each modifier group
+  const formattedModifiers = modifiers.map((mod: any) => ({
+    ...mod,
+    options: JSON.parse(mod.options || '[]')
+  }));
+
+  res.json({
+    success: true,
+    data: formattedModifiers
+  });
+}));
+
+/**
+ * POST /api/menu/items/:id/modifiers
+ * Assign modifier groups to a menu item
+ */
+router.post('/items/:id/modifiers', asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { modifierGroupIds } = req.body;
+  const db = DatabaseService.getInstance().getDatabase();
+
+  if (!Array.isArray(modifierGroupIds)) {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'modifierGroupIds must be an array' }
+    });
+  }
+
+  // Start transaction
+  await db.run('BEGIN TRANSACTION');
+
+  try {
+    // Remove existing assignments
+    await db.run('DELETE FROM menu_item_modifiers WHERE menu_item_id = ?', [id]);
+
+    // Add new assignments
+    for (let i = 0; i < modifierGroupIds.length; i++) {
+      await db.run(`
+        INSERT INTO menu_item_modifiers (id, menu_item_id, modifier_group_id, sort_order)
+        VALUES (?, ?, ?, ?)
+      `, [uuidv4(), id, modifierGroupIds[i], i]);
+    }
+
+    await db.run('COMMIT');
+
+    await DatabaseService.getInstance().logAudit(
+      'system',
+      'update_item_modifiers',
+      'menu_item',
+      id,
+      { modifierGroupIds }
+    );
+
+    res.json({
+      success: true,
+      message: 'Menu item modifiers updated successfully'
+    });
+
+  } catch (error) {
+    await db.run('ROLLBACK');
+    throw error;
+  }
+}));
+
+// ============================================================================
+// MENU BULK IMPORT
+// ============================================================================
+
+/**
+ * POST /api/menu/import
+ * Import menu from Excel/CSV file
+ */
+router.post('/import', upload.single('file'), asyncHandler(async (req: Request, res: Response) => {
+  if (!req.file) {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'File is required' }
+    });
+  }
+
+  const db = DatabaseService.getInstance().getDatabase();
+  const restaurantId = '00000000-0000-0000-0000-000000000001';
+  const importId = uuidv4();
+  const fileType = req.file.mimetype.includes('excel') || req.file.originalname.endsWith('.xlsx') ? 'excel' : 'csv';
+
+  // Create import record
+  await db.run(`
+    INSERT INTO menu_imports (id, restaurant_id, filename, file_type, status, uploaded_by)
+    VALUES (?, ?, ?, ?, 'processing', ?)
+  `, [importId, restaurantId, req.file.originalname, fileType, 'system']);
+
+  try {
+    let data: any[] = [];
+    
+    if (fileType === 'excel') {
+      // Handle Excel files using xlsx library
+      const XLSX = require('xlsx');
+      const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+      data = XLSX.utils.sheet_to_json(worksheet);
+    } else {
+      // Handle CSV files
+      const csv = require('csv-parser');
+      const { Readable } = require('stream');
+      
+      await new Promise((resolve, reject) => {
+        const stream = Readable.from(req.file!.buffer);
+        stream
+          .pipe(csv())
+          .on('data', (row: any) => data.push(row))
+          .on('end', resolve)
+          .on('error', reject);
+      });
+    }
+
+    // Process the data
+    let successCount = 0;
+    let errorCount = 0;
+    const errors: any[] = [];
+
+    for (let i = 0; i < data.length; i++) {
+      const row = data[i];
+      try {
+        // Validate required fields
+        if (!row.name || !row.price || !row.category) {
+          throw new Error('Missing required fields: name, price, category');
+        }
+
+        // Find or create category
+        let category = await db.get(
+          'SELECT id FROM menu_categories WHERE name = ? AND restaurant_id = ?',
+          [row.category, restaurantId]
+        );
+
+        if (!category) {
+          const categoryId = uuidv4();
+          await db.run(`
+            INSERT INTO menu_categories (id, restaurant_id, name, is_active)
+            VALUES (?, ?, ?, 1)
+          `, [categoryId, restaurantId, row.category]);
+          category = { id: categoryId };
+        }
+
+        // Create menu item
+        const itemId = uuidv4();
+        await db.run(`
+          INSERT INTO menu_items (
+            id, restaurant_id, category_id, name, description, price, cost,
+            preparation_time, is_available, sort_order
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+        `, [
+          itemId,
+          restaurantId,
+          category.id,
+          row.name.trim(),
+          row.description?.trim() || null,
+          parseFloat(row.price),
+          row.cost ? parseFloat(row.cost) : null,
+          row.preparation_time ? parseInt(row.preparation_time) : 0,
+          i
+        ]);
+
+        successCount++;
+      } catch (error: any) {
+        errorCount++;
+        errors.push({
+          row: i + 1,
+          data: row,
+          error: error.message
+        });
+      }
+    }
+
+    // Update import record
+    await db.run(`
+      UPDATE menu_imports 
+      SET status = 'completed', total_rows = ?, processed_rows = ?, 
+          success_count = ?, error_count = ?, errors = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `, [data.length, data.length, successCount, errorCount, JSON.stringify(errors), importId]);
+
+    await DatabaseService.getInstance().logAudit(
+      'system',
+      'import_menu',
+      'menu_import',
+      importId,
+      { filename: req.file.originalname, totalRows: data.length, successCount, errorCount }
+    );
+
+    logger.info(`Menu import completed: ${successCount} success, ${errorCount} errors`);
+
+    res.json({
+      success: true,
+      data: {
+        importId,
+        totalRows: data.length,
+        successCount,
+        errorCount,
+        errors: errors.slice(0, 10) // Return first 10 errors
+      }
+    });
+
+  } catch (error: any) {
+    // Update import record with error
+    await db.run(`
+      UPDATE menu_imports 
+      SET status = 'failed', errors = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `, [JSON.stringify([{ error: error.message }]), importId]);
+
+    logger.error('Menu import failed:', error);
+    
+    res.status(500).json({
+      success: false,
+      error: { message: 'Import failed: ' + error.message }
+    });
+  }
+}));
+
+/**
+ * GET /api/menu/imports
+ * Get menu import history
+ */
+router.get('/imports', asyncHandler(async (req: Request, res: Response) => {
+  const db = DatabaseService.getInstance().getDatabase();
+  const restaurantId = '00000000-0000-0000-0000-000000000001';
+
+  const imports = await db.all(`
+    SELECT 
+      id, filename, file_type, status, total_rows, processed_rows,
+      success_count, error_count, created_at, updated_at
+    FROM menu_imports
+    WHERE restaurant_id = ?
+    ORDER BY created_at DESC
+    LIMIT 50
+  `, [restaurantId]);
+
+  res.json({
+    success: true,
+    data: imports
   });
 }));
 
