@@ -11,10 +11,6 @@
     "test": "jest --passWithNoTests"
   },
   "dependencies": {
-    "@types/compression": "^1.8.1",
-    "@types/nodemailer": "^7.0.5",
-    "@types/qrcode": "^1.5.6",
-    "@types/sharp": "^0.31.1",
     "axios": "^1.6.2",
     "bcryptjs": "^2.4.3",
     "cloudinary": "^2.9.0",
@@ -46,6 +42,7 @@
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
+    "@types/compression": "^1.8.1",
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
     "@types/jest": "^29.5.8",
@@ -53,7 +50,10 @@
     "@types/morgan": "^1.9.9",
     "@types/multer": "^1.4.11",
     "@types/node": "^20.10.5",
+    "@types/nodemailer": "^7.0.5",
     "@types/pg": "^8.16.0",
+    "@types/qrcode": "^1.5.6",
+    "@types/sharp": "^0.31.1",
     "@types/uuid": "^9.0.7",
     "@typescript-eslint/eslint-plugin": "^6.15.0",
     "@typescript-eslint/parser": "^6.15.0",
