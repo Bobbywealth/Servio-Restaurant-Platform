@@ -6,7 +6,7 @@ import {
   Mic, Bot, Shield, Zap, Clock, Users,
   Phone, Smartphone, BarChart3,
   CheckCircle2, MessageSquare, HeadphonesIcon,
-  Utensils, ShoppingCart, Inventory,
+  Utensils, ShoppingCart,
   Calendar, DollarSign, TrendingUp,
   ArrowRight, PlayCircle, Star
 } from 'lucide-react'

@@ -425,10 +425,10 @@ export class DatabaseService {
     for (const indexSQL of indexes) {
       try {
         await db.exec(indexSQL);
-      } catch (error) {
+      } catch (error: any) {
         // Ignore if index already exists
-        if (!error.message?.includes('already exists')) {
-          logger.warn(`Index creation warning: ${error.message}`);
+        if (!error?.message?.includes('already exists')) {
+          logger.warn(`Index creation warning: ${error?.message || error}`);
         }
       }
     }
@@ -442,8 +442,8 @@ export class DatabaseService {
         await db.exec('SET effective_cache_size = "1GB"');
         await db.exec('SET random_page_cost = 1.1');
         await db.exec('SET checkpoint_completion_target = 0.9');
-      } catch (error) {
-        logger.warn('PostgreSQL performance tuning skipped:', error.message);
+      } catch (error: any) {
+        logger.warn('PostgreSQL performance tuning skipped:', error?.message || error);
       }
     } else {
       // SQLite optimizations
@@ -454,8 +454,8 @@ export class DatabaseService {
         await db.exec('PRAGMA temp_store = MEMORY');
         await db.exec('PRAGMA mmap_size = 268435456'); // 256MB
         await db.exec('PRAGMA optimize');
-      } catch (error) {
-        logger.warn('SQLite optimization warning:', error.message);
+      } catch (error: any) {
+        logger.warn('SQLite optimization warning:', error?.message || error);
       }
     }
 

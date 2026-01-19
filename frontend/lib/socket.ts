@@ -1,5 +1,11 @@
-import { io, Socket } from 'socket.io-client'
+import { io, Socket, ManagerOptions } from 'socket.io-client'
 import { showToast } from '../components/ui/Toast'
+
+// Extend ManagerOptions to include ping properties
+interface ManagerOptionsWithPing extends ManagerOptions {
+  pingTimeout?: number
+  pingInterval?: number
+}
 
 export interface SocketEvents {
   // Order events
@@ -61,14 +67,18 @@ class SocketManager {
 
     const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001'
 
-    this.socket = io(backendUrl, {
+    const socketOptions = {
       transports: ['websocket', 'polling'],
       timeout: 20000,
       reconnection: true,
       reconnectionAttempts: this.maxReconnectAttempts,
       reconnectionDelay: this.reconnectDelay,
       reconnectionDelayMax: 5000,
-    })
+      pingTimeout: 60000,
+      pingInterval: 25000,
+    } as Partial<ManagerOptionsWithPing>
+
+    this.socket = io(backendUrl, socketOptions)
 
     this.setupEventListeners()
   }

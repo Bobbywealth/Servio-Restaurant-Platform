@@ -93,7 +93,7 @@ async function initializeServer() {
         process.exit(1);
     }
 }
-// Middleware
+// AGGRESSIVE PERFORMANCE MIDDLEWARE
 app.use((0, helmet_1.default)({
     crossOriginResourcePolicy: { policy: "cross-origin" },
     contentSecurityPolicy: {
@@ -104,31 +104,108 @@ app.use((0, helmet_1.default)({
             imgSrc: ["'self'", "data:", "https:"],
         },
     },
+    hsts: {
+        maxAge: 31536000,
+        includeSubDomains: true,
+        preload: true
+    }
 }));
 app.use((0, cors_1.default)({
     origin: process.env.FRONTEND_URL || "http://localhost:3003",
     credentials: true,
-    optionsSuccessStatus: 200 // some legacy browsers (IE11, various SmartTVs) choke on 204
+    optionsSuccessStatus: 200,
+    preflightContinue: false,
+    maxAge: 86400 // 24 hour preflight cache
 }));
-// Compression middleware for better performance
+// LIGHTNING FAST COMPRESSION
 app.use((0, compression_1.default)({
-    level: 6,
-    threshold: 1024,
+    level: 9, // Maximum compression
+    threshold: 512, // Compress even small responses
+    memLevel: 8, // Use more memory for better compression
+    chunkSize: 32 * 1024, // 32KB chunks
     filter: (req, res) => {
         if (req.headers['x-no-compression'])
             return false;
+        // Compress JSON, text, and JavaScript responses
         return compression_1.default.filter(req, res);
     }
 }));
-app.use((0, morgan_1.default)('combined', { stream: { write: message => logger_1.logger.info(message.trim()) } }));
-app.use(express_1.default.json({ limit: '10mb' }));
-app.use(express_1.default.urlencoded({ extended: true, limit: '10mb' }));
-// Add caching middleware for static assets
-app.use('/uploads', express_1.default.static(path_1.default.join(__dirname, '../uploads'), {
-    maxAge: '1d',
-    etag: true,
-    lastModified: true
+// OPTIMIZED LOGGING (less verbose in production)
+const morganFormat = process.env.NODE_ENV === 'production' ? 'combined' : 'dev';
+app.use((0, morgan_1.default)(morganFormat, {
+    stream: { write: message => logger_1.logger.info(message.trim()) },
+    skip: (req, res) => res.statusCode < 400 && process.env.NODE_ENV === 'production'
 }));
+// OPTIMIZED BODY PARSING
+app.use(express_1.default.json({
+    limit: '10mb',
+    strict: true,
+    type: ['application/json', 'application/csp-report']
+}));
+app.use(express_1.default.urlencoded({
+    extended: true,
+    limit: '10mb',
+    parameterLimit: 1000
+}));
+// IN-MEMORY CACHE FOR API RESPONSES
+const cache = new Map();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const MAX_CACHE_SIZE = 1000;
+// Cache middleware for GET requests
+app.use((req, res, next) => {
+    if (req.method === 'GET' && !req.url.includes('/auth') && !req.url.includes('/timeclock')) {
+        const cacheKey = req.url;
+        const cached = cache.get(cacheKey);
+        if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+            res.set(cached.headers);
+            res.set('X-Cache', 'HIT');
+            return res.json(cached.data);
+        }
+        // Cache the response
+        const originalSend = res.json;
+        res.json = function (data) {
+            if (res.statusCode === 200 && cache.size < MAX_CACHE_SIZE) {
+                cache.set(cacheKey, {
+                    data,
+                    timestamp: Date.now(),
+                    headers: {
+                        'Cache-Control': 'public, max-age=300',
+                        'ETag': Buffer.from(JSON.stringify(data)).toString('base64').slice(0, 20)
+                    }
+                });
+            }
+            res.set('X-Cache', 'MISS');
+            return originalSend.call(this, data);
+        };
+    }
+    next();
+});
+// AGGRESSIVE STATIC ASSET CACHING
+app.use('/uploads', express_1.default.static(path_1.default.join(__dirname, '../uploads'), {
+    maxAge: '1y', // 1 year cache
+    etag: true,
+    lastModified: true,
+    immutable: true,
+    setHeaders: (res, path) => {
+        res.set('Cache-Control', 'public, max-age=31536000, immutable');
+        res.set('X-Content-Type-Options', 'nosniff');
+    }
+}));
+// PERFORMANCE HEADERS FOR ALL RESPONSES
+app.use((req, res, next) => {
+    res.set('X-Powered-By', 'Servio');
+    res.set('X-Response-Time-Start', Date.now().toString());
+    next();
+});
+// Clean up cache periodically
+setInterval(() => {
+    const now = Date.now();
+    for (const [key, value] of cache.entries()) {
+        if (now - value.timestamp > CACHE_TTL) {
+            cache.delete(key);
+        }
+    }
+}, 5 * 60 * 1000); // Clean every 5 minutes
 // Socket.IO connection handling
 io.on('connection', (socket) => {
     logger_1.logger.info(`Client connected: ${socket.id}`);
