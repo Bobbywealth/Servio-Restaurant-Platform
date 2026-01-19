@@ -369,7 +369,7 @@ export default function RealisticAvatar({
               exit={{ opacity: 0, y: -10 }}
               className="text-xs text-gray-400 dark:text-gray-500"
             >
-              Say "Hey Servio" or click mic to start
+              {"Say \"Hey Servio\" or click mic to start"}
             </motion.p>
           )}
           {currentExpression === 'listening' && (
@@ -379,7 +379,7 @@ export default function RealisticAvatar({
               exit={{ opacity: 0, y: -10 }}
               className="text-xs text-blue-500"
             >
-              I'm listening... go ahead!
+              {"I'm listening... go ahead!"}
             </motion.p>
           )}
           {currentExpression === 'speaking' && (

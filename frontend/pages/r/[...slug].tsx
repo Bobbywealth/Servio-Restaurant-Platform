@@ -166,7 +166,7 @@ const PublicProfile: React.FC<PublicProfileProps> = ({ restaurant, menuData, lin
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </Head>
 
-      <div style={customStyle} className="min-h-screen" style={{...customStyle, backgroundColor: theme.background_color}}>
+      <div className="min-h-screen" style={{...customStyle, backgroundColor: theme.background_color}}>
         {/* Header */}
         <div className="relative">
           {restaurant.cover_image_url && (

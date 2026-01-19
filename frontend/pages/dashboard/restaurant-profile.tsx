@@ -666,7 +666,7 @@ export default function RestaurantProfile() {
                 Restaurant Profile
               </h1>
               <p className="text-gray-600 dark:text-gray-400 mt-1">
-                Manage your restaurant's public profile and branding
+                {"Manage your restaurant's public profile and branding"}
               </p>
             </div>
           </div>

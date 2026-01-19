@@ -187,7 +187,7 @@ export default function SettingsPage() {
                       <span>Sign Out</span>
                     </h5>
                     <p className="text-sm text-surface-600 dark:text-surface-400 mb-4">
-                      This will log you out of your account and return you to the login page. Make sure you've saved any important work.
+                      {"This will log you out of your account and return you to the login page. Make sure you've saved any important work."}
                     </p>
                     <motion.button
                       className="btn-danger inline-flex items-center space-x-2"

@@ -1,8 +1,8 @@
 [build]
   # Build command to run from the root of the repo
   command = "cd frontend && npm install && npm run build"
-  # Directory to publish (where the built files are)
-  publish = "frontend/out"
+  # Directory to publish (where the built files are) - Next.js build output
+  publish = "frontend/.next"
   # Base directory for the build (optional, but helpful for monorepos)
   base = "."
 
@@ -10,11 +10,11 @@
   # Node.js version to use during build
   NODE_VERSION = "18"
 
-# Redirect rules for Next.js static export
-[[redirects]]
-  from = "/*"
-  to = "/404.html"
-  status = 404
+# Use Netlify's Next.js plugin for proper deployment
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
+# Redirect rules will be handled by Next.js routing
 
 # Headers for security and performance
 [[headers]]

@@ -3,7 +3,8 @@ const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
   trailingSlash: true,
-  output: 'export', // Enable static export for Netlify deployment
+  // Note: Disabled static export to support dynamic restaurant pages with getServerSideProps
+  // output: 'export', // Enable static export for Netlify deployment
 
   // AGGRESSIVE IMAGE OPTIMIZATION
   images: {
