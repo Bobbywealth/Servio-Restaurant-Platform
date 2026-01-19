@@ -4,7 +4,7 @@ const nextConfig = {
   swcMinify: true,
   trailingSlash: true,
   output: 'export', // Enable static export for Netlify deployment
-  
+
   // AGGRESSIVE IMAGE OPTIMIZATION
   images: {
     unoptimized: true,
@@ -14,27 +14,27 @@ const nextConfig = {
     deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048, 3840],
     imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
   },
-  
+
   env: {
     BACKEND_URL: process.env.BACKEND_URL || 'http://localhost:3002',
   },
-  
+
   // EXPERIMENTAL PERFORMANCE FEATURES
   experimental: {
     optimizePackageImports: ['lucide-react', 'framer-motion'],
     turbotrace: {},
     scrollRestoration: true,
   },
-  
+
   // AGGRESSIVE COMPRESSION
   compress: true,
   poweredByHeader: false,
-  
+
   // OPTIMIZED BUILD ID
   generateBuildId: async () => {
     return 'servio-' + process.env.NODE_ENV + '-' + Date.now()
   },
-  
+
   // AGGRESSIVE WEBPACK OPTIMIZATIONS
   webpack: (config, { dev, isServer }) => {
     // PRODUCTION OPTIMIZATIONS
@@ -87,17 +87,17 @@ const nextConfig = {
           },
         },
       }
-      
+
       // AGGRESSIVE MODULE FEDERATION & TREE SHAKING
       config.resolve.alias = {
         ...config.resolve.alias,
         '@': require('path').join(__dirname, '.'),
       }
     }
-    
+
     // PERFORMANCE OPTIMIZATIONS FOR ALL BUILDS
     config.resolve.extensions = ['.tsx', '.ts', '.js', '.jsx', '.json']
-    
+
     // OPTIMIZE BUNDLE SIZE
     if (!isServer) {
       config.resolve.fallback = {
@@ -107,7 +107,7 @@ const nextConfig = {
         tls: false,
       }
     }
-    
+
     // MODULE RULES FOR PERFORMANCE
     config.module.rules.push({
       test: /\.svg$/,
@@ -123,10 +123,10 @@ const nextConfig = {
         }
       }]
     })
-    
+
     return config
   },
-  
+
   // ASSET OPTIMIZATION
   assetPrefix: process.env.NODE_ENV === 'production' ? undefined : '',
 }

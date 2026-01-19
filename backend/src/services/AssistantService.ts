@@ -51,7 +51,7 @@ export class AssistantService {
 
   async processAudio(audioBuffer: Buffer, userId: string): Promise<AssistantResponse> {
     const startTime = Date.now();
-    
+
     try {
       // 1. Speech-to-Text
       const transcript = await this.transcribeAudio(audioBuffer);
@@ -67,7 +67,7 @@ export class AssistantService {
 
       // 2. Process the text with LLM
       const result = await this.processText(transcript, userId);
-      
+
       return {
         transcript,
         ...result,
@@ -95,7 +95,7 @@ export class AssistantService {
     try {
       // Get system prompt with current context
       const systemPrompt = await this.getSystemPrompt(userId);
-      
+
       const completion = await this.openai.chat.completions.create({
         model: 'gpt-4',
         messages: [
@@ -152,7 +152,7 @@ export class AssistantService {
     try {
       // Save buffer to temporary file
       const tempPath = path.join(__dirname, `../../temp/audio_${Date.now()}.webm`);
-      
+
       // Ensure temp directory exists
       const tempDir = path.dirname(tempPath);
       if (!fs.existsSync(tempDir)) {
@@ -237,7 +237,7 @@ CURRENT RESTAURANT STATUS:
 
 YOUR CAPABILITIES:
 1. Orders: Check status, update progress, view wait times
-2. Menu/86: Mark items unavailable/available on delivery platforms  
+2. Menu/86: Mark items unavailable/available on delivery platforms
 3. Inventory: Record receipts, adjust quantities, check levels
 4. Tasks: View daily tasks, mark as complete
 5. General info: Provide restaurant operational assistance
@@ -427,7 +427,7 @@ Use the available tools to perform actions. Always be helpful and professional.`
 
   private async executeTool(toolCall: ToolCall, userId: string): Promise<AssistantResponse['actions'][0]> {
     const { name, arguments: args } = toolCall.function;
-    
+
     try {
       const parsedArgs = JSON.parse(args);
       logger.info(`Executing tool: ${name} with args:`, parsedArgs);
@@ -463,7 +463,7 @@ Use the available tools to perform actions. Always be helpful and professional.`
 
   private async handleGetOrders(args: any, userId: string): Promise<AssistantResponse['actions'][0]> {
     const { status, limit = 10 } = args;
-    
+
     let query = 'SELECT * FROM orders';
     const params: any[] = [];
 
@@ -476,7 +476,7 @@ Use the available tools to perform actions. Always be helpful and professional.`
     params.push(limit);
 
     const orders = await this.db.all(query, params);
-    
+
     // Parse items JSON for each order
     const formattedOrders = orders.map((order: any) => ({
       ...order,
@@ -542,7 +542,7 @@ Use the available tools to perform actions. Always be helpful and professional.`
     const channelText = channels.includes('all') ? 'all platforms' : channels.join(', ');
 
     await DatabaseService.getInstance().logAudit(
-      userId, 'set_item_availability', 'menu_item', item.id, 
+      userId, 'set_item_availability', 'menu_item', item.id,
       { itemName, available, channels }
     );
 
@@ -556,7 +556,7 @@ Use the available tools to perform actions. Always be helpful and professional.`
 
   private async handleGetInventory(args: any, userId: string): Promise<AssistantResponse['actions'][0]> {
     const { search, lowStock } = args;
-    
+
     let query = 'SELECT * FROM inventory';
     const params: any[] = [];
 
@@ -605,7 +605,7 @@ Use the available tools to perform actions. Always be helpful and professional.`
     }
 
     const newQuantity = item.current_quantity + quantity;
-    
+
     if (newQuantity < 0) {
       throw new Error(`Cannot reduce ${itemName} below 0. Current: ${item.current_quantity}, Requested: ${quantity}`);
     }
@@ -616,7 +616,7 @@ Use the available tools to perform actions. Always be helpful and professional.`
     );
 
     await DatabaseService.getInstance().logAudit(
-      userId, 'adjust_inventory', 'inventory', item.id, 
+      userId, 'adjust_inventory', 'inventory', item.id,
       { itemName, previousQuantity: item.current_quantity, adjustment: quantity, newQuantity, reason }
     );
 
@@ -633,7 +633,7 @@ Use the available tools to perform actions. Always be helpful and professional.`
 
   private async handleGetTasks(args: any, userId: string): Promise<AssistantResponse['actions'][0]> {
     const { status, type } = args;
-    
+
     let query = 'SELECT * FROM tasks';
     const params: any[] = [];
     const conditions: string[] = [];
@@ -672,7 +672,7 @@ Use the available tools to perform actions. Always be helpful and professional.`
     const { taskId } = args;
 
     const task = await this.db.get('SELECT * FROM tasks WHERE id = ?', [taskId]);
-    
+
     if (!task) {
       throw new Error(`Task ${taskId} not found`);
     }

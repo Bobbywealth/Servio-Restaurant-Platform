@@ -60,14 +60,14 @@ export default function ThemeToggle({ showLabel = false, variant = 'button' }: T
         transition={{ duration: 0.2 }}
         className="flex items-center justify-center"
       >
-        <CurrentIcon 
+        <CurrentIcon
           className={`
-            ${showLabel ? 'w-4 h-4' : 'w-5 h-5'} 
+            ${showLabel ? 'w-4 h-4' : 'w-5 h-5'}
             ${actualTheme === 'dark' ? 'text-yellow-400' : 'text-surface-600'}
-          `} 
+          `}
         />
       </motion.div>
-      
+
       {showLabel && (
         <span className="text-sm font-medium text-surface-700 dark:text-surface-300">
           {currentTheme?.label}
@@ -78,8 +78,8 @@ export default function ThemeToggle({ showLabel = false, variant = 'button' }: T
       <motion.div
         className="absolute inset-0 rounded-lg"
         animate={{
-          backgroundColor: actualTheme === 'dark' 
-            ? 'rgba(59, 130, 246, 0.1)' 
+          backgroundColor: actualTheme === 'dark'
+            ? 'rgba(59, 130, 246, 0.1)'
             : 'rgba(251, 191, 36, 0.1)'
         }}
         transition={{ duration: 0.3 }}
@@ -103,7 +103,7 @@ export function ThemeSelector() {
       {themes.map((t) => {
         const Icon = t.icon
         const isActive = theme === t.value
-        
+
         return (
           <motion.button
             key={t.value}
@@ -111,18 +111,18 @@ export function ThemeSelector() {
             className={`
               relative flex items-center justify-center w-8 h-8 rounded-md
               transition-all duration-200
-              ${isActive 
-                ? 'bg-white dark:bg-surface-700 shadow-sm' 
+              ${isActive
+                ? 'bg-white dark:bg-surface-700 shadow-sm'
                 : 'hover:bg-surface-200 dark:hover:bg-surface-700'
               }
             `}
             whileTap={{ scale: 0.95 }}
             title={`Switch to ${t.label.toLowerCase()} mode`}
           >
-            <Icon 
+            <Icon
               className={`w-4 h-4 ${isActive ? t.color : 'text-surface-400'}`}
             />
-            
+
             {isActive && (
               <motion.div
                 layoutId="theme-indicator"

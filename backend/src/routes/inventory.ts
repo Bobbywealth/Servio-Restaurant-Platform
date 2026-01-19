@@ -64,7 +64,7 @@ router.post('/receive', asyncHandler(async (req: Request, res: Response) => {
 
   for (const item of items) {
     const { name, quantity } = item;
-    
+
     if (!name || !quantity) {
       continue;
     }
@@ -77,7 +77,7 @@ router.post('/receive', asyncHandler(async (req: Request, res: Response) => {
 
     if (inventoryItem) {
       const newQuantity = inventoryItem.current_quantity + quantity;
-      
+
       await db.run(
         'UPDATE inventory SET current_quantity = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
         [newQuantity, inventoryItem.id]
@@ -133,11 +133,11 @@ router.post('/adjust', asyncHandler(async (req: Request, res: Response) => {
   }
 
   const newQuantity = item.current_quantity + quantity;
-  
+
   if (newQuantity < 0) {
     return res.status(400).json({
       success: false,
-      error: { 
+      error: {
         message: `Cannot reduce ${item.name} below 0. Current: ${item.current_quantity}, Requested: ${quantity}`
       }
     });
@@ -180,13 +180,13 @@ router.get('/low-stock', asyncHandler(async (req: Request, res: Response) => {
   const db = DatabaseService.getInstance().getDatabase();
 
   const lowStockItems = await db.all(`
-    SELECT *, 
-           CASE 
+    SELECT *,
+           CASE
              WHEN current_quantity = 0 THEN 'out_of_stock'
              WHEN current_quantity <= low_stock_threshold THEN 'low_stock'
              ELSE 'normal'
            END as stock_status
-    FROM inventory 
+    FROM inventory
     WHERE current_quantity <= low_stock_threshold
     ORDER BY current_quantity ASC
   `);
@@ -206,7 +206,7 @@ router.get('/categories', asyncHandler(async (req: Request, res: Response) => {
 
   const categories = await db.all(`
     SELECT category, COUNT(*) as item_count
-    FROM inventory 
+    FROM inventory
     GROUP BY category
     ORDER BY category
   `);

@@ -14,7 +14,7 @@ const DashboardLayout = dynamic(() => import('../../components/Layout/DashboardL
 
 // MEMOIZED STAT CARD COMPONENT FOR PERFORMANCE
 const StatCard = memo(({ stat, index }: { stat: any; index: number }) => (
-  <motion.div 
+  <motion.div
     className="card-hover"
     initial={{ opacity: 0, y: 20 }}
     animate={{ opacity: 1, y: 0 }}
@@ -22,7 +22,7 @@ const StatCard = memo(({ stat, index }: { stat: any; index: number }) => (
     whileHover={{ y: -4 }}
   >
     <div className="flex items-center">
-      <motion.div 
+      <motion.div
         className={`p-3 rounded-xl ${stat.color}`}
         whileHover={{ scale: 1.1, rotate: 5 }}
         transition={{ type: "spring", stiffness: 400, damping: 10 }}
@@ -33,7 +33,7 @@ const StatCard = memo(({ stat, index }: { stat: any; index: number }) => (
         <p className="text-sm font-medium text-surface-600 dark:text-surface-400">
           {stat.name}
         </p>
-        <motion.p 
+        <motion.p
           className="text-2xl font-bold text-surface-900 dark:text-surface-100"
           initial={{ scale: 0 }}
           animate={{ scale: 1 }}
@@ -46,8 +46,8 @@ const StatCard = memo(({ stat, index }: { stat: any; index: number }) => (
     <div className="mt-4 flex items-center justify-between">
       <div className="flex items-center">
         <span className={`text-sm font-medium inline-flex items-center px-2 py-1 rounded-full ${
-          stat.changeType === 'increase' 
-            ? 'text-servio-green-700 dark:text-servio-green-300 bg-servio-green-100 dark:bg-servio-green-900/30' 
+          stat.changeType === 'increase'
+            ? 'text-servio-green-700 dark:text-servio-green-300 bg-servio-green-100 dark:bg-servio-green-900/30'
             : 'text-servio-red-700 dark:text-servio-red-300 bg-servio-red-100 dark:bg-servio-red-900/30'
         }`}>
           {stat.change}
@@ -154,7 +154,7 @@ const DashboardIndex = memo(() => {
           </div>
 
           {/* Quick Access to Assistant */}
-          <motion.div 
+          <motion.div
             className="gradient-warning rounded-2xl p-6 text-white relative overflow-hidden"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -163,7 +163,7 @@ const DashboardIndex = memo(() => {
             <div className="absolute inset-0 bg-gradient-to-br from-servio-orange-400/20 to-transparent" />
             <div className="relative flex items-center justify-between">
               <div>
-                <motion.h2 
+                <motion.h2
                   className="text-xl font-semibold mb-2 flex items-center"
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
@@ -178,7 +178,7 @@ const DashboardIndex = memo(() => {
                     <Sparkles className="w-5 h-5" />
                   </motion.div>
                 </motion.h2>
-                <motion.p 
+                <motion.p
                   className="text-orange-100 mb-4 max-w-md"
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
@@ -202,9 +202,9 @@ const DashboardIndex = memo(() => {
                 </motion.div>
               </div>
               <div className="hidden md:block">
-                <motion.div 
+                <motion.div
                   className="w-20 h-20 bg-white bg-opacity-20 rounded-2xl flex items-center justify-center backdrop-blur-sm"
-                  animate={{ 
+                  animate={{
                     scale: [1, 1.05, 1],
                     rotate: [0, 2, -2, 0]
                   }}
@@ -225,7 +225,7 @@ const DashboardIndex = memo(() => {
 
           {/* Recent Activity */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <motion.div 
+            <motion.div
               className="card"
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
@@ -237,8 +237,8 @@ const DashboardIndex = memo(() => {
               </h3>
               <div className="space-y-3">
                 {recentOrders.map((order, index) => (
-                  <motion.div 
-                    key={order.id} 
+                  <motion.div
+                    key={order.id}
                     className="flex items-center justify-between py-3 px-4 rounded-xl bg-surface-50 dark:bg-surface-800/50 hover:bg-surface-100 dark:hover:bg-surface-800 transition-colors cursor-pointer"
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
@@ -262,7 +262,7 @@ const DashboardIndex = memo(() => {
               </div>
             </motion.div>
 
-            <motion.div 
+            <motion.div
               className="card"
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
@@ -283,15 +283,15 @@ const DashboardIndex = memo(() => {
                     <Link
                       href={action.href}
                       className={`block w-full text-left p-4 rounded-xl border transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] ${
-                        action.highlight 
-                          ? 'border-servio-orange-200 dark:border-servio-orange-800 bg-servio-orange-50 dark:bg-servio-orange-900/20 hover:bg-servio-orange-100 dark:hover:bg-servio-orange-900/30' 
+                        action.highlight
+                          ? 'border-servio-orange-200 dark:border-servio-orange-800 bg-servio-orange-50 dark:bg-servio-orange-900/20 hover:bg-servio-orange-100 dark:hover:bg-servio-orange-900/30'
                           : 'border-surface-200 dark:border-surface-700 hover:bg-surface-50 dark:hover:bg-surface-800/50'
                       }`}
                     >
                       <div className="flex items-center space-x-3">
                         <div className={`p-2 rounded-lg ${
-                          action.highlight 
-                            ? 'bg-servio-orange-100 dark:bg-servio-orange-800/50' 
+                          action.highlight
+                            ? 'bg-servio-orange-100 dark:bg-servio-orange-800/50'
                             : 'bg-surface-100 dark:bg-surface-800'
                         }`}>
                           <action.icon className={`h-5 w-5 ${action.iconColor}`} />

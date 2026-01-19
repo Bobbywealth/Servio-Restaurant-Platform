@@ -24,8 +24,8 @@ interface TranscriptFeedProps {
   isProcessing?: boolean
 }
 
-export default function TranscriptFeed({ 
-  messages, 
+export default function TranscriptFeed({
+  messages,
   className = '',
   isProcessing = false
 }: TranscriptFeedProps) {
@@ -157,7 +157,7 @@ export default function TranscriptFeed({
                         </span>
                       )}
                     </div>
-                    
+
                     <p className={`text-sm ${styles.textColor} whitespace-pre-wrap break-words`}>
                       {message.content}
                     </p>

@@ -36,7 +36,7 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
   params.push(Number(limit), Number(offset));
 
   const orders = await db.all(query, params);
-  
+
   // Parse JSON fields
   const formattedOrders = orders.map((order: any) => ({
     ...order,
@@ -106,11 +106,11 @@ router.post('/:id/status', asyncHandler(async (req: Request, res: Response) => {
   const { status, userId } = req.body;
 
   const validStatuses = ['received', 'preparing', 'ready', 'completed', 'cancelled'];
-  
+
   if (!status || !validStatuses.includes(status)) {
     return res.status(400).json({
       success: false,
-      error: { 
+      error: {
         message: 'Invalid status. Must be one of: ' + validStatuses.join(', ')
       }
     });
@@ -253,14 +253,14 @@ router.get('/waiting-times', asyncHandler(async (req: Request, res: Response) =>
  * Create a new order (typically from delivery platforms)
  */
 router.post('/', asyncHandler(async (req: Request, res: Response) => {
-  const { 
-    externalId, 
-    channel, 
-    items, 
-    customerName, 
-    customerPhone, 
+  const {
+    externalId,
+    channel,
+    items,
+    customerName,
+    customerPhone,
     totalAmount,
-    userId 
+    userId
   } = req.body;
 
   if (!externalId || !channel || !items || !totalAmount) {
@@ -275,7 +275,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
 
   await db.run(`
     INSERT INTO orders (
-      id, external_id, channel, items, customer_name, 
+      id, external_id, channel, items, customer_name,
       customer_phone, total_amount, status
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `, [

@@ -54,11 +54,11 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
     if (theme !== 'system') return
 
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
-    
+
     const handleChange = () => {
       const systemTheme = mediaQuery.matches ? 'dark' : 'light'
       setActualTheme(systemTheme)
-      
+
       const root = window.document.documentElement
       root.classList.remove('light', 'dark')
       root.classList.add(systemTheme)

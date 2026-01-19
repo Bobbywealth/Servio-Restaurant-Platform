@@ -20,12 +20,12 @@ export function formatCurrency(
 export function formatRelativeTime(date: Date): string {
   const now = new Date()
   const diff = now.getTime() - date.getTime()
-  
+
   const seconds = Math.floor(diff / 1000)
   const minutes = Math.floor(seconds / 60)
   const hours = Math.floor(minutes / 60)
   const days = Math.floor(hours / 24)
-  
+
   if (days > 0) return `${days} day${days > 1 ? 's' : ''} ago`
   if (hours > 0) return `${hours} hour${hours > 1 ? 's' : ''} ago`
   if (minutes > 0) return `${minutes} min${minutes > 1 ? 's' : ''} ago`
@@ -135,11 +135,11 @@ export function calculatePercentage(value: number, total: number): number {
 // Format file size
 export function formatFileSize(bytes: number): string {
   if (bytes === 0) return '0 Bytes'
-  
+
   const k = 1024
   const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB']
   const i = Math.floor(Math.log(bytes) / Math.log(k))
-  
+
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
 
@@ -155,7 +155,7 @@ export const storage = {
       return defaultValue
     }
   },
-  
+
   set: <T>(key: string, value: T): void => {
     if (typeof window === 'undefined') return
     try {
@@ -164,7 +164,7 @@ export const storage = {
       console.error(`Error setting localStorage key "${key}":`, error)
     }
   },
-  
+
   remove: (key: string): void => {
     if (typeof window === 'undefined') return
     try {

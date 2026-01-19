@@ -50,7 +50,7 @@ router.post('/process-audio', upload.single('audio'), asyncHandler(async (req: R
 
   try {
     const result = await assistantService.processAudio(audioFile.buffer, userId);
-    
+
     res.json({
       success: true,
       data: result
@@ -59,7 +59,7 @@ router.post('/process-audio', upload.single('audio'), asyncHandler(async (req: R
     logger.error('Audio processing error:', error);
     res.status(500).json({
       success: false,
-      error: { 
+      error: {
         message: 'Failed to process audio',
         details: error instanceof Error ? error.message : 'Unknown error'
       }
@@ -92,7 +92,7 @@ router.post('/process-text', asyncHandler(async (req: Request, res: Response) =>
 
   try {
     const result = await assistantService.processText(text, userId);
-    
+
     res.json({
       success: true,
       data: result
@@ -101,7 +101,7 @@ router.post('/process-text', asyncHandler(async (req: Request, res: Response) =>
     logger.error('Text processing error:', error);
     res.status(500).json({
       success: false,
-      error: { 
+      error: {
         message: 'Failed to process text',
         details: error instanceof Error ? error.message : 'Unknown error'
       }
@@ -266,7 +266,7 @@ router.use((error: any, req: Request, res: Response, next: any) => {
       });
     }
   }
-  
+
   if (error.message === 'Only audio files are allowed') {
     return res.status(400).json({
       success: false,

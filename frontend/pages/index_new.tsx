@@ -2,9 +2,9 @@ import React from 'react'
 import Head from 'next/head'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
-import { 
-  Mic, Bot, Shield, Zap, Clock, Users, 
-  Phone, Smartphone, RefreshCw, BarChart3, 
+import {
+  Mic, Bot, Shield, Zap, Clock, Users,
+  Phone, Smartphone, RefreshCw, BarChart3,
   CheckCircle2, MessageSquare, HeadphonesIcon,
   Utensils, ShoppingCart, Inventory,
   Calendar, DollarSign, TrendingUp,
@@ -40,8 +40,8 @@ export default function HomePage() {
                 <a href="#demo" className="text-gray-600 hover:text-gray-900 font-medium">Demo</a>
               </div>
               <div className="flex items-center space-x-4">
-                <Link 
-                  href="/dashboard/assistant" 
+                <Link
+                  href="/dashboard/assistant"
                   className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium transition-all duration-200 transform hover:scale-105"
                 >
                   Try Servio Free
@@ -62,7 +62,7 @@ export default function HomePage() {
           </div>
 
           <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20 pb-32">
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6 }}
@@ -84,13 +84,13 @@ export default function HomePage() {
                 <br />
                 Restaurant Platform
               </h1>
-              
+
               <p className="text-xl md:text-2xl text-gray-600 mb-12 max-w-4xl mx-auto leading-relaxed">
                 Servio unifies <strong>orders, voice interactions, inventory, staff operations,</strong> and <strong>delivery platforms</strong> into one intelligent command center. Built for real restaurant conditions.
               </p>
-              
+
               <div className="flex flex-col sm:flex-row gap-6 justify-center items-center mb-16">
-                <Link 
+                <Link
                   href="/dashboard/assistant"
                   className="group bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-8 py-4 rounded-xl font-semibold text-lg transition-all duration-200 transform hover:scale-105 shadow-xl"
                 >
@@ -99,7 +99,7 @@ export default function HomePage() {
                     Try Servio Assistant Free
                   </div>
                 </Link>
-                
+
                 <button className="group bg-white border-2 border-gray-200 hover:border-gray-300 text-gray-700 px-8 py-4 rounded-xl font-semibold text-lg transition-all duration-200 shadow-lg">
                   <div className="flex items-center">
                     <PlayCircle className="w-5 h-5 mr-2 group-hover:text-blue-600" />
@@ -120,7 +120,7 @@ export default function HomePage() {
               </div>
 
               {/* Hero Dashboard Preview */}
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0, y: 40 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.8, delay: 0.4 }}
@@ -193,7 +193,7 @@ export default function HomePage() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-16">
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 className="bg-white p-6 rounded-xl shadow-sm border border-gray-200"
@@ -207,7 +207,7 @@ export default function HomePage() {
                 </p>
               </motion.div>
 
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.1 }}
@@ -222,7 +222,7 @@ export default function HomePage() {
                 </p>
               </motion.div>
 
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.2 }}
@@ -237,7 +237,7 @@ export default function HomePage() {
                 </p>
               </motion.div>
 
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.3 }}
@@ -252,7 +252,7 @@ export default function HomePage() {
                 </p>
               </motion.div>
 
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.4 }}
@@ -267,7 +267,7 @@ export default function HomePage() {
                 </p>
               </motion.div>
 
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.5 }}
@@ -577,7 +577,7 @@ export default function HomePage() {
                 whileInView={{ opacity: 1, x: 0 }}
               >
                 <div className="w-16 h-16 bg-purple-100 rounded-2xl flex items-center justify-center mb-6">
-                  <Sync className="w-8 h-8 text-purple-600" />
+                  <RefreshCw className="w-8 h-8 text-purple-600" />
                 </div>
                 <h3 className="text-3xl font-bold text-gray-900 mb-6">Smart Sync Engine</h3>
                 <p className="text-lg text-gray-600 mb-8">
@@ -851,9 +851,9 @@ export default function HomePage() {
               <p className="text-xl text-blue-100 mb-12 max-w-3xl mx-auto">
                 Join hundreds of restaurants already using Servio to streamline operations, increase efficiency, and delight customers.
               </p>
-              
+
               <div className="flex flex-col sm:flex-row gap-6 justify-center items-center">
-                <Link 
+                <Link
                   href="/dashboard/assistant"
                   className="group bg-white hover:bg-gray-50 text-blue-600 px-8 py-4 rounded-xl font-semibold text-lg transition-all duration-200 transform hover:scale-105 shadow-lg"
                 >
@@ -862,7 +862,7 @@ export default function HomePage() {
                     Start Your Free Trial
                   </div>
                 </Link>
-                
+
                 <button className="group bg-transparent border-2 border-white hover:bg-white hover:text-blue-600 text-white px-8 py-4 rounded-xl font-semibold text-lg transition-all duration-200">
                   <div className="flex items-center">
                     <MessageSquare className="w-5 h-5 mr-2" />
@@ -897,7 +897,7 @@ export default function HomePage() {
                   <span className="ml-2 text-sm text-gray-400">4.9/5 from 200+ restaurants</span>
                 </div>
               </div>
-              
+
               <div>
                 <h3 className="text-white font-semibold mb-4">Product</h3>
                 <ul className="space-y-2">
@@ -907,7 +907,7 @@ export default function HomePage() {
                   <li><Link href="/dashboard/assistant" className="text-gray-400 hover:text-white">Try Demo</Link></li>
                 </ul>
               </div>
-              
+
               <div>
                 <h3 className="text-white font-semibold mb-4">Company</h3>
                 <ul className="space-y-2">
@@ -917,7 +917,7 @@ export default function HomePage() {
                   <li><a href="#" className="text-gray-400 hover:text-white">Contact</a></li>
                 </ul>
               </div>
-              
+
               <div>
                 <h3 className="text-white font-semibold mb-4">Support</h3>
                 <ul className="space-y-2">
@@ -928,7 +928,7 @@ export default function HomePage() {
                 </ul>
               </div>
             </div>
-            
+
             <div className="border-t border-gray-800 pt-8 flex flex-col md:flex-row justify-between items-center">
               <p className="text-gray-400">© 2026 Servio. All rights reserved.</p>
               <div className="flex space-x-6 mt-4 md:mt-0">

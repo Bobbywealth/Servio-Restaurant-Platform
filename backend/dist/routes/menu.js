@@ -159,7 +159,7 @@ router.get('/unavailable', (0, errorHandler_1.asyncHandler)(async (req, res) => 
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
     const unavailableItems = await db.all(`
     SELECT *, updated_at as unavailable_since
-    FROM menu_items 
+    FROM menu_items
     WHERE is_available = 0
     ORDER BY updated_at DESC
   `);
@@ -180,12 +180,12 @@ router.get('/unavailable', (0, errorHandler_1.asyncHandler)(async (req, res) => 
 router.get('/categories', (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
     const categories = await db.all(`
-    SELECT 
+    SELECT
       category,
       COUNT(*) as total_items,
       COUNT(CASE WHEN is_available = 1 THEN 1 END) as available_items,
       COUNT(CASE WHEN is_available = 0 THEN 1 END) as unavailable_items
-    FROM menu_items 
+    FROM menu_items
     GROUP BY category
     ORDER BY category
   `);

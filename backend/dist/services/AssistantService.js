@@ -185,7 +185,7 @@ CURRENT RESTAURANT STATUS:
 
 YOUR CAPABILITIES:
 1. Orders: Check status, update progress, view wait times
-2. Menu/86: Mark items unavailable/available on delivery platforms  
+2. Menu/86: Mark items unavailable/available on delivery platforms
 3. Inventory: Record receipts, adjust quantities, check levels
 4. Tasks: View daily tasks, mark as complete
 5. General info: Provide restaurant operational assistance

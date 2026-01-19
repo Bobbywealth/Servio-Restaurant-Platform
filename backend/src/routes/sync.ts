@@ -66,8 +66,8 @@ router.get('/status', asyncHandler(async (req: Request, res: Response) => {
   ];
 
   const recentJobs = await db.all(`
-    SELECT * FROM sync_jobs 
-    ORDER BY created_at DESC 
+    SELECT * FROM sync_jobs
+    ORDER BY created_at DESC
     LIMIT 10
   `);
 
@@ -94,7 +94,7 @@ router.get('/status', asyncHandler(async (req: Request, res: Response) => {
 router.post('/manual', asyncHandler(async (req: Request, res: Response) => {
   const { channels = ['all'], type = 'full_sync', userId } = req.body;
 
-  const targetChannels = channels.includes('all') 
+  const targetChannels = channels.includes('all')
     ? ['doordash', 'ubereats', 'grubhub']
     : channels;
 
@@ -103,7 +103,7 @@ router.post('/manual', asyncHandler(async (req: Request, res: Response) => {
 
   for (const channel of targetChannels) {
     const jobId = `sync_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    
+
     await db.run(`
       INSERT INTO sync_jobs (id, type, status, channels, details)
       VALUES (?, ?, ?, ?, ?)
@@ -118,8 +118,8 @@ router.post('/manual', asyncHandler(async (req: Request, res: Response) => {
     // Simulate immediate completion for demo
     setTimeout(async () => {
       await db.run(`
-        UPDATE sync_jobs 
-        SET status = 'completed', completed_at = CURRENT_TIMESTAMP 
+        UPDATE sync_jobs
+        SET status = 'completed', completed_at = CURRENT_TIMESTAMP
         WHERE id = ?
       `, [jobId]);
     }, Math.random() * 2000 + 1000); // Complete after 1-3 seconds

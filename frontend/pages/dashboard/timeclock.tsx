@@ -46,7 +46,7 @@ export default function TimeClockPage() {
     fetchCurrentStaff()
     fetchRecentEntries()
     fetchStats()
-    
+
     // Refresh data every 30 seconds
     const interval = setInterval(() => {
       fetchCurrentStaff()
@@ -60,7 +60,7 @@ export default function TimeClockPage() {
     try {
       const response = await fetch('/api/timeclock/current-staff')
       const data = await response.json()
-      
+
       if (data.success) {
         setCurrentStaff(data.data.currentStaff)
         setStats(prev => ({
@@ -79,7 +79,7 @@ export default function TimeClockPage() {
       const today = new Date().toISOString().split('T')[0]
       const response = await fetch(`/api/timeclock/entries?startDate=${today}&limit=10`)
       const data = await response.json()
-      
+
       if (data.success) {
         setRecentEntries(data.data.entries)
       }
@@ -93,7 +93,7 @@ export default function TimeClockPage() {
       const today = new Date().toISOString().split('T')[0]
       const response = await fetch(`/api/timeclock/stats?startDate=${today}&endDate=${today}`)
       const data = await response.json()
-      
+
       if (data.success) {
         setStats(prev => ({
           ...prev,
@@ -116,9 +116,9 @@ export default function TimeClockPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pin: selectedPin })
       })
-      
+
       const data = await response.json()
-      
+
       if (data.success) {
         setSelectedPin('')
         fetchCurrentStaff()
@@ -143,9 +143,9 @@ export default function TimeClockPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId })
       })
-      
+
       const data = await response.json()
-      
+
       if (data.success) {
         fetchCurrentStaff()
         fetchRecentEntries()
@@ -164,16 +164,16 @@ export default function TimeClockPage() {
 
   const handleBreak = async (userId: string, isOnBreak: boolean) => {
     const endpoint = isOnBreak ? 'end-break' : 'start-break'
-    
+
     try {
       const response = await fetch(`/api/timeclock/${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId })
       })
-      
+
       const data = await response.json()
-      
+
       if (data.success) {
         fetchCurrentStaff()
       } else {
@@ -219,17 +219,17 @@ export default function TimeClockPage() {
             <h1 className="text-2xl font-bold text-gray-900">Time Clock</h1>
             <p className="text-gray-600">Staff time tracking and management</p>
           </div>
-          
+
           <div className="text-right">
             <div className="text-2xl font-mono font-bold text-gray-900">
               {new Date().toLocaleTimeString()}
             </div>
             <div className="text-sm text-gray-600">
-              {new Date().toLocaleDateString('en-US', { 
+              {new Date().toLocaleDateString('en-US', {
                 weekday: 'long',
-                year: 'numeric', 
-                month: 'long', 
-                day: 'numeric' 
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
               })}
             </div>
           </div>
@@ -237,7 +237,7 @@ export default function TimeClockPage() {
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className="bg-white p-6 rounded-xl shadow-sm border border-gray-200"
@@ -253,7 +253,7 @@ export default function TimeClockPage() {
             </div>
           </motion.div>
 
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
@@ -270,7 +270,7 @@ export default function TimeClockPage() {
             </div>
           </motion.div>
 
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
@@ -287,7 +287,7 @@ export default function TimeClockPage() {
             </div>
           </motion.div>
 
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
@@ -307,13 +307,13 @@ export default function TimeClockPage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Clock In/Out Interface */}
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             className="bg-white p-6 rounded-xl shadow-sm border border-gray-200"
           >
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Clock In/Out</h2>
-            
+
             <div className="space-y-4">
               {/* PIN Display */}
               <div className="text-center">
@@ -322,7 +322,7 @@ export default function TimeClockPage() {
                     {selectedPin.padEnd(4, '•')}
                   </div>
                 </div>
-                
+
                 {/* PIN Keypad */}
                 <div className="grid grid-cols-3 gap-2 mb-4">
                   {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
@@ -359,13 +359,13 @@ export default function TimeClockPage() {
           </motion.div>
 
           {/* Currently Working Staff */}
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             className="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-gray-200"
           >
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Currently Working</h2>
-            
+
             <div className="space-y-3">
               {currentStaff.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">
@@ -385,7 +385,7 @@ export default function TimeClockPage() {
                         </div>
                       </div>
                     </div>
-                    
+
                     <div className="flex items-center space-x-4">
                       <div className="text-right text-sm">
                         <p className="text-gray-900 font-medium">
@@ -400,19 +400,19 @@ export default function TimeClockPage() {
                           </p>
                         )}
                       </div>
-                      
+
                       <div className="flex space-x-2">
                         <button
                           onClick={() => handleBreak(staff.user_id, staff.is_on_break)}
                           className={`p-2 rounded-lg transition-colors ${
-                            staff.is_on_break 
-                              ? 'bg-orange-100 text-orange-600 hover:bg-orange-200' 
+                            staff.is_on_break
+                              ? 'bg-orange-100 text-orange-600 hover:bg-orange-200'
                               : 'bg-blue-100 text-blue-600 hover:bg-blue-200'
                           }`}
                         >
                           {staff.is_on_break ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
                         </button>
-                        
+
                         <button
                           onClick={() => handleClockOut(staff.user_id)}
                           className="p-2 bg-red-100 text-red-600 hover:bg-red-200 rounded-lg transition-colors"
@@ -429,13 +429,13 @@ export default function TimeClockPage() {
         </div>
 
         {/* Recent Time Entries */}
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           className="bg-white p-6 rounded-xl shadow-sm border border-gray-200"
         >
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Today&apos;s Time Entries</h2>
-          
+
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
@@ -480,7 +480,7 @@ export default function TimeClockPage() {
                 ))}
               </tbody>
             </table>
-            
+
             {recentEntries.length === 0 && (
               <div className="text-center py-8 text-gray-500">
                 <Clock className="w-12 h-12 mx-auto mb-3 text-gray-300" />

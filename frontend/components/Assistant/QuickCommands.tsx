@@ -1,11 +1,11 @@
 import React, { useState } from 'react'
 import { motion } from 'framer-motion'
-import { 
-  ClipboardList, 
-  Package, 
-  Users, 
-  Clock, 
-  DollarSign, 
+import {
+  ClipboardList,
+  Package,
+  Users,
+  Clock,
+  DollarSign,
   AlertTriangle,
   ChefHat,
   Phone,
@@ -141,15 +141,15 @@ const CATEGORIES = {
   general: { label: 'General', color: 'gray' }
 }
 
-export default function QuickCommands({ 
-  onCommand, 
-  disabled = false, 
-  className = '' 
+export default function QuickCommands({
+  onCommand,
+  disabled = false,
+  className = ''
 }: QuickCommandsProps) {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
   const [hoveredCommand, setHoveredCommand] = useState<string | null>(null)
 
-  const filteredCommands = selectedCategory 
+  const filteredCommands = selectedCategory
     ? QUICK_COMMANDS.filter(cmd => cmd.category === selectedCategory)
     : QUICK_COMMANDS
 
@@ -226,8 +226,8 @@ export default function QuickCommands({
             className={`
               flex items-start space-x-3 p-4 sm:p-3 rounded-lg border text-left transition-all duration-200
               ${getCommandButtonColor(command.category)}
-              ${disabled 
-                ? 'opacity-50 cursor-not-allowed' 
+              ${disabled
+                ? 'opacity-50 cursor-not-allowed'
                 : 'cursor-pointer transform hover:scale-[1.02] active:scale-[0.98] touch-manipulation mobile-tap-highlight'
               }
               min-h-touch
@@ -248,7 +248,7 @@ export default function QuickCommands({
                   {CATEGORIES[command.category].label}
                 </span>
               </div>
-              
+
               <p className="text-xs text-gray-600 mt-1 line-clamp-2">
                 {hoveredCommand === command.id ? command.command : command.description}
               </p>
@@ -259,9 +259,9 @@ export default function QuickCommands({
 
       {/* Custom Command Input */}
       <div className="mt-4 pt-4 border-t border-gray-200">
-        <CustomCommandInput 
-          onCommand={onCommand} 
-          disabled={disabled} 
+        <CustomCommandInput
+          onCommand={onCommand}
+          disabled={disabled}
         />
       </div>
     </div>
@@ -269,12 +269,12 @@ export default function QuickCommands({
 }
 
 // Custom Command Input Component
-function CustomCommandInput({ 
-  onCommand, 
-  disabled 
-}: { 
+function CustomCommandInput({
+  onCommand,
+  disabled
+}: {
   onCommand: (command: string) => void
-  disabled: boolean 
+  disabled: boolean
 }) {
   const [customCommand, setCustomCommand] = useState('')
 

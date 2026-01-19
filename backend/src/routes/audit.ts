@@ -10,15 +10,15 @@ const num = (v: any) => (typeof v === 'number' ? v : Number(v ?? 0));
  * Get audit logs with filtering and pagination
  */
 router.get('/logs', asyncHandler(async (req: Request, res: Response) => {
-  const { 
-    userId, 
-    action, 
-    entityType, 
+  const {
+    userId,
+    action,
+    entityType,
     source = 'all',
-    limit = 100, 
+    limit = 100,
     offset = 0,
     startDate,
-    endDate 
+    endDate
   } = req.query;
 
   const db = DatabaseService.getInstance().getDatabase();
@@ -126,7 +126,7 @@ router.get('/users', asyncHandler(async (req: Request, res: Response) => {
   const db = DatabaseService.getInstance().getDatabase();
 
   const users = await db.all(`
-    SELECT 
+    SELECT
       al.user_id,
       u.name as user_name,
       u.role as user_role,
@@ -183,40 +183,40 @@ router.get('/stats', asyncHandler(async (req: Request, res: Response) => {
   ] = await Promise.all([
     db.get(`SELECT COUNT(*) as count FROM audit_logs WHERE ${dateCondition}`),
     db.all(`
-      SELECT action, COUNT(*) as count 
-      FROM audit_logs 
+      SELECT action, COUNT(*) as count
+      FROM audit_logs
       WHERE ${dateCondition}
-      GROUP BY action 
-      ORDER BY count DESC 
+      GROUP BY action
+      ORDER BY count DESC
       LIMIT 10
     `),
     db.all(`
-      SELECT 
-        al.user_id, 
+      SELECT
+        al.user_id,
         u.name as user_name,
-        COUNT(*) as count 
+        COUNT(*) as count
       FROM audit_logs al
       LEFT JOIN users u ON al.user_id = u.id
       WHERE ${dateCondition}
       GROUP BY al.user_id, u.name
-      ORDER BY count DESC 
+      ORDER BY count DESC
       LIMIT 10
     `),
     db.all(`
-      SELECT source, COUNT(*) as count 
-      FROM audit_logs 
+      SELECT source, COUNT(*) as count
+      FROM audit_logs
       WHERE ${dateCondition}
-      GROUP BY source 
+      GROUP BY source
       ORDER BY count DESC
     `),
     db.all(`
-      SELECT 
+      SELECT
         al.*,
         u.name as user_name
       FROM audit_logs al
       LEFT JOIN users u ON al.user_id = u.id
       WHERE ${dateCondition}
-      ORDER BY created_at DESC 
+      ORDER BY created_at DESC
       LIMIT 20
     `)
   ]);
@@ -258,7 +258,7 @@ router.get('/entity/:entityType/:entityId', asyncHandler(async (req: Request, re
   const db = DatabaseService.getInstance().getDatabase();
 
   const logs = await db.all(`
-    SELECT 
+    SELECT
       al.*,
       u.name as user_name
     FROM audit_logs al
@@ -288,11 +288,11 @@ router.get('/entity/:entityType/:entityId', asyncHandler(async (req: Request, re
  * Export audit logs (generate downloadable report)
  */
 router.post('/export', asyncHandler(async (req: Request, res: Response) => {
-  const { 
+  const {
     format = 'json', // json, csv
-    startDate, 
-    endDate, 
-    filters = {} 
+    startDate,
+    endDate,
+    filters = {}
   } = req.body;
 
   // In a real application, this would:

@@ -84,14 +84,14 @@ router.post('/items/set-unavailable', asyncHandler(async (req: Request, res: Res
   );
 
   // Simulate channel sync (in real app, this would call delivery platform APIs)
-  const syncResults = channels.includes('all') 
+  const syncResults = channels.includes('all')
     ? ['doordash', 'ubereats', 'grubhub']
     : channels;
 
   const syncJobs = [];
   for (const channel of syncResults) {
     const jobId = `sync_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    
+
     await db.run(`
       INSERT INTO sync_jobs (id, type, status, channels, details)
       VALUES (?, ?, ?, ?, ?)
@@ -159,14 +159,14 @@ router.post('/items/set-available', asyncHandler(async (req: Request, res: Respo
   );
 
   // Simulate channel sync
-  const syncResults = channels.includes('all') 
+  const syncResults = channels.includes('all')
     ? ['doordash', 'ubereats', 'grubhub']
     : channels;
 
   const syncJobs = [];
   for (const channel of syncResults) {
     const jobId = `sync_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    
+
     await db.run(`
       INSERT INTO sync_jobs (id, type, status, channels, details)
       VALUES (?, ?, ?, ?, ?)
@@ -212,7 +212,7 @@ router.get('/unavailable', asyncHandler(async (req: Request, res: Response) => {
 
   const unavailableItems = await db.all(`
     SELECT *, updated_at as unavailable_since
-    FROM menu_items 
+    FROM menu_items
     WHERE is_available = 0
     ORDER BY updated_at DESC
   `);
@@ -237,12 +237,12 @@ router.get('/categories', asyncHandler(async (req: Request, res: Response) => {
   const db = DatabaseService.getInstance().getDatabase();
 
   const categories = await db.all(`
-    SELECT 
+    SELECT
       category,
       COUNT(*) as total_items,
       COUNT(CASE WHEN is_available = 1 THEN 1 END) as available_items,
       COUNT(CASE WHEN is_available = 0 THEN 1 END) as unavailable_items
-    FROM menu_items 
+    FROM menu_items
     GROUP BY category
     ORDER BY category
   `);

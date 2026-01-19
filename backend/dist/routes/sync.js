@@ -59,8 +59,8 @@ router.get('/status', (0, errorHandler_1.asyncHandler)(async (req, res) => {
         }
     ];
     const recentJobs = await db.all(`
-    SELECT * FROM sync_jobs 
-    ORDER BY created_at DESC 
+    SELECT * FROM sync_jobs
+    ORDER BY created_at DESC
     LIMIT 10
   `);
     const formattedJobs = recentJobs.map((job) => ({
@@ -103,8 +103,8 @@ router.post('/manual', (0, errorHandler_1.asyncHandler)(async (req, res) => {
         // Simulate immediate completion for demo
         setTimeout(async () => {
             await db.run(`
-        UPDATE sync_jobs 
-        SET status = 'completed', completed_at = CURRENT_TIMESTAMP 
+        UPDATE sync_jobs
+        SET status = 'completed', completed_at = CURRENT_TIMESTAMP
         WHERE id = ?
       `, [jobId]);
         }, Math.random() * 2000 + 1000); // Complete after 1-3 seconds

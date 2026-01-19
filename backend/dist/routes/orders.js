@@ -212,7 +212,7 @@ router.post('/', (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const orderId = `order_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     await db.run(`
     INSERT INTO orders (
-      id, external_id, channel, items, customer_name, 
+      id, external_id, channel, items, customer_name,
       customer_phone, total_amount, status
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `, [

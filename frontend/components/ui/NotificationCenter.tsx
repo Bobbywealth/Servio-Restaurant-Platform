@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { 
-  Bell, 
-  X, 
-  CheckCircle2, 
-  Clock, 
-  AlertTriangle, 
+import {
+  Bell,
+  X,
+  CheckCircle2,
+  Clock,
+  AlertTriangle,
   Info,
   ShoppingCart,
   Package,
@@ -175,7 +175,7 @@ export default function NotificationCenter({ className = '' }: NotificationCente
 
   const markAsRead = (id: string) => {
     setNotifications(prev => {
-      const updated = prev.map(n => 
+      const updated = prev.map(n =>
         n.id === id ? { ...n, read: true } : n
       )
       localStorage.setItem('servio_notifications', JSON.stringify(updated))
@@ -199,11 +199,11 @@ export default function NotificationCenter({ className = '' }: NotificationCente
       const notification = prev.find(n => n.id === id)
       const updated = prev.filter(n => n.id !== id)
       localStorage.setItem('servio_notifications', JSON.stringify(updated))
-      
+
       if (notification && !notification.read) {
         setUnreadCount(count => Math.max(0, count - 1))
       }
-      
+
       return updated
     })
   }
@@ -244,7 +244,7 @@ export default function NotificationCenter({ className = '' }: NotificationCente
         whileTap={{ scale: 0.95 }}
       >
         <Bell className="w-5 h-5" />
-        
+
         {unreadCount > 0 && (
           <motion.span
             initial={{ scale: 0 }}
@@ -311,7 +311,7 @@ export default function NotificationCenter({ className = '' }: NotificationCente
                     <div className="space-y-1 p-2">
                       {notifications.map((notification) => {
                         const Icon = getNotificationIcon(notification.type)
-                        
+
                         return (
                           <motion.div
                             key={notification.id}
@@ -319,8 +319,8 @@ export default function NotificationCenter({ className = '' }: NotificationCente
                             animate={{ opacity: 1, x: 0 }}
                             exit={{ opacity: 0, x: -20 }}
                             className={`p-3 rounded-lg border transition-all duration-200 hover:bg-surface-50 dark:hover:bg-surface-800/50 ${
-                              notification.read 
-                                ? 'bg-surface-50 dark:bg-surface-800/30 border-surface-200 dark:border-surface-700' 
+                              notification.read
+                                ? 'bg-surface-50 dark:bg-surface-800/30 border-surface-200 dark:border-surface-700'
                                 : 'bg-white dark:bg-surface-800 border-surface-300 dark:border-surface-600'
                             }`}
                             onClick={() => !notification.read && markAsRead(notification.id)}
@@ -329,7 +329,7 @@ export default function NotificationCenter({ className = '' }: NotificationCente
                               <div className={`p-2 rounded-lg ${getPriorityColor(notification.priority)}`}>
                                 <Icon className="w-4 h-4" />
                               </div>
-                              
+
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center justify-between">
                                   <p className="font-medium text-surface-900 dark:text-surface-100 text-sm truncate">
@@ -345,16 +345,16 @@ export default function NotificationCenter({ className = '' }: NotificationCente
                                     <X className="w-3 h-3" />
                                   </button>
                                 </div>
-                                
+
                                 <p className="text-surface-600 dark:text-surface-400 text-sm mt-1">
                                   {notification.message}
                                 </p>
-                                
+
                                 <div className="flex items-center justify-between mt-2">
                                   <span className="text-2xs text-surface-500 dark:text-surface-400">
                                     {formatRelativeTime(notification.timestamp)}
                                   </span>
-                                  
+
                                   {!notification.read && (
                                     <div className="w-2 h-2 bg-primary-500 rounded-full" />
                                   )}
@@ -372,7 +372,7 @@ export default function NotificationCenter({ className = '' }: NotificationCente
                                           markAsRead(notification.id)
                                         }}
                                         className={`text-xs px-3 py-1 rounded-lg font-medium ${
-                                          action.variant === 'danger' 
+                                          action.variant === 'danger'
                                             ? 'bg-servio-red-100 text-servio-red-700 hover:bg-servio-red-200'
                                             : action.variant === 'primary'
                                             ? 'bg-primary-100 text-primary-700 hover:bg-primary-200'

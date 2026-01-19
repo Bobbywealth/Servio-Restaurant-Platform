@@ -19,9 +19,9 @@ interface AvatarProps {
   talkIntensity?: number // 0..1 audio-driven mouth movement
 }
 
-const Avatar = memo<AvatarProps>(({ 
-  isTalking = false, 
-  isListening = false, 
+const Avatar = memo<AvatarProps>(({
+  isTalking = false,
+  isListening = false,
   size = 'large',
   className = '',
   useFace = true,
@@ -31,7 +31,7 @@ const Avatar = memo<AvatarProps>(({
   // MEMOIZED SIZE CLASSES FOR PERFORMANCE
   const sizeClasses = useMemo(() => ({
     small: 'w-16 h-16',
-    medium: 'w-24 h-24', 
+    medium: 'w-24 h-24',
     large: 'w-32 h-32'
   }), [])
 
@@ -182,19 +182,19 @@ const Avatar = memo<AvatarProps>(({
         className="mt-4 text-center"
       >
         <p className={`text-sm font-medium ${
-          isListening ? 'text-blue-600' : 
-          isTalking ? 'text-green-600' : 
+          isListening ? 'text-blue-600' :
+          isTalking ? 'text-green-600' :
           'text-gray-600'
         }`}>
           {state.label}
         </p>
-        
+
         {/* Activity indicator */}
         <div className="flex items-center justify-center mt-2">
           <motion.div
             className={`w-2 h-2 rounded-full ${
-              isListening ? 'bg-blue-500' : 
-              isTalking ? 'bg-green-500' : 
+              isListening ? 'bg-blue-500' :
+              isTalking ? 'bg-green-500' :
               'bg-gray-400'
             }`}
             animate={{

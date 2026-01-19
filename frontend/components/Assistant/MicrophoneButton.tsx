@@ -48,7 +48,7 @@ export default function MicrophoneButton({
 
   const handleClick = () => {
     if (disabled || isProcessing) return
-    
+
     if (isRecording) {
       onStopRecording()
     } else {
@@ -123,7 +123,7 @@ export default function MicrophoneButton({
       <motion.button
         className={`
           relative w-20 h-20 sm:w-16 sm:h-16 rounded-full ${state.bgColor} ${state.hoverColor} ${state.textColor}
-          flex items-center justify-center transition-all duration-200 focus:outline-none 
+          flex items-center justify-center transition-all duration-200 focus:outline-none
           focus:ring-4 focus:ring-blue-300 shadow-lg ${state.shadowColor}
           ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}
           touch-manipulation mobile-tap-highlight

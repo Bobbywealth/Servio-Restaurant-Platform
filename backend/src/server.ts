@@ -29,7 +29,7 @@ async function initializeServer() {
   try {
     await DatabaseService.initialize();
     logger.info('Database initialized successfully');
-    
+
     // Now load routes after database is ready
     const { default: authRoutes } = await import('./routes/auth');
     const { default: assistantRoutes } = await import('./routes/assistant');
@@ -41,7 +41,7 @@ async function initializeServer() {
     const { default: receiptsRoutes } = await import('./routes/receipts');
     const { default: auditRoutes } = await import('./routes/audit');
     const { default: timeclockRoutes } = await import('./routes/timeclock');
-    
+
     // API Routes
     app.use('/api/auth', authRoutes);
 
@@ -55,7 +55,7 @@ async function initializeServer() {
     app.use('/api/receipts', requireAuth, receiptsRoutes);
     app.use('/api/audit', requireAuth, auditRoutes);
     app.use('/api/timeclock', requireAuth, timeclockRoutes);
-    
+
     logger.info('Routes loaded successfully');
   } catch (error) {
     logger.error('Failed to initialize server:', error);
@@ -104,19 +104,19 @@ app.use(compression({
 
 // OPTIMIZED LOGGING (less verbose in production)
 const morganFormat = process.env.NODE_ENV === 'production' ? 'combined' : 'dev';
-app.use(morgan(morganFormat, { 
+app.use(morgan(morganFormat, {
   stream: { write: message => logger.info(message.trim()) },
   skip: (req, res) => res.statusCode < 400 && process.env.NODE_ENV === 'production'
 }));
 
 // OPTIMIZED BODY PARSING
-app.use(express.json({ 
+app.use(express.json({
   limit: '10mb',
   strict: true,
   type: ['application/json', 'application/csp-report']
 }));
-app.use(express.urlencoded({ 
-  extended: true, 
+app.use(express.urlencoded({
+  extended: true,
   limit: '10mb',
   parameterLimit: 1000
 }));
@@ -131,13 +131,13 @@ app.use((req, res, next) => {
   if (req.method === 'GET' && !req.url.includes('/auth') && !req.url.includes('/timeclock')) {
     const cacheKey = req.url;
     const cached = cache.get(cacheKey);
-    
+
     if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
       res.set(cached.headers);
       res.set('X-Cache', 'HIT');
       return res.json(cached.data);
     }
-    
+
     // Cache the response
     const originalSend = res.json;
     res.json = function(data) {
@@ -190,7 +190,7 @@ setInterval(() => {
 // Socket.IO connection handling
 io.on('connection', (socket) => {
   logger.info(`Client connected: ${socket.id}`);
-  
+
   socket.on('join-restaurant', (restaurantId: string) => {
     socket.join(`restaurant-${restaurantId}`);
     logger.info(`Socket ${socket.id} joined restaurant-${restaurantId}`);
@@ -208,8 +208,8 @@ app.set('socketio', io);
 
 // Health check
 app.get('/health', (req, res) => {
-  res.status(200).json({ 
-    status: 'ok', 
+  res.status(200).json({
+    status: 'ok',
     timestamp: new Date().toISOString(),
     version: '1.0.0'
   });
@@ -240,7 +240,7 @@ app.use(errorHandler);
 
 // 404 handler
 app.use('*', (req, res) => {
-  res.status(404).json({ 
+  res.status(404).json({
     error: 'Not Found',
     message: `Route ${req.method} ${req.originalUrl} not found`
   });

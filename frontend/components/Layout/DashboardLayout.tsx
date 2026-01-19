@@ -5,14 +5,14 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useUser } from '../../contexts/UserContext'
 import ThemeToggle from '../ui/ThemeToggle'
 import NotificationCenter from '../ui/NotificationCenter'
-import { 
-  Bot, 
-  Home, 
-  Mic, 
-  ClipboardList, 
-  Package, 
-  Users, 
-  Settings, 
+import {
+  Bot,
+  Home,
+  Mic,
+  ClipboardList,
+  Package,
+  Users,
+  Settings,
   LogOut,
   Clock,
   User,
@@ -35,46 +35,46 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const currentPath = normalizePath(router.asPath)
 
   const navigation = [
-    { 
-      name: 'Dashboard', 
-      href: '/dashboard', 
-      icon: Home, 
+    {
+      name: 'Dashboard',
+      href: '/dashboard',
+      icon: Home,
       description: 'Overview & quick actions',
       color: 'text-servio-blue-500'
     },
-    { 
-      name: 'Assistant', 
-      href: '/dashboard/assistant', 
-      icon: Mic, 
+    {
+      name: 'Assistant',
+      href: '/dashboard/assistant',
+      icon: Mic,
       description: 'AI voice assistant',
       color: 'text-servio-orange-500',
       highlight: true
     },
-    { 
-      name: 'Orders', 
-      href: '/dashboard/orders', 
-      icon: ClipboardList, 
+    {
+      name: 'Orders',
+      href: '/dashboard/orders',
+      icon: ClipboardList,
       description: 'Manage all orders',
       color: 'text-primary-500'
     },
-    { 
-      name: 'Inventory', 
-      href: '/dashboard/inventory', 
-      icon: Package, 
+    {
+      name: 'Inventory',
+      href: '/dashboard/inventory',
+      icon: Package,
       description: 'Stock management',
       color: 'text-servio-green-500'
     },
-    { 
-      name: 'Staff', 
-      href: '/dashboard/staff', 
-      icon: Users, 
+    {
+      name: 'Staff',
+      href: '/dashboard/staff',
+      icon: Users,
       description: 'Team & schedules',
       color: 'text-purple-500'
     },
-    { 
-      name: 'Settings', 
-      href: '/dashboard/settings', 
-      icon: Settings, 
+    {
+      name: 'Settings',
+      href: '/dashboard/settings',
+      icon: Settings,
       description: 'System settings',
       color: 'text-surface-500'
     },
@@ -98,7 +98,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       </AnimatePresence>
 
       {/* Sidebar */}
-      <motion.div 
+      <motion.div
         className={`fixed inset-y-0 left-0 z-50 w-72 bg-white/95 dark:bg-surface-900/95 backdrop-blur-xl shadow-2xl transform transition-transform duration-300 ease-out lg:translate-x-0 border-r border-surface-200 dark:border-surface-800 ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
@@ -106,7 +106,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       >
         {/* Logo */}
         <div className="flex items-center justify-between h-16 px-6 border-b border-surface-200 dark:border-surface-800">
-          <motion.div 
+          <motion.div
             className="flex items-center"
             whileHover={{ scale: 1.02 }}
           >
@@ -142,7 +142,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
           {navigation.map((item, index) => {
             const isActive = currentPath === normalizePath(item.href)
-            
+
             return (
               <motion.div
                 key={item.name}
@@ -154,24 +154,24 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                   href={item.href}
                   onClick={closeSidebar}
                   className={`
-                    group relative flex items-center px-4 py-3 text-sm font-medium rounded-xl 
+                    group relative flex items-center px-4 py-3 text-sm font-medium rounded-xl
                     transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]
                     ${isActive
-                      ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 shadow-sm' 
+                      ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 shadow-sm'
                       : 'text-surface-600 dark:text-surface-400 hover:bg-surface-100 dark:hover:bg-surface-800 hover:text-surface-900 dark:hover:text-surface-200'
                     }
                   `}
                 >
                   <div className={`
                     flex items-center justify-center w-10 h-10 rounded-lg mr-3 transition-colors
-                    ${isActive 
-                      ? 'bg-primary-200 dark:bg-primary-800/50' 
+                    ${isActive
+                      ? 'bg-primary-200 dark:bg-primary-800/50'
                       : 'bg-surface-100 dark:bg-surface-800 group-hover:bg-surface-200 dark:group-hover:bg-surface-700'
                     }
                   `}>
                     <item.icon className={`w-5 h-5 ${isActive ? item.color : 'text-surface-500 dark:text-surface-400'}`} />
                   </div>
-                  
+
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between">
                       <span className="font-medium">{item.name}</span>
@@ -209,7 +209,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         {/* User Info */}
         <div className="p-4 border-t border-surface-200 dark:border-surface-800">
           {user && (
-            <motion.div 
+            <motion.div
               className="flex items-center p-3 rounded-xl bg-surface-50 dark:bg-surface-800/50"
               whileHover={{ scale: 1.02 }}
             >
@@ -218,7 +218,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                   <User className="w-5 h-5 text-white" />
                 </div>
               </div>
-              
+
               <div className="ml-3 flex-1 min-w-0">
                 <p className="text-sm font-semibold text-surface-900 dark:text-surface-100 truncate">
                   {user?.name || 'Loading...'}
@@ -229,7 +229,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                   </span>
                 </div>
               </div>
-              
+
               <button
                 onClick={logout}
                 className="btn-icon ml-2 text-surface-400 hover:text-servio-red-500"
@@ -255,9 +255,9 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                 >
                   <Menu className="w-6 h-6" />
                 </button>
-                
+
                 {false && (
-                  <motion.div 
+                  <motion.div
                     className="hidden sm:flex items-center px-3 py-2 bg-servio-green-100 dark:bg-servio-green-900/30 text-servio-green-700 dark:text-servio-green-300 text-sm font-medium rounded-lg"
                     initial={{ scale: 0, opacity: 0 }}
                     animate={{ scale: 1, opacity: 1 }}
@@ -284,7 +284,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         </div>
 
         {/* Page Content */}
-        <motion.main 
+        <motion.main
           className="p-4 sm:p-6 lg:p-8"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}

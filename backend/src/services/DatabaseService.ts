@@ -372,50 +372,50 @@ export class DatabaseService {
       'CREATE INDEX IF NOT EXISTS idx_users_role ON users(role)',
       'CREATE INDEX IF NOT EXISTS idx_users_active ON users(is_active)',
       'CREATE INDEX IF NOT EXISTS idx_users_pin ON users(pin)',
-      
+
       // ORDER INDEXES
       'CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status)',
       'CREATE INDEX IF NOT EXISTS idx_orders_channel ON orders(channel)',
       'CREATE INDEX IF NOT EXISTS idx_orders_external_id ON orders(external_id)',
       'CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at)',
       'CREATE INDEX IF NOT EXISTS idx_orders_customer_phone ON orders(customer_phone)',
-      
-      // INVENTORY INDEXES  
+
+      // INVENTORY INDEXES
       'CREATE INDEX IF NOT EXISTS idx_inventory_sku ON inventory(sku)',
       'CREATE INDEX IF NOT EXISTS idx_inventory_category ON inventory(category)',
       'CREATE INDEX IF NOT EXISTS idx_inventory_low_stock ON inventory(current_quantity, low_stock_threshold)',
-      
+
       // MENU INDEXES
       'CREATE INDEX IF NOT EXISTS idx_menu_category ON menu_items(category)',
       'CREATE INDEX IF NOT EXISTS idx_menu_available ON menu_items(is_available)',
       'CREATE INDEX IF NOT EXISTS idx_menu_name ON menu_items(name)',
-      
+
       // TASK INDEXES
       'CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)',
       'CREATE INDEX IF NOT EXISTS idx_tasks_assigned ON tasks(assigned_to)',
       'CREATE INDEX IF NOT EXISTS idx_tasks_due_date ON tasks(due_date)',
       'CREATE INDEX IF NOT EXISTS idx_tasks_type ON tasks(type)',
-      
+
       // TIME ENTRY INDEXES
       'CREATE INDEX IF NOT EXISTS idx_time_entries_user ON time_entries(user_id)',
       'CREATE INDEX IF NOT EXISTS idx_time_entries_clock_in ON time_entries(clock_in_time)',
       'CREATE INDEX IF NOT EXISTS idx_time_entries_active ON time_entries(user_id, clock_out_time)',
-      
+
       // SESSION INDEXES
       'CREATE INDEX IF NOT EXISTS idx_sessions_user ON auth_sessions(user_id)',
       'CREATE INDEX IF NOT EXISTS idx_sessions_expires ON auth_sessions(expires_at)',
-      
+
       // AUDIT LOG INDEXES
       'CREATE INDEX IF NOT EXISTS idx_audit_user ON audit_logs(user_id)',
       'CREATE INDEX IF NOT EXISTS idx_audit_entity ON audit_logs(entity_type, entity_id)',
       'CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_logs(created_at)',
       'CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_logs(action)',
-      
+
       // SYNC JOB INDEXES
       'CREATE INDEX IF NOT EXISTS idx_sync_status ON sync_jobs(status)',
       'CREATE INDEX IF NOT EXISTS idx_sync_type ON sync_jobs(type)',
       'CREATE INDEX IF NOT EXISTS idx_sync_created ON sync_jobs(created_at)',
-      
+
       // BREAK INDEXES
       'CREATE INDEX IF NOT EXISTS idx_breaks_entry ON time_entry_breaks(time_entry_id)',
       'CREATE INDEX IF NOT EXISTS idx_breaks_start ON time_entry_breaks(break_start)'
@@ -700,7 +700,7 @@ export class DatabaseService {
     const db = this.getDatabase();
 
     const auditId = `audit_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    
+
     await db.run(
       'INSERT INTO audit_logs (id, user_id, action, entity_type, entity_id, details, source) VALUES (?, ?, ?, ?, ?, ?, ?)',
       [auditId, userId, action, entityType, entityId, JSON.stringify(details), source]

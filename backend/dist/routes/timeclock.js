@@ -36,9 +36,9 @@ router.post('/clock-in', (0, errorHandler_1.asyncHandler)(async (req, res) => {
     }
     // Check if user is already clocked in
     const existingEntry = await db.get(`
-    SELECT * FROM time_entries 
+    SELECT * FROM time_entries
     WHERE user_id = ? AND clock_out_time IS NULL
-    ORDER BY clock_in_time DESC 
+    ORDER BY clock_in_time DESC
     LIMIT 1
   `, [user.id]);
     if (existingEntry) {
@@ -101,9 +101,9 @@ router.post('/clock-out', (0, errorHandler_1.asyncHandler)(async (req, res) => {
     }
     // Find active time entry
     const timeEntry = await db.get(`
-    SELECT * FROM time_entries 
+    SELECT * FROM time_entries
     WHERE user_id = ? AND clock_out_time IS NULL
-    ORDER BY clock_in_time DESC 
+    ORDER BY clock_in_time DESC
     LIMIT 1
   `, [user.id]);
     if (!timeEntry) {
@@ -120,7 +120,7 @@ router.post('/clock-out', (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const totalHours = Math.max(0, (totalMinutes - timeEntry.break_minutes) / 60);
     // Update time entry
     await db.run(`
-    UPDATE time_entries 
+    UPDATE time_entries
     SET clock_out_time = ?, total_hours = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
     WHERE id = ?
   `, [clockOutTime, totalHours.toFixed(2), notes || null, timeEntry.id]);
@@ -160,9 +160,9 @@ router.post('/start-break', (0, errorHandler_1.asyncHandler)(async (req, res) =>
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
     // Find active time entry
     const timeEntry = await db.get(`
-    SELECT * FROM time_entries 
+    SELECT * FROM time_entries
     WHERE user_id = ? AND clock_out_time IS NULL
-    ORDER BY clock_in_time DESC 
+    ORDER BY clock_in_time DESC
     LIMIT 1
   `, [userId]);
     if (!timeEntry) {
@@ -173,9 +173,9 @@ router.post('/start-break', (0, errorHandler_1.asyncHandler)(async (req, res) =>
     }
     // Check if already on break
     const activeBreak = await db.get(`
-    SELECT * FROM time_entry_breaks 
+    SELECT * FROM time_entry_breaks
     WHERE time_entry_id = ? AND break_end IS NULL
-    ORDER BY break_start DESC 
+    ORDER BY break_start DESC
     LIMIT 1
   `, [timeEntry.id]);
     if (activeBreak) {
@@ -220,9 +220,9 @@ router.post('/end-break', (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
     // Find active time entry
     const timeEntry = await db.get(`
-    SELECT * FROM time_entries 
+    SELECT * FROM time_entries
     WHERE user_id = ? AND clock_out_time IS NULL
-    ORDER BY clock_in_time DESC 
+    ORDER BY clock_in_time DESC
     LIMIT 1
   `, [userId]);
     if (!timeEntry) {
@@ -233,9 +233,9 @@ router.post('/end-break', (0, errorHandler_1.asyncHandler)(async (req, res) => {
     }
     // Find active break
     const activeBreak = await db.get(`
-    SELECT * FROM time_entry_breaks 
+    SELECT * FROM time_entry_breaks
     WHERE time_entry_id = ? AND break_end IS NULL
-    ORDER BY break_start DESC 
+    ORDER BY break_start DESC
     LIMIT 1
   `, [timeEntry.id]);
     if (!activeBreak) {
@@ -250,18 +250,18 @@ router.post('/end-break', (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const durationMinutes = Math.floor((breakEndTime.getTime() - breakStart.getTime()) / (1000 * 60));
     // Update break entry
     await db.run(`
-    UPDATE time_entry_breaks 
+    UPDATE time_entry_breaks
     SET break_end = ?, duration_minutes = ?
     WHERE id = ?
   `, [breakEnd, durationMinutes, activeBreak.id]);
     // Update time entry with total break minutes
     const totalBreaks = await db.get(`
     SELECT COALESCE(SUM(duration_minutes), 0) as total_break_minutes
-    FROM time_entry_breaks 
+    FROM time_entry_breaks
     WHERE time_entry_id = ? AND duration_minutes IS NOT NULL
   `, [timeEntry.id]);
     await db.run(`
-    UPDATE time_entries 
+    UPDATE time_entries
     SET break_minutes = ?
     WHERE id = ?
   `, [totalBreaks.total_break_minutes, timeEntry.id]);
@@ -355,7 +355,7 @@ router.get('/entries', (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
     const dialect = DatabaseService_1.DatabaseService.getInstance().getDialect();
     let query = `
-    SELECT 
+    SELECT
       te.*,
       u.name as user_name,
       u.role as user_role,
@@ -391,7 +391,7 @@ router.get('/entries', (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const entries = await db.all(query, params);
     // Get total count for pagination
     let countQuery = `
-    SELECT COUNT(*) as total 
+    SELECT COUNT(*) as total
     FROM time_entries te
     JOIN users u ON te.user_id = u.id
   `;
@@ -438,8 +438,8 @@ router.put('/entries/:id', (0, errorHandler_1.asyncHandler)(async (req, res) => 
     }
     // Update time entry
     await db.run(`
-    UPDATE time_entries 
-    SET 
+    UPDATE time_entries
+    SET
       clock_in_time = COALESCE(?, clock_in_time),
       clock_out_time = COALESCE(?, clock_out_time),
       break_minutes = COALESCE(?, break_minutes),
@@ -471,7 +471,7 @@ router.put('/entries/:id', (0, errorHandler_1.asyncHandler)(async (req, res) => 
     });
     // Get updated entry
     const updatedEntry = await db.get(`
-    SELECT 
+    SELECT
       te.*,
       u.name as user_name,
       u.role as user_role
@@ -507,7 +507,7 @@ router.get('/stats', (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const [totalStats, dailyStats, userStats] = await Promise.all([
         // Total statistics
         db.get(`
-      SELECT 
+      SELECT
         COUNT(*) as total_entries,
         ROUND(SUM(te.total_hours), 2) as total_hours,
         ROUND(AVG(te.total_hours), 2) as avg_hours_per_shift,
@@ -516,7 +516,7 @@ router.get('/stats', (0, errorHandler_1.asyncHandler)(async (req, res) => {
     `, params),
         // Daily breakdown
         db.all(`
-      SELECT 
+      SELECT
         ${dialect === 'postgres' ? 'te.clock_in_time::date' : 'DATE(te.clock_in_time)'} as date,
         COUNT(*) as entries_count,
         ROUND(SUM(te.total_hours), 2) as total_hours,
@@ -527,7 +527,7 @@ router.get('/stats', (0, errorHandler_1.asyncHandler)(async (req, res) => {
     `, params),
         // Per-user statistics (if not filtering by specific user)
         userId ? null : db.all(`
-      SELECT 
+      SELECT
         u.id as user_id,
         u.name,
         u.role,

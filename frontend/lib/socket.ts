@@ -7,31 +7,31 @@ export interface SocketEvents {
   'order:updated': (order: any) => void
   'order:status_changed': (data: { orderId: string; status: string; timestamp: Date }) => void
   'order:assigned': (data: { orderId: string; assignedTo: string }) => void
-  
+
   // Menu/Inventory events
   'menu:availability_changed': (data: { itemId: string; isAvailable: boolean; channels: string[] }) => void
   'inventory:low_stock': (data: { itemId: string; currentLevel: number; threshold: number }) => void
   'inventory:updated': (data: { itemId: string; newQuantity: number }) => void
-  
+
   // Staff events
   'staff:clock_in': (data: { userId: string; timestamp: Date }) => void
   'staff:clock_out': (data: { userId: string; timestamp: Date }) => void
   'staff:break_start': (data: { userId: string; timestamp: Date }) => void
   'staff:break_end': (data: { userId: string; timestamp: Date }) => void
-  
+
   // Task events
   'task:assigned': (data: { taskId: string; assignedTo: string }) => void
   'task:completed': (data: { taskId: string; completedBy: string; timestamp: Date }) => void
   'task:overdue': (data: { taskId: string; dueDate: Date }) => void
-  
+
   // Voice/Assistant events
   'voice:command_received': (data: { transcript: string; confidence: number }) => void
   'voice:action_completed': (data: { action: string; result: any }) => void
-  
+
   // System events
   'system:notification': (data: { type: string; message: string; priority: 'low' | 'medium' | 'high' }) => void
   'system:alert': (data: { type: string; message: string; data?: any }) => void
-  
+
   // Connection events
   'connect': () => void
   'disconnect': (reason: string) => void
@@ -60,7 +60,7 @@ class SocketManager {
     }
 
     const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001'
-    
+
     this.socket = io(backendUrl, {
       transports: ['websocket', 'polling'],
       timeout: 20000,
@@ -82,9 +82,9 @@ class SocketManager {
       this.isConnected = true
       this.reconnectAttempts = 0
       this.notifyConnectionListeners(true)
-      
+
       showToast.success('Connected to Servio')
-      
+
       // Join user room if authenticated
       const user = this.getUserFromStorage()
       if (user) {
@@ -96,19 +96,19 @@ class SocketManager {
       console.log('🔌 Socket disconnected:', reason)
       this.isConnected = false
       this.notifyConnectionListeners(false)
-      
+
       if (reason === 'io server disconnect') {
         // Server initiated disconnect - reconnect manually
         this.socket?.connect()
       }
-      
+
       showToast.warning('Disconnected from Servio')
     })
 
     this.socket.on('connect_error', (error) => {
       console.error('🔌 Socket connection error:', error)
       this.reconnectAttempts++
-      
+
       if (this.reconnectAttempts >= this.maxReconnectAttempts) {
         showToast.error('Unable to connect to Servio. Please refresh the page.')
       }
@@ -132,7 +132,7 @@ class SocketManager {
     // System events
     this.socket.on('system:notification', (data) => {
       const { type, message, priority } = data
-      
+
       switch (priority) {
         case 'high':
           showToast.error(message)
@@ -155,7 +155,7 @@ class SocketManager {
     if (!this.eventHandlers.has(event)) {
       this.eventHandlers.set(event, [])
     }
-    
+
     this.eventHandlers.get(event)?.push(handler as Function)
     this.socket?.on(event, handler as any)
   }
@@ -186,7 +186,7 @@ class SocketManager {
   // Connection status
   onConnectionChange(callback: (status: boolean) => void): () => void {
     this.connectionListeners.push(callback)
-    
+
     // Return cleanup function
     return () => {
       const index = this.connectionListeners.indexOf(callback)

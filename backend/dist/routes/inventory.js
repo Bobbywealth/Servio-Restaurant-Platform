@@ -127,13 +127,13 @@ router.post('/adjust', (0, errorHandler_1.asyncHandler)(async (req, res) => {
 router.get('/low-stock', (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
     const lowStockItems = await db.all(`
-    SELECT *, 
-           CASE 
+    SELECT *,
+           CASE
              WHEN current_quantity = 0 THEN 'out_of_stock'
              WHEN current_quantity <= low_stock_threshold THEN 'low_stock'
              ELSE 'normal'
            END as stock_status
-    FROM inventory 
+    FROM inventory
     WHERE current_quantity <= low_stock_threshold
     ORDER BY current_quantity ASC
   `);
@@ -150,7 +150,7 @@ router.get('/categories', (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
     const categories = await db.all(`
     SELECT category, COUNT(*) as item_count
-    FROM inventory 
+    FROM inventory
     GROUP BY category
     ORDER BY category
   `);

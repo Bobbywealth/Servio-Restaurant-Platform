@@ -9,9 +9,9 @@ interface AnimatedFaceProps {
   talkIntensity?: number // 0..1, optional audio-driven mouth movement
 }
 
-export default function AnimatedFace({ 
-  isListening = false, 
-  isTalking = false, 
+export default function AnimatedFace({
+  isListening = false,
+  isTalking = false,
   emotion = 'neutral',
   size = 'large',
   talkIntensity
@@ -122,7 +122,7 @@ export default function AnimatedFace({
   const baseMouthRx = expression.mouthWidth / 2
 
   return (
-    <div 
+    <div
       className="relative flex items-center justify-center"
       style={{ width: currentSize.width, height: currentSize.height }}
     >
@@ -205,7 +205,7 @@ export default function AnimatedFace({
         >
           {/* Left eye white */}
           <ellipse cx={55} cy={55} rx={12} ry={10} fill="white" />
-          
+
           {/* Left eye iris */}
           <motion.circle
             cx={55}
@@ -219,7 +219,7 @@ export default function AnimatedFace({
               duration: isBlinking ? 0.2 : 0
             }}
           />
-          
+
           {/* Left eye pupil */}
           <motion.circle
             cx={55}
@@ -260,7 +260,7 @@ export default function AnimatedFace({
         >
           {/* Right eye white */}
           <ellipse cx={105} cy={55} rx={12} ry={10} fill="white" />
-          
+
           {/* Right eye iris */}
           <motion.circle
             cx={105}
@@ -274,7 +274,7 @@ export default function AnimatedFace({
               duration: isBlinking ? 0.2 : 0
             }}
           />
-          
+
           {/* Right eye pupil */}
           <motion.circle
             cx={105}

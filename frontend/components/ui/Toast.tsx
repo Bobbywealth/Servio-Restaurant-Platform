@@ -4,14 +4,14 @@ import { CheckCircle2, XCircle, AlertCircle, Info, X } from 'lucide-react'
 import { motion } from 'framer-motion'
 
 // Custom toast component
-const CustomToast = ({ 
-  message, 
-  type, 
-  onClose 
-}: { 
+const CustomToast = ({
+  message,
+  type,
+  onClose
+}: {
   message: string
   type: 'success' | 'error' | 'warning' | 'info'
-  onClose: () => void 
+  onClose: () => void
 }) => {
   const icons = {
     success: CheckCircle2,
