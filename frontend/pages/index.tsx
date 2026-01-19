@@ -2,9 +2,9 @@ import React from 'react'
 import Head from 'next/head'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
-import { 
-  Mic, Bot, Shield, Zap, Clock, Users, 
-  Phone, Smartphone, Sync, BarChart3, 
+import {
+  Mic, Bot, Shield, Zap, Clock, Users,
+  Phone, Smartphone, BarChart3,
   CheckCircle2, MessageSquare, HeadphonesIcon,
   Utensils, ShoppingCart, Inventory,
   Calendar, DollarSign, TrendingUp,
@@ -29,7 +29,7 @@ export default function HomePage() {
         <nav className="fixed top-0 left-0 right-0 bg-white/80 dark:bg-surface-900/80 backdrop-blur-xl shadow-sm z-50 border-b border-surface-200/50 dark:border-surface-800/50">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between items-center h-16">
-              <motion.div 
+              <motion.div
                 className="flex items-center"
                 whileHover={{ scale: 1.02 }}
               >
@@ -51,17 +51,17 @@ export default function HomePage() {
                   AI
                 </motion.div>
               </motion.div>
-              
+
               <div className="hidden md:flex items-center space-x-8">
                 <a href="#features" className="text-surface-600 dark:text-surface-400 hover:text-surface-900 dark:hover:text-surface-100 font-medium transition-colors">Features</a>
                 <a href="#how-it-works" className="text-surface-600 dark:text-surface-400 hover:text-surface-900 dark:hover:text-surface-100 font-medium transition-colors">How It Works</a>
                 <a href="#pricing" className="text-surface-600 dark:text-surface-400 hover:text-surface-900 dark:hover:text-surface-100 font-medium transition-colors">Pricing</a>
                 <a href="#demo" className="text-surface-600 dark:text-surface-400 hover:text-surface-900 dark:hover:text-surface-100 font-medium transition-colors">Demo</a>
               </div>
-              
+
               <div className="flex items-center space-x-4">
-                <Link 
-                  href="/dashboard/assistant" 
+                <Link
+                  href="/dashboard/assistant"
                   className="btn-primary"
                 >
                   Try Servio Free
@@ -82,7 +82,7 @@ export default function HomePage() {
           </div>
 
           <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20 pb-32">
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6 }}
@@ -104,13 +104,13 @@ export default function HomePage() {
                 <br />
                 Restaurant Platform
               </h1>
-              
+
               <p className="text-xl md:text-2xl text-gray-600 mb-12 max-w-4xl mx-auto leading-relaxed">
                 Servio unifies <strong>orders, voice interactions, inventory, staff operations,</strong> and <strong>delivery platforms</strong> into one intelligent command center. Built for real restaurant conditions.
               </p>
-              
+
               <div className="flex flex-col sm:flex-row gap-6 justify-center items-center mb-16">
-                <Link 
+                <Link
                   href="/dashboard/assistant"
                   className="group bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-8 py-4 rounded-xl font-semibold text-lg transition-all duration-200 transform hover:scale-105 shadow-xl"
                 >
@@ -119,7 +119,7 @@ export default function HomePage() {
                     Try Servio Assistant Free
                   </div>
                 </Link>
-                
+
                 <button className="group bg-white border-2 border-gray-200 hover:border-gray-300 text-gray-700 px-8 py-4 rounded-xl font-semibold text-lg transition-all duration-200 shadow-lg">
                   <div className="flex items-center">
                     <PlayCircle className="w-5 h-5 mr-2 group-hover:text-blue-600" />
@@ -140,7 +140,7 @@ export default function HomePage() {
               </div>
 
               {/* Hero Dashboard Preview */}
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0, y: 40 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.8, delay: 0.4 }}
@@ -213,7 +213,7 @@ export default function HomePage() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.6, delay: 0.1 }}
@@ -226,7 +226,7 @@ export default function HomePage() {
                 </p>
               </motion.div>
 
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.6, delay: 0.2 }}
@@ -239,7 +239,7 @@ export default function HomePage() {
                 </p>
               </motion.div>
 
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.6, delay: 0.3 }}
@@ -252,7 +252,7 @@ export default function HomePage() {
                 </p>
               </motion.div>
 
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.6, delay: 0.4 }}
@@ -265,7 +265,7 @@ export default function HomePage() {
                 </p>
               </motion.div>
 
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.6, delay: 0.5 }}
@@ -278,7 +278,7 @@ export default function HomePage() {
                 </p>
               </motion.div>
 
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.6, delay: 0.6 }}
@@ -308,8 +308,8 @@ export default function HomePage() {
               <p className="text-xl text-gray-300 mb-8 max-w-2xl mx-auto">
                 Start using Servio today and see how AI can make your restaurant staff more efficient.
               </p>
-              
-              <Link 
+
+              <Link
                 href="/dashboard/assistant"
                 className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-xl font-semibold text-lg transition-all duration-200 transform hover:scale-105 shadow-lg inline-flex items-center"
               >

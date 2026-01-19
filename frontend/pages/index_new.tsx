@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { motion } from 'framer-motion'
 import { 
   Mic, Bot, Shield, Zap, Clock, Users, 
-  Phone, Smartphone, Sync, BarChart3, 
+  Phone, Smartphone, RefreshCw, BarChart3, 
   CheckCircle2, MessageSquare, HeadphonesIcon,
   Utensils, ShoppingCart, Inventory,
   Calendar, DollarSign, TrendingUp,
@@ -229,7 +229,7 @@ export default function HomePage() {
                 className="bg-white p-6 rounded-xl shadow-sm border border-gray-200"
               >
                 <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center mb-4">
-                  <Sync className="w-6 h-6 text-red-600" />
+                  <RefreshCw className="w-6 h-6 text-red-600" />
                 </div>
                 <h3 className="text-lg font-semibold text-gray-900 mb-3">Manual 86ing</h3>
                 <p className="text-gray-600">

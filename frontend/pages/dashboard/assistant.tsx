@@ -95,6 +95,8 @@ export default function AssistantPage() {
       audioContextRef.current = new AudioContextImpl()
     }
     const audioContext = audioContextRef.current
+    if (!audioContext) return
+
     if (audioContext.state === 'suspended') {
       await audioContext.resume()
     }
@@ -154,29 +156,29 @@ export default function AssistantPage() {
   useEffect(() => {
     const initializeMediaRecorder = async () => {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ 
+        const stream = await navigator.mediaDevices.getUserMedia({
           audio: {
             echoCancellation: true,
             noiseSuppression: true,
             sampleRate: 44100
-          } 
+          }
         })
-        
+
         const recorder = new MediaRecorder(stream, {
           mimeType: 'audio/webm;codecs=opus'
         })
-        
+
         recorder.ondataavailable = (event) => {
           if (event.data.size > 0) {
             setAudioChunks(prev => [...prev, event.data])
           }
         }
-        
+
         recorder.onstop = async () => {
           // Process the recorded audio
           await processRecording()
         }
-        
+
         setMediaRecorder(recorder)
       } catch (error) {
         console.error('Failed to initialize media recorder:', error)
@@ -214,7 +216,7 @@ export default function AssistantPage() {
       timestamp: new Date(),
       ...message
     }
-    
+
     setState(prev => ({
       ...prev,
       messages: [...prev.messages, newMessage]
@@ -223,10 +225,10 @@ export default function AssistantPage() {
 
   const startRecording = useCallback(() => {
     if (!mediaRecorder || state.isProcessing) return
-    
+
     setAudioChunks([])
     mediaRecorder.start(100) // Collect data every 100ms
-    
+
     setState(prev => ({
       ...prev,
       isRecording: true
@@ -235,9 +237,9 @@ export default function AssistantPage() {
 
   const stopRecording = useCallback(() => {
     if (!mediaRecorder || !state.isRecording) return
-    
+
     mediaRecorder.stop()
-    
+
     setState(prev => ({
       ...prev,
       isRecording: false,
@@ -423,14 +425,14 @@ export default function AssistantPage() {
             {/* Left Panel - Avatar & Controls */}
             <div className="lg:col-span-1">
               <div className="card-mobile space-y-4 sm:space-y-6">
-                <Avatar 
+                <Avatar
                   isTalking={state.isSpeaking}
                   isListening={state.isRecording}
                   useFace={true}
                   emotion={state.isProcessing ? 'thinking' : state.isRecording ? 'focused' : 'happy'}
                   talkIntensity={talkIntensity}
                 />
-                
+
                 <MicrophoneButton
                   isRecording={state.isRecording}
                   isProcessing={state.isProcessing}
@@ -442,7 +444,7 @@ export default function AssistantPage() {
 
               {/* Quick Commands */}
               <div className="mt-4 sm:mt-6 card-mobile">
-                <QuickCommands 
+                <QuickCommands
                   onCommand={handleQuickCommand}
                   disabled={state.isProcessing || state.isRecording}
                 />
@@ -459,9 +461,9 @@ export default function AssistantPage() {
                   <div className="flex items-center space-x-2 text-xs sm:text-sm text-gray-500 dark:text-gray-400">
                     <div className="flex items-center space-x-1">
                       <div className={`w-2 h-2 rounded-full ${
-                        state.isRecording ? 'bg-red-500' : 
-                        state.isProcessing ? 'bg-yellow-500' : 
-                        state.isSpeaking ? 'bg-green-500' : 
+                        state.isRecording ? 'bg-red-500' :
+                        state.isProcessing ? 'bg-yellow-500' :
+                        state.isSpeaking ? 'bg-green-500' :
                         'bg-gray-300 dark:bg-gray-600'
                       }`} />
                       <span className="hidden sm:inline">
@@ -479,8 +481,8 @@ export default function AssistantPage() {
                     </div>
                   </div>
                 </div>
-                
-                <TranscriptFeed 
+
+                <TranscriptFeed
                   messages={state.messages}
                   className="h-full mobile-scrolling"
                 />

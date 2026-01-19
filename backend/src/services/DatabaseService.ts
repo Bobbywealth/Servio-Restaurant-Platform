@@ -82,9 +82,19 @@ export class DatabaseService {
             ? { rejectUnauthorized: false }
             : undefined;
 
+        // OPTIMIZED CONNECTION POOL CONFIGURATION
         this.pgPool = new Pool({
           connectionString: databaseUrl,
-          ssl
+          ssl,
+          // CONNECTION POOL OPTIMIZATION
+          max: 20,                    // Maximum pool size
+          min: 2,                     // Minimum connections
+          idleTimeoutMillis: 30000,   // Close idle connections after 30s
+          connectionTimeoutMillis: 5000, // Connection timeout
+          // PERFORMANCE TUNING
+          query_timeout: 10000,       // 10s query timeout
+          statement_timeout: 15000,   // 15s statement timeout
+          idle_in_transaction_session_timeout: 10000 // 10s idle transaction timeout
         });
 
         // sanity query
@@ -355,7 +365,101 @@ export class DatabaseService {
     await ensureColumn('users', 'pin TEXT');
     await ensureColumn('users', 'is_active BOOLEAN');
 
-    logger.info('Database tables created/verified');
+    // LIGHTNING FAST INDEXES FOR OPTIMAL PERFORMANCE
+    const indexes = [
+      // USER INDEXES
+      'CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)',
+      'CREATE INDEX IF NOT EXISTS idx_users_role ON users(role)',
+      'CREATE INDEX IF NOT EXISTS idx_users_active ON users(is_active)',
+      'CREATE INDEX IF NOT EXISTS idx_users_pin ON users(pin)',
+      
+      // ORDER INDEXES
+      'CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status)',
+      'CREATE INDEX IF NOT EXISTS idx_orders_channel ON orders(channel)',
+      'CREATE INDEX IF NOT EXISTS idx_orders_external_id ON orders(external_id)',
+      'CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at)',
+      'CREATE INDEX IF NOT EXISTS idx_orders_customer_phone ON orders(customer_phone)',
+      
+      // INVENTORY INDEXES  
+      'CREATE INDEX IF NOT EXISTS idx_inventory_sku ON inventory(sku)',
+      'CREATE INDEX IF NOT EXISTS idx_inventory_category ON inventory(category)',
+      'CREATE INDEX IF NOT EXISTS idx_inventory_low_stock ON inventory(current_quantity, low_stock_threshold)',
+      
+      // MENU INDEXES
+      'CREATE INDEX IF NOT EXISTS idx_menu_category ON menu_items(category)',
+      'CREATE INDEX IF NOT EXISTS idx_menu_available ON menu_items(is_available)',
+      'CREATE INDEX IF NOT EXISTS idx_menu_name ON menu_items(name)',
+      
+      // TASK INDEXES
+      'CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)',
+      'CREATE INDEX IF NOT EXISTS idx_tasks_assigned ON tasks(assigned_to)',
+      'CREATE INDEX IF NOT EXISTS idx_tasks_due_date ON tasks(due_date)',
+      'CREATE INDEX IF NOT EXISTS idx_tasks_type ON tasks(type)',
+      
+      // TIME ENTRY INDEXES
+      'CREATE INDEX IF NOT EXISTS idx_time_entries_user ON time_entries(user_id)',
+      'CREATE INDEX IF NOT EXISTS idx_time_entries_clock_in ON time_entries(clock_in_time)',
+      'CREATE INDEX IF NOT EXISTS idx_time_entries_active ON time_entries(user_id, clock_out_time)',
+      
+      // SESSION INDEXES
+      'CREATE INDEX IF NOT EXISTS idx_sessions_user ON auth_sessions(user_id)',
+      'CREATE INDEX IF NOT EXISTS idx_sessions_expires ON auth_sessions(expires_at)',
+      
+      // AUDIT LOG INDEXES
+      'CREATE INDEX IF NOT EXISTS idx_audit_user ON audit_logs(user_id)',
+      'CREATE INDEX IF NOT EXISTS idx_audit_entity ON audit_logs(entity_type, entity_id)',
+      'CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_logs(created_at)',
+      'CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_logs(action)',
+      
+      // SYNC JOB INDEXES
+      'CREATE INDEX IF NOT EXISTS idx_sync_status ON sync_jobs(status)',
+      'CREATE INDEX IF NOT EXISTS idx_sync_type ON sync_jobs(type)',
+      'CREATE INDEX IF NOT EXISTS idx_sync_created ON sync_jobs(created_at)',
+      
+      // BREAK INDEXES
+      'CREATE INDEX IF NOT EXISTS idx_breaks_entry ON time_entry_breaks(time_entry_id)',
+      'CREATE INDEX IF NOT EXISTS idx_breaks_start ON time_entry_breaks(break_start)'
+    ];
+
+    console.log('⚡ Creating performance indexes...')
+    for (const indexSQL of indexes) {
+      try {
+        await db.exec(indexSQL);
+      } catch (error) {
+        // Ignore if index already exists
+        if (!error.message?.includes('already exists')) {
+          logger.warn(`Index creation warning: ${error.message}`);
+        }
+      }
+    }
+
+    // DATABASE PERFORMANCE TUNING
+    if (isPg) {
+      // PostgreSQL optimizations
+      try {
+        await db.exec('SET work_mem = "64MB"');
+        await db.exec('SET maintenance_work_mem = "256MB"');
+        await db.exec('SET effective_cache_size = "1GB"');
+        await db.exec('SET random_page_cost = 1.1');
+        await db.exec('SET checkpoint_completion_target = 0.9');
+      } catch (error) {
+        logger.warn('PostgreSQL performance tuning skipped:', error.message);
+      }
+    } else {
+      // SQLite optimizations
+      try {
+        await db.exec('PRAGMA journal_mode = WAL');
+        await db.exec('PRAGMA synchronous = NORMAL');
+        await db.exec('PRAGMA cache_size = 10000');
+        await db.exec('PRAGMA temp_store = MEMORY');
+        await db.exec('PRAGMA mmap_size = 268435456'); // 256MB
+        await db.exec('PRAGMA optimize');
+      } catch (error) {
+        logger.warn('SQLite optimization warning:', error.message);
+      }
+    }
+
+    logger.info('⚡ Database tables created/verified with TURBO optimizations!');
   }
 
   private async seedData(): Promise<void> {
