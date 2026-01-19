@@ -68,7 +68,6 @@ class SocketManager {
       reconnectionAttempts: this.maxReconnectAttempts,
       reconnectionDelay: this.reconnectDelay,
       reconnectionDelayMax: 5000,
-      maxHttpBufferSize: 1e6,
       pingTimeout: 60000,
       pingInterval: 25000,
     })

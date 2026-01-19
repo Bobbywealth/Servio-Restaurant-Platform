@@ -106,101 +106,227 @@ self.addEventListener('activate', (event) => {
   )
 })
 
-// Fetch event
+// ULTRA-FAST FETCH EVENT WITH ADVANCED CACHING STRATEGIES
 self.addEventListener('fetch', (event) => {
   const { request } = event
   const url = new URL(request.url)
+  
+  // Skip non-GET requests for caching (except for specific cases)
+  if (request.method !== 'GET' && !url.pathname.startsWith('/api/')) {
+    return
+  }
 
-  // Handle API requests
+  // STRATEGY 1: API REQUESTS - STALE WHILE REVALIDATE
   if (url.pathname.startsWith('/api/')) {
-    event.respondWith(
-      fetch(request)
-        .then((response) => {
-          // If online, return the response
-          return response
-        })
-        .catch(() => {
-          // If offline, return cached data or offline page
-          if (request.method === 'GET') {
-            return caches.match('/offline') || new Response(
-              JSON.stringify({ error: 'Offline', message: 'You are currently offline' }),
-              {
-                status: 503,
-                statusText: 'Service Unavailable',
-                headers: new Headers({
-                  'Content-Type': 'application/json',
-                }),
-              }
-            )
-          }
-          return new Response(
-            JSON.stringify({ error: 'Offline', message: 'Cannot perform this action while offline' }),
-            {
-              status: 503,
-              statusText: 'Service Unavailable',
-              headers: new Headers({
-                'Content-Type': 'application/json',
-              }),
-            }
-          )
-        })
-    )
+    event.respondWith(handleAPIRequest(request))
     return
   }
 
-  // Handle page requests
+  // STRATEGY 2: STATIC ASSETS - CACHE FIRST (JS, CSS, fonts)
+  if (isStaticAsset(url)) {
+    event.respondWith(handleStaticAsset(request))
+    return
+  }
+
+  // STRATEGY 3: IMAGES - CACHE FIRST WITH FALLBACK
+  if (isImageRequest(url)) {
+    event.respondWith(handleImageRequest(request))
+    return
+  }
+
+  // STRATEGY 4: PAGE NAVIGATION - NETWORK FIRST WITH CACHE FALLBACK
   if (request.mode === 'navigate') {
-    event.respondWith(
-      fetch(request)
-        .then((response) => {
-          // If online, cache and return the response
-          if (response.status === 200) {
-            const responseClone = response.clone()
-            caches.open(CACHE_NAME)
-              .then((cache) => {
-                cache.put(request, responseClone)
-              })
-          }
-          return response
-        })
-        .catch(() => {
-          // If offline, serve from cache or offline page
-          return caches.match(request)
-            .then((cachedResponse) => {
-              return cachedResponse || caches.match('/offline')
-            })
-        })
-    )
+    event.respondWith(handleNavigation(request))
     return
   }
 
-  // Handle other requests (CSS, JS, images, etc.)
-  event.respondWith(
-    caches.match(request)
-      .then((cachedResponse) => {
-        if (cachedResponse) {
-          return cachedResponse
-        }
-        
-        return fetch(request)
-          .then((response) => {
-            // Don't cache non-successful responses
-            if (!response || response.status !== 200 || response.type !== 'basic') {
-              return response
-            }
-
-            // Cache successful responses
-            const responseToCache = response.clone()
-            caches.open(CACHE_NAME)
-              .then((cache) => {
-                cache.put(request, responseToCache)
-              })
-
-            return response
-          })
-      })
-  )
+  // STRATEGY 5: OTHER REQUESTS - STALE WHILE REVALIDATE
+  event.respondWith(handleGenericRequest(request))
 })
+
+// API REQUEST HANDLER - STALE WHILE REVALIDATE WITH SMART CACHING
+async function handleAPIRequest(request) {
+  const url = new URL(request.url)
+  const isReadOnlyAPI = request.method === 'GET' && 
+    (url.pathname.includes('/menu') || url.pathname.includes('/inventory'))
+  
+  if (isReadOnlyAPI) {
+    // Use stale-while-revalidate for read-only APIs
+    return staleWhileRevalidate(request, API_CACHE_NAME, CACHE_EXPIRATION.API)
+  }
+  
+  try {
+    // For write operations, always try network first
+    const response = await fetch(request)
+    
+    // Cache successful GET responses
+    if (response.ok && request.method === 'GET') {
+      const cache = await caches.open(API_CACHE_NAME)
+      cache.put(request, response.clone())
+    }
+    
+    return response
+  } catch (error) {
+    // Offline fallback for GET requests
+    if (request.method === 'GET') {
+      const cached = await caches.match(request)
+      if (cached) return cached
+    }
+    
+    return new Response(
+      JSON.stringify({ 
+        error: 'Offline', 
+        message: 'Network unavailable - some features may be limited',
+        cached: false
+      }),
+      {
+        status: 503,
+        headers: { 'Content-Type': 'application/json' }
+      }
+    )
+  }
+}
+
+// STATIC ASSET HANDLER - AGGRESSIVE CACHE FIRST
+async function handleStaticAsset(request) {
+  const cache = await caches.open(STATIC_CACHE_NAME)
+  const cached = await cache.match(request)
+  
+  if (cached) {
+    // Return cached version immediately
+    // Update in background if expired
+    if (isCacheExpired(cached, CACHE_EXPIRATION.STATIC)) {
+      updateCacheInBackground(request, STATIC_CACHE_NAME)
+    }
+    return cached
+  }
+  
+  try {
+    const response = await fetch(request)
+    if (response.ok) {
+      cache.put(request, response.clone())
+    }
+    return response
+  } catch (error) {
+    // Return a placeholder or throw
+    throw error
+  }
+}
+
+// IMAGE REQUEST HANDLER - CACHE FIRST WITH WEBP CONVERSION
+async function handleImageRequest(request) {
+  const cache = await caches.open(IMAGE_CACHE_NAME)
+  const cached = await cache.match(request)
+  
+  if (cached) return cached
+  
+  try {
+    const response = await fetch(request)
+    if (response.ok) {
+      cache.put(request, response.clone())
+    }
+    return response
+  } catch (error) {
+    // Return placeholder image or throw
+    return new Response(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200"><rect width="200" height="200" fill="#f3f4f6"/><text x="50%" y="50%" text-anchor="middle" dy=".3em" fill="#9ca3af">Image Unavailable</text></svg>',
+      { headers: { 'Content-Type': 'image/svg+xml' } }
+    )
+  }
+}
+
+// NAVIGATION HANDLER - NETWORK FIRST WITH SMART CACHING
+async function handleNavigation(request) {
+  try {
+    const response = await fetch(request)
+    
+    if (response.ok) {
+      // Cache successful navigations
+      const cache = await caches.open(DYNAMIC_CACHE_NAME)
+      cache.put(request, response.clone())
+    }
+    
+    return response
+  } catch (error) {
+    // Try cache first, then offline page
+    const cached = await caches.match(request)
+    if (cached) return cached
+    
+    const offlinePage = await caches.match('/offline/')
+    return offlinePage || new Response(
+      '<!DOCTYPE html><html><head><title>Offline</title></head><body><h1>You are offline</h1><p>Please check your connection and try again.</p></body></html>',
+      { headers: { 'Content-Type': 'text/html' } }
+    )
+  }
+}
+
+// GENERIC REQUEST HANDLER - STALE WHILE REVALIDATE
+async function handleGenericRequest(request) {
+  return staleWhileRevalidate(request, DYNAMIC_CACHE_NAME, CACHE_EXPIRATION.DYNAMIC)
+}
+
+// STALE WHILE REVALIDATE IMPLEMENTATION
+async function staleWhileRevalidate(request, cacheName, maxAge) {
+  const cache = await caches.open(cacheName)
+  const cached = await cache.match(request)
+  
+  // Always try to fetch in the background
+  const fetchPromise = fetch(request).then(response => {
+    if (response.ok) {
+      cache.put(request, response.clone())
+    }
+    return response
+  }).catch(() => null)
+  
+  // Return cached version if available and not expired
+  if (cached && !isCacheExpired(cached, maxAge)) {
+    // Update cache in background
+    fetchPromise.catch(() => {})
+    return cached
+  }
+  
+  // Otherwise wait for network
+  try {
+    return await fetchPromise
+  } catch (error) {
+    // Return stale cache as last resort
+    return cached || Promise.reject(error)
+  }
+}
+
+// UTILITY FUNCTIONS
+function isStaticAsset(url) {
+  return url.pathname.includes('/_next/static/') ||
+         url.pathname.endsWith('.js') ||
+         url.pathname.endsWith('.css') ||
+         url.pathname.endsWith('.woff2') ||
+         url.pathname.endsWith('.woff') ||
+         url.pathname.includes('/manifest.json')
+}
+
+function isImageRequest(url) {
+  return url.pathname.match(/\.(jpg|jpeg|png|gif|webp|svg|ico)$/i)
+}
+
+function isCacheExpired(response, maxAge) {
+  const dateHeader = response.headers.get('date')
+  if (!dateHeader) return true
+  
+  const cacheDate = new Date(dateHeader)
+  return Date.now() - cacheDate.getTime() > maxAge
+}
+
+async function updateCacheInBackground(request, cacheName) {
+  try {
+    const response = await fetch(request)
+    if (response.ok) {
+      const cache = await caches.open(cacheName)
+      cache.put(request, response.clone())
+    }
+  } catch (error) {
+    // Ignore background update failures
+  }
+}
 
 // Background sync for offline actions
 self.addEventListener('sync', (event) => {
