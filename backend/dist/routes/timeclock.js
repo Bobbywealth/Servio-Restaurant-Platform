@@ -23,10 +23,10 @@ router.post('/clock-in', (0, errorHandler_1.asyncHandler)(async (req, res) => {
     // If PIN provided, look up user
     let user;
     if (pin) {
-        user = await db.get('SELECT * FROM users WHERE pin = ? AND is_active = 1', [pin]);
+        user = await db.get('SELECT * FROM users WHERE pin = ? AND is_active = TRUE', [pin]);
     }
     else {
-        user = await db.get('SELECT * FROM users WHERE id = ? AND is_active = 1', [userId]);
+        user = await db.get('SELECT * FROM users WHERE id = ? AND is_active = TRUE', [userId]);
     }
     if (!user) {
         return res.status(404).json({
@@ -88,10 +88,10 @@ router.post('/clock-out', (0, errorHandler_1.asyncHandler)(async (req, res) => {
     // If PIN provided, look up user
     let user;
     if (pin) {
-        user = await db.get('SELECT * FROM users WHERE pin = ? AND is_active = 1', [pin]);
+        user = await db.get('SELECT * FROM users WHERE pin = ? AND is_active = TRUE', [pin]);
     }
     else {
-        user = await db.get('SELECT * FROM users WHERE id = ? AND is_active = 1', [userId]);
+        user = await db.get('SELECT * FROM users WHERE id = ? AND is_active = TRUE', [userId]);
     }
     if (!user) {
         return res.status(404).json({
@@ -333,7 +333,7 @@ router.get('/current-staff', (0, errorHandler_1.asyncHandler)(async (req, res) =
           JOIN users u ON te.user_id = u.id
           LEFT JOIN time_entry_breaks teb ON te.id = teb.time_entry_id AND teb.break_end IS NULL
           WHERE te.clock_out_time IS NULL
-          AND u.is_active = 1
+          AND u.is_active = TRUE
           ORDER BY te.clock_in_time ASC
         `);
     res.json({

@@ -237,7 +237,7 @@ router.get('/theme', (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const restaurantId = '00000000-0000-0000-0000-000000000001';
     const theme = await db.get(`
     SELECT * FROM restaurant_themes 
-    WHERE restaurant_id = ? AND is_active = 1
+    WHERE restaurant_id = ? AND is_active = TRUE
   `, [restaurantId]);
     if (!theme) {
         // Return default theme
@@ -279,7 +279,7 @@ router.put('/theme', (0, errorHandler_1.asyncHandler)(async (req, res) => {
     // Check if theme exists
     const existingTheme = await db.get(`
     SELECT * FROM restaurant_themes 
-    WHERE restaurant_id = ? AND is_active = 1
+    WHERE restaurant_id = ? AND is_active = TRUE
   `, [restaurantId]);
     if (existingTheme) {
         // Update existing theme

@@ -61,7 +61,7 @@ router.get('/categories/all', (0, errorHandler_1.asyncHandler)(async (req, res) 
       created_at,
       (SELECT COUNT(*) FROM menu_items WHERE category_id = menu_categories.id) as item_count
     FROM menu_categories 
-    WHERE restaurant_id = ? AND is_active = 1
+    WHERE restaurant_id = ? AND is_active = TRUE
     ORDER BY sort_order ASC, name ASC
   `, [restaurantId]);
     res.json({
@@ -632,7 +632,7 @@ router.get('/modifier-groups', (0, errorHandler_1.asyncHandler)(async (req, res)
       COUNT(mo.id) as option_count
     FROM modifier_groups mg
     LEFT JOIN modifier_options mo ON mg.id = mo.modifier_group_id AND mo.is_available = 1
-    WHERE mg.restaurant_id = ? AND mg.is_active = 1
+    WHERE mg.restaurant_id = ? AND mg.is_active = TRUE
     GROUP BY mg.id
     ORDER BY mg.sort_order ASC, mg.name ASC
   `, [restaurantId]);
@@ -742,7 +742,7 @@ router.get('/items/:id/modifiers', (0, errorHandler_1.asyncHandler)(async (req, 
       ) as options
     FROM modifier_groups mg
     INNER JOIN menu_item_modifiers mim ON mg.id = mim.modifier_group_id
-    WHERE mim.menu_item_id = ? AND mg.is_active = 1
+    WHERE mim.menu_item_id = ? AND mg.is_active = TRUE
     ORDER BY mim.sort_order ASC, mg.sort_order ASC
   `, [id]);
     // Parse JSON options for each modifier group

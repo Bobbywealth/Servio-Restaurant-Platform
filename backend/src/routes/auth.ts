@@ -34,7 +34,7 @@ router.post(
     }
 
     const db = DatabaseService.getInstance().getDatabase();
-    const user = await db.get<any>('SELECT * FROM users WHERE email = ? AND is_active = 1', [email]);
+    const user = await db.get<any>('SELECT * FROM users WHERE email = ? AND is_active = TRUE', [email]);
     if (!user || !user.password_hash) {
       throw new UnauthorizedError('Invalid email or password');
     }
@@ -82,7 +82,7 @@ router.post(
       const match = await bcrypt.compare(String(refreshToken), String(s.refresh_token_hash));
       if (!match) continue;
 
-      const user = await db.get<any>('SELECT * FROM users WHERE id = ? AND is_active = 1', [s.user_id]);
+      const user = await db.get<any>('SELECT * FROM users WHERE id = ? AND is_active = TRUE', [s.user_id]);
       if (!user) throw new UnauthorizedError('User not found or inactive');
 
       const accessToken = issueAccessToken({ sub: user.id, sid: s.id });
@@ -143,7 +143,7 @@ router.post(
     // For testing purposes, we'll allow switching to any active account
     const db = DatabaseService.getInstance().getDatabase();
     const targetUser = await db.get<any>(
-      'SELECT * FROM users WHERE email = ? AND is_active = 1', 
+      'SELECT * FROM users WHERE email = ? AND is_active = TRUE', 
       [targetEmail]
     );
     
@@ -182,7 +182,7 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const db = DatabaseService.getInstance().getDatabase();
     const users = await db.all<any>(
-      'SELECT id, email, name, role FROM users WHERE is_active = 1 ORDER BY role DESC, name ASC'
+      'SELECT id, email, name, role FROM users WHERE is_active = TRUE ORDER BY role DESC, name ASC'
     );
     
     const accountsByRole = users.reduce((acc, user) => {

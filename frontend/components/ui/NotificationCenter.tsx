@@ -183,7 +183,7 @@ export default function NotificationCenter({ className = '' }: NotificationCente
       socket.off('voice:command_received', handleVoiceCommand)
       socket.off('system:alert', handleSystemAlert)
     }
-  }, [socket])
+  }, [socket, addNotification])
 
   const markAllAsRead = () => {
     setNotifications(prev => {

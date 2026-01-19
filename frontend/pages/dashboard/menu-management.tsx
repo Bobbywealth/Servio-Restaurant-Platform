@@ -1136,7 +1136,7 @@ const BulkMenuUpload = ({ onClose, onImportComplete }: {
               <ul className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
                 <li>• <strong>Required columns:</strong> name, price, category</li>
                 <li>• <strong>Optional columns:</strong> description, cost, preparation_time</li>
-                <li>• Categories will be created automatically if they don't exist</li>
+                <li>• Categories will be created automatically if they don&apos;t exist</li>
                 <li>• Price should be in decimal format (e.g., 12.99)</li>
                 <li>• Preparation time should be in minutes</li>
               </ul>
