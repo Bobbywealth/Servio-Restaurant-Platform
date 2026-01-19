@@ -198,7 +198,7 @@ export default function AssistantPage() {
         mediaRecorder.stream.getTracks().forEach(track => track.stop())
       }
     }
-  }, [])
+  }, [addMessage, processRecording])
 
   useEffect(() => {
     return () => {
@@ -332,7 +332,7 @@ export default function AssistantPage() {
       }))
       setAudioChunks([])
     }
-  }, [audioChunks, user?.id, addMessage])
+  }, [audioChunks, user?.id, addMessage, playAudio])
 
   const handleQuickCommand = useCallback(async (command: string) => {
     // Add user message immediately
@@ -401,7 +401,7 @@ export default function AssistantPage() {
     } finally {
       setState(prev => ({ ...prev, isProcessing: false }))
     }
-  }, [user?.id, addMessage])
+  }, [user?.id, addMessage, playAudio])
 
   return (
     <>
