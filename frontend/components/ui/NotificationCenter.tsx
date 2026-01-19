@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Bell,
@@ -41,6 +41,42 @@ export default function NotificationCenter({ className = '' }: NotificationCente
   const [isOpen, setIsOpen] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
   const socket = useSocket()
+
+  const markAsRead = useCallback((id: string) => {
+    setNotifications(prev => {
+      const updated = prev.map(n =>
+        n.id === id ? { ...n, read: true } : n
+      )
+      localStorage.setItem('servio_notifications', JSON.stringify(updated))
+      return updated
+    })
+
+    setUnreadCount(prev => Math.max(0, prev - 1))
+  }, [])
+
+  const addNotification = useCallback((notification: Omit<Notification, 'id' | 'timestamp' | 'read'>) => {
+    const newNotification: Notification = {
+      ...notification,
+      id: `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      timestamp: new Date(),
+      read: false
+    }
+
+    setNotifications(prev => {
+      const updated = [newNotification, ...prev].slice(0, 100) // Keep last 100 notifications
+      localStorage.setItem('servio_notifications', JSON.stringify(updated))
+      return updated
+    })
+
+    setUnreadCount(prev => prev + 1)
+
+    // Auto-dismiss low priority notifications
+    if (notification.priority === 'low') {
+      setTimeout(() => {
+        markAsRead(newNotification.id)
+      }, 5000)
+    }
+  }, [markAsRead])
 
   useEffect(() => {
     // Load saved notifications from localStorage
@@ -148,42 +184,6 @@ export default function NotificationCenter({ className = '' }: NotificationCente
       socket.off('system:alert', handleSystemAlert)
     }
   }, [socket])
-
-  const addNotification = (notification: Omit<Notification, 'id' | 'timestamp' | 'read'>) => {
-    const newNotification: Notification = {
-      ...notification,
-      id: `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      timestamp: new Date(),
-      read: false
-    }
-
-    setNotifications(prev => {
-      const updated = [newNotification, ...prev].slice(0, 100) // Keep last 100 notifications
-      localStorage.setItem('servio_notifications', JSON.stringify(updated))
-      return updated
-    })
-
-    setUnreadCount(prev => prev + 1)
-
-    // Auto-dismiss low priority notifications
-    if (notification.priority === 'low') {
-      setTimeout(() => {
-        markAsRead(newNotification.id)
-      }, 5000)
-    }
-  }
-
-  const markAsRead = (id: string) => {
-    setNotifications(prev => {
-      const updated = prev.map(n =>
-        n.id === id ? { ...n, read: true } : n
-      )
-      localStorage.setItem('servio_notifications', JSON.stringify(updated))
-      return updated
-    })
-
-    setUnreadCount(prev => Math.max(0, prev - 1))
-  }
 
   const markAllAsRead = () => {
     setNotifications(prev => {

@@ -152,64 +152,6 @@ export default function AssistantPage() {
     rafRef.current = requestAnimationFrame(tick)
   }, [resolveAudioUrl, stopAudio])
 
-  // Initialize media recorder
-  useEffect(() => {
-    const initializeMediaRecorder = async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            sampleRate: 44100
-          }
-        })
-
-        const recorder = new MediaRecorder(stream, {
-          mimeType: 'audio/webm;codecs=opus'
-        })
-
-        recorder.ondataavailable = (event) => {
-          if (event.data.size > 0) {
-            setAudioChunks(prev => [...prev, event.data])
-          }
-        }
-
-        recorder.onstop = async () => {
-          // Process the recorded audio
-          await processRecording()
-        }
-
-        setMediaRecorder(recorder)
-      } catch (error) {
-        console.error('Failed to initialize media recorder:', error)
-        addMessage({
-          type: 'system',
-          content: 'Failed to access microphone. Please check permissions.',
-          metadata: { action: { type: 'error', status: 'error' } }
-        })
-      }
-    }
-
-    initializeMediaRecorder()
-
-    return () => {
-      // Cleanup media stream
-      if (mediaRecorder?.stream) {
-        mediaRecorder.stream.getTracks().forEach(track => track.stop())
-      }
-    }
-  }, [addMessage, processRecording])
-
-  useEffect(() => {
-    return () => {
-      stopAudio()
-      if (audioContextRef.current) {
-        audioContextRef.current.close().catch(() => {})
-        audioContextRef.current = null
-      }
-    }
-  }, [stopAudio])
-
   const addMessage = useCallback((message: Omit<TranscriptMessage, 'id' | 'timestamp'>) => {
     const newMessage: TranscriptMessage = {
       id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -222,30 +164,6 @@ export default function AssistantPage() {
       messages: [...prev.messages, newMessage]
     }))
   }, [])
-
-  const startRecording = useCallback(() => {
-    if (!mediaRecorder || state.isProcessing) return
-
-    setAudioChunks([])
-    mediaRecorder.start(100) // Collect data every 100ms
-
-    setState(prev => ({
-      ...prev,
-      isRecording: true
-    }))
-  }, [mediaRecorder, state.isProcessing])
-
-  const stopRecording = useCallback(() => {
-    if (!mediaRecorder || !state.isRecording) return
-
-    mediaRecorder.stop()
-
-    setState(prev => ({
-      ...prev,
-      isRecording: false,
-      isProcessing: true
-    }))
-  }, [mediaRecorder, state.isRecording])
 
   const processRecording = useCallback(async () => {
     if (audioChunks.length === 0) {
@@ -333,6 +251,89 @@ export default function AssistantPage() {
       setAudioChunks([])
     }
   }, [audioChunks, user?.id, addMessage, playAudio])
+
+  // Initialize media recorder
+  useEffect(() => {
+    const initializeMediaRecorder = async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            sampleRate: 44100
+          }
+        })
+
+        const recorder = new MediaRecorder(stream, {
+          mimeType: 'audio/webm;codecs=opus'
+        })
+
+        recorder.ondataavailable = (event) => {
+          if (event.data.size > 0) {
+            setAudioChunks(prev => [...prev, event.data])
+          }
+        }
+
+        recorder.onstop = async () => {
+          // Process the recorded audio
+          await processRecording()
+        }
+
+        setMediaRecorder(recorder)
+      } catch (error) {
+        console.error('Failed to initialize media recorder:', error)
+        addMessage({
+          type: 'system',
+          content: 'Failed to access microphone. Please check permissions.',
+          metadata: { action: { type: 'error', status: 'error' } }
+        })
+      }
+    }
+
+    initializeMediaRecorder()
+
+    return () => {
+      // Cleanup media stream
+      if (mediaRecorder?.stream) {
+        mediaRecorder.stream.getTracks().forEach(track => track.stop())
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [processRecording, mediaRecorder])
+
+  useEffect(() => {
+    return () => {
+      stopAudio()
+      if (audioContextRef.current) {
+        audioContextRef.current.close().catch(() => {})
+        audioContextRef.current = null
+      }
+    }
+  }, [stopAudio])
+
+  const startRecording = useCallback(() => {
+    if (!mediaRecorder || state.isProcessing) return
+
+    setAudioChunks([])
+    mediaRecorder.start(100) // Collect data every 100ms
+
+    setState(prev => ({
+      ...prev,
+      isRecording: true
+    }))
+  }, [mediaRecorder, state.isProcessing])
+
+  const stopRecording = useCallback(() => {
+    if (!mediaRecorder || !state.isRecording) return
+
+    mediaRecorder.stop()
+
+    setState(prev => ({
+      ...prev,
+      isRecording: false,
+      isProcessing: true
+    }))
+  }, [mediaRecorder, state.isRecording])
 
   const handleQuickCommand = useCallback(async (command: string) => {
     // Add user message immediately
