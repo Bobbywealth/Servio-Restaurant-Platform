@@ -265,9 +265,9 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                   >
                     <Clock className="w-4 h-4 mr-2" />
                     <span>On Shift</span>
-                    {user?.shift?.startTime && (
+                    {false && (
                       <span className="ml-2 text-servio-green-600 dark:text-servio-green-400 text-xs">
-                        since {new Date(user.shift.startTime).toLocaleTimeString()}
+                        since {new Date().toLocaleTimeString()}
                       </span>
                     )}
                   </motion.div>
