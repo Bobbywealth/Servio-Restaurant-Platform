@@ -26,7 +26,7 @@ Servio is an on-screen AI assistant specifically designed for restaurant staff t
 #### Backend (Node.js + Express)
 - **AI Assistant Service** - OpenAI GPT-4 with custom restaurant tools
 - **Speech-to-Text** - OpenAI Whisper for voice transcription
-- **Text-to-Speech** - ElevenLabs integration (optional)
+- **Text-to-Speech** - OpenAI TTS (optional), ElevenLabs integration (optional)
 - **SQLite Database** - Lightweight, embedded database
 - **RESTful APIs** - Complete API suite for all operations
 
@@ -45,20 +45,26 @@ Servio is an on-screen AI assistant specifically designed for restaurant staff t
    ```
 
 2. **Environment Setup**
-   Create `.env` files in both frontend and backend directories:
+   Use the provided examples and create env files in both frontend and backend directories:
+   - `backend/env.example`
+   - `frontend/env.example`
 
-   **Backend `.env`:**
+   **Backend `backend/.env`:**
    ```env
    NODE_ENV=development
-   PORT=3001
+   PORT=3002
    FRONTEND_URL=http://localhost:3000
    OPENAI_API_KEY=your_openai_api_key_here
+   # Optional (TTS voice tuning)
+   OPENAI_TTS_MODEL=tts-1
+   OPENAI_TTS_VOICE=alloy
+   # Optional alternative TTS provider
    ELEVENLABS_API_KEY=your_elevenlabs_api_key_here
    ```
 
-   **Frontend `.env.local`:**
+   **Frontend `frontend/.env.local`:**
    ```env
-   NEXT_PUBLIC_BACKEND_URL=http://localhost:3001
+   BACKEND_URL=http://localhost:3002
    ```
 
 3. **Start Development Servers**
@@ -66,12 +72,12 @@ Servio is an on-screen AI assistant specifically designed for restaurant staff t
    npm run dev
    ```
 
-   This starts both frontend (port 3000) and backend (port 3001) concurrently.
+   This starts both frontend (port 3000) and backend (port 3002) concurrently.
 
 4. **Access the Application**
    - Frontend Dashboard: http://localhost:3000
-   - Backend API: http://localhost:3001/api
-   - Health Check: http://localhost:3001/health
+   - Backend API: http://localhost:3002/api
+   - Health Check: http://localhost:3002/health
 
 ### 🎯 Core Use Cases
 

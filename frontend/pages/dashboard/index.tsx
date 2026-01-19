@@ -1,15 +1,72 @@
-import React from 'react'
+import React, { memo, useMemo } from 'react'
 import Head from 'next/head'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
-import DashboardLayout from '../../components/Layout/DashboardLayout'
+import dynamic from 'next/dynamic'
 import { useUser } from '../../contexts/UserContext'
 import { MessageCircle, ShoppingCart, Package, CheckSquare, TrendingUp, Sparkles, ArrowRight } from 'lucide-react'
 
-export default function DashboardIndex() {
+// LAZY LOAD HEAVY COMPONENTS FOR PERFORMANCE
+const DashboardLayout = dynamic(() => import('../../components/Layout/DashboardLayout'), {
+  ssr: true,
+  loading: () => <div className="min-h-screen bg-gray-50 animate-pulse" />
+})
+
+// MEMOIZED STAT CARD COMPONENT FOR PERFORMANCE
+const StatCard = memo(({ stat, index }: { stat: any; index: number }) => (
+  <motion.div 
+    className="card-hover"
+    initial={{ opacity: 0, y: 20 }}
+    animate={{ opacity: 1, y: 0 }}
+    transition={{ delay: 0.1 * (index + 2) }}
+    whileHover={{ y: -4 }}
+  >
+    <div className="flex items-center">
+      <motion.div 
+        className={`p-3 rounded-xl ${stat.color}`}
+        whileHover={{ scale: 1.1, rotate: 5 }}
+        transition={{ type: "spring", stiffness: 400, damping: 10 }}
+      >
+        <stat.icon className="h-6 w-6 text-white" />
+      </motion.div>
+      <div className="ml-4 flex-1">
+        <p className="text-sm font-medium text-surface-600 dark:text-surface-400">
+          {stat.name}
+        </p>
+        <motion.p 
+          className="text-2xl font-bold text-surface-900 dark:text-surface-100"
+          initial={{ scale: 0 }}
+          animate={{ scale: 1 }}
+          transition={{ delay: 0.2 * (index + 2), type: "spring", bounce: 0.4 }}
+        >
+          {stat.value}
+        </motion.p>
+      </div>
+    </div>
+    <div className="mt-4 flex items-center justify-between">
+      <div className="flex items-center">
+        <span className={`text-sm font-medium inline-flex items-center px-2 py-1 rounded-full ${
+          stat.changeType === 'increase' 
+            ? 'text-servio-green-700 dark:text-servio-green-300 bg-servio-green-100 dark:bg-servio-green-900/30' 
+            : 'text-servio-red-700 dark:text-servio-red-300 bg-servio-red-100 dark:bg-servio-red-900/30'
+        }`}>
+          {stat.change}
+        </span>
+      </div>
+      <span className="text-xs text-surface-500 dark:text-surface-400">
+        from yesterday
+      </span>
+    </div>
+  </motion.div>
+))
+
+StatCard.displayName = 'StatCard'
+
+const DashboardIndex = memo(() => {
   const { user, isManagerOrOwner } = useUser()
 
-  const stats = [
+  // MEMOIZED STATS DATA FOR PERFORMANCE
+  const stats = useMemo(() => [
     {
       name: 'Active Orders',
       value: '12',
@@ -42,7 +99,40 @@ export default function DashboardIndex() {
       icon: TrendingUp,
       color: 'bg-servio-green-500'
     }
-  ]
+  ], [])
+
+  // MEMOIZED ORDERS DATA FOR PERFORMANCE
+  const recentOrders = useMemo(() => [
+    { id: '214', item: 'Jerk Chicken Plate', time: '2 min ago', status: 'preparing' },
+    { id: '215', item: 'Curry Goat', time: '5 min ago', status: 'ready' },
+    { id: '216', item: 'Oxtail Dinner', time: '8 min ago', status: 'preparing' }
+  ], [])
+
+  // MEMOIZED QUICK ACTIONS FOR PERFORMANCE
+  const quickActions = useMemo(() => [
+    {
+      href: "/dashboard/assistant",
+      icon: MessageCircle,
+      iconColor: "text-servio-orange-500",
+      title: "Talk to Servio",
+      description: "Get help with orders, inventory, and tasks",
+      highlight: true
+    },
+    {
+      href: "/dashboard/orders",
+      icon: ShoppingCart,
+      iconColor: "text-primary-500",
+      title: "View All Orders",
+      description: "Check order status and update progress"
+    },
+    {
+      href: "/dashboard/inventory",
+      icon: Package,
+      iconColor: "text-servio-green-500",
+      title: "Update Inventory",
+      description: "Adjust stock levels and receive items"
+    }
+  ], [])
 
   return (
     <>
@@ -59,7 +149,7 @@ export default function DashboardIndex() {
               Welcome back, {user?.name || 'Team'}!
             </h1>
             <p className="mt-2 text-gray-600">
-              Here's what's happening with your restaurant today.
+              Here&apos;s what&apos;s happening with your restaurant today.
             </p>
           </div>
 
@@ -126,54 +216,10 @@ export default function DashboardIndex() {
             </div>
           </motion.div>
 
-          {/* Stats Grid */}
+          {/* Stats Grid - Optimized with Memoized Components */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {stats.map((stat, index) => (
-              <motion.div 
-                key={stat.name} 
-                className="card-hover"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.1 * (index + 2) }}
-                whileHover={{ y: -4 }}
-              >
-                <div className="flex items-center">
-                  <motion.div 
-                    className={`p-3 rounded-xl ${stat.color}`}
-                    whileHover={{ scale: 1.1, rotate: 5 }}
-                    transition={{ type: "spring", stiffness: 400, damping: 10 }}
-                  >
-                    <stat.icon className="h-6 w-6 text-white" />
-                  </motion.div>
-                  <div className="ml-4 flex-1">
-                    <p className="text-sm font-medium text-surface-600 dark:text-surface-400">
-                      {stat.name}
-                    </p>
-                    <motion.p 
-                      className="text-2xl font-bold text-surface-900 dark:text-surface-100"
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                      transition={{ delay: 0.2 * (index + 2), type: "spring", bounce: 0.4 }}
-                    >
-                      {stat.value}
-                    </motion.p>
-                  </div>
-                </div>
-                <div className="mt-4 flex items-center justify-between">
-                  <div className="flex items-center">
-                    <span className={`text-sm font-medium inline-flex items-center px-2 py-1 rounded-full ${
-                      stat.changeType === 'increase' 
-                        ? 'text-servio-green-700 dark:text-servio-green-300 bg-servio-green-100 dark:bg-servio-green-900/30' 
-                        : 'text-servio-red-700 dark:text-servio-red-300 bg-servio-red-100 dark:bg-servio-red-900/30'
-                    }`}>
-                      {stat.change}
-                    </span>
-                  </div>
-                  <span className="text-xs text-surface-500 dark:text-surface-400">
-                    from yesterday
-                  </span>
-                </div>
-              </motion.div>
+              <StatCard key={stat.name} stat={stat} index={index} />
             ))}
           </div>
 
@@ -190,11 +236,7 @@ export default function DashboardIndex() {
                 Recent Orders
               </h3>
               <div className="space-y-3">
-                {[
-                  { id: '214', item: 'Jerk Chicken Plate', time: '2 min ago', status: 'preparing' },
-                  { id: '215', item: 'Curry Goat', time: '5 min ago', status: 'ready' },
-                  { id: '216', item: 'Oxtail Dinner', time: '8 min ago', status: 'preparing' }
-                ].map((order, index) => (
+                {recentOrders.map((order, index) => (
                   <motion.div 
                     key={order.id} 
                     className="flex items-center justify-between py-3 px-4 rounded-xl bg-surface-50 dark:bg-surface-800/50 hover:bg-surface-100 dark:hover:bg-surface-800 transition-colors cursor-pointer"
@@ -231,30 +273,7 @@ export default function DashboardIndex() {
                 Quick Actions
               </h3>
               <div className="space-y-3">
-                {[
-                  {
-                    href: "/dashboard/assistant",
-                    icon: MessageCircle,
-                    iconColor: "text-servio-orange-500",
-                    title: "Talk to Servio",
-                    description: "Get help with orders, inventory, and tasks",
-                    highlight: true
-                  },
-                  {
-                    href: "/dashboard/orders",
-                    icon: ShoppingCart,
-                    iconColor: "text-primary-500",
-                    title: "View All Orders",
-                    description: "Check order status and update progress"
-                  },
-                  {
-                    href: "/dashboard/inventory",
-                    icon: Package,
-                    iconColor: "text-servio-green-500",
-                    title: "Update Inventory",
-                    description: "Adjust stock levels and receive items"
-                  }
-                ].map((action, index) => (
+                {quickActions.map((action, index) => (
                   <motion.div
                     key={action.href}
                     initial={{ opacity: 0, y: 20 }}
@@ -307,4 +326,8 @@ export default function DashboardIndex() {
       </DashboardLayout>
     </>
   )
-}
+})
+
+DashboardIndex.displayName = 'DashboardIndex'
+
+export default DashboardIndex

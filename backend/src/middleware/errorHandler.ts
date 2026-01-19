@@ -51,7 +51,7 @@ export const errorHandler = (
   error: AppError,
   req: Request,
   res: Response,
-  next: NextFunction
+  _next: NextFunction
 ): void => {
   // Default error values
   let statusCode = error.statusCode || 500;
@@ -122,8 +122,8 @@ export const errorHandler = (
 };
 
 // Async error wrapper
-export const asyncHandler = (fn: Function) => (req: Request, res: Response, next: NextFunction) => {
-  Promise.resolve(fn(req, res, next)).catch(next);
+export const asyncHandler = (fn: Function) => (req: Request, res: Response, _next: NextFunction) => {
+  Promise.resolve(fn(req, res, _next)).catch(_next);
 };
 
 // 404 handler

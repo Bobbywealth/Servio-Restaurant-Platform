@@ -1,7 +1,13 @@
-import React from 'react'
+import React, { memo, useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { Bot } from 'lucide-react'
-import AnimatedFace from './AnimatedFace'
+import dynamic from 'next/dynamic'
+
+// LAZY LOAD ANIMATED FACE FOR PERFORMANCE
+const AnimatedFace = dynamic(() => import('./AnimatedFace'), {
+  ssr: false,
+  loading: () => <div className="w-full h-full bg-gradient-to-br from-orange-400 to-orange-600 rounded-full animate-pulse" />
+})
 
 interface AvatarProps {
   isTalking?: boolean
@@ -10,29 +16,33 @@ interface AvatarProps {
   className?: string
   useFace?: boolean // New prop to choose between face and bot icon
   emotion?: 'happy' | 'focused' | 'thinking' | 'neutral'
+  talkIntensity?: number // 0..1 audio-driven mouth movement
 }
 
-export default function Avatar({ 
+const Avatar = memo<AvatarProps>(({ 
   isTalking = false, 
   isListening = false, 
   size = 'large',
   className = '',
   useFace = true,
-  emotion = 'neutral'
-}: AvatarProps) {
-  const sizeClasses = {
+  emotion = 'neutral',
+  talkIntensity
+}) => {
+  // MEMOIZED SIZE CLASSES FOR PERFORMANCE
+  const sizeClasses = useMemo(() => ({
     small: 'w-16 h-16',
     medium: 'w-24 h-24', 
     large: 'w-32 h-32'
-  }
+  }), [])
 
-  const iconSizes = {
+  const iconSizes = useMemo(() => ({
     small: 'w-6 h-6',
     medium: 'w-8 h-8',
     large: 'w-12 h-12'
-  }
+  }), [])
 
-  const getAvatarState = () => {
+  // MEMOIZED STATE CALCULATION
+  const state = useMemo(() => {
     if (isListening) {
       return {
         bgColor: 'bg-blue-500',
@@ -55,9 +65,28 @@ export default function Avatar({
         label: 'Ready'
       }
     }
-  }
+  }, [isListening, isTalking])
 
-  const state = getAvatarState()
+  // MEMOIZED ANIMATION VARIANTS FOR PERFORMANCE
+  const pulseVariants = useMemo(() => ({
+    outer: {
+      scale: [1, 1.2, 1],
+      opacity: [0.7, 0, 0.7]
+    },
+    middle: {
+      scale: [1, 1.1, 1],
+      opacity: [0.5, 0, 0.5]
+    }
+  }), [])
+
+  const avatarVariants = useMemo(() => ({
+    active: {
+      scale: [1, 1.05, 1]
+    },
+    inactive: {
+      scale: 1
+    }
+  }), [])
 
   return (
     <div className={`flex flex-col items-center ${className}`}>
@@ -67,10 +96,7 @@ export default function Avatar({
         {(isTalking || isListening) && (
           <motion.div
             className={`absolute inset-0 ${sizeClasses[size]} rounded-full ${state.pulseColor}`}
-            animate={{
-              scale: [1, 1.2, 1],
-              opacity: [0.7, 0, 0.7]
-            }}
+            animate={pulseVariants.outer}
             transition={{
               duration: 2,
               repeat: Infinity,
@@ -83,10 +109,7 @@ export default function Avatar({
         {isTalking && (
           <motion.div
             className={`absolute inset-0 ${sizeClasses[size]} rounded-full ${state.pulseColor}`}
-            animate={{
-              scale: [1, 1.1, 1],
-              opacity: [0.5, 0, 0.5]
-            }}
+            animate={pulseVariants.middle}
             transition={{
               duration: 1.5,
               repeat: Infinity,
@@ -99,9 +122,7 @@ export default function Avatar({
         {/* Avatar Circle */}
         <motion.div
           className={`${sizeClasses[size]} rounded-full ${useFace ? 'bg-transparent' : state.bgColor} flex items-center justify-center shadow-lg relative z-10`}
-          animate={{
-            scale: isListening || isTalking ? [1, 1.05, 1] : 1
-          }}
+          animate={isListening || isTalking ? avatarVariants.active : avatarVariants.inactive}
           transition={{
             duration: 1,
             repeat: isListening || isTalking ? Infinity : 0,
@@ -114,6 +135,7 @@ export default function Avatar({
               isTalking={isTalking}
               emotion={emotion}
               size={size}
+              talkIntensity={talkIntensity}
             />
           ) : (
             <motion.div
@@ -195,9 +217,13 @@ export default function Avatar({
           transition={{ delay: 0.5 }}
           className="text-xs text-gray-500 text-center mt-2 max-w-xs"
         >
-          Click the microphone button or say "Hey Servio" to start
+          Click the microphone button or say &quot;Hey Servio&quot; to start
         </motion.p>
       )}
     </div>
   )
-}
+})
+
+Avatar.displayName = 'Avatar'
+
+export default Avatar

@@ -5,17 +5,8 @@ import { logger } from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
 
 const router = Router();
+const num = (v: any) => (typeof v === 'number' ? v : Number(v ?? 0));
 
-interface TimeEntry {
-  id: string;
-  user_id: string;
-  clock_in_time: string;
-  clock_out_time?: string;
-  break_minutes: number;
-  total_hours?: number;
-  position?: string;
-  notes?: string;
-}
 
 /**
  * POST /api/timeclock/clock-in
@@ -371,29 +362,54 @@ router.post('/end-break', asyncHandler(async (req: Request, res: Response) => {
  */
 router.get('/current-staff', asyncHandler(async (req: Request, res: Response) => {
   const db = DatabaseService.getInstance().getDatabase();
+  const dialect = DatabaseService.getInstance().getDialect();
 
-  const currentStaff = await db.all(`
-    SELECT 
-      u.id as user_id,
-      u.name,
-      u.role,
-      te.id as time_entry_id,
-      te.clock_in_time,
-      te.position,
-      te.break_minutes,
-      CASE 
-        WHEN teb.break_end IS NULL THEN 1 
-        ELSE 0 
-      END as is_on_break,
-      teb.break_start as current_break_start,
-      ROUND((julianday('now') - julianday(te.clock_in_time)) * 24, 2) as hours_worked
-    FROM time_entries te
-    JOIN users u ON te.user_id = u.id
-    LEFT JOIN time_entry_breaks teb ON te.id = teb.time_entry_id AND teb.break_end IS NULL
-    WHERE te.clock_out_time IS NULL
-    AND u.is_active = 1
-    ORDER BY te.clock_in_time ASC
-  `);
+  const currentStaff =
+    dialect === 'postgres'
+      ? await db.all(`
+          SELECT
+            u.id as user_id,
+            u.name,
+            u.role,
+            te.id as time_entry_id,
+            te.clock_in_time,
+            te.position,
+            te.break_minutes,
+            CASE
+              WHEN teb.break_end IS NULL THEN 1
+              ELSE 0
+            END as is_on_break,
+            teb.break_start as current_break_start,
+            ROUND(EXTRACT(EPOCH FROM (NOW() - te.clock_in_time)) / 3600, 2) as hours_worked
+          FROM time_entries te
+          JOIN users u ON te.user_id = u.id
+          LEFT JOIN time_entry_breaks teb ON te.id = teb.time_entry_id AND teb.break_end IS NULL
+          WHERE te.clock_out_time IS NULL
+          AND u.is_active = TRUE
+          ORDER BY te.clock_in_time ASC
+        `)
+      : await db.all(`
+          SELECT
+            u.id as user_id,
+            u.name,
+            u.role,
+            te.id as time_entry_id,
+            te.clock_in_time,
+            te.position,
+            te.break_minutes,
+            CASE
+              WHEN teb.break_end IS NULL THEN 1
+              ELSE 0
+            END as is_on_break,
+            teb.break_start as current_break_start,
+            ROUND((julianday('now') - julianday(te.clock_in_time)) * 24, 2) as hours_worked
+          FROM time_entries te
+          JOIN users u ON te.user_id = u.id
+          LEFT JOIN time_entry_breaks teb ON te.id = teb.time_entry_id AND teb.break_end IS NULL
+          WHERE te.clock_out_time IS NULL
+          AND u.is_active = 1
+          ORDER BY te.clock_in_time ASC
+        `);
 
   res.json({
     success: true,
@@ -420,6 +436,7 @@ router.get('/entries', asyncHandler(async (req: Request, res: Response) => {
   } = req.query;
 
   const db = DatabaseService.getInstance().getDatabase();
+  const dialect = DatabaseService.getInstance().getDialect();
 
   let query = `
     SELECT 
@@ -440,12 +457,12 @@ router.get('/entries', asyncHandler(async (req: Request, res: Response) => {
   }
 
   if (startDate) {
-    conditions.push('DATE(te.clock_in_time) >= ?');
+    conditions.push(dialect === 'postgres' ? 'te.clock_in_time::date >= ?' : 'DATE(te.clock_in_time) >= ?');
     params.push(startDate);
   }
 
   if (endDate) {
-    conditions.push('DATE(te.clock_in_time) <= ?');
+    conditions.push(dialect === 'postgres' ? 'te.clock_in_time::date <= ?' : 'DATE(te.clock_in_time) <= ?');
     params.push(endDate);
   }
 
@@ -482,10 +499,10 @@ router.get('/entries', asyncHandler(async (req: Request, res: Response) => {
     data: {
       entries,
       pagination: {
-        total: countResult.total,
+        total: num(countResult.total),
         limit: Number(limit),
         offset: Number(offset),
-        hasMore: countResult.total > Number(offset) + entries.length
+        hasMore: num(countResult.total) > Number(offset) + entries.length
       }
     }
   });
@@ -597,12 +614,13 @@ router.get('/stats', asyncHandler(async (req: Request, res: Response) => {
   } = req.query;
 
   const db = DatabaseService.getInstance().getDatabase();
+  const dialect = DatabaseService.getInstance().getDialect();
 
   let baseQuery = `
     FROM time_entries te
     JOIN users u ON te.user_id = u.id
-    WHERE DATE(te.clock_in_time) >= ? 
-    AND DATE(te.clock_in_time) <= ?
+    WHERE ${dialect === 'postgres' ? 'te.clock_in_time::date' : 'DATE(te.clock_in_time)'} >= ?
+    AND ${dialect === 'postgres' ? 'te.clock_in_time::date' : 'DATE(te.clock_in_time)'} <= ?
     AND te.clock_out_time IS NOT NULL
   `;
 
@@ -631,13 +649,13 @@ router.get('/stats', asyncHandler(async (req: Request, res: Response) => {
     // Daily breakdown
     db.all(`
       SELECT 
-        DATE(te.clock_in_time) as date,
+        ${dialect === 'postgres' ? 'te.clock_in_time::date' : 'DATE(te.clock_in_time)'} as date,
         COUNT(*) as entries_count,
         ROUND(SUM(te.total_hours), 2) as total_hours,
         COUNT(DISTINCT te.user_id) as unique_staff
       ${baseQuery}
-      GROUP BY DATE(te.clock_in_time)
-      ORDER BY DATE(te.clock_in_time)
+      GROUP BY ${dialect === 'postgres' ? 'te.clock_in_time::date' : 'DATE(te.clock_in_time)'}
+      ORDER BY ${dialect === 'postgres' ? 'te.clock_in_time::date' : 'DATE(te.clock_in_time)'}
     `, params),
 
     // Per-user statistics (if not filtering by specific user)

@@ -2,7 +2,8 @@ import { open } from 'sqlite';
 import sqlite3 from 'sqlite3';
 import path from 'path';
 import fs from 'fs';
-import { Pool, PoolClient, QueryResult } from 'pg';
+import { Pool, QueryResult } from 'pg';
+import bcrypt from 'bcryptjs';
 import { logger } from '../utils/logger';
 
 type DatabaseDialect = 'sqlite' | 'postgres';
@@ -125,8 +126,12 @@ export class DatabaseService {
           `CREATE TABLE IF NOT EXISTS users (
             id TEXT PRIMARY KEY,
             name TEXT NOT NULL,
+            email TEXT UNIQUE,
+            password_hash TEXT,
+            pin TEXT,
             role TEXT NOT NULL CHECK (role IN ('staff', 'manager', 'owner')),
             permissions TEXT NOT NULL DEFAULT '[]',
+            is_active BOOLEAN NOT NULL DEFAULT TRUE,
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
           )`,
@@ -176,6 +181,33 @@ export class DatabaseService {
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
           )`,
+          `CREATE TABLE IF NOT EXISTS time_entries (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            clock_in_time TIMESTAMPTZ NOT NULL,
+            clock_out_time TIMESTAMPTZ,
+            break_minutes INTEGER NOT NULL DEFAULT 0,
+            total_hours DOUBLE PRECISION,
+            position TEXT,
+            notes TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          )`,
+          `CREATE TABLE IF NOT EXISTS time_entry_breaks (
+            id TEXT PRIMARY KEY,
+            time_entry_id TEXT NOT NULL,
+            break_start TIMESTAMPTZ NOT NULL,
+            break_end TIMESTAMPTZ,
+            duration_minutes INTEGER,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          )`,
+          `CREATE TABLE IF NOT EXISTS auth_sessions (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            refresh_token_hash TEXT NOT NULL,
+            expires_at TIMESTAMPTZ NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          )`,
           `CREATE TABLE IF NOT EXISTS audit_logs (
             id TEXT PRIMARY KEY,
             user_id TEXT NOT NULL,
@@ -201,8 +233,12 @@ export class DatabaseService {
           `CREATE TABLE IF NOT EXISTS users (
             id TEXT PRIMARY KEY,
             name TEXT NOT NULL,
+            email TEXT UNIQUE,
+            password_hash TEXT,
+            pin TEXT,
             role TEXT NOT NULL CHECK (role IN ('staff', 'manager', 'owner')),
             permissions TEXT NOT NULL DEFAULT '[]',
+            is_active BOOLEAN NOT NULL DEFAULT 1,
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
           )`,
@@ -252,6 +288,33 @@ export class DatabaseService {
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
           )`,
+          `CREATE TABLE IF NOT EXISTS time_entries (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            clock_in_time TEXT NOT NULL,
+            clock_out_time TEXT,
+            break_minutes INTEGER NOT NULL DEFAULT 0,
+            total_hours REAL,
+            position TEXT,
+            notes TEXT,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+          )`,
+          `CREATE TABLE IF NOT EXISTS time_entry_breaks (
+            id TEXT PRIMARY KEY,
+            time_entry_id TEXT NOT NULL,
+            break_start TEXT NOT NULL,
+            break_end TEXT,
+            duration_minutes INTEGER,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+          )`,
+          `CREATE TABLE IF NOT EXISTS auth_sessions (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            refresh_token_hash TEXT NOT NULL,
+            expires_at TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+          )`,
           `CREATE TABLE IF NOT EXISTS audit_logs (
             id TEXT PRIMARY KEY,
             user_id TEXT NOT NULL,
@@ -278,6 +341,20 @@ export class DatabaseService {
       await db.exec(tableSQL);
     }
 
+    // Lightweight “migration” safety: if tables existed before, ensure new columns exist.
+    // SQLite/Postgres both support ADD COLUMN; we ignore failures when column already exists.
+    const ensureColumn = async (table: string, columnSql: string) => {
+      try {
+        await db.exec(`ALTER TABLE ${table} ADD COLUMN ${columnSql}`);
+      } catch {
+        // ignore
+      }
+    };
+    await ensureColumn('users', 'email TEXT');
+    await ensureColumn('users', 'password_hash TEXT');
+    await ensureColumn('users', 'pin TEXT');
+    await ensureColumn('users', 'is_active BOOLEAN');
+
     logger.info('Database tables created/verified');
   }
 
@@ -296,12 +373,18 @@ export class DatabaseService {
       {
         id: 'user-1',
         name: 'Demo Staff',
+        email: 'staff@demo.servio',
+        password: 'password',
+        pin: '1111',
         role: 'staff',
         permissions: JSON.stringify(['orders.read', 'orders.update', 'inventory.read', 'inventory.adjust'])
       },
       {
         id: 'user-2',
         name: 'Demo Manager',
+        email: 'manager@demo.servio',
+        password: 'password',
+        pin: '2222',
         role: 'manager',
         permissions: JSON.stringify(['*'])
       }
@@ -411,9 +494,10 @@ export class DatabaseService {
 
     // Insert sample data
     for (const user of users) {
+      const passwordHash = bcrypt.hashSync(user.password, 10);
       await db.run(
-        'INSERT INTO users (id, name, role, permissions) VALUES (?, ?, ?, ?)',
-        [user.id, user.name, user.role, user.permissions]
+        'INSERT INTO users (id, name, email, password_hash, pin, role, permissions, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        [user.id, user.name, user.email, passwordHash, user.pin, user.role, user.permissions, 1]
       );
     }
 

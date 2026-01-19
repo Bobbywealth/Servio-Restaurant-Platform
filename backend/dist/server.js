@@ -48,6 +48,7 @@ const path_1 = __importDefault(require("path"));
 const DatabaseService_1 = require("./services/DatabaseService");
 const logger_1 = require("./utils/logger");
 const errorHandler_1 = require("./middleware/errorHandler");
+const auth_1 = require("./middleware/auth");
 const app = (0, express_1.default)();
 const server = (0, http_1.createServer)(app);
 const io = new socket_io_1.Server(server, {
@@ -63,6 +64,7 @@ async function initializeServer() {
         await DatabaseService_1.DatabaseService.initialize();
         logger_1.logger.info('Database initialized successfully');
         // Now load routes after database is ready
+        const { default: authRoutes } = await Promise.resolve().then(() => __importStar(require('./routes/auth')));
         const { default: assistantRoutes } = await Promise.resolve().then(() => __importStar(require('./routes/assistant')));
         const { default: ordersRoutes } = await Promise.resolve().then(() => __importStar(require('./routes/orders')));
         const { default: inventoryRoutes } = await Promise.resolve().then(() => __importStar(require('./routes/inventory')));
@@ -73,15 +75,17 @@ async function initializeServer() {
         const { default: auditRoutes } = await Promise.resolve().then(() => __importStar(require('./routes/audit')));
         const { default: timeclockRoutes } = await Promise.resolve().then(() => __importStar(require('./routes/timeclock')));
         // API Routes
-        app.use('/api/assistant', assistantRoutes);
-        app.use('/api/orders', ordersRoutes);
-        app.use('/api/inventory', inventoryRoutes);
-        app.use('/api/menu', menuRoutes);
-        app.use('/api/tasks', tasksRoutes);
-        app.use('/api/sync', syncRoutes);
-        app.use('/api/receipts', receiptsRoutes);
-        app.use('/api/audit', auditRoutes);
-        app.use('/api/timeclock', timeclockRoutes);
+        app.use('/api/auth', authRoutes);
+        // Protected routes
+        app.use('/api/assistant', auth_1.requireAuth, assistantRoutes);
+        app.use('/api/orders', auth_1.requireAuth, ordersRoutes);
+        app.use('/api/inventory', auth_1.requireAuth, inventoryRoutes);
+        app.use('/api/menu', auth_1.requireAuth, menuRoutes);
+        app.use('/api/tasks', auth_1.requireAuth, tasksRoutes);
+        app.use('/api/sync', auth_1.requireAuth, syncRoutes);
+        app.use('/api/receipts', auth_1.requireAuth, receiptsRoutes);
+        app.use('/api/audit', auth_1.requireAuth, auditRoutes);
+        app.use('/api/timeclock', auth_1.requireAuth, timeclockRoutes);
         logger_1.logger.info('Routes loaded successfully');
     }
     catch (error) {

@@ -3,6 +3,7 @@ import type { AppProps } from 'next/app'
 import { useState, useEffect } from 'react'
 import { UserProvider } from '../contexts/UserContext'
 import { ThemeProvider } from '../contexts/ThemeContext'
+import ToastProvider from '../components/ui/Toast'
 
 export default function App({ Component, pageProps }: AppProps) {
   const [mounted, setMounted] = useState(false)
@@ -19,6 +20,7 @@ export default function App({ Component, pageProps }: AppProps) {
     <ThemeProvider>
       <UserProvider>
         <Component {...pageProps} />
+        <ToastProvider />
       </UserProvider>
     </ThemeProvider>
   )

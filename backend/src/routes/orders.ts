@@ -128,7 +128,7 @@ router.post('/:id/status', asyncHandler(async (req: Request, res: Response) => {
   }
 
   // Update the order
-  const result = await db.run(
+  await db.run(
     'UPDATE orders SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
     [status, id]
   );

@@ -1,8 +1,10 @@
 import React, { ReactNode, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/router'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useUser } from '../../contexts/UserContext'
 import ThemeToggle from '../ui/ThemeToggle'
+import NotificationCenter from '../ui/NotificationCenter'
 import { 
   Bot, 
   Home, 
@@ -12,7 +14,6 @@ import {
   Users, 
   Settings, 
   LogOut,
-  Bell,
   Clock,
   User,
   Menu,
@@ -28,6 +29,10 @@ interface DashboardLayoutProps {
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const { user, logout } = useUser()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const router = useRouter()
+
+  const normalizePath = (p: string) => (p || '/').split('?')[0].replace(/\/+$/, '') || '/'
+  const currentPath = normalizePath(router.asPath)
 
   const navigation = [
     { 
@@ -136,9 +141,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         {/* Navigation */}
         <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
           {navigation.map((item, index) => {
-            const isActive = typeof window !== 'undefined' && 
-              (window.location.pathname === item.href || 
-               (item.href === '/dashboard' && window.location.pathname === '/dashboard/index'))
+            const isActive = currentPath === normalizePath(item.href)
             
             return (
               <motion.div
@@ -214,13 +217,6 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                 <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-600 rounded-xl flex items-center justify-center shadow-lg">
                   <User className="w-5 h-5 text-white" />
                 </div>
-                {user?.shift?.isActive && (
-                  <motion.div
-                    className="absolute -top-1 -right-1 w-3 h-3 bg-servio-green-500 rounded-full border-2 border-white dark:border-surface-800"
-                    animate={{ scale: [1, 1.2, 1] }}
-                    transition={{ duration: 2, repeat: Infinity }}
-                  />
-                )}
               </div>
               
               <div className="ml-3 flex-1 min-w-0">
@@ -231,12 +227,6 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                   <span className="text-2xs text-surface-500 dark:text-surface-400 truncate">
                     {user?.role || 'User'}
                   </span>
-                  {user?.shift?.isActive && (
-                    <div className="flex items-center text-2xs text-servio-green-600 dark:text-servio-green-400">
-                      <Clock className="w-3 h-3 mr-1" />
-                      <span>Active</span>
-                    </div>
-                  )}
                 </div>
               </div>
               
@@ -266,7 +256,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                   <Menu className="w-6 h-6" />
                 </button>
                 
-                {user?.shift?.isActive && (
+                {false && (
                   <motion.div 
                     className="hidden sm:flex items-center px-3 py-2 bg-servio-green-100 dark:bg-servio-green-900/30 text-servio-green-700 dark:text-servio-green-300 text-sm font-medium rounded-lg"
                     initial={{ scale: 0, opacity: 0 }}
@@ -287,18 +277,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
               {/* Right side actions */}
               <div className="flex items-center space-x-3">
                 <ThemeToggle />
-                
-                <motion.button 
-                  className="btn-icon relative"
-                  whileTap={{ scale: 0.95 }}
-                >
-                  <Bell className="w-5 h-5" />
-                  <motion.span 
-                    className="absolute top-2 right-2 w-2 h-2 bg-servio-red-500 rounded-full"
-                    animate={{ scale: [1, 1.2, 1] }}
-                    transition={{ duration: 2, repeat: Infinity }}
-                  />
-                </motion.button>
+                <NotificationCenter />
               </div>
             </div>
           </div>

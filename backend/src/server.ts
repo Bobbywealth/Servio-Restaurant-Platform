@@ -11,6 +11,7 @@ import path from 'path';
 import { DatabaseService } from './services/DatabaseService';
 import { logger } from './utils/logger';
 import { errorHandler } from './middleware/errorHandler';
+import { requireAuth } from './middleware/auth';
 
 const app = express();
 const server = createServer(app);
@@ -30,6 +31,7 @@ async function initializeServer() {
     logger.info('Database initialized successfully');
     
     // Now load routes after database is ready
+    const { default: authRoutes } = await import('./routes/auth');
     const { default: assistantRoutes } = await import('./routes/assistant');
     const { default: ordersRoutes } = await import('./routes/orders');
     const { default: inventoryRoutes } = await import('./routes/inventory');
@@ -41,15 +43,18 @@ async function initializeServer() {
     const { default: timeclockRoutes } = await import('./routes/timeclock');
     
     // API Routes
-    app.use('/api/assistant', assistantRoutes);
-    app.use('/api/orders', ordersRoutes);
-    app.use('/api/inventory', inventoryRoutes);
-    app.use('/api/menu', menuRoutes);
-    app.use('/api/tasks', tasksRoutes);
-app.use('/api/sync', syncRoutes);
-app.use('/api/receipts', receiptsRoutes);
-app.use('/api/audit', auditRoutes);
-app.use('/api/timeclock', timeclockRoutes);
+    app.use('/api/auth', authRoutes);
+
+    // Protected routes
+    app.use('/api/assistant', requireAuth, assistantRoutes);
+    app.use('/api/orders', requireAuth, ordersRoutes);
+    app.use('/api/inventory', requireAuth, inventoryRoutes);
+    app.use('/api/menu', requireAuth, menuRoutes);
+    app.use('/api/tasks', requireAuth, tasksRoutes);
+    app.use('/api/sync', requireAuth, syncRoutes);
+    app.use('/api/receipts', requireAuth, receiptsRoutes);
+    app.use('/api/audit', requireAuth, auditRoutes);
+    app.use('/api/timeclock', requireAuth, timeclockRoutes);
     
     logger.info('Routes loaded successfully');
   } catch (error) {
@@ -58,7 +63,7 @@ app.use('/api/timeclock', timeclockRoutes);
   }
 }
 
-// Middleware
+// AGGRESSIVE PERFORMANCE MIDDLEWARE
 app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" },
   contentSecurityPolicy: {
@@ -69,33 +74,118 @@ app.use(helmet({
       imgSrc: ["'self'", "data:", "https:"],
     },
   },
+  hsts: {
+    maxAge: 31536000,
+    includeSubDomains: true,
+    preload: true
+  }
 }));
+
 app.use(cors({
   origin: process.env.FRONTEND_URL || "http://localhost:3003",
   credentials: true,
-  optionsSuccessStatus: 200 // some legacy browsers (IE11, various SmartTVs) choke on 204
+  optionsSuccessStatus: 200,
+  preflightContinue: false,
+  maxAge: 86400 // 24 hour preflight cache
 }));
 
-// Compression middleware for better performance
+// LIGHTNING FAST COMPRESSION
 app.use(compression({
-  level: 6,
-  threshold: 1024,
+  level: 9, // Maximum compression
+  threshold: 512, // Compress even small responses
+  memLevel: 8, // Use more memory for better compression
+  chunkSize: 32 * 1024, // 32KB chunks
   filter: (req, res) => {
     if (req.headers['x-no-compression']) return false;
+    // Compress JSON, text, and JavaScript responses
     return compression.filter(req, res);
   }
 }));
 
-app.use(morgan('combined', { stream: { write: message => logger.info(message.trim()) } }));
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-
-// Add caching middleware for static assets
-app.use('/uploads', express.static(path.join(__dirname, '../uploads'), {
-  maxAge: '1d',
-  etag: true,
-  lastModified: true
+// OPTIMIZED LOGGING (less verbose in production)
+const morganFormat = process.env.NODE_ENV === 'production' ? 'combined' : 'dev';
+app.use(morgan(morganFormat, { 
+  stream: { write: message => logger.info(message.trim()) },
+  skip: (req, res) => res.statusCode < 400 && process.env.NODE_ENV === 'production'
 }));
+
+// OPTIMIZED BODY PARSING
+app.use(express.json({ 
+  limit: '10mb',
+  strict: true,
+  type: ['application/json', 'application/csp-report']
+}));
+app.use(express.urlencoded({ 
+  extended: true, 
+  limit: '10mb',
+  parameterLimit: 1000
+}));
+
+// IN-MEMORY CACHE FOR API RESPONSES
+const cache = new Map();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const MAX_CACHE_SIZE = 1000;
+
+// Cache middleware for GET requests
+app.use((req, res, next) => {
+  if (req.method === 'GET' && !req.url.includes('/auth') && !req.url.includes('/timeclock')) {
+    const cacheKey = req.url;
+    const cached = cache.get(cacheKey);
+    
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+      res.set(cached.headers);
+      res.set('X-Cache', 'HIT');
+      return res.json(cached.data);
+    }
+    
+    // Cache the response
+    const originalSend = res.json;
+    res.json = function(data) {
+      if (res.statusCode === 200 && cache.size < MAX_CACHE_SIZE) {
+        cache.set(cacheKey, {
+          data,
+          timestamp: Date.now(),
+          headers: {
+            'Cache-Control': 'public, max-age=300',
+            'ETag': Buffer.from(JSON.stringify(data)).toString('base64').slice(0, 20)
+          }
+        });
+      }
+      res.set('X-Cache', 'MISS');
+      return originalSend.call(this, data);
+    };
+  }
+  next();
+});
+
+// AGGRESSIVE STATIC ASSET CACHING
+app.use('/uploads', express.static(path.join(__dirname, '../uploads'), {
+  maxAge: '1y', // 1 year cache
+  etag: true,
+  lastModified: true,
+  immutable: true,
+  setHeaders: (res, path) => {
+    res.set('Cache-Control', 'public, max-age=31536000, immutable');
+    res.set('X-Content-Type-Options', 'nosniff');
+  }
+}));
+
+// PERFORMANCE HEADERS FOR ALL RESPONSES
+app.use((req, res, next) => {
+  res.set('X-Powered-By', 'Servio');
+  res.set('X-Response-Time-Start', Date.now().toString());
+  next();
+});
+
+// Clean up cache periodically
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, value] of cache.entries()) {
+    if (now - value.timestamp > CACHE_TTL) {
+      cache.delete(key);
+    }
+  }
+}, 5 * 60 * 1000); // Clean every 5 minutes
 
 // Socket.IO connection handling
 io.on('connection', (socket) => {

@@ -38,7 +38,7 @@ class ForbiddenError extends Error {
     }
 }
 exports.ForbiddenError = ForbiddenError;
-const errorHandler = (error, req, res, next) => {
+const errorHandler = (error, req, res, _next) => {
     // Default error values
     let statusCode = error.statusCode || 500;
     let message = error.message || 'Internal Server Error';
@@ -106,8 +106,8 @@ const errorHandler = (error, req, res, next) => {
 };
 exports.errorHandler = errorHandler;
 // Async error wrapper
-const asyncHandler = (fn) => (req, res, next) => {
-    Promise.resolve(fn(req, res, next)).catch(next);
+const asyncHandler = (fn) => (req, res, _next) => {
+    Promise.resolve(fn(req, res, _next)).catch(_next);
 };
 exports.asyncHandler = asyncHandler;
 // 404 handler

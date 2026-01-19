@@ -118,7 +118,7 @@ router.get('/status', asyncHandler(async (req: Request, res: Response) => {
     service: 'online',
     features: {
       speechToText: process.env.OPENAI_API_KEY ? 'available' : 'unavailable',
-      textToSpeech: process.env.ELEVENLABS_API_KEY ? 'available' : 'limited',
+      textToSpeech: process.env.OPENAI_API_KEY || process.env.ELEVENLABS_API_KEY ? 'available' : 'unavailable',
       llm: process.env.OPENAI_API_KEY ? 'available' : 'unavailable'
     },
     capabilities: [
@@ -142,8 +142,6 @@ router.get('/status', asyncHandler(async (req: Request, res: Response) => {
  * Get conversation history for a user (if we implement conversation storage)
  */
 router.get('/conversation/:userId', asyncHandler(async (req: Request, res: Response) => {
-  const { userId } = req.params;
-  const { limit = 50 } = req.query;
 
   // For now, return empty - this could be implemented to store conversation history
   res.json({

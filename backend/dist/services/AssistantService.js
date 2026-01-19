@@ -9,6 +9,7 @@ const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
 const DatabaseService_1 = require("./DatabaseService");
 const logger_1 = require("../utils/logger");
+const uuid_1 = require("uuid");
 class AssistantService {
     constructor() {
         this._db = null;
@@ -134,16 +135,35 @@ class AssistantService {
     }
     async generateSpeech(text) {
         try {
-            // For now, return null - TTS integration can be added later
-            // In production, you'd integrate with ElevenLabs or OpenAI TTS
-            return '';
+            if (!process.env.OPENAI_API_KEY) {
+                return '';
+            }
+            // Keep responses bounded for latency/cost.
+            const input = text.length > 2000 ? text.slice(0, 2000) : text;
+            const model = process.env.OPENAI_TTS_MODEL || 'tts-1';
+            const voice = (process.env.OPENAI_TTS_VOICE || 'alloy');
+            const speech = await this.openai.audio.speech.create({
+                model,
+                voice,
+                input,
+                response_format: 'mp3'
+            });
+            const arrayBuffer = await speech.arrayBuffer();
+            const audioBuffer = Buffer.from(arrayBuffer);
+            const ttsDir = path_1.default.join(process.cwd(), 'uploads', 'tts');
+            await fs_1.default.promises.mkdir(ttsDir, { recursive: true });
+            const fileName = `tts_${Date.now()}_${(0, uuid_1.v4)()}.mp3`;
+            const outPath = path_1.default.join(ttsDir, fileName);
+            await fs_1.default.promises.writeFile(outPath, audioBuffer);
+            // Served by backend static route: /uploads/*
+            return `/uploads/tts/${fileName}`;
         }
         catch (error) {
             logger_1.logger.error('TTS generation failed:', error);
             return '';
         }
     }
-    async getSystemPrompt(userId) {
+    async getSystemPrompt(_userId) {
         // Get current restaurant context
         const orders = await this.db.all('SELECT * FROM orders WHERE status != "completed" ORDER BY created_at DESC LIMIT 10');
         const unavailableItems = await this.db.all('SELECT * FROM menu_items WHERE is_available = 0');

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react'
+import React, { useState, useCallback, useEffect, useRef } from 'react'
 import Head from 'next/head'
 import DashboardLayout from '../../components/Layout/DashboardLayout'
 import Avatar from '../../components/Assistant/Avatar'
@@ -6,7 +6,7 @@ import MicrophoneButton from '../../components/Assistant/MicrophoneButton'
 import TranscriptFeed, { TranscriptMessage } from '../../components/Assistant/TranscriptFeed'
 import QuickCommands from '../../components/Assistant/QuickCommands'
 import { useUser } from '../../contexts/UserContext'
-import axios from 'axios'
+import { api } from '../../lib/api'
 
 interface AssistantState {
   isRecording: boolean
@@ -28,6 +28,127 @@ export default function AssistantPage() {
 
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null)
   const [audioChunks, setAudioChunks] = useState<Blob[]>([])
+  const [talkIntensity, setTalkIntensity] = useState(0)
+
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const audioContextRef = useRef<AudioContext | null>(null)
+  const analyserRef = useRef<AnalyserNode | null>(null)
+  const mediaSourceRef = useRef<MediaElementAudioSourceNode | null>(null)
+  const rafRef = useRef<number | null>(null)
+
+  const resolveAudioUrl = useCallback((audioUrl: string) => {
+    // Backend returns /uploads/...; make it absolute for the browser.
+    if (audioUrl.startsWith('http://') || audioUrl.startsWith('https://')) return audioUrl
+    const backendUrl = process.env.BACKEND_URL || 'http://localhost:3002'
+    if (audioUrl.startsWith('/')) return `${backendUrl}${audioUrl}`
+    return `${backendUrl}/${audioUrl}`
+  }, [])
+
+  const stopAudio = useCallback(() => {
+    if (rafRef.current) {
+      cancelAnimationFrame(rafRef.current)
+      rafRef.current = null
+    }
+    setTalkIntensity(0)
+    if (mediaSourceRef.current) {
+      try {
+        mediaSourceRef.current.disconnect()
+      } catch {}
+      mediaSourceRef.current = null
+    }
+    if (analyserRef.current) {
+      try {
+        analyserRef.current.disconnect()
+      } catch {}
+      analyserRef.current = null
+    }
+    if (audioRef.current) {
+      audioRef.current.pause()
+      audioRef.current.currentTime = 0
+      audioRef.current = null
+    }
+  }, [])
+
+  const playAudio = useCallback(async (audioUrl: string) => {
+    stopAudio()
+
+    const url = resolveAudioUrl(audioUrl)
+    setState(prev => ({ ...prev, isSpeaking: true, currentAudioUrl: url }))
+
+    const audio = new Audio(url)
+    audio.crossOrigin = 'anonymous'
+    audioRef.current = audio
+
+    const AudioContextImpl =
+      (window as any).AudioContext || (window as any).webkitAudioContext
+    if (!AudioContextImpl) {
+      // Fallback: still play audio even if we can't drive mouth movement.
+      audio.onended = () => {
+        setState(prev => ({ ...prev, isSpeaking: false, currentAudioUrl: null }))
+        setTalkIntensity(0)
+      }
+      await audio.play()
+      return
+    }
+
+    if (!audioContextRef.current) {
+      audioContextRef.current = new AudioContextImpl()
+    }
+    const audioContext = audioContextRef.current
+    if (audioContext.state === 'suspended') {
+      await audioContext.resume()
+    }
+
+    const source = audioContext.createMediaElementSource(audio)
+    const analyser = audioContext.createAnalyser()
+    analyser.fftSize = 1024
+    analyserRef.current = analyser
+    mediaSourceRef.current = source
+
+    source.connect(analyser)
+    analyser.connect(audioContext.destination)
+
+    const data = new Uint8Array(analyser.fftSize)
+    const tick = () => {
+      if (!analyserRef.current) return
+      analyserRef.current.getByteTimeDomainData(data)
+      // RMS amplitude -> 0..1-ish
+      let sum = 0
+      for (let i = 0; i < data.length; i++) {
+        const v = (data[i] - 128) / 128
+        sum += v * v
+      }
+      const rms = Math.sqrt(sum / data.length)
+      // Boost and clamp for more visible mouth movement
+      const boosted = Math.min(1, rms * 6)
+      setTalkIntensity(boosted)
+      rafRef.current = requestAnimationFrame(tick)
+    }
+
+    audio.onended = () => {
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current)
+        rafRef.current = null
+      }
+      if (mediaSourceRef.current) {
+        try {
+          mediaSourceRef.current.disconnect()
+        } catch {}
+        mediaSourceRef.current = null
+      }
+      if (analyserRef.current) {
+        try {
+          analyserRef.current.disconnect()
+        } catch {}
+        analyserRef.current = null
+      }
+      setTalkIntensity(0)
+      setState(prev => ({ ...prev, isSpeaking: false, currentAudioUrl: null }))
+    }
+
+    await audio.play()
+    rafRef.current = requestAnimationFrame(tick)
+  }, [resolveAudioUrl, stopAudio])
 
   // Initialize media recorder
   useEffect(() => {
@@ -76,6 +197,16 @@ export default function AssistantPage() {
       }
     }
   }, [])
+
+  useEffect(() => {
+    return () => {
+      stopAudio()
+      if (audioContextRef.current) {
+        audioContextRef.current.close().catch(() => {})
+        audioContextRef.current = null
+      }
+    }
+  }, [stopAudio])
 
   const addMessage = useCallback((message: Omit<TranscriptMessage, 'id' | 'timestamp'>) => {
     const newMessage: TranscriptMessage = {
@@ -127,14 +258,14 @@ export default function AssistantPage() {
       formData.append('userId', user?.id || 'anonymous')
 
       // Send to backend for processing
-      const backendUrl = process.env.BACKEND_URL || 'http://localhost:3002'
-      const response = await axios.post(`${backendUrl}/api/assistant/process-audio`, formData, {
+      const response = await api.post(`/api/assistant/process-audio`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data'
         }
       })
 
-      const { transcript, response: assistantResponse, actions, audioUrl } = response.data
+      const payload = response.data?.data || response.data
+      const { transcript, response: assistantResponse, actions, audioUrl } = payload
 
       // Add user message (transcript)
       if (transcript) {
@@ -142,7 +273,7 @@ export default function AssistantPage() {
           type: 'user',
           content: transcript,
           metadata: {
-            confidence: response.data.confidence || 0.9
+            confidence: payload.confidence || 0.9
           }
         })
       }
@@ -153,7 +284,7 @@ export default function AssistantPage() {
           type: 'assistant',
           content: assistantResponse,
           metadata: {
-            duration: response.data.processingTime
+            duration: payload.processingTime
           }
         })
       }
@@ -177,21 +308,7 @@ export default function AssistantPage() {
 
       // Play assistant response audio
       if (audioUrl) {
-        setState(prev => ({
-          ...prev,
-          isSpeaking: true,
-          currentAudioUrl: audioUrl
-        }))
-        
-        const audio = new Audio(audioUrl)
-        audio.onended = () => {
-          setState(prev => ({
-            ...prev,
-            isSpeaking: false,
-            currentAudioUrl: null
-          }))
-        }
-        audio.play().catch(console.error)
+        await playAudio(audioUrl)
       }
 
     } catch (error) {
@@ -226,13 +343,13 @@ export default function AssistantPage() {
     setState(prev => ({ ...prev, isProcessing: true }))
 
     try {
-      const backendUrl = process.env.BACKEND_URL || 'http://localhost:3002'
-      const response = await axios.post(`${backendUrl}/api/assistant/process-text`, {
+      const response = await api.post(`/api/assistant/process-text`, {
         text: command,
         userId: user?.id || 'anonymous'
       })
 
-      const { response: assistantResponse, actions, audioUrl } = response.data
+      const payload = response.data?.data || response.data
+      const { response: assistantResponse, actions, audioUrl } = payload
 
       // Add assistant response
       if (assistantResponse) {
@@ -240,7 +357,7 @@ export default function AssistantPage() {
           type: 'assistant',
           content: assistantResponse,
           metadata: {
-            duration: response.data.processingTime
+            duration: payload.processingTime
           }
         })
       }
@@ -264,21 +381,7 @@ export default function AssistantPage() {
 
       // Play response audio
       if (audioUrl) {
-        setState(prev => ({
-          ...prev,
-          isSpeaking: true,
-          currentAudioUrl: audioUrl
-        }))
-        
-        const audio = new Audio(audioUrl)
-        audio.onended = () => {
-          setState(prev => ({
-            ...prev,
-            isSpeaking: false,
-            currentAudioUrl: null
-          }))
-        }
-        audio.play().catch(console.error)
+        await playAudio(audioUrl)
       }
 
     } catch (error) {
@@ -325,6 +428,7 @@ export default function AssistantPage() {
                   isListening={state.isRecording}
                   useFace={true}
                   emotion={state.isProcessing ? 'thinking' : state.isRecording ? 'focused' : 'happy'}
+                  talkIntensity={talkIntensity}
                 />
                 
                 <MicrophoneButton

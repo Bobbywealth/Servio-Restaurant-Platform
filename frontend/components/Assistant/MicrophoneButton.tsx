@@ -131,9 +131,11 @@ export default function MicrophoneButton({
         onClick={handleClick}
         onMouseDown={handleMouseDown}
         onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp} // Stop recording if mouse leaves button
+        onMouseLeave={() => {
+          handleMouseUp(); // Stop recording if mouse leaves button
+          setIsHovered(false);
+        }}
         onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
         onTouchCancel={handleTouchEnd} // Stop recording if touch is cancelled

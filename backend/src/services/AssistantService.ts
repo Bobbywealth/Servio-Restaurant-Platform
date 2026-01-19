@@ -1,7 +1,5 @@
 import OpenAI from 'openai';
-import FormData from 'form-data';
 import fs from 'fs';
-import axios from 'axios';
 import path from 'path';
 import { DatabaseService } from './DatabaseService';
 import { logger } from '../utils/logger';
@@ -32,22 +30,7 @@ interface AssistantResponse {
   processingTime: number;
 }
 
-interface OrderItem {
-  id: string;
-  name: string;
-  quantity: number;
-}
 
-interface Order {
-  id: string;
-  external_id: string;
-  channel: string;
-  status: string;
-  items: OrderItem[];
-  customer_name: string;
-  total_amount: number;
-  created_at: string;
-}
 
 export class AssistantService {
   private openai: OpenAI;
@@ -196,16 +179,41 @@ export class AssistantService {
 
   private async generateSpeech(text: string): Promise<string> {
     try {
-      // For now, return null - TTS integration can be added later
-      // In production, you'd integrate with ElevenLabs or OpenAI TTS
-      return '';
+      if (!process.env.OPENAI_API_KEY) {
+        return '';
+      }
+
+      // Keep responses bounded for latency/cost.
+      const input = text.length > 2000 ? text.slice(0, 2000) : text;
+      const model = process.env.OPENAI_TTS_MODEL || 'tts-1';
+      const voice = (process.env.OPENAI_TTS_VOICE || 'alloy') as any;
+
+      const speech = await this.openai.audio.speech.create({
+        model,
+        voice,
+        input,
+        response_format: 'mp3'
+      });
+
+      const arrayBuffer = await speech.arrayBuffer();
+      const audioBuffer = Buffer.from(arrayBuffer);
+
+      const ttsDir = path.join(process.cwd(), 'uploads', 'tts');
+      await fs.promises.mkdir(ttsDir, { recursive: true });
+
+      const fileName = `tts_${Date.now()}_${uuidv4()}.mp3`;
+      const outPath = path.join(ttsDir, fileName);
+      await fs.promises.writeFile(outPath, audioBuffer);
+
+      // Served by backend static route: /uploads/*
+      return `/uploads/tts/${fileName}`;
     } catch (error) {
       logger.error('TTS generation failed:', error);
       return '';
     }
   }
 
-  private async getSystemPrompt(userId: string): Promise<string> {
+  private async getSystemPrompt(_userId: string): Promise<string> {
     // Get current restaurant context
     const orders = await this.db.all('SELECT * FROM orders WHERE status != "completed" ORDER BY created_at DESC LIMIT 10');
     const unavailableItems = await this.db.all('SELECT * FROM menu_items WHERE is_available = 0');

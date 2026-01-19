@@ -6,13 +6,15 @@ interface AnimatedFaceProps {
   isTalking?: boolean
   emotion?: 'happy' | 'focused' | 'thinking' | 'neutral'
   size?: 'small' | 'medium' | 'large'
+  talkIntensity?: number // 0..1, optional audio-driven mouth movement
 }
 
 export default function AnimatedFace({ 
   isListening = false, 
   isTalking = false, 
   emotion = 'neutral',
-  size = 'large'
+  size = 'large',
+  talkIntensity
 }: AnimatedFaceProps) {
   const [isBlinking, setIsBlinking] = useState(false)
   const [eyePosition, setEyePosition] = useState({ x: 0, y: 0 })
@@ -114,6 +116,10 @@ export default function AnimatedFace({
   }
 
   const expression = getExpression()
+  const hasAudioDrive = typeof talkIntensity === 'number'
+  const clampedIntensity = Math.max(0, Math.min(1, talkIntensity ?? 0))
+  const baseMouthRy = expression.mouthHeight / 2
+  const baseMouthRx = expression.mouthWidth / 2
 
   return (
     <div 
@@ -318,18 +324,33 @@ export default function AnimatedFace({
         <motion.ellipse
           cx={80}
           cy={expression.mouthY}
-          rx={expression.mouthWidth / 2}
-          ry={expression.mouthHeight / 2}
+          rx={baseMouthRx}
+          ry={baseMouthRy}
           fill="#DC2626"
-          animate={{
-            ry: isTalking ? [expression.mouthHeight / 2, expression.mouthHeight / 2 + 3, expression.mouthHeight / 2] : expression.mouthHeight / 2,
-            rx: isTalking ? [expression.mouthWidth / 2, expression.mouthWidth / 2 + 2, expression.mouthWidth / 2] : expression.mouthWidth / 2
-          }}
-          transition={{
-            duration: isTalking ? 0.4 : 0.3,
-            repeat: isTalking ? Infinity : 0,
-            ease: "easeInOut"
-          }}
+          animate={
+            hasAudioDrive
+              ? {
+                  ry: baseMouthRy + (isTalking ? clampedIntensity * 8 : 0),
+                  rx: baseMouthRx + (isTalking ? clampedIntensity * 3 : 0)
+                }
+              : {
+                  ry: isTalking
+                    ? [baseMouthRy, baseMouthRy + 3, baseMouthRy]
+                    : baseMouthRy,
+                  rx: isTalking
+                    ? [baseMouthRx, baseMouthRx + 2, baseMouthRx]
+                    : baseMouthRx
+                }
+          }
+          transition={
+            hasAudioDrive
+              ? { duration: 0.06, ease: 'linear' }
+              : {
+                  duration: isTalking ? 0.4 : 0.3,
+                  repeat: isTalking ? Infinity : 0,
+                  ease: 'easeInOut'
+                }
+          }
         />
 
         {/* Talking animation - sound waves */}

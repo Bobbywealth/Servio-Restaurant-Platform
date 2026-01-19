@@ -131,7 +131,6 @@ router.post('/process/:token', asyncHandler(async (req: Request, res: Response) 
  * Get receipt processing history
  */
 router.get('/history', asyncHandler(async (req: Request, res: Response) => {
-  const { limit = 20, userId } = req.query;
 
   // In a real app, this would query the database for actual receipt records
   // For demo purposes, we'll return mock data

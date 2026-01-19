@@ -106,7 +106,7 @@ router.post('/:id/status', (0, errorHandler_1.asyncHandler)(async (req, res) => 
         });
     }
     // Update the order
-    const result = await db.run('UPDATE orders SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [status, id]);
+    await db.run('UPDATE orders SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [status, id]);
     // Log the action
     await DatabaseService_1.DatabaseService.getInstance().logAudit(userId || 'system', 'update_order_status', 'order', id, { previousStatus: order.status, newStatus: status });
     logger_1.logger.info(`Order ${id} status updated from ${order.status} to ${status}`);

@@ -137,7 +137,7 @@ export default function HomePage() {
                         </div>
                         <div className="text-center">
                           <Mic className="w-12 h-12 text-blue-600 mx-auto mb-3" />
-                          <p className="text-sm text-gray-600">"86 the jerk chicken on all platforms"</p>
+                          <p className="text-sm text-gray-600">&quot;86 the jerk chicken on all platforms&quot;</p>
                         </div>
                       </div>
 
@@ -188,7 +188,7 @@ export default function HomePage() {
                 The Restaurant Chaos Problem
               </h2>
               <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-                Modern restaurants juggle multiple disconnected systems that don't talk to each other, leading to chaos during rush hours.
+                Modern restaurants juggle multiple disconnected systems that don&apos;t talk to each other, leading to chaos during rush hours.
               </p>
             </div>
 
@@ -322,21 +322,21 @@ export default function HomePage() {
                   <div className="flex items-start">
                     <CheckCircle2 className="w-6 h-6 text-green-600 mr-3 mt-0.5" />
                     <div>
-                      <p className="font-semibold text-gray-900">"86 the jerk chicken on all platforms"</p>
+                      <p className="font-semibold text-gray-900">&quot;86 the jerk chicken on all platforms&quot;</p>
                       <p className="text-gray-600">Instant availability sync across DoorDash, Uber Eats, GrubHub</p>
                     </div>
                   </div>
                   <div className="flex items-start">
                     <CheckCircle2 className="w-6 h-6 text-green-600 mr-3 mt-0.5" />
                     <div>
-                      <p className="font-semibold text-gray-900">"Show me orders over 20 minutes"</p>
+                      <p className="font-semibold text-gray-900">&quot;Show me orders over 20 minutes&quot;</p>
                       <p className="text-gray-600">Real-time order queue analysis and alerts</p>
                     </div>
                   </div>
                   <div className="flex items-start">
                     <CheckCircle2 className="w-6 h-6 text-green-600 mr-3 mt-0.5" />
                     <div>
-                      <p className="font-semibold text-gray-900">"Add 2 cases of chicken to inventory"</p>
+                      <p className="font-semibold text-gray-900">&quot;Add 2 cases of chicken to inventory&quot;</p>
                       <p className="text-gray-600">Voice-powered inventory management</p>
                     </div>
                   </div>
@@ -356,7 +356,7 @@ export default function HomePage() {
                     </div>
                     <div className="space-y-4">
                       <div className="bg-blue-50 p-3 rounded-lg">
-                        <p className="text-sm text-gray-800">"Show me today's low stock items"</p>
+                        <p className="text-sm text-gray-800">&quot;Show me today&apos;s low stock items&quot;</p>
                       </div>
                       <div className="bg-gray-50 p-3 rounded-lg">
                         <p className="text-sm text-gray-600">Found 3 items below reorder threshold:</p>
@@ -390,7 +390,7 @@ export default function HomePage() {
                           <HeadphonesIcon className="w-4 h-4 text-green-600" />
                         </div>
                         <div>
-                          <p className="text-sm text-gray-800">"Hi, I'd like to place an order for pickup..."</p>
+                          <p className="text-sm text-gray-800">&quot;Hi, I&apos;d like to place an order for pickup...&quot;</p>
                         </div>
                       </div>
                       <div className="flex items-start">
@@ -398,7 +398,7 @@ export default function HomePage() {
                           <Bot className="w-4 h-4 text-blue-600" />
                         </div>
                         <div>
-                          <p className="text-sm text-gray-600">"Great! I can help you with that. What would you like to order today?"</p>
+                          <p className="text-sm text-gray-600">&quot;Great! I can help you with that. What would you like to order today?&quot;</p>
                         </div>
                       </div>
                     </div>
@@ -418,7 +418,7 @@ export default function HomePage() {
                 </div>
                 <h3 className="text-3xl font-bold text-gray-900 mb-6">AI Phone Agent</h3>
                 <p className="text-lg text-gray-600 mb-8">
-                  Never miss another phone order. Servio's AI answers every call, takes orders, answers menu questions, and processes payments automatically.
+                  Never miss another phone order. Servio&apos;s AI answers every call, takes orders, answers menu questions, and processes payments automatically.
                 </p>
                 <div className="space-y-4">
                   <div className="flex items-start">
@@ -432,7 +432,7 @@ export default function HomePage() {
                     <CheckCircle2 className="w-6 h-6 text-green-600 mr-3 mt-0.5" />
                     <div>
                       <p className="font-semibold text-gray-900">Natural Conversation</p>
-                      <p className="text-gray-600">Customers don't even realize they're talking to AI</p>
+                      <p className="text-gray-600">Customers don&apos;t even realize they&apos;re talking to AI</p>
                     </div>
                   </div>
                   <div className="flex items-start">
@@ -668,7 +668,7 @@ export default function HomePage() {
                   <div className="flex items-center justify-center">
                     <Mic className="w-8 h-8 text-blue-600" />
                   </div>
-                  <p className="text-sm text-gray-600 mt-2">"Show me today's orders"</p>
+                  <p className="text-sm text-gray-600 mt-2">&quot;Show me today&apos;s orders&quot;</p>
                 </div>
               </motion.div>
 
@@ -904,7 +904,7 @@ export default function HomePage() {
                   <li><a href="#features" className="text-gray-400 hover:text-white">Features</a></li>
                   <li><a href="#how-it-works" className="text-gray-400 hover:text-white">How It Works</a></li>
                   <li><a href="#pricing" className="text-gray-400 hover:text-white">Pricing</a></li>
-                  <li><a href="/dashboard/assistant" className="text-gray-400 hover:text-white">Try Demo</a></li>
+                  <li><Link href="/dashboard/assistant" className="text-gray-400 hover:text-white">Try Demo</Link></li>
                 </ul>
               </div>
               

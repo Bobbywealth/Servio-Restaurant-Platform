@@ -434,7 +434,7 @@ export default function TimeClockPage() {
           animate={{ opacity: 1, y: 0 }}
           className="bg-white p-6 rounded-xl shadow-sm border border-gray-200"
         >
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Today's Time Entries</h2>
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Today&apos;s Time Entries</h2>
           
           <div className="overflow-x-auto">
             <table className="w-full">

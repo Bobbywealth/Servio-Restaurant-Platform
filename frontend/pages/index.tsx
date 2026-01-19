@@ -157,7 +157,7 @@ export default function HomePage() {
                         </div>
                         <div className="text-center">
                           <Mic className="w-12 h-12 text-blue-600 mx-auto mb-3" />
-                          <p className="text-sm text-gray-600">"86 the jerk chicken on all platforms"</p>
+                          <p className="text-sm text-gray-600">&quot;86 the jerk chicken on all platforms&quot;</p>
                         </div>
                       </div>
 
@@ -287,7 +287,7 @@ export default function HomePage() {
                 <Bot className="w-12 h-12 text-indigo-600 mb-4" />
                 <h3 className="text-xl font-semibold text-gray-900 mb-3">Always Learning</h3>
                 <p className="text-gray-600">
-                  Servio gets smarter over time, learning your restaurant's unique needs and preferences.
+                  Servio gets smarter over time, learning your restaurant&apos;s unique needs and preferences.
                 </p>
               </motion.div>
             </div>
