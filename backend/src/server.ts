@@ -41,6 +41,8 @@ async function initializeServer() {
     const { default: receiptsRoutes } = await import('./routes/receipts');
     const { default: auditRoutes } = await import('./routes/audit');
     const { default: timeclockRoutes } = await import('./routes/timeclock');
+    const { default: marketingRoutes } = await import('./routes/marketing');
+    const { default: restaurantRoutes } = await import('./routes/restaurant');
 
     // API Routes
     app.use('/api/auth', authRoutes);
@@ -55,6 +57,8 @@ async function initializeServer() {
     app.use('/api/receipts', requireAuth, receiptsRoutes);
     app.use('/api/audit', requireAuth, auditRoutes);
     app.use('/api/timeclock', requireAuth, timeclockRoutes);
+    app.use('/api/marketing', requireAuth, marketingRoutes);
+    app.use('/api/restaurant', requireAuth, restaurantRoutes);
 
     logger.info('Routes loaded successfully');
   } catch (error) {
@@ -230,7 +234,9 @@ app.get('/api', (req, res) => {
       sync: '/api/sync',
       receipts: '/api/receipts',
       audit: '/api/audit',
-      timeclock: '/api/timeclock'
+      timeclock: '/api/timeclock',
+      marketing: '/api/marketing',
+      restaurant: '/api/restaurant'
     }
   });
 });

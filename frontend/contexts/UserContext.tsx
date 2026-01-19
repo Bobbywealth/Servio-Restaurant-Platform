@@ -5,8 +5,15 @@ export interface User {
   id: string
   name: string
   email?: string | null
-  role: 'staff' | 'manager' | 'owner'
+  role: 'staff' | 'manager' | 'owner' | 'admin'
   permissions: string[]
+}
+
+interface AccountOption {
+  id: string
+  email: string
+  name: string
+  role: 'staff' | 'manager' | 'owner' | 'admin'
 }
 
 interface UserContextType {
@@ -17,6 +24,11 @@ interface UserContextType {
   hasPermission: (resource: string, action?: string) => boolean
   updateUser: (updates: Partial<User>) => void
   isManagerOrOwner: boolean
+  // Account switching functionality
+  availableAccounts: Record<string, AccountOption[]>
+  loadAvailableAccounts: () => Promise<void>
+  switchAccount: (targetEmail: string) => Promise<void>
+  isAdmin: boolean
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined)
@@ -28,6 +40,7 @@ interface UserProviderProps {
 export function UserProvider({ children }: UserProviderProps) {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [availableAccounts, setAvailableAccounts] = useState<Record<string, AccountOption[]>>({})
 
   useEffect(() => {
     const loadUser = async () => {
@@ -47,6 +60,8 @@ export function UserProvider({ children }: UserProviderProps) {
             if (meUser) {
               setUser(meUser)
               localStorage.setItem('servio_user', JSON.stringify(meUser))
+              // Load available accounts for switching
+              loadAvailableAccounts().catch(console.error)
               return
             }
           } catch {
@@ -63,6 +78,8 @@ export function UserProvider({ children }: UserProviderProps) {
             if (refreshedUser) {
               setUser(refreshedUser)
               localStorage.setItem('servio_user', JSON.stringify(refreshedUser))
+              // Load available accounts for switching
+              loadAvailableAccounts().catch(console.error)
               return
             }
           } catch {
@@ -70,9 +87,8 @@ export function UserProvider({ children }: UserProviderProps) {
           }
         }
 
-        // Development convenience: auto-login as demo staff user if nothing is set.
-        // This keeps the app functional without building a login UI yet.
-        const demoEmail = process.env.NEXT_PUBLIC_DEMO_EMAIL || 'staff@demo.servio'
+        // Development convenience: auto-login as demo admin user for easy testing
+        const demoEmail = process.env.NEXT_PUBLIC_DEMO_EMAIL || 'admin@servio.com'
         const demoPassword = process.env.NEXT_PUBLIC_DEMO_PASSWORD || 'password'
         await login(demoEmail, demoPassword)
       } catch (error) {
@@ -97,6 +113,9 @@ export function UserProvider({ children }: UserProviderProps) {
       if (refreshToken) localStorage.setItem('servio_refresh_token', refreshToken)
       setUser(userData)
       localStorage.setItem('servio_user', JSON.stringify(userData))
+      
+      // Load available accounts for switching
+      loadAvailableAccounts().catch(console.error)
     } finally {
       setIsLoading(false)
     }
@@ -129,7 +148,42 @@ export function UserProvider({ children }: UserProviderProps) {
     }
   }
 
+  const loadAvailableAccounts = async () => {
+    try {
+      const response = await api.get('/api/auth/available-accounts')
+      const accounts = response.data?.data?.accounts || {}
+      setAvailableAccounts(accounts)
+    } catch (error) {
+      console.error('Failed to load available accounts:', error)
+      setAvailableAccounts({})
+    }
+  }
+
+  const switchAccount = async (targetEmail: string) => {
+    setIsLoading(true)
+    try {
+      const response = await api.post('/api/auth/switch-account', { targetEmail })
+      const userData = response.data?.data?.user as User
+      const accessToken = response.data?.data?.accessToken as string
+      const refreshToken = response.data?.data?.refreshToken as string
+
+      if (accessToken) localStorage.setItem('servio_access_token', accessToken)
+      if (refreshToken) localStorage.setItem('servio_refresh_token', refreshToken)
+      setUser(userData)
+      localStorage.setItem('servio_user', JSON.stringify(userData))
+
+      // Reload available accounts after switching
+      await loadAvailableAccounts()
+    } catch (error) {
+      console.error('Failed to switch account:', error)
+      throw error
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   const isManagerOrOwner = user?.role === 'manager' || user?.role === 'owner'
+  const isAdmin = user?.role === 'admin'
 
   const value: UserContextType = {
     user,
@@ -138,7 +192,11 @@ export function UserProvider({ children }: UserProviderProps) {
     logout,
     hasPermission,
     updateUser,
-    isManagerOrOwner
+    isManagerOrOwner,
+    availableAccounts,
+    loadAvailableAccounts,
+    switchAccount,
+    isAdmin
   }
 
   return (

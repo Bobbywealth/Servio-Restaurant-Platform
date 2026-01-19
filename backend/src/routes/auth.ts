@@ -129,5 +129,82 @@ router.get(
   })
 );
 
+// Account switching endpoint for testing
+router.post(
+  '/switch-account',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { targetEmail } = req.body ?? {};
+    
+    if (!targetEmail) {
+      throw new UnauthorizedError('Target email is required');
+    }
+    
+    // In production, you'd want to add proper authorization checks here
+    // For testing purposes, we'll allow switching to any active account
+    const db = DatabaseService.getInstance().getDatabase();
+    const targetUser = await db.get<any>(
+      'SELECT * FROM users WHERE email = ? AND is_active = 1', 
+      [targetEmail]
+    );
+    
+    if (!targetUser) {
+      throw new UnauthorizedError('Target user not found or inactive');
+    }
+    
+    // Create new session for the target user
+    const sessionId = uuidv4();
+    const refreshToken = uuidv4();
+    const refreshTokenHash = await bcrypt.hash(refreshToken, 10);
+    const expiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000).toISOString();
+    
+    await db.run(
+      'INSERT INTO auth_sessions (id, user_id, refresh_token_hash, expires_at) VALUES (?, ?, ?, ?)',
+      [sessionId, targetUser.id, refreshTokenHash, expiresAt]
+    );
+    
+    const accessToken = issueAccessToken({ sub: targetUser.id, sid: sessionId });
+    
+    res.json({
+      success: true,
+      data: {
+        user: safeUser(targetUser),
+        accessToken,
+        refreshToken,
+        message: `Switched to ${targetUser.name} (${targetUser.role})`
+      }
+    });
+  })
+);
+
+// Get all available accounts for switching (testing only)
+router.get(
+  '/available-accounts',
+  asyncHandler(async (req: Request, res: Response) => {
+    const db = DatabaseService.getInstance().getDatabase();
+    const users = await db.all<any>(
+      'SELECT id, email, name, role FROM users WHERE is_active = 1 ORDER BY role DESC, name ASC'
+    );
+    
+    const accountsByRole = users.reduce((acc, user) => {
+      if (!acc[user.role]) acc[user.role] = [];
+      acc[user.role].push({
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role
+      });
+      return acc;
+    }, {} as Record<string, any[]>);
+    
+    res.json({
+      success: true,
+      data: {
+        accounts: accountsByRole,
+        totalCount: users.length
+      }
+    });
+  })
+);
+
 export default router;
 

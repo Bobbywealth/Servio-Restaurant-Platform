@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useUser } from '../../contexts/UserContext'
 import ThemeToggle from '../ui/ThemeToggle'
 import NotificationCenter from '../ui/NotificationCenter'
+import AccountSwitcher from '../ui/AccountSwitcher'
 import {
   Bot,
   Home,
@@ -19,7 +20,10 @@ import {
   Menu,
   X,
   Sparkles,
-  ChevronRight
+  ChevronRight,
+  UtensilsCrossed,
+  Mail,
+  Store
 } from 'lucide-react'
 
 interface DashboardLayoutProps {
@@ -56,6 +60,27 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       icon: ClipboardList,
       description: 'Manage all orders',
       color: 'text-primary-500'
+    },
+    {
+      name: 'Menu',
+      href: '/dashboard/menu-management',
+      icon: UtensilsCrossed,
+      description: 'Menu & categories',
+      color: 'text-amber-500'
+    },
+    {
+      name: 'Marketing',
+      href: '/dashboard/marketing',
+      icon: Mail,
+      description: 'SMS & email campaigns',
+      color: 'text-pink-500'
+    },
+    {
+      name: 'Profile',
+      href: '/dashboard/restaurant-profile',
+      icon: Store,
+      description: 'Restaurant branding',
+      color: 'text-indigo-500'
     },
     {
       name: 'Inventory',
@@ -206,39 +231,9 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           })}
         </nav>
 
-        {/* User Info */}
+        {/* Account Switcher */}
         <div className="p-4 border-t border-surface-200 dark:border-surface-800">
-          {user && (
-            <motion.div
-              className="flex items-center p-3 rounded-xl bg-surface-50 dark:bg-surface-800/50"
-              whileHover={{ scale: 1.02 }}
-            >
-              <div className="relative">
-                <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-600 rounded-xl flex items-center justify-center shadow-lg">
-                  <User className="w-5 h-5 text-white" />
-                </div>
-              </div>
-
-              <div className="ml-3 flex-1 min-w-0">
-                <p className="text-sm font-semibold text-surface-900 dark:text-surface-100 truncate">
-                  {user?.name || 'Loading...'}
-                </p>
-                <div className="flex items-center space-x-2">
-                  <span className="text-2xs text-surface-500 dark:text-surface-400 truncate">
-                    {user?.role || 'User'}
-                  </span>
-                </div>
-              </div>
-
-              <button
-                onClick={logout}
-                className="btn-icon ml-2 text-surface-400 hover:text-servio-red-500"
-                title="Sign out"
-              >
-                <LogOut className="w-4 h-4" />
-              </button>
-            </motion.div>
-          )}
+          <AccountSwitcher />
         </div>
       </motion.div>
 
