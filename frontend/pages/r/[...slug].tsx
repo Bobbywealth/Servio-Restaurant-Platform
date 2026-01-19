@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import Head from 'next/head';
-import { GetServerSideProps } from 'next';
+import { GetStaticProps, GetStaticPaths } from 'next';
 import { motion } from 'framer-motion';
 import {
   Phone,
@@ -505,8 +505,15 @@ const PublicProfile: React.FC<PublicProfileProps> = ({ restaurant, menuData, lin
   );
 };
 
-export const getServerSideProps: GetServerSideProps = async ({ params, req }) => {
-  const slugArray = params?.slug as string[];
+export async function getStaticPaths() {
+  return {
+    paths: [],
+    fallback: 'blocking'
+  };
+}
+
+export async function getStaticProps({ params }: { params: { slug: string[] } }) {
+  const slugArray = params?.slug;
   
   if (!slugArray || slugArray.length === 0) {
     return {
@@ -618,6 +625,7 @@ export const getServerSideProps: GetServerSideProps = async ({ params, req }) =>
         menuData: linkType === 'menu' ? menuData : null,
         linkType,
       },
+      revalidate: 60, // Revalidate every minute
     };
   } catch (error) {
     return {
@@ -627,6 +635,7 @@ export const getServerSideProps: GetServerSideProps = async ({ params, req }) =>
         linkType: 'menu',
         error: 'Restaurant not found or temporarily unavailable',
       },
+      revalidate: 10, // Try again in 10 seconds on error
     };
   }
 };
