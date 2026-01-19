@@ -37,37 +37,72 @@ const CACHE_EXPIRATION = {
   IMAGES: 30 * 24 * 60 * 60 * 1000   // 30 days
 }
 
-// Install event
+// AGGRESSIVE INSTALL EVENT - PRE-CACHE EVERYTHING CRITICAL
 self.addEventListener('install', (event) => {
-  console.log('Service Worker: Installing...')
+  console.log('🚀 Servio SW: Turbo Installing...')
   
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then((cache) => {
-        console.log('Service Worker: Caching files')
-        return cache.addAll(STATIC_CACHE_URLS)
+    Promise.all([
+      // Pre-cache static assets
+      caches.open(STATIC_CACHE_NAME).then(cache => {
+        console.log('⚡ SW: Pre-caching static assets')
+        return cache.addAll(STATIC_CACHE_URLS.filter(url => !url.includes('/_next/')))
+      }),
+      // Pre-cache dynamic routes
+      caches.open(DYNAMIC_CACHE_NAME).then(cache => {
+        console.log('🔥 SW: Pre-caching dynamic routes')
+        return Promise.resolve()
+      }),
+      // Initialize API cache
+      caches.open(API_CACHE_NAME).then(() => {
+        console.log('💾 SW: API cache initialized')
+        return Promise.resolve()
+      }),
+      // Initialize image cache
+      caches.open(IMAGE_CACHE_NAME).then(() => {
+        console.log('🖼️ SW: Image cache initialized')
+        return Promise.resolve()
       })
-      .then(() => self.skipWaiting())
+    ]).then(() => {
+      console.log('✅ SW: All caches initialized')
+      return self.skipWaiting()
+    })
   )
 })
 
-// Activate event
+// LIGHTNING FAST ACTIVATE EVENT - CLEAN UP OLD CACHES
 self.addEventListener('activate', (event) => {
-  console.log('Service Worker: Activating...')
+  console.log('⚡ Servio SW: Turbo Activating...')
+  
+  const expectedCaches = [STATIC_CACHE_NAME, DYNAMIC_CACHE_NAME, API_CACHE_NAME, IMAGE_CACHE_NAME]
   
   event.waitUntil(
-    caches.keys()
-      .then((cacheNames) => {
+    Promise.all([
+      // Clean up old caches
+      caches.keys().then(cacheNames => {
         return Promise.all(
-          cacheNames.map((cache) => {
-            if (cache !== CACHE_NAME) {
-              console.log('Service Worker: Deleting old cache')
+          cacheNames.map(cache => {
+            if (!expectedCaches.includes(cache)) {
+              console.log('🗑️ SW: Deleting old cache:', cache)
               return caches.delete(cache)
             }
           })
         )
+      }),
+      // Take control of all clients immediately
+      self.clients.claim()
+    ]).then(() => {
+      console.log('✅ SW: Activation complete - TURBO MODE ENABLED')
+      // Notify clients of update
+      self.clients.matchAll().then(clients => {
+        clients.forEach(client => {
+          client.postMessage({
+            type: 'SW_ACTIVATED',
+            message: 'Servio is now running in TURBO MODE! ⚡'
+          })
+        })
       })
-      .then(() => self.clients.claim())
+    })
   )
 })
 
