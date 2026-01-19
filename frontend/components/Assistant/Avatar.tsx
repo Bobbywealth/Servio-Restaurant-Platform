@@ -1,19 +1,24 @@
 import React from 'react'
 import { motion } from 'framer-motion'
 import { Bot } from 'lucide-react'
+import AnimatedFace from './AnimatedFace'
 
 interface AvatarProps {
   isTalking?: boolean
   isListening?: boolean
   size?: 'small' | 'medium' | 'large'
   className?: string
+  useFace?: boolean // New prop to choose between face and bot icon
+  emotion?: 'happy' | 'focused' | 'thinking' | 'neutral'
 }
 
 export default function Avatar({ 
   isTalking = false, 
   isListening = false, 
   size = 'large',
-  className = ''
+  className = '',
+  useFace = true,
+  emotion = 'neutral'
 }: AvatarProps) {
   const sizeClasses = {
     small: 'w-16 h-16',
@@ -93,7 +98,7 @@ export default function Avatar({
 
         {/* Avatar Circle */}
         <motion.div
-          className={`${sizeClasses[size]} rounded-full ${state.bgColor} flex items-center justify-center shadow-lg relative z-10`}
+          className={`${sizeClasses[size]} rounded-full ${useFace ? 'bg-transparent' : state.bgColor} flex items-center justify-center shadow-lg relative z-10`}
           animate={{
             scale: isListening || isTalking ? [1, 1.05, 1] : 1
           }}
@@ -103,18 +108,27 @@ export default function Avatar({
             ease: "easeInOut"
           }}
         >
-          <motion.div
-            animate={{
-              rotate: isTalking ? 360 : 0
-            }}
-            transition={{
-              duration: 3,
-              repeat: isTalking ? Infinity : 0,
-              ease: "linear"
-            }}
-          >
-            <Bot className={`${iconSizes[size]} ${state.iconColor}`} />
-          </motion.div>
+          {useFace ? (
+            <AnimatedFace
+              isListening={isListening}
+              isTalking={isTalking}
+              emotion={emotion}
+              size={size}
+            />
+          ) : (
+            <motion.div
+              animate={{
+                rotate: isTalking ? 360 : 0
+              }}
+              transition={{
+                duration: 3,
+                repeat: isTalking ? Infinity : 0,
+                ease: "linear"
+              }}
+            >
+              <Bot className={`${iconSizes[size]} ${state.iconColor}`} />
+            </motion.div>
+          )}
         </motion.div>
 
         {/* Sound waves for talking */}

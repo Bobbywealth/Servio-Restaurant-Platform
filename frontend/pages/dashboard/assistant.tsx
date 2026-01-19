@@ -322,6 +322,8 @@ export default function AssistantPage() {
                 <Avatar 
                   isTalking={state.isSpeaking}
                   isListening={state.isRecording}
+                  useFace={true}
+                  emotion={state.isProcessing ? 'thinking' : state.isRecording ? 'focused' : 'happy'}
                 />
                 
                 <MicrophoneButton
