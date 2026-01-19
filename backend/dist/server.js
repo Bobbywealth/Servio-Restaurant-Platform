@@ -62,7 +62,11 @@ const io = new socket_io_1.Server(server, {
         ],
         methods: ["GET", "POST"],
         credentials: true
-    }
+    },
+    transports: ['polling', 'websocket'],
+    allowEIO3: true,
+    pingTimeout: 60000,
+    pingInterval: 25000
 });
 const PORT = process.env.PORT || 3002;
 // Initialize database first, then load routes
