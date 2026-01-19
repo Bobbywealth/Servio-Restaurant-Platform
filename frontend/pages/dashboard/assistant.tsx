@@ -1,5 +1,4 @@
 import React, { useState, useCallback, useEffect } from 'react'
-import { GetServerSideProps } from 'next'
 import Head from 'next/head'
 import DashboardLayout from '../../components/Layout/DashboardLayout'
 import Avatar from '../../components/Assistant/Avatar'
@@ -382,11 +381,4 @@ export default function AssistantPage() {
   )
 }
 
-// This ensures the page is only accessible to authenticated users
-export const getServerSideProps: GetServerSideProps = async (context) => {
-  // In a real app, you'd check authentication here
-  // For now, we'll allow access to all users
-  return {
-    props: {}
-  }
-}
+// Authentication will be handled client-side for static export compatibility
