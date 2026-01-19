@@ -21,7 +21,10 @@ const app = express();
 const server = createServer(app);
 const io = new SocketIOServer(server, {
   cors: {
-    origin: process.env.FRONTEND_URL || "http://localhost:3000",
+    origin: [
+      process.env.FRONTEND_URL || "http://localhost:3000",
+      "https://serviorestaurantplatform.netlify.app"
+    ],
     methods: ["GET", "POST"],
     credentials: true
   }
@@ -115,7 +118,10 @@ app.use(helmet({
 }));
 
 app.use(cors({
-  origin: process.env.FRONTEND_URL || "http://localhost:3000",
+  origin: [
+    process.env.FRONTEND_URL || "http://localhost:3000",
+    "https://serviorestaurantplatform.netlify.app"
+  ],
   credentials: true,
   optionsSuccessStatus: 200,
   preflightContinue: false,

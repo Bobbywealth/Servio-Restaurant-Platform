@@ -46,7 +46,7 @@ async function requireAuth(req, _res, next) {
         if (!userId)
             throw new errorHandler_1.UnauthorizedError('Invalid token payload');
         const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
-        const userRow = await db.get('SELECT * FROM users WHERE id = ? AND is_active = 1', [userId]);
+        const userRow = await db.get('SELECT * FROM users WHERE id = ? AND is_active = TRUE', [userId]);
         if (!userRow)
             throw new errorHandler_1.UnauthorizedError('User not found or inactive');
         const user = {
