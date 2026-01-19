@@ -56,7 +56,10 @@ const app = (0, express_1.default)();
 const server = (0, http_1.createServer)(app);
 const io = new socket_io_1.Server(server, {
     cors: {
-        origin: process.env.FRONTEND_URL || "http://localhost:3000",
+        origin: [
+            process.env.FRONTEND_URL || "http://localhost:3000",
+            "https://serviorestaurantplatform.netlify.app"
+        ],
         methods: ["GET", "POST"],
         credentials: true
     }
@@ -139,7 +142,10 @@ app.use((0, helmet_1.default)({
     }
 }));
 app.use((0, cors_1.default)({
-    origin: process.env.FRONTEND_URL || "http://localhost:3000",
+    origin: [
+        process.env.FRONTEND_URL || "http://localhost:3000",
+        "https://serviorestaurantplatform.netlify.app"
+    ],
     credentials: true,
     optionsSuccessStatus: 200,
     preflightContinue: false,
