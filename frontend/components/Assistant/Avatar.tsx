@@ -227,3 +227,6 @@ const Avatar = memo<AvatarProps>(({
 Avatar.displayName = 'Avatar'
 
 export default Avatar
+
+// Also export the realistic avatar for modern use
+export { default as RealisticAvatar } from './RealisticAvatar'

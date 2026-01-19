@@ -69,22 +69,19 @@ export function AccountSwitcher({ className = '' }: AccountSwitcherProps) {
 
   return (
     <div className={`relative ${className}`}>
-      {/* Current Account Display & Toggle */}
+      {/* Compact Account Toggle for Header */}
       <motion.button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center space-x-3 w-full p-3 bg-white dark:bg-surface-800 rounded-lg border border-surface-200 dark:border-surface-700 hover:border-surface-300 dark:hover:border-surface-600 transition-all duration-200"
+        className="flex items-center space-x-2 p-2 bg-white dark:bg-surface-800 rounded-lg border border-surface-200 dark:border-surface-700 hover:border-surface-300 dark:hover:border-surface-600 transition-all duration-200"
         whileTap={{ scale: 0.98 }}
       >
-        <div className={`p-2 rounded-lg ${currentUserColor}`}>
+        <div className={`p-1.5 rounded-lg ${currentUserColor}`}>
           {React.createElement(currentUserIcon, { className: 'w-4 h-4' })}
         </div>
         
-        <div className="flex-1 text-left">
-          <div className="font-medium text-surface-900 dark:text-surface-100">
+        <div className="hidden sm:block text-left">
+          <div className="font-medium text-surface-900 dark:text-surface-100 text-sm">
             {user.name}
-          </div>
-          <div className="text-sm text-surface-500 dark:text-surface-400">
-            {roleNames[user.role]} • {totalAccounts} accounts
           </div>
         </div>
         
@@ -92,7 +89,7 @@ export function AccountSwitcher({ className = '' }: AccountSwitcherProps) {
           animate={{ rotate: isOpen ? 180 : 0 }}
           transition={{ duration: 0.2 }}
         >
-          <ChevronDown className="w-4 h-4 text-surface-400" />
+          <ChevronDown className="w-3 h-3 text-surface-400" />
         </motion.div>
       </motion.button>
 
@@ -104,7 +101,7 @@ export function AccountSwitcher({ className = '' }: AccountSwitcherProps) {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -10, scale: 0.95 }}
             transition={{ duration: 0.2 }}
-            className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-surface-800 rounded-lg border border-surface-200 dark:border-surface-700 shadow-lg z-50 max-h-96 overflow-y-auto"
+            className="absolute top-full right-0 mt-2 w-80 bg-white dark:bg-surface-800 rounded-lg border border-surface-200 dark:border-surface-700 shadow-lg z-50 max-h-96 overflow-y-auto"
           >
             <div className="p-3">
               <div className="flex items-center space-x-2 mb-4">

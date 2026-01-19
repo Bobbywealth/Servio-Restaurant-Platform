@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import Head from 'next/head'
 import { motion } from 'framer-motion'
 import dynamic from 'next/dynamic'
+import { useUser } from '../../contexts/UserContext'
 import { 
   Settings as SettingsIcon, 
   User,
@@ -13,7 +14,11 @@ import {
   Wifi,
   Save,
   AlertCircle,
-  Check
+  Check,
+  LogOut,
+  UserCog,
+  Mail,
+  Calendar
 } from 'lucide-react'
 
 const DashboardLayout = dynamic(() => import('../../components/Layout/DashboardLayout'), {
@@ -22,7 +27,9 @@ const DashboardLayout = dynamic(() => import('../../components/Layout/DashboardL
 })
 
 export default function SettingsPage() {
-  const [activeTab, setActiveTab] = useState('general')
+  const { user, logout, availableAccounts, switchAccount, isAdmin } = useUser()
+  const [activeTab, setActiveTab] = useState('account')
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [settings, setSettings] = useState({
     // General Settings
     restaurantName: 'Servio Restaurant',
@@ -55,6 +62,7 @@ export default function SettingsPage() {
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
 
   const tabs = [
+    { id: 'account', name: 'Account', icon: User },
     { id: 'general', name: 'General', icon: SettingsIcon },
     { id: 'notifications', name: 'Notifications', icon: Bell },
     { id: 'security', name: 'Security', icon: Shield },
@@ -74,8 +82,136 @@ export default function SettingsPage() {
     setTimeout(() => setSaveStatus('idle'), 2000)
   }
 
+  const handleLogout = async () => {
+    setIsLoggingOut(true)
+    try {
+      logout()
+      // Redirect will happen automatically due to auth state change
+      window.location.href = '/'
+    } catch (error) {
+      console.error('Logout failed:', error)
+    } finally {
+      setIsLoggingOut(false)
+    }
+  }
+
   const renderTabContent = () => {
     switch (activeTab) {
+      case 'account':
+        return (
+          <div className="space-y-6">
+            {/* User Profile Section */}
+            <div className="bg-gradient-to-r from-primary-50 to-primary-100 dark:from-primary-900/20 dark:to-primary-800/20 rounded-xl p-6 border border-primary-200 dark:border-primary-800">
+              <div className="flex items-center space-x-4">
+                <div className="w-16 h-16 bg-primary-500 rounded-full flex items-center justify-center">
+                  <User className="w-8 h-8 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-semibold text-surface-900 dark:text-surface-100">
+                    {user?.name || 'User'}
+                  </h3>
+                  <p className="text-surface-600 dark:text-surface-400 flex items-center space-x-2">
+                    <Mail className="w-4 h-4" />
+                    <span>{user?.email || 'No email'}</span>
+                  </p>
+                  <div className="flex items-center space-x-2 mt-1">
+                    <div className={`px-2 py-1 rounded-full text-xs font-medium ${
+                      user?.role === 'admin' ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300' :
+                      user?.role === 'owner' ? 'bg-gold-100 text-gold-800 dark:bg-gold-900/30 dark:text-gold-300' :
+                      user?.role === 'manager' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300' :
+                      'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-300'
+                    }`}>
+                      {user?.role?.charAt(0).toUpperCase()}{user?.role?.slice(1)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Account Actions */}
+            <div className="space-y-4">
+              <h4 className="text-lg font-semibold text-surface-900 dark:text-surface-100">
+                Account Actions
+              </h4>
+              
+              {/* Account Switching */}
+              {isAdmin && Object.keys(availableAccounts).length > 0 && (
+                <div className="border border-surface-200 dark:border-surface-700 rounded-xl p-4">
+                  <h5 className="font-medium text-surface-900 dark:text-surface-100 mb-3 flex items-center space-x-2">
+                    <UserCog className="w-4 h-4" />
+                    <span>Switch Account</span>
+                  </h5>
+                  <div className="space-y-2">
+                    {Object.entries(availableAccounts).map(([restaurant, accounts]) => (
+                      <div key={restaurant}>
+                        <p className="text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">{restaurant}</p>
+                        <div className="grid grid-cols-1 gap-2">
+                          {accounts.map((account) => (
+                            <button
+                              key={account.id}
+                              onClick={() => switchAccount(account.email)}
+                              className={`text-left p-2 rounded-lg border transition-colors ${
+                                user?.email === account.email
+                                  ? 'border-primary-300 bg-primary-50 dark:border-primary-700 dark:bg-primary-900/20'
+                                  : 'border-surface-200 dark:border-surface-700 hover:border-surface-300 dark:hover:border-surface-600 hover:bg-surface-50 dark:hover:bg-surface-800/50'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <p className="font-medium text-sm text-surface-900 dark:text-surface-100">
+                                    {account.name}
+                                  </p>
+                                  <p className="text-xs text-surface-600 dark:text-surface-400">
+                                    {account.email} • {account.role}
+                                  </p>
+                                </div>
+                                {user?.email === account.email && (
+                                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                                )}
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Logout Section */}
+              <div className="border border-servio-red-200 dark:border-servio-red-800 rounded-xl p-4 bg-servio-red-50/50 dark:bg-servio-red-900/10">
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <h5 className="font-medium text-surface-900 dark:text-surface-100 mb-2 flex items-center space-x-2">
+                      <LogOut className="w-4 h-4" />
+                      <span>Sign Out</span>
+                    </h5>
+                    <p className="text-sm text-surface-600 dark:text-surface-400 mb-4">
+                      This will log you out of your account and return you to the login page. Make sure you've saved any important work.
+                    </p>
+                    <motion.button
+                      className="btn-danger inline-flex items-center space-x-2"
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={handleLogout}
+                      disabled={isLoggingOut}
+                    >
+                      {isLoggingOut ? (
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <LogOut className="w-4 h-4" />
+                      )}
+                      <span>
+                        {isLoggingOut ? 'Signing Out...' : 'Sign Out'}
+                      </span>
+                    </motion.button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )
+
       case 'general':
         return (
           <div className="space-y-6">

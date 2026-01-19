@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react'
 import Head from 'next/head'
 import DashboardLayout from '../../components/Layout/DashboardLayout'
-import Avatar from '../../components/Assistant/Avatar'
+import RealisticAvatar from '../../components/Assistant/RealisticAvatar'
 import MicrophoneButton from '../../components/Assistant/MicrophoneButton'
 import TranscriptFeed, { TranscriptMessage } from '../../components/Assistant/TranscriptFeed'
 import QuickCommands from '../../components/Assistant/QuickCommands'
@@ -426,12 +426,14 @@ export default function AssistantPage() {
             {/* Left Panel - Avatar & Controls */}
             <div className="lg:col-span-1">
               <div className="card-mobile space-y-4 sm:space-y-6">
-                <Avatar
+                <RealisticAvatar
                   isTalking={state.isSpeaking}
                   isListening={state.isRecording}
-                  useFace={true}
-                  emotion={state.isProcessing ? 'thinking' : state.isRecording ? 'focused' : 'happy'}
-                  talkIntensity={talkIntensity}
+                  isThinking={state.isProcessing}
+                  size="large"
+                  gender="female"
+                  name="Servio Assistant"
+                  audioLevel={talkIntensity * 100}
                 />
 
                 <MicrophoneButton

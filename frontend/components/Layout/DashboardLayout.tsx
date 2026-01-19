@@ -231,10 +231,6 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           })}
         </nav>
 
-        {/* Account Switcher */}
-        <div className="p-4 border-t border-surface-200 dark:border-surface-800">
-          <AccountSwitcher />
-        </div>
       </motion.div>
 
       {/* Main Content */}
@@ -273,6 +269,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
               <div className="flex items-center space-x-3">
                 <ThemeToggle />
                 <NotificationCenter />
+                <AccountSwitcher />
               </div>
             </div>
           </div>
