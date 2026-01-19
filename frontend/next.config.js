@@ -3,8 +3,8 @@ const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
   trailingSlash: true,
-  // Enable static export for Render deployment
-  output: 'export', // Enable static export for static site deployment
+  // Temporarily disable static export to support dynamic restaurant pages
+  // output: 'export', // Enable static export for static site deployment
 
   // AGGRESSIVE IMAGE OPTIMIZATION
   images: {
