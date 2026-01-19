@@ -127,7 +127,8 @@ export default function AssistantPage() {
       formData.append('userId', user?.id || 'anonymous')
 
       // Send to backend for processing
-      const response = await axios.post('/api/assistant/process-audio', formData, {
+      const backendUrl = process.env.BACKEND_URL || 'http://localhost:3002'
+      const response = await axios.post(`${backendUrl}/api/assistant/process-audio`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data'
         }
@@ -225,7 +226,8 @@ export default function AssistantPage() {
     setState(prev => ({ ...prev, isProcessing: true }))
 
     try {
-      const response = await axios.post('/api/assistant/process-text', {
+      const backendUrl = process.env.BACKEND_URL || 'http://localhost:3002'
+      const response = await axios.post(`${backendUrl}/api/assistant/process-text`, {
         text: command,
         userId: user?.id || 'anonymous'
       })
@@ -305,19 +307,19 @@ export default function AssistantPage() {
 
       <DashboardLayout>
         <div className="max-w-7xl mx-auto">
-          <div className="mb-6">
-            <h1 className="text-3xl font-bold text-gray-900">
+          <div className="mb-4 sm:mb-6">
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100">
               Servio Assistant
             </h1>
-            <p className="mt-2 text-gray-600">
+            <p className="mt-2 text-sm sm:text-base text-gray-600 dark:text-gray-400">
               Your AI-powered restaurant operations assistant. Talk to Servio to manage orders, inventory, and tasks.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
             {/* Left Panel - Avatar & Controls */}
             <div className="lg:col-span-1">
-              <div className="card space-y-6">
+              <div className="card-mobile space-y-4 sm:space-y-6">
                 <Avatar 
                   isTalking={state.isSpeaking}
                   isListening={state.isRecording}
@@ -335,7 +337,7 @@ export default function AssistantPage() {
               </div>
 
               {/* Quick Commands */}
-              <div className="mt-6 card">
+              <div className="mt-4 sm:mt-6 card-mobile">
                 <QuickCommands 
                   onCommand={handleQuickCommand}
                   disabled={state.isProcessing || state.isRecording}
@@ -345,23 +347,29 @@ export default function AssistantPage() {
 
             {/* Right Panel - Transcript & Actions */}
             <div className="lg:col-span-2">
-              <div className="card h-[700px]">
+              <div className="card-mobile h-[60vh] sm:h-[70vh] lg:h-[700px]">
                 <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-lg font-semibold text-gray-900">
+                  <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100">
                     Conversation
                   </h2>
-                  <div className="flex items-center space-x-2 text-sm text-gray-500">
+                  <div className="flex items-center space-x-2 text-xs sm:text-sm text-gray-500 dark:text-gray-400">
                     <div className="flex items-center space-x-1">
                       <div className={`w-2 h-2 rounded-full ${
                         state.isRecording ? 'bg-red-500' : 
                         state.isProcessing ? 'bg-yellow-500' : 
                         state.isSpeaking ? 'bg-green-500' : 
-                        'bg-gray-300'
+                        'bg-gray-300 dark:bg-gray-600'
                       }`} />
-                      <span>
+                      <span className="hidden sm:inline">
                         {state.isRecording && 'Recording'}
                         {state.isProcessing && 'Processing'}
                         {state.isSpeaking && 'Speaking'}
+                        {!state.isRecording && !state.isProcessing && !state.isSpeaking && 'Ready'}
+                      </span>
+                      <span className="sm:hidden">
+                        {state.isRecording && 'Rec'}
+                        {state.isProcessing && 'Proc'}
+                        {state.isSpeaking && 'Talk'}
                         {!state.isRecording && !state.isProcessing && !state.isSpeaking && 'Ready'}
                       </span>
                     </div>
@@ -370,7 +378,7 @@ export default function AssistantPage() {
                 
                 <TranscriptFeed 
                   messages={state.messages}
-                  className="h-full"
+                  className="h-full mobile-scrolling"
                 />
               </div>
             </div>

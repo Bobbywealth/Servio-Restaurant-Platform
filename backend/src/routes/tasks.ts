@@ -4,6 +4,7 @@ import { asyncHandler } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
 
 const router = Router();
+const num = (v: any) => (typeof v === 'number' ? v : Number(v ?? 0));
 
 /**
  * GET /api/tasks/today
@@ -12,13 +13,22 @@ const router = Router();
 router.get('/today', asyncHandler(async (req: Request, res: Response) => {
   const { status } = req.query;
   const db = DatabaseService.getInstance().getDatabase();
+  const dialect = DatabaseService.getInstance().getDialect();
 
-  let query = `
-    SELECT * FROM tasks 
-    WHERE type = 'daily' 
-    OR (due_date IS NOT NULL AND DATE(due_date) = DATE('now'))
-    OR (type = 'one_time' AND status != 'completed')
-  `;
+  let query =
+    dialect === 'postgres'
+      ? `
+          SELECT * FROM tasks
+          WHERE type = 'daily'
+          OR (due_date IS NOT NULL AND due_date::date = CURRENT_DATE)
+          OR (type = 'one_time' AND status != 'completed')
+        `
+      : `
+          SELECT * FROM tasks
+          WHERE type = 'daily'
+          OR (due_date IS NOT NULL AND DATE(due_date) = DATE('now'))
+          OR (type = 'one_time' AND status != 'completed')
+        `;
   const params: any[] = [];
 
   if (status) {
@@ -186,6 +196,12 @@ router.post('/:id/start', asyncHandler(async (req: Request, res: Response) => {
  */
 router.get('/stats', asyncHandler(async (req: Request, res: Response) => {
   const db = DatabaseService.getInstance().getDatabase();
+  const dialect = DatabaseService.getInstance().getDialect();
+
+  const completedTodayCondition =
+    dialect === 'postgres'
+      ? "status = 'completed' AND completed_at::date = CURRENT_DATE"
+      : 'status = "completed" AND DATE(completed_at) = DATE("now")';
 
   const [
     totalTasks,
@@ -196,21 +212,21 @@ router.get('/stats', asyncHandler(async (req: Request, res: Response) => {
   ] = await Promise.all([
     db.get('SELECT COUNT(*) as count FROM tasks'),
     db.get('SELECT COUNT(*) as count FROM tasks WHERE status = "pending"'),
-    db.get('SELECT COUNT(*) as count FROM tasks WHERE status = "completed" AND DATE(completed_at) = DATE("now")'),
+    db.get(`SELECT COUNT(*) as count FROM tasks WHERE ${completedTodayCondition}`),
     db.all('SELECT type, COUNT(*) as count FROM tasks GROUP BY type'),
     db.all('SELECT status, COUNT(*) as count FROM tasks GROUP BY status')
   ]);
 
   const stats = {
-    total: totalTasks.count,
-    pending: pendingTasks.count,
-    completedToday: completedToday.count,
+    total: num(totalTasks.count),
+    pending: num(pendingTasks.count),
+    completedToday: num(completedToday.count),
     byType: tasksByType.reduce((acc: any, row: any) => {
-      acc[row.type] = row.count;
+      acc[row.type] = num(row.count);
       return acc;
     }, {}),
     byStatus: tasksByStatus.reduce((acc: any, row: any) => {
-      acc[row.status] = row.count;
+      acc[row.status] = num(row.count);
       return acc;
     }, {})
   };

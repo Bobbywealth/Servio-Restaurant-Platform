@@ -29,6 +29,7 @@ interface UserContextType {
   logout: () => void
   hasPermission: (resource: string, action?: string) => boolean
   updateUser: (updates: Partial<User>) => void
+  isManagerOrOwner: boolean
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined)
@@ -141,13 +142,16 @@ export function UserProvider({ children }: UserProviderProps) {
     }
   }
 
+  const isManagerOrOwner = user?.role === 'admin' || user?.role === 'manager'
+
   const value: UserContextType = {
     user,
     isLoading,
     login,
     logout,
     hasPermission,
-    updateUser
+    updateUser,
+    isManagerOrOwner
   }
 
   return (

@@ -3,6 +3,7 @@ import { DatabaseService } from '../services/DatabaseService';
 import { asyncHandler } from '../middleware/errorHandler';
 
 const router = Router();
+const num = (v: any) => (typeof v === 'number' ? v : Number(v ?? 0));
 
 /**
  * GET /api/audit/logs
@@ -150,20 +151,27 @@ router.get('/users', asyncHandler(async (req: Request, res: Response) => {
 router.get('/stats', asyncHandler(async (req: Request, res: Response) => {
   const { period = 'today' } = req.query;
   const db = DatabaseService.getInstance().getDatabase();
+  const dialect = DatabaseService.getInstance().getDialect();
 
   let dateCondition = '';
   switch (period) {
     case 'today':
-      dateCondition = "DATE(created_at) = DATE('now')";
+      dateCondition = dialect === 'postgres' ? 'created_at::date = CURRENT_DATE' : "DATE(created_at) = DATE('now')";
       break;
     case 'week':
-      dateCondition = "created_at >= datetime('now', '-7 days')";
+      dateCondition =
+        dialect === 'postgres'
+          ? "created_at >= (NOW() - INTERVAL '7 days')"
+          : "created_at >= datetime('now', '-7 days')";
       break;
     case 'month':
-      dateCondition = "created_at >= datetime('now', '-30 days')";
+      dateCondition =
+        dialect === 'postgres'
+          ? "created_at >= (NOW() - INTERVAL '30 days')"
+          : "created_at >= datetime('now', '-30 days')";
       break;
     default:
-      dateCondition = "DATE(created_at) = DATE('now')";
+      dateCondition = dialect === 'postgres' ? 'created_at::date = CURRENT_DATE' : "DATE(created_at) = DATE('now')";
   }
 
   const [
@@ -220,14 +228,14 @@ router.get('/stats', asyncHandler(async (req: Request, res: Response) => {
 
   const stats = {
     period,
-    totalActions: totalActions.count,
+    totalActions: num(totalActions.count),
     actionsByType: actionsByType.reduce((acc: any, row: any) => {
-      acc[row.action] = row.count;
+      acc[row.action] = num(row.count);
       return acc;
     }, {}),
     actionsByUser: actionsByUser,
     actionsBySource: actionsBySource.reduce((acc: any, row: any) => {
-      acc[row.source] = row.count;
+      acc[row.source] = num(row.count);
       return acc;
     }, {}),
     recentActivity: formattedRecentActivity

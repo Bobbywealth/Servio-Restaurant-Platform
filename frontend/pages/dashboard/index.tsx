@@ -1,9 +1,10 @@
 import React from 'react'
 import Head from 'next/head'
 import Link from 'next/link'
+import { motion } from 'framer-motion'
 import DashboardLayout from '../../components/Layout/DashboardLayout'
 import { useUser } from '../../contexts/UserContext'
-import { MessageCircle, ShoppingCart, Package, CheckSquare, TrendingUp } from 'lucide-react'
+import { MessageCircle, ShoppingCart, Package, CheckSquare, TrendingUp, Sparkles, ArrowRight } from 'lucide-react'
 
 export default function DashboardIndex() {
   const { user, isManagerOrOwner } = useUser()
@@ -13,33 +14,33 @@ export default function DashboardIndex() {
       name: 'Active Orders',
       value: '12',
       change: '+2.5%',
-      changeType: 'increase',
+      changeType: 'increase' as const,
       icon: ShoppingCart,
-      color: 'text-blue-600 bg-blue-100'
+      color: 'bg-primary-500'
     },
     {
       name: 'Items 86\'d',
       value: '3',
       change: '+1',
-      changeType: 'increase',
+      changeType: 'increase' as const,
       icon: Package,
-      color: 'text-red-600 bg-red-100'
+      color: 'bg-servio-red-500'
     },
     {
       name: 'Pending Tasks',
       value: '7',
       change: '-3',
-      changeType: 'decrease',
+      changeType: 'decrease' as const,
       icon: CheckSquare,
-      color: 'text-yellow-600 bg-yellow-100'
+      color: 'bg-servio-orange-500'
     },
     {
       name: 'Today\'s Sales',
       value: '$2,847',
       change: '+12.5%',
-      changeType: 'increase',
+      changeType: 'increase' as const,
       icon: TrendingUp,
-      color: 'text-green-600 bg-green-100'
+      color: 'bg-servio-green-500'
     }
   ]
 
@@ -63,66 +64,129 @@ export default function DashboardIndex() {
           </div>
 
           {/* Quick Access to Assistant */}
-          <div className="bg-gradient-to-r from-servio-orange to-orange-600 rounded-lg p-6 text-white">
-            <div className="flex items-center justify-between">
+          <motion.div 
+            className="gradient-warning rounded-2xl p-6 text-white relative overflow-hidden"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+          >
+            <div className="absolute inset-0 bg-gradient-to-br from-servio-orange-400/20 to-transparent" />
+            <div className="relative flex items-center justify-between">
               <div>
-                <h2 className="text-xl font-semibold mb-2">
-                  Meet Servio Assistant
-                </h2>
-                <p className="text-orange-100 mb-4">
-                  Your AI-powered helper for orders, inventory, and tasks. Just talk and Servio will help!
-                </p>
-                <Link
-                  href="/dashboard/assistant"
-                  className="inline-flex items-center space-x-2 bg-white text-servio-orange px-4 py-2 rounded-lg font-medium hover:bg-gray-50 transition-colors"
+                <motion.h2 
+                  className="text-xl font-semibold mb-2 flex items-center"
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.2 }}
                 >
-                  <MessageCircle className="h-5 w-5" />
-                  <span>Start Talking to Servio</span>
-                </Link>
+                  Meet Servio Assistant
+                  <motion.div
+                    className="ml-2"
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
+                  >
+                    <Sparkles className="w-5 h-5" />
+                  </motion.div>
+                </motion.h2>
+                <motion.p 
+                  className="text-orange-100 mb-4 max-w-md"
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.3 }}
+                >
+                  Your AI-powered helper for orders, inventory, and tasks. Just talk and Servio will help!
+                </motion.p>
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.4 }}
+                >
+                  <Link
+                    href="/dashboard/assistant"
+                    className="inline-flex items-center space-x-2 bg-white text-servio-orange-700 px-6 py-3 rounded-xl font-medium hover:bg-orange-50 transition-all duration-200 transform hover:scale-105 shadow-lg"
+                  >
+                    <MessageCircle className="h-5 w-5" />
+                    <span>Start Talking to Servio</span>
+                    <ArrowRight className="h-4 w-4" />
+                  </Link>
+                </motion.div>
               </div>
               <div className="hidden md:block">
-                <div className="w-20 h-20 bg-white bg-opacity-20 rounded-full flex items-center justify-center">
+                <motion.div 
+                  className="w-20 h-20 bg-white bg-opacity-20 rounded-2xl flex items-center justify-center backdrop-blur-sm"
+                  animate={{ 
+                    scale: [1, 1.05, 1],
+                    rotate: [0, 2, -2, 0]
+                  }}
+                  transition={{ duration: 4, repeat: Infinity }}
+                >
                   <MessageCircle className="h-10 w-10" />
-                </div>
+                </motion.div>
               </div>
             </div>
-          </div>
+          </motion.div>
 
           {/* Stats Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {stats.map((stat) => (
-              <div key={stat.name} className="card">
+            {stats.map((stat, index) => (
+              <motion.div 
+                key={stat.name} 
+                className="card-hover"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.1 * (index + 2) }}
+                whileHover={{ y: -4 }}
+              >
                 <div className="flex items-center">
-                  <div className={`p-2 rounded-lg ${stat.color}`}>
-                    <stat.icon className="h-6 w-6" />
-                  </div>
-                  <div className="ml-4">
-                    <p className="text-sm font-medium text-gray-600">
+                  <motion.div 
+                    className={`p-3 rounded-xl ${stat.color}`}
+                    whileHover={{ scale: 1.1, rotate: 5 }}
+                    transition={{ type: "spring", stiffness: 400, damping: 10 }}
+                  >
+                    <stat.icon className="h-6 w-6 text-white" />
+                  </motion.div>
+                  <div className="ml-4 flex-1">
+                    <p className="text-sm font-medium text-surface-600 dark:text-surface-400">
                       {stat.name}
                     </p>
-                    <p className="text-2xl font-bold text-gray-900">
+                    <motion.p 
+                      className="text-2xl font-bold text-surface-900 dark:text-surface-100"
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      transition={{ delay: 0.2 * (index + 2), type: "spring", bounce: 0.4 }}
+                    >
                       {stat.value}
-                    </p>
+                    </motion.p>
                   </div>
                 </div>
-                <div className="mt-4">
-                  <span className={`text-sm font-medium ${
-                    stat.changeType === 'increase' ? 'text-green-600' : 'text-red-600'
-                  }`}>
-                    {stat.change}
-                  </span>
-                  <span className="text-sm text-gray-500 ml-2">
+                <div className="mt-4 flex items-center justify-between">
+                  <div className="flex items-center">
+                    <span className={`text-sm font-medium inline-flex items-center px-2 py-1 rounded-full ${
+                      stat.changeType === 'increase' 
+                        ? 'text-servio-green-700 dark:text-servio-green-300 bg-servio-green-100 dark:bg-servio-green-900/30' 
+                        : 'text-servio-red-700 dark:text-servio-red-300 bg-servio-red-100 dark:bg-servio-red-900/30'
+                    }`}>
+                      {stat.change}
+                    </span>
+                  </div>
+                  <span className="text-xs text-surface-500 dark:text-surface-400">
                     from yesterday
                   </span>
                 </div>
-              </div>
+              </motion.div>
             ))}
           </div>
 
           {/* Recent Activity */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="card">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">
+            <motion.div 
+              className="card"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.6 }}
+            >
+              <h3 className="text-lg font-semibold text-surface-900 dark:text-surface-100 mb-4 flex items-center">
+                <ShoppingCart className="w-5 h-5 mr-2 text-primary-500" />
                 Recent Orders
               </h3>
               <div className="space-y-3">
@@ -130,72 +194,114 @@ export default function DashboardIndex() {
                   { id: '214', item: 'Jerk Chicken Plate', time: '2 min ago', status: 'preparing' },
                   { id: '215', item: 'Curry Goat', time: '5 min ago', status: 'ready' },
                   { id: '216', item: 'Oxtail Dinner', time: '8 min ago', status: 'preparing' }
-                ].map((order) => (
-                  <div key={order.id} className="flex items-center justify-between py-2">
+                ].map((order, index) => (
+                  <motion.div 
+                    key={order.id} 
+                    className="flex items-center justify-between py-3 px-4 rounded-xl bg-surface-50 dark:bg-surface-800/50 hover:bg-surface-100 dark:hover:bg-surface-800 transition-colors cursor-pointer"
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.7 + index * 0.1 }}
+                    whileHover={{ x: 4 }}
+                  >
                     <div>
-                      <p className="font-medium text-gray-900">Order #{order.id}</p>
-                      <p className="text-sm text-gray-600">{order.item}</p>
+                      <p className="font-medium text-surface-900 dark:text-surface-100">Order #{order.id}</p>
+                      <p className="text-sm text-surface-600 dark:text-surface-400">{order.item}</p>
                     </div>
                     <div className="text-right">
-                      <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
-                        order.status === 'ready' 
-                          ? 'bg-green-100 text-green-800' 
-                          : 'bg-yellow-100 text-yellow-800'
+                      <span className={`status-badge ${
+                        order.status === 'ready' ? 'status-success' : 'status-warning'
                       }`}>
                         {order.status}
                       </span>
-                      <p className="text-xs text-gray-500 mt-1">{order.time}</p>
+                      <p className="text-xs text-surface-500 dark:text-surface-400 mt-1">{order.time}</p>
                     </div>
-                  </div>
+                  </motion.div>
                 ))}
               </div>
-            </div>
+            </motion.div>
 
-            <div className="card">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">
+            <motion.div 
+              className="card"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.6 }}
+            >
+              <h3 className="text-lg font-semibold text-surface-900 dark:text-surface-100 mb-4 flex items-center">
+                <Sparkles className="w-5 h-5 mr-2 text-servio-orange-500" />
                 Quick Actions
               </h3>
-              <div className="space-y-2">
-                <Link
-                  href="/dashboard/assistant"
-                  className="block w-full text-left px-4 py-3 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
-                >
-                  <div className="flex items-center space-x-3">
-                    <MessageCircle className="h-5 w-5 text-servio-orange" />
-                    <span className="font-medium">Talk to Servio</span>
-                  </div>
-                  <p className="text-sm text-gray-600 mt-1">
-                    Get help with orders, inventory, and tasks
-                  </p>
-                </Link>
-                
-                <Link
-                  href="/dashboard/orders"
-                  className="block w-full text-left px-4 py-3 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
-                >
-                  <div className="flex items-center space-x-3">
-                    <ShoppingCart className="h-5 w-5 text-blue-600" />
-                    <span className="font-medium">View All Orders</span>
-                  </div>
-                  <p className="text-sm text-gray-600 mt-1">
-                    Check order status and update progress
-                  </p>
-                </Link>
-
-                <Link
-                  href="/dashboard/inventory"
-                  className="block w-full text-left px-4 py-3 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
-                >
-                  <div className="flex items-center space-x-3">
-                    <Package className="h-5 w-5 text-green-600" />
-                    <span className="font-medium">Update Inventory</span>
-                  </div>
-                  <p className="text-sm text-gray-600 mt-1">
-                    Adjust stock levels and receive items
-                  </p>
-                </Link>
+              <div className="space-y-3">
+                {[
+                  {
+                    href: "/dashboard/assistant",
+                    icon: MessageCircle,
+                    iconColor: "text-servio-orange-500",
+                    title: "Talk to Servio",
+                    description: "Get help with orders, inventory, and tasks",
+                    highlight: true
+                  },
+                  {
+                    href: "/dashboard/orders",
+                    icon: ShoppingCart,
+                    iconColor: "text-primary-500",
+                    title: "View All Orders",
+                    description: "Check order status and update progress"
+                  },
+                  {
+                    href: "/dashboard/inventory",
+                    icon: Package,
+                    iconColor: "text-servio-green-500",
+                    title: "Update Inventory",
+                    description: "Adjust stock levels and receive items"
+                  }
+                ].map((action, index) => (
+                  <motion.div
+                    key={action.href}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.7 + index * 0.1 }}
+                  >
+                    <Link
+                      href={action.href}
+                      className={`block w-full text-left p-4 rounded-xl border transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] ${
+                        action.highlight 
+                          ? 'border-servio-orange-200 dark:border-servio-orange-800 bg-servio-orange-50 dark:bg-servio-orange-900/20 hover:bg-servio-orange-100 dark:hover:bg-servio-orange-900/30' 
+                          : 'border-surface-200 dark:border-surface-700 hover:bg-surface-50 dark:hover:bg-surface-800/50'
+                      }`}
+                    >
+                      <div className="flex items-center space-x-3">
+                        <div className={`p-2 rounded-lg ${
+                          action.highlight 
+                            ? 'bg-servio-orange-100 dark:bg-servio-orange-800/50' 
+                            : 'bg-surface-100 dark:bg-surface-800'
+                        }`}>
+                          <action.icon className={`h-5 w-5 ${action.iconColor}`} />
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between">
+                            <span className="font-medium text-surface-900 dark:text-surface-100">
+                              {action.title}
+                            </span>
+                            {action.highlight && (
+                              <motion.div
+                                animate={{ rotate: 360 }}
+                                transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
+                              >
+                                <Sparkles className="w-4 h-4 text-servio-orange-500" />
+                              </motion.div>
+                            )}
+                          </div>
+                          <p className="text-sm text-surface-600 dark:text-surface-400 mt-1">
+                            {action.description}
+                          </p>
+                        </div>
+                        <ArrowRight className="w-4 h-4 text-surface-400 dark:text-surface-500 group-hover:text-surface-600 dark:group-hover:text-surface-300" />
+                      </div>
+                    </Link>
+                  </motion.div>
+                ))}
               </div>
-            </div>
+            </motion.div>
           </div>
         </div>
       </DashboardLayout>

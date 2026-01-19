@@ -1,81 +1,43 @@
-import { open, Database } from 'sqlite';
+import { open } from 'sqlite';
 import sqlite3 from 'sqlite3';
 import path from 'path';
 import fs from 'fs';
+import { Pool, PoolClient, QueryResult } from 'pg';
 import { logger } from '../utils/logger';
 
-interface User {
-  id: string;
-  name: string;
-  role: 'staff' | 'manager' | 'owner';
-  permissions: string;
-  created_at: string;
-  updated_at: string;
+type DatabaseDialect = 'sqlite' | 'postgres';
+
+export interface RunResult {
+  changes: number;
 }
 
-interface Order {
-  id: string;
-  external_id: string;
-  channel: string;
-  status: string;
-  items: string;
-  customer_name: string;
-  customer_phone?: string;
-  total_amount: number;
-  created_at: string;
-  updated_at: string;
+export interface DbClient {
+  dialect: DatabaseDialect;
+  all<T = any>(sql: string, params?: any[]): Promise<T[]>;
+  get<T = any>(sql: string, params?: any[]): Promise<T | undefined>;
+  run(sql: string, params?: any[]): Promise<RunResult>;
+  exec(sql: string): Promise<void>;
 }
 
-interface InventoryItem {
-  id: string;
-  name: string;
-  sku: string;
-  category: string;
-  current_quantity: number;
-  unit: string;
-  low_stock_threshold: number;
-  created_at: string;
-  updated_at: string;
+function convertQMarksToDollars(sql: string): string {
+  let idx = 0;
+  return sql.replace(/\?/g, () => {
+    idx += 1;
+    return `$${idx}`;
+  });
 }
 
-interface MenuItem {
-  id: string;
-  name: string;
-  description: string;
-  price: number;
-  category: string;
-  is_available: boolean;
-  channel_availability: string;
-  created_at: string;
-  updated_at: string;
-}
-
-interface Task {
-  id: string;
-  title: string;
-  description: string;
-  type: 'daily' | 'weekly' | 'monthly' | 'one_time';
-  status: 'pending' | 'in_progress' | 'completed';
-  assigned_to: string;
-  due_date?: string;
-  completed_at?: string;
-  created_at: string;
-}
-
-interface AuditLog {
-  id: string;
-  user_id: string;
-  action: string;
-  entity_type: string;
-  entity_id: string;
-  details: string;
-  source: string;
-  created_at: string;
+function asNumber(value: any): number {
+  if (typeof value === 'number') return value;
+  if (typeof value === 'string' && value.trim().length > 0) return Number(value);
+  return Number(value ?? 0);
 }
 
 export class DatabaseService {
   private static instance: DatabaseService;
-  private db: Database | null = null;
+  private _dialect: DatabaseDialect | null = null;
+  private sqliteDb: any | null = null;
+  private pgPool: Pool | null = null;
 
   private constructor() {}
 
@@ -95,23 +57,52 @@ export class DatabaseService {
 
   public static async close(): Promise<void> {
     const service = DatabaseService.getInstance();
-    if (service.db) {
-      await service.db.close();
-      service.db = null;
-      logger.info('Database connection closed');
+    if (service.sqliteDb) {
+      await service.sqliteDb.close();
+      service.sqliteDb = null;
     }
+    if (service.pgPool) {
+      await service.pgPool.end();
+      service.pgPool = null;
+    }
+    service._dialect = null;
+    logger.info('Database connection closed');
   }
 
   private async connect(): Promise<void> {
     try {
-      // Ensure uploads directory exists
+      const databaseUrl = process.env.DATABASE_URL;
+
+      if (databaseUrl && databaseUrl.startsWith('postgres')) {
+        this._dialect = 'postgres';
+
+        const ssl =
+          process.env.DATABASE_SSL === 'true'
+            ? { rejectUnauthorized: false }
+            : undefined;
+
+        this.pgPool = new Pool({
+          connectionString: databaseUrl,
+          ssl
+        });
+
+        // sanity query
+        await this.pgPool.query('SELECT 1 as ok');
+
+        logger.info('Connected to PostgreSQL database via DATABASE_URL');
+        return;
+      }
+
+      // Default: SQLite (local/dev)
+      this._dialect = 'sqlite';
+
       const dbDir = path.join(__dirname, '../../data');
       if (!fs.existsSync(dbDir)) {
         fs.mkdirSync(dbDir, { recursive: true });
       }
 
       const dbPath = path.join(dbDir, 'servio.db');
-      this.db = await open({
+      this.sqliteDb = await open({
         filename: dbPath,
         driver: sqlite3.Database
       });
@@ -124,110 +115,178 @@ export class DatabaseService {
   }
 
   private async createTables(): Promise<void> {
-    if (!this.db) throw new Error('Database not connected');
+    const db = this.getDatabase();
 
-    const tables = [
-      // Users table
-      `CREATE TABLE IF NOT EXISTS users (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        role TEXT NOT NULL CHECK (role IN ('staff', 'manager', 'owner')),
-        permissions TEXT NOT NULL DEFAULT '[]',
-        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-      )`,
+    const isPg = db.dialect === 'postgres';
 
-      // Orders table
-      `CREATE TABLE IF NOT EXISTS orders (
-        id TEXT PRIMARY KEY,
-        external_id TEXT NOT NULL,
-        channel TEXT NOT NULL,
-        status TEXT NOT NULL DEFAULT 'received',
-        items TEXT NOT NULL DEFAULT '[]',
-        customer_name TEXT,
-        customer_phone TEXT,
-        total_amount REAL NOT NULL DEFAULT 0,
-        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-      )`,
-
-      // Inventory table
-      `CREATE TABLE IF NOT EXISTS inventory (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        sku TEXT UNIQUE,
-        category TEXT NOT NULL,
-        current_quantity REAL NOT NULL DEFAULT 0,
-        unit TEXT NOT NULL,
-        low_stock_threshold REAL NOT NULL DEFAULT 5,
-        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-      )`,
-
-      // Menu items table
-      `CREATE TABLE IF NOT EXISTS menu_items (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        description TEXT,
-        price REAL NOT NULL,
-        category TEXT NOT NULL,
-        is_available BOOLEAN NOT NULL DEFAULT 1,
-        channel_availability TEXT NOT NULL DEFAULT '{}',
-        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-      )`,
-
-      // Tasks table
-      `CREATE TABLE IF NOT EXISTS tasks (
-        id TEXT PRIMARY KEY,
-        title TEXT NOT NULL,
-        description TEXT,
-        type TEXT NOT NULL DEFAULT 'daily',
-        status TEXT NOT NULL DEFAULT 'pending',
-        assigned_to TEXT,
-        due_date TEXT,
-        completed_at TEXT,
-        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-      )`,
-
-      // Audit log table
-      `CREATE TABLE IF NOT EXISTS audit_logs (
-        id TEXT PRIMARY KEY,
-        user_id TEXT NOT NULL,
-        action TEXT NOT NULL,
-        entity_type TEXT NOT NULL,
-        entity_id TEXT NOT NULL,
-        details TEXT NOT NULL DEFAULT '{}',
-        source TEXT NOT NULL DEFAULT 'web',
-        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-      )`,
-
-      // Sync jobs table
-      `CREATE TABLE IF NOT EXISTS sync_jobs (
-        id TEXT PRIMARY KEY,
-        type TEXT NOT NULL,
-        status TEXT NOT NULL DEFAULT 'pending',
-        channels TEXT NOT NULL DEFAULT '[]',
-        details TEXT NOT NULL DEFAULT '{}',
-        error_message TEXT,
-        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        completed_at TEXT
-      )`
-    ];
+    // Note: keep schema intentionally close to existing SQLite schema; later todos will expand it.
+    const tables = isPg
+      ? [
+          `CREATE TABLE IF NOT EXISTS users (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            role TEXT NOT NULL CHECK (role IN ('staff', 'manager', 'owner')),
+            permissions TEXT NOT NULL DEFAULT '[]',
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          )`,
+          `CREATE TABLE IF NOT EXISTS orders (
+            id TEXT PRIMARY KEY,
+            external_id TEXT NOT NULL,
+            channel TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'received',
+            items TEXT NOT NULL DEFAULT '[]',
+            customer_name TEXT,
+            customer_phone TEXT,
+            total_amount DOUBLE PRECISION NOT NULL DEFAULT 0,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          )`,
+          `CREATE TABLE IF NOT EXISTS inventory (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            sku TEXT UNIQUE,
+            category TEXT NOT NULL,
+            current_quantity DOUBLE PRECISION NOT NULL DEFAULT 0,
+            unit TEXT NOT NULL,
+            low_stock_threshold DOUBLE PRECISION NOT NULL DEFAULT 5,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          )`,
+          `CREATE TABLE IF NOT EXISTS menu_items (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            description TEXT,
+            price DOUBLE PRECISION NOT NULL,
+            category TEXT NOT NULL,
+            is_available BOOLEAN NOT NULL DEFAULT TRUE,
+            channel_availability TEXT NOT NULL DEFAULT '{}',
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          )`,
+          `CREATE TABLE IF NOT EXISTS tasks (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            description TEXT,
+            type TEXT NOT NULL DEFAULT 'daily',
+            status TEXT NOT NULL DEFAULT 'pending',
+            assigned_to TEXT,
+            due_date TIMESTAMPTZ,
+            completed_at TIMESTAMPTZ,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          )`,
+          `CREATE TABLE IF NOT EXISTS audit_logs (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            action TEXT NOT NULL,
+            entity_type TEXT NOT NULL,
+            entity_id TEXT NOT NULL,
+            details TEXT NOT NULL DEFAULT '{}',
+            source TEXT NOT NULL DEFAULT 'web',
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          )`,
+          `CREATE TABLE IF NOT EXISTS sync_jobs (
+            id TEXT PRIMARY KEY,
+            type TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            channels TEXT NOT NULL DEFAULT '[]',
+            details TEXT NOT NULL DEFAULT '{}',
+            error_message TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            completed_at TIMESTAMPTZ
+          )`
+        ]
+      : [
+          `CREATE TABLE IF NOT EXISTS users (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            role TEXT NOT NULL CHECK (role IN ('staff', 'manager', 'owner')),
+            permissions TEXT NOT NULL DEFAULT '[]',
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+          )`,
+          `CREATE TABLE IF NOT EXISTS orders (
+            id TEXT PRIMARY KEY,
+            external_id TEXT NOT NULL,
+            channel TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'received',
+            items TEXT NOT NULL DEFAULT '[]',
+            customer_name TEXT,
+            customer_phone TEXT,
+            total_amount REAL NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+          )`,
+          `CREATE TABLE IF NOT EXISTS inventory (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            sku TEXT UNIQUE,
+            category TEXT NOT NULL,
+            current_quantity REAL NOT NULL DEFAULT 0,
+            unit TEXT NOT NULL,
+            low_stock_threshold REAL NOT NULL DEFAULT 5,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+          )`,
+          `CREATE TABLE IF NOT EXISTS menu_items (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            description TEXT,
+            price REAL NOT NULL,
+            category TEXT NOT NULL,
+            is_available BOOLEAN NOT NULL DEFAULT 1,
+            channel_availability TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+          )`,
+          `CREATE TABLE IF NOT EXISTS tasks (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            description TEXT,
+            type TEXT NOT NULL DEFAULT 'daily',
+            status TEXT NOT NULL DEFAULT 'pending',
+            assigned_to TEXT,
+            due_date TEXT,
+            completed_at TEXT,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+          )`,
+          `CREATE TABLE IF NOT EXISTS audit_logs (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            action TEXT NOT NULL,
+            entity_type TEXT NOT NULL,
+            entity_id TEXT NOT NULL,
+            details TEXT NOT NULL DEFAULT '{}',
+            source TEXT NOT NULL DEFAULT 'web',
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+          )`,
+          `CREATE TABLE IF NOT EXISTS sync_jobs (
+            id TEXT PRIMARY KEY,
+            type TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            channels TEXT NOT NULL DEFAULT '[]',
+            details TEXT NOT NULL DEFAULT '{}',
+            error_message TEXT,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            completed_at TEXT
+          )`
+        ];
 
     for (const tableSQL of tables) {
-      await this.db.exec(tableSQL);
+      await db.exec(tableSQL);
     }
 
     logger.info('Database tables created/verified');
   }
 
   private async seedData(): Promise<void> {
-    if (!this.db) throw new Error('Database not connected');
+    const db = this.getDatabase();
 
     // Check if we already have data
-    const userCount = await this.db.get('SELECT COUNT(*) as count FROM users');
-    if (userCount.count > 0) {
+    const userCount = await db.get<{ count: any }>('SELECT COUNT(*) as count FROM users');
+    if (asNumber(userCount?.count) > 0) {
       logger.info('Database already seeded, skipping...');
       return;
     }
@@ -352,35 +411,35 @@ export class DatabaseService {
 
     // Insert sample data
     for (const user of users) {
-      await this.db.run(
+      await db.run(
         'INSERT INTO users (id, name, role, permissions) VALUES (?, ?, ?, ?)',
         [user.id, user.name, user.role, user.permissions]
       );
     }
 
     for (const item of menuItems) {
-      await this.db.run(
+      await db.run(
         'INSERT INTO menu_items (id, name, description, price, category, channel_availability) VALUES (?, ?, ?, ?, ?, ?)',
         [item.id, item.name, item.description, item.price, item.category, item.channel_availability]
       );
     }
 
     for (const item of inventory) {
-      await this.db.run(
+      await db.run(
         'INSERT INTO inventory (id, name, sku, category, current_quantity, unit, low_stock_threshold) VALUES (?, ?, ?, ?, ?, ?, ?)',
         [item.id, item.name, item.sku, item.category, item.current_quantity, item.unit, item.low_stock_threshold]
       );
     }
 
     for (const order of orders) {
-      await this.db.run(
+      await db.run(
         'INSERT INTO orders (id, external_id, channel, status, items, customer_name, total_amount) VALUES (?, ?, ?, ?, ?, ?, ?)',
         [order.id, order.external_id, order.channel, order.status, order.items, order.customer_name, order.total_amount]
       );
     }
 
     for (const task of tasks) {
-      await this.db.run(
+      await db.run(
         'INSERT INTO tasks (id, title, description, type, status, assigned_to, completed_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
         [task.id, task.title, task.description, task.type, task.status, task.assigned_to, task.completed_at]
       );
@@ -389,9 +448,56 @@ export class DatabaseService {
     logger.info('Database seeded with sample data');
   }
 
-  public getDatabase(): Database {
-    if (!this.db) throw new Error('Database not connected');
-    return this.db;
+  public getDialect(): DatabaseDialect {
+    if (!this._dialect) throw new Error('Database not connected');
+    return this._dialect;
+  }
+
+  public getDatabase(): DbClient {
+    if (!this._dialect) throw new Error('Database not connected');
+
+    if (this._dialect === 'sqlite') {
+      if (!this.sqliteDb) throw new Error('SQLite database not connected');
+
+      const sqliteDb = this.sqliteDb;
+      return {
+        dialect: 'sqlite',
+        all: (sql: string, params: any[] = []) => sqliteDb.all(sql, params),
+        get: (sql: string, params: any[] = []) => sqliteDb.get(sql, params),
+        run: async (sql: string, params: any[] = []) => {
+          const result = await sqliteDb.run(sql, params);
+          return { changes: asNumber(result?.changes) };
+        },
+        exec: (sql: string) => sqliteDb.exec(sql)
+      };
+    }
+
+    if (!this.pgPool) throw new Error('PostgreSQL pool not connected');
+    const pool = this.pgPool;
+
+    const query = async (sql: string, params: any[] = []): Promise<QueryResult<any>> => {
+      const pgSql = convertQMarksToDollars(sql);
+      return pool.query(pgSql, params);
+    };
+
+    return {
+      dialect: 'postgres',
+      all: async (sql: string, params: any[] = []) => {
+        const res = await query(sql, params);
+        return res.rows;
+      },
+      get: async (sql: string, params: any[] = []) => {
+        const res = await query(sql, params);
+        return res.rows[0];
+      },
+      run: async (sql: string, params: any[] = []) => {
+        const res = await query(sql, params);
+        return { changes: asNumber(res.rowCount) };
+      },
+      exec: async (sql: string) => {
+        await pool.query(sql);
+      }
+    };
   }
 
   // Helper method to log audit events
@@ -403,11 +509,11 @@ export class DatabaseService {
     details: any = {},
     source: string = 'assistant'
   ): Promise<void> {
-    if (!this.db) return;
+    const db = this.getDatabase();
 
     const auditId = `audit_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
-    await this.db.run(
+    await db.run(
       'INSERT INTO audit_logs (id, user_id, action, entity_type, entity_id, details, source) VALUES (?, ?, ?, ?, ?, ?, ?)',
       [auditId, userId, action, entityType, entityId, JSON.stringify(details), source]
     );

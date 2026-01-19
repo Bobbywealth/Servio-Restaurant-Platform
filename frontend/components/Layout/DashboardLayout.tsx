@@ -1,6 +1,8 @@
-import React, { ReactNode } from 'react'
+import React, { ReactNode, useState } from 'react'
 import Link from 'next/link'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useUser } from '../../contexts/UserContext'
+import ThemeToggle from '../ui/ThemeToggle'
 import { 
   Bot, 
   Home, 
@@ -12,7 +14,11 @@ import {
   LogOut,
   Bell,
   Clock,
-  User
+  User,
+  Menu,
+  X,
+  Sparkles,
+  ChevronRight
 } from 'lucide-react'
 
 interface DashboardLayoutProps {
@@ -21,118 +27,292 @@ interface DashboardLayoutProps {
 
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const { user, logout } = useUser()
+  const [sidebarOpen, setSidebarOpen] = useState(false)
 
   const navigation = [
-    { name: 'Home', href: '/', icon: Home },
-    { name: 'Assistant', href: '/dashboard/assistant', icon: Mic },
-    { name: 'Orders', href: '/dashboard/orders', icon: ClipboardList },
-    { name: 'Inventory', href: '/dashboard/inventory', icon: Package },
-    { name: 'Staff', href: '/dashboard/staff', icon: Users },
-    { name: 'Settings', href: '/dashboard/settings', icon: Settings },
+    { 
+      name: 'Dashboard', 
+      href: '/dashboard', 
+      icon: Home, 
+      description: 'Overview & quick actions',
+      color: 'text-servio-blue-500'
+    },
+    { 
+      name: 'Assistant', 
+      href: '/dashboard/assistant', 
+      icon: Mic, 
+      description: 'AI voice assistant',
+      color: 'text-servio-orange-500',
+      highlight: true
+    },
+    { 
+      name: 'Orders', 
+      href: '/dashboard/orders', 
+      icon: ClipboardList, 
+      description: 'Manage all orders',
+      color: 'text-primary-500'
+    },
+    { 
+      name: 'Inventory', 
+      href: '/dashboard/inventory', 
+      icon: Package, 
+      description: 'Stock management',
+      color: 'text-servio-green-500'
+    },
+    { 
+      name: 'Staff', 
+      href: '/dashboard/staff', 
+      icon: Users, 
+      description: 'Team & schedules',
+      color: 'text-purple-500'
+    },
+    { 
+      name: 'Settings', 
+      href: '/dashboard/settings', 
+      icon: Settings, 
+      description: 'System settings',
+      color: 'text-surface-500'
+    },
   ]
 
+  const closeSidebar = () => setSidebarOpen(false)
+
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen gradient-surface">
+      {/* Mobile sidebar overlay */}
+      <AnimatePresence>
+        {sidebarOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-40 bg-surface-900/50 backdrop-blur-sm lg:hidden"
+            onClick={closeSidebar}
+          />
+        )}
+      </AnimatePresence>
+
       {/* Sidebar */}
-      <div className="fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-lg">
+      <motion.div 
+        className={`fixed inset-y-0 left-0 z-50 w-72 bg-white/95 dark:bg-surface-900/95 backdrop-blur-xl shadow-2xl transform transition-transform duration-300 ease-out lg:translate-x-0 border-r border-surface-200 dark:border-surface-800 ${
+          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
+        initial={false}
+      >
         {/* Logo */}
-        <div className="flex items-center justify-center h-16 px-4 border-b border-gray-200">
-          <Bot className="w-8 h-8 text-blue-600" />
-          <span className="ml-2 text-xl font-bold text-gray-900">Servio</span>
+        <div className="flex items-center justify-between h-16 px-6 border-b border-surface-200 dark:border-surface-800">
+          <motion.div 
+            className="flex items-center"
+            whileHover={{ scale: 1.02 }}
+          >
+            <div className="relative">
+              <Bot className="w-8 h-8 text-primary-600 dark:text-primary-400" />
+              <motion.div
+                className="absolute -top-1 -right-1 w-3 h-3 bg-servio-orange-500 rounded-full"
+                animate={{ scale: [1, 1.2, 1] }}
+                transition={{ duration: 2, repeat: Infinity }}
+              />
+            </div>
+            <span className="ml-3 text-xl font-bold text-surface-900 dark:text-surface-100">
+              Servio
+            </span>
+            <motion.div
+              className="ml-2 px-2 py-1 bg-servio-orange-100 dark:bg-servio-orange-900/30 text-servio-orange-700 dark:text-servio-orange-300 text-2xs font-medium rounded-full"
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ delay: 0.2 }}
+            >
+              AI
+            </motion.div>
+          </motion.div>
+          <button
+            onClick={closeSidebar}
+            className="lg:hidden btn-icon"
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
         {/* Navigation */}
-        <nav className="mt-5 px-2">
-          <div className="space-y-1">
-            {navigation.map((item) => {
-              const isActive = typeof window !== 'undefined' && window.location.pathname === item.href
-              return (
+        <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
+          {navigation.map((item, index) => {
+            const isActive = typeof window !== 'undefined' && 
+              (window.location.pathname === item.href || 
+               (item.href === '/dashboard' && window.location.pathname === '/dashboard/index'))
+            
+            return (
+              <motion.div
+                key={item.name}
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: index * 0.1 }}
+              >
                 <Link
-                  key={item.name}
                   href={item.href}
-                  className={`${
-                    isActive
-                      ? 'bg-blue-50 border-blue-500 text-blue-700'
-                      : 'border-transparent text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                  } group flex items-center px-2 py-2 text-sm font-medium rounded-md border-l-4 transition-colors duration-200`}
+                  onClick={closeSidebar}
+                  className={`
+                    group relative flex items-center px-4 py-3 text-sm font-medium rounded-xl 
+                    transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]
+                    ${isActive
+                      ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 shadow-sm' 
+                      : 'text-surface-600 dark:text-surface-400 hover:bg-surface-100 dark:hover:bg-surface-800 hover:text-surface-900 dark:hover:text-surface-200'
+                    }
+                  `}
                 >
-                  <item.icon
-                    className={`${
-                      isActive ? 'text-blue-500' : 'text-gray-400 group-hover:text-gray-500'
-                    } mr-3 h-5 w-5`}
-                  />
-                  {item.name}
+                  <div className={`
+                    flex items-center justify-center w-10 h-10 rounded-lg mr-3 transition-colors
+                    ${isActive 
+                      ? 'bg-primary-200 dark:bg-primary-800/50' 
+                      : 'bg-surface-100 dark:bg-surface-800 group-hover:bg-surface-200 dark:group-hover:bg-surface-700'
+                    }
+                  `}>
+                    <item.icon className={`w-5 h-5 ${isActive ? item.color : 'text-surface-500 dark:text-surface-400'}`} />
+                  </div>
+                  
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium">{item.name}</span>
+                      {item.highlight && (
+                        <motion.div
+                          className="ml-2"
+                          animate={{ rotate: 360 }}
+                          transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
+                        >
+                          <Sparkles className="w-4 h-4 text-servio-orange-500" />
+                        </motion.div>
+                      )}
+                    </div>
+                    <p className="text-2xs text-surface-500 dark:text-surface-400 truncate">
+                      {item.description}
+                    </p>
+                  </div>
+
+                  {isActive && (
+                    <motion.div
+                      className="absolute right-2"
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      transition={{ type: "spring", bounce: 0.3 }}
+                    >
+                      <ChevronRight className="w-4 h-4 text-primary-500" />
+                    </motion.div>
+                  )}
                 </Link>
-              )
-            })}
-          </div>
+              </motion.div>
+            )
+          })}
         </nav>
 
         {/* User Info */}
-        <div className="absolute bottom-0 w-full p-4 border-t border-gray-200">
+        <div className="p-4 border-t border-surface-200 dark:border-surface-800">
           {user && (
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
-                  <User className="w-4 h-4 text-white" />
+            <motion.div 
+              className="flex items-center p-3 rounded-xl bg-surface-50 dark:bg-surface-800/50"
+              whileHover={{ scale: 1.02 }}
+            >
+              <div className="relative">
+                <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-600 rounded-xl flex items-center justify-center shadow-lg">
+                  <User className="w-5 h-5 text-white" />
                 </div>
+                {user?.shift?.isActive && (
+                  <motion.div
+                    className="absolute -top-1 -right-1 w-3 h-3 bg-servio-green-500 rounded-full border-2 border-white dark:border-surface-800"
+                    animate={{ scale: [1, 1.2, 1] }}
+                    transition={{ duration: 2, repeat: Infinity }}
+                  />
+                )}
               </div>
+              
               <div className="ml-3 flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-900 truncate">
+                <p className="text-sm font-semibold text-surface-900 dark:text-surface-100 truncate">
                   {user?.name || 'Loading...'}
                 </p>
-                <p className="text-xs text-gray-500 truncate">
-                  {user?.role || 'User'} • {user?.restaurant?.name || 'Restaurant'}
-                </p>
+                <div className="flex items-center space-x-2">
+                  <span className="text-2xs text-surface-500 dark:text-surface-400 truncate">
+                    {user?.role || 'User'}
+                  </span>
+                  {user?.shift?.isActive && (
+                    <div className="flex items-center text-2xs text-servio-green-600 dark:text-servio-green-400">
+                      <Clock className="w-3 h-3 mr-1" />
+                      <span>Active</span>
+                    </div>
+                  )}
+                </div>
               </div>
+              
               <button
                 onClick={logout}
-                className="ml-2 p-1 rounded-md text-gray-400 hover:text-gray-600 transition-colors duration-200"
+                className="btn-icon ml-2 text-surface-400 hover:text-servio-red-500"
                 title="Sign out"
               >
                 <LogOut className="w-4 h-4" />
               </button>
-            </div>
+            </motion.div>
           )}
         </div>
-      </div>
+      </motion.div>
 
       {/* Main Content */}
-      <div className="pl-64">
+      <div className="pl-0 lg:pl-72 transition-all duration-300">
         {/* Top Bar */}
-        <div className="bg-white shadow-sm border-b border-gray-200">
+        <div className="bg-white/80 dark:bg-surface-900/80 backdrop-blur-xl shadow-sm border-b border-surface-200/50 dark:border-surface-800/50 sticky top-0 z-30">
           <div className="px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between items-center h-16">
-              {/* Breadcrumb or title can go here */}
-              <div className="flex-1">
+              <div className="flex items-center space-x-4">
+                <button
+                  onClick={() => setSidebarOpen(true)}
+                  className="lg:hidden btn-icon"
+                >
+                  <Menu className="w-6 h-6" />
+                </button>
+                
                 {user?.shift?.isActive && (
-                  <div className="flex items-center text-sm text-green-600">
-                    <Clock className="w-4 h-4 mr-1" />
-                    On Shift
+                  <motion.div 
+                    className="hidden sm:flex items-center px-3 py-2 bg-servio-green-100 dark:bg-servio-green-900/30 text-servio-green-700 dark:text-servio-green-300 text-sm font-medium rounded-lg"
+                    initial={{ scale: 0, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ delay: 0.3 }}
+                  >
+                    <Clock className="w-4 h-4 mr-2" />
+                    <span>On Shift</span>
                     {user?.shift?.startTime && (
-                      <span className="ml-1 text-gray-500">
+                      <span className="ml-2 text-servio-green-600 dark:text-servio-green-400 text-xs">
                         since {new Date(user.shift.startTime).toLocaleTimeString()}
                       </span>
                     )}
-                  </div>
+                  </motion.div>
                 )}
               </div>
 
-              {/* Notifications */}
-              <div className="flex items-center space-x-4">
-                <button className="p-2 text-gray-400 hover:text-gray-600 relative">
+              {/* Right side actions */}
+              <div className="flex items-center space-x-3">
+                <ThemeToggle />
+                
+                <motion.button 
+                  className="btn-icon relative"
+                  whileTap={{ scale: 0.95 }}
+                >
                   <Bell className="w-5 h-5" />
-                  <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-                </button>
+                  <motion.span 
+                    className="absolute top-2 right-2 w-2 h-2 bg-servio-red-500 rounded-full"
+                    animate={{ scale: [1, 1.2, 1] }}
+                    transition={{ duration: 2, repeat: Infinity }}
+                  />
+                </motion.button>
               </div>
             </div>
           </div>
         </div>
 
         {/* Page Content */}
-        <main className="py-6 px-4 sm:px-6 lg:px-8">
+        <motion.main 
+          className="p-4 sm:p-6 lg:p-8"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+        >
           {children}
-        </main>
+        </motion.main>
       </div>
     </div>
   )

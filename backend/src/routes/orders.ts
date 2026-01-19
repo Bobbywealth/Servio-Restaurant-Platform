@@ -4,6 +4,7 @@ import { asyncHandler } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
 
 const router = Router();
+const num = (v: any) => (typeof v === 'number' ? v : Number(v ?? 0));
 
 /**
  * GET /api/orders
@@ -160,6 +161,12 @@ router.post('/:id/status', asyncHandler(async (req: Request, res: Response) => {
  */
 router.get('/stats/summary', asyncHandler(async (req: Request, res: Response) => {
   const db = DatabaseService.getInstance().getDatabase();
+  const dialect = DatabaseService.getInstance().getDialect();
+
+  const completedTodayCondition =
+    dialect === 'postgres'
+      ? "status = 'completed' AND created_at::date = CURRENT_DATE"
+      : 'status = "completed" AND DATE(created_at) = DATE("now")';
 
   const [
     totalOrders,
@@ -171,23 +178,23 @@ router.get('/stats/summary', asyncHandler(async (req: Request, res: Response) =>
   ] = await Promise.all([
     db.get('SELECT COUNT(*) as count FROM orders'),
     db.get('SELECT COUNT(*) as count FROM orders WHERE status IN ("received", "preparing", "ready")'),
-    db.get('SELECT COUNT(*) as count FROM orders WHERE status = "completed" AND DATE(created_at) = DATE("now")'),
-    db.get('SELECT AVG(total_amount) as avg FROM orders WHERE status = "completed" AND DATE(created_at) = DATE("now")'),
+    db.get(`SELECT COUNT(*) as count FROM orders WHERE ${completedTodayCondition}`),
+    db.get(`SELECT AVG(total_amount) as avg FROM orders WHERE ${completedTodayCondition}`),
     db.all('SELECT status, COUNT(*) as count FROM orders GROUP BY status'),
     db.all('SELECT channel, COUNT(*) as count FROM orders GROUP BY channel')
   ]);
 
   const stats = {
-    totalOrders: totalOrders.count,
-    activeOrders: activeOrders.count,
-    completedToday: completedToday.count,
+    totalOrders: num(totalOrders.count),
+    activeOrders: num(activeOrders.count),
+    completedToday: num(completedToday.count),
     avgOrderValue: parseFloat((avgOrderValue.avg || 0).toFixed(2)),
     ordersByStatus: ordersByStatus.reduce((acc: any, row: any) => {
-      acc[row.status] = row.count;
+      acc[row.status] = num(row.count);
       return acc;
     }, {}),
     ordersByChannel: ordersByChannel.reduce((acc: any, row: any) => {
-      acc[row.channel] = row.count;
+      acc[row.channel] = num(row.count);
       return acc;
     }, {})
   };
@@ -204,20 +211,36 @@ router.get('/stats/summary', asyncHandler(async (req: Request, res: Response) =>
  */
 router.get('/waiting-times', asyncHandler(async (req: Request, res: Response) => {
   const db = DatabaseService.getInstance().getDatabase();
+  const dialect = DatabaseService.getInstance().getDialect();
 
-  const orders = await db.all(`
-    SELECT 
-      id, 
-      external_id, 
-      channel, 
-      status, 
-      customer_name,
-      created_at,
-      ROUND((julianday('now') - julianday(created_at)) * 24 * 60) as waiting_minutes
-    FROM orders 
-    WHERE status IN ('received', 'preparing', 'ready')
-    ORDER BY waiting_minutes DESC
-  `);
+  const orders =
+    dialect === 'postgres'
+      ? await db.all(`
+          SELECT
+            id,
+            external_id,
+            channel,
+            status,
+            customer_name,
+            created_at,
+            ROUND(EXTRACT(EPOCH FROM (NOW() - created_at)) / 60) as waiting_minutes
+          FROM orders
+          WHERE status IN ('received', 'preparing', 'ready')
+          ORDER BY waiting_minutes DESC
+        `)
+      : await db.all(`
+          SELECT
+            id,
+            external_id,
+            channel,
+            status,
+            customer_name,
+            created_at,
+            ROUND((julianday('now') - julianday(created_at)) * 24 * 60) as waiting_minutes
+          FROM orders
+          WHERE status IN ('received', 'preparing', 'ready')
+          ORDER BY waiting_minutes DESC
+        `);
 
   res.json({
     success: true,

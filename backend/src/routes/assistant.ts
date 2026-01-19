@@ -1,7 +1,5 @@
 import { Router, Request, Response } from 'express';
 import multer from 'multer';
-import path from 'path';
-import fs from 'fs';
 import { AssistantService } from '../services/AssistantService';
 import { logger } from '../utils/logger';
 import { asyncHandler } from '../middleware/errorHandler';
@@ -14,7 +12,7 @@ const upload = multer({
   limits: {
     fileSize: 25 * 1024 * 1024, // 25MB limit
   },
-  fileFilter: (req, file, cb) => {
+  fileFilter: (req, file, cb: any) => {
     // Accept audio files
     if (file.mimetype.startsWith('audio/')) {
       cb(null, true);

@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
+import compression from 'compression';
 import { createServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 import path from 'path';
@@ -15,7 +16,7 @@ const app = express();
 const server = createServer(app);
 const io = new SocketIOServer(server, {
   cors: {
-    origin: process.env.FRONTEND_URL || "http://localhost:3001",
+    origin: process.env.FRONTEND_URL || "http://localhost:3003",
     methods: ["GET", "POST"]
   }
 });
@@ -37,6 +38,7 @@ async function initializeServer() {
     const { default: syncRoutes } = await import('./routes/sync');
     const { default: receiptsRoutes } = await import('./routes/receipts');
     const { default: auditRoutes } = await import('./routes/audit');
+    const { default: timeclockRoutes } = await import('./routes/timeclock');
     
     // API Routes
     app.use('/api/assistant', assistantRoutes);
@@ -44,9 +46,10 @@ async function initializeServer() {
     app.use('/api/inventory', inventoryRoutes);
     app.use('/api/menu', menuRoutes);
     app.use('/api/tasks', tasksRoutes);
-    app.use('/api/sync', syncRoutes);
-    app.use('/api/receipts', receiptsRoutes);
-    app.use('/api/audit', auditRoutes);
+app.use('/api/sync', syncRoutes);
+app.use('/api/receipts', receiptsRoutes);
+app.use('/api/audit', auditRoutes);
+app.use('/api/timeclock', timeclockRoutes);
     
     logger.info('Routes loaded successfully');
   } catch (error) {
@@ -57,18 +60,42 @@ async function initializeServer() {
 
 // Middleware
 app.use(helmet({
-  crossOriginResourcePolicy: { policy: "cross-origin" }
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrc: ["'self'"],
+      imgSrc: ["'self'", "data:", "https:"],
+    },
+  },
 }));
 app.use(cors({
-  origin: process.env.FRONTEND_URL || "http://localhost:3001",
-  credentials: true
+  origin: process.env.FRONTEND_URL || "http://localhost:3003",
+  credentials: true,
+  optionsSuccessStatus: 200 // some legacy browsers (IE11, various SmartTVs) choke on 204
 }));
+
+// Compression middleware for better performance
+app.use(compression({
+  level: 6,
+  threshold: 1024,
+  filter: (req, res) => {
+    if (req.headers['x-no-compression']) return false;
+    return compression.filter(req, res);
+  }
+}));
+
 app.use(morgan('combined', { stream: { write: message => logger.info(message.trim()) } }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Serve uploaded files
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+// Add caching middleware for static assets
+app.use('/uploads', express.static(path.join(__dirname, '../uploads'), {
+  maxAge: '1d',
+  etag: true,
+  lastModified: true
+}));
 
 // Socket.IO connection handling
 io.on('connection', (socket) => {
@@ -112,7 +139,8 @@ app.get('/api', (req, res) => {
       tasks: '/api/tasks',
       sync: '/api/sync',
       receipts: '/api/receipts',
-      audit: '/api/audit'
+      audit: '/api/audit',
+      timeclock: '/api/timeclock'
     }
   });
 });

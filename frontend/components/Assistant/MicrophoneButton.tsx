@@ -22,6 +22,18 @@ export default function MicrophoneButton({
   const [isHovered, setIsHovered] = useState(false)
   const [pressStartTime, setPressStartTime] = useState<number | null>(null)
 
+  const handleTouchStart = () => {
+    if (disabled || isProcessing) return
+    setPressStartTime(Date.now())
+    onStartRecording()
+  }
+
+  const handleTouchEnd = () => {
+    if (!isRecording) return
+    setPressStartTime(null)
+    onStopRecording()
+  }
+
   const handleMouseDown = () => {
     if (disabled || isProcessing) return
     setPressStartTime(Date.now())
@@ -110,10 +122,11 @@ export default function MicrophoneButton({
       {/* Main Button */}
       <motion.button
         className={`
-          relative w-16 h-16 rounded-full ${state.bgColor} ${state.hoverColor} ${state.textColor}
+          relative w-20 h-20 sm:w-16 sm:h-16 rounded-full ${state.bgColor} ${state.hoverColor} ${state.textColor}
           flex items-center justify-center transition-all duration-200 focus:outline-none 
           focus:ring-4 focus:ring-blue-300 shadow-lg ${state.shadowColor}
           ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}
+          touch-manipulation mobile-tap-highlight
         `}
         onClick={handleClick}
         onMouseDown={handleMouseDown}
@@ -121,6 +134,9 @@ export default function MicrophoneButton({
         onMouseLeave={handleMouseUp} // Stop recording if mouse leaves button
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+        onTouchCancel={handleTouchEnd} // Stop recording if touch is cancelled
         onKeyDown={handleKeyDown}
         onKeyUp={handleKeyUp}
         disabled={disabled}
@@ -166,9 +182,9 @@ export default function MicrophoneButton({
         {/* Icon */}
         <div className="relative z-10">
           {isProcessing ? (
-            <Loader2 className="w-6 h-6 animate-spin" />
+            <Loader2 className="w-7 h-7 sm:w-6 sm:h-6 animate-spin" />
           ) : disabled ? (
-            <MicOff className="w-6 h-6" />
+            <MicOff className="w-7 h-7 sm:w-6 sm:h-6" />
           ) : (
             <motion.div
               animate={{
@@ -179,7 +195,7 @@ export default function MicrophoneButton({
                 repeat: isRecording ? Infinity : 0,
               }}
             >
-              <Mic className="w-6 h-6" />
+              <Mic className="w-7 h-7 sm:w-6 sm:h-6" />
             </motion.div>
           )}
         </div>
@@ -189,7 +205,7 @@ export default function MicrophoneButton({
       <motion.p
         initial={{ opacity: 0, y: 5 }}
         animate={{ opacity: 1, y: 0 }}
-        className="mt-3 text-sm text-center text-gray-600 max-w-xs"
+        className="mt-3 text-sm sm:text-sm md:text-base text-center text-gray-600 dark:text-gray-400 max-w-xs px-2"
       >
         {state.label}
       </motion.p>

@@ -4,6 +4,7 @@ import { logger } from '../utils/logger';
 export interface AppError extends Error {
   statusCode?: number;
   isOperational?: boolean;
+  code?: string;
 }
 
 export class ValidationError extends Error {
