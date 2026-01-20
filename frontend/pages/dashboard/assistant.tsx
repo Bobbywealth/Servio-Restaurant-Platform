@@ -192,7 +192,9 @@ export default function AssistantPage() {
   }, [addMessage])
 
   const processRecording = useCallback(async () => {
+    console.log('Processing recording, chunks count:', audioChunksRef.current.length);
     if (audioChunksRef.current.length === 0) {
+      console.warn('No audio chunks to process');
       setState(prev => ({ ...prev, isProcessing: false }))
       return
     }
@@ -203,6 +205,7 @@ export default function AssistantPage() {
       formData.append('audio', audioBlob, 'recording.webm')
       formData.append('userId', user?.id || 'anonymous')
 
+      console.log('Sending audio to backend...');
       // Send to backend for processing
       const response = await api.post(`/api/assistant/process-audio`, formData, {
         headers: {
@@ -211,6 +214,7 @@ export default function AssistantPage() {
       })
 
       const payload = response.data?.data || response.data
+      console.log('Backend response received:', payload);
       const { transcript, response: assistantResponse, actions, audioUrl } = payload
 
       // Add user message (transcript)
@@ -378,6 +382,7 @@ export default function AssistantPage() {
   }, [mediaRecorder, state.isRecording])
 
   const handleQuickCommand = useCallback(async (command: string) => {
+    console.log('Handling quick command:', command);
     // Add user message immediately
     addMessage({
       type: 'user',
@@ -388,12 +393,14 @@ export default function AssistantPage() {
     setState(prev => ({ ...prev, isProcessing: true }))
 
     try {
+      console.log('Sending text command to backend...');
       const response = await api.post(`/api/assistant/process-text`, {
         text: command,
         userId: user?.id || 'anonymous'
       })
 
       const payload = response.data?.data || response.data
+      console.log('Backend response received:', payload);
       const { response: assistantResponse, actions, audioUrl } = payload
 
       // Add assistant response

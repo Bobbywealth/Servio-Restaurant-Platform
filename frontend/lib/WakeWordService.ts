@@ -88,16 +88,20 @@ export class WakeWordService {
   }
 
   async initialize(): Promise<boolean> {
+    console.log('Initializing WakeWordService...');
     try {
       // Check if SpeechRecognition is supported
       const SpeechRecognition = window.SpeechRecognition || (window as any).webkitSpeechRecognition;
       
       if (!SpeechRecognition) {
+        console.error('Speech recognition NOT supported in this browser');
         throw new Error('Speech recognition not supported in this browser');
       }
 
+      console.log('Requesting microphone permission for wake word...');
       // Request microphone permission first
       await navigator.mediaDevices.getUserMedia({ audio: true });
+      console.log('Microphone permission granted');
 
       // Initialize speech recognition
       this.recognition = new SpeechRecognition();
@@ -110,6 +114,7 @@ export class WakeWordService {
       this.setupEventHandlers();
 
       this.isInitialized = true;
+      console.log('WakeWordService initialized successfully');
       return true;
 
     } catch (error) {
