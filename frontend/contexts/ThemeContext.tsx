@@ -16,15 +16,15 @@ interface ThemeProviderProps {
 }
 
 export function ThemeProvider({ children }: ThemeProviderProps) {
-  const [theme, setThemeState] = useState<Theme>('system')
+  // Light theme is always the default
+  const [theme, setThemeState] = useState<Theme>('light')
   const [actualTheme, setActualTheme] = useState<'light' | 'dark'>('light')
 
   useEffect(() => {
-    // Load theme from localStorage on mount
-    const savedTheme = localStorage.getItem('servio_theme') as Theme
-    if (savedTheme && ['light', 'dark', 'system'].includes(savedTheme)) {
-      setThemeState(savedTheme)
-    }
+    // Always default to light theme - don't load from localStorage
+    // Light theme should be the default at all times
+    setThemeState('light')
+    setActualTheme('light')
   }, [])
 
   useEffect(() => {
@@ -45,8 +45,13 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
     setActualTheme(effectiveTheme)
     root.classList.add(effectiveTheme)
 
-    // Save to localStorage
-    localStorage.setItem('servio_theme', theme)
+    // Only save to localStorage if user explicitly changes theme
+    // Default is always light, so we don't save 'light' to localStorage
+    if (theme !== 'light') {
+      localStorage.setItem('servio_theme', theme)
+    } else {
+      localStorage.removeItem('servio_theme')
+    }
   }, [theme])
 
   // Listen for system theme changes

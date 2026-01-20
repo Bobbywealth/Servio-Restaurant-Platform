@@ -196,10 +196,10 @@ const DashboardIndex = memo(() => {
         <div className="space-y-6">
           {/* Welcome Section */}
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+            <h1 className="text-3xl font-bold text-gray-900">
               Welcome back, {user?.name || 'Team'}!
             </h1>
-            <p className="mt-2 text-gray-600 dark:text-white/70">
+            <p className="mt-2 text-gray-600">
               Here&apos;s what&apos;s happening with your restaurant today.
             </p>
           </div>
@@ -284,7 +284,7 @@ const DashboardIndex = memo(() => {
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.6 }}
             >
-              <h3 className="text-lg font-semibold text-surface-900 dark:text-gray-900 mb-4 flex items-center">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
                 <ShoppingCart className="w-5 h-5 mr-2 text-primary-500" />
                 Recent Orders
               </h3>
@@ -325,7 +325,7 @@ const DashboardIndex = memo(() => {
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.6 }}
             >
-              <h3 className="text-lg font-semibold text-surface-900 dark:text-gray-900 mb-4 flex items-center">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
                 <Sparkles className="w-5 h-5 mr-2 text-servio-orange-500" />
                 Quick Actions
               </h3>

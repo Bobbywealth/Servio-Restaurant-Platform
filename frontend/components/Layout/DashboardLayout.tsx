@@ -176,27 +176,18 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       </AnimatePresence>
 
       <motion.div
-        className={`fixed inset-y-0 left-0 z-50 w-72 bg-white dark:bg-surface-900 transform transition-transform duration-300 ease-out lg:translate-x-0 border-r border-surface-200 dark:border-surface-800 ${
+        className={`fixed inset-y-0 left-0 z-50 w-72 bg-gray-100 dark:bg-[#0A0A0B] transform transition-transform duration-300 ease-out lg:translate-x-0 border-r border-gray-200 dark:border-white/10 ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
         initial={false}
       >
-        <div className="flex items-center justify-between h-16 px-6 border-b border-surface-200 dark:border-surface-800">
+        <div className="flex items-center justify-between h-16 px-6 border-b border-gray-200 dark:border-white/10">
           <motion.div className="flex items-center" whileHover={{ scale: 1.02 }}>
             <Link href="/dashboard" className="flex items-center">
-              <img 
-                src="/images/servio_logo_transparent_tight.png" 
-                alt="Servio Logo" 
-                className="h-8 w-auto dark:brightness-0 dark:invert" 
-              />
-              <motion.div
-                className="ml-2 px-2 py-1 bg-servio-orange-100 dark:bg-servio-orange-900/30 text-servio-orange-700 dark:text-servio-orange-300 text-[10px] leading-none font-bold rounded-full"
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{ delay: 0.2 }}
-              >
-                AI
-              </motion.div>
+              <div className="w-8 h-8 rounded-lg bg-[#14b8a6] flex items-center justify-center">
+                <span className="text-white font-bold text-xl">S</span>
+              </div>
+              <span className="ml-2 text-xl font-semibold tracking-tight text-gray-900 dark:text-white">servio</span>
             </Link>
           </motion.div>
           <button onClick={closeSidebar} className="lg:hidden btn-icon">
@@ -219,10 +210,10 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                   onClick={closeSidebar}
                   className={`
                     group relative flex items-center px-4 py-3 text-sm font-medium rounded-xl
-                    transition-all duration-200 hover:bg-surface-100 dark:hover:bg-surface-800
+                    transition-all duration-200 hover:bg-gray-200 dark:hover:bg-surface-800
                     ${isActive
-                      ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300'
-                      : 'text-surface-600 dark:text-surface-400 hover:text-surface-900 dark:hover:text-surface-200'
+                      ? 'bg-white text-primary-700 dark:bg-primary-900/30 dark:text-primary-300'
+                      : 'text-gray-700 dark:text-surface-400 hover:text-gray-900 dark:hover:text-surface-200'
                     }
                   `}
                 >
@@ -230,7 +221,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                     flex items-center justify-center w-10 h-10 rounded-lg mr-3 transition-colors
                     ${isActive
                       ? 'bg-primary-100 dark:bg-primary-800/50'
-                      : 'bg-surface-100 dark:bg-surface-800 group-hover:bg-surface-200 dark:group-hover:bg-surface-700'
+                      : 'bg-white dark:bg-surface-800 group-hover:bg-gray-200 dark:group-hover:bg-surface-700'
                     }
                   `}>
                     <item.icon className={`w-5 h-5 ${isActive ? item.color : 'text-surface-500 dark:text-surface-400'}`} />
@@ -248,7 +239,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                         </motion.div>
                       )}
                     </div>
-                    <p className="text-2xs text-surface-500 dark:text-surface-400 truncate">{item.description}</p>
+                    <p className="text-2xs text-gray-500 dark:text-surface-400 truncate">{item.description}</p>
                   </div>
                   {isActive && (
                     <motion.div
@@ -275,7 +266,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                 <button onClick={() => setSidebarOpen(true)} className="lg:hidden btn-icon">
                   <Menu className="w-6 h-6" />
                 </button>
-                <div className="text-sm font-semibold text-gray-900 dark:text-surface-100">{pageTitle}</div>
+                <div className="text-sm font-semibold text-gray-900 dark:text-white">{pageTitle}</div>
               </div>
               <div className="flex items-center space-x-3">
                 <NotificationCenter />
@@ -296,7 +287,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       </div>
 
       {/* Mobile bottom navigation */}
-      <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-[#0A0A0B]/95 border-t border-surface-200 dark:border-white/10 backdrop-blur-md lg:hidden pb-safe-bottom">
+      <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-[#0A0A0B]/95 dark:bg-[#0A0A0B]/95 border-t border-gray-200 dark:border-white/10 backdrop-blur-md lg:hidden pb-safe-bottom">
         <div className="grid grid-cols-5 px-2 py-2">
           {mobileNav.map((item) => {
             const isActive = currentPath === normalizePath(item.href);
