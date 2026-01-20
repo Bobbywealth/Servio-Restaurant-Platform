@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react'
+import React, { useState, useMemo, useEffect, useCallback } from 'react'
 import Head from 'next/head'
 import { motion } from 'framer-motion'
 import dynamic from 'next/dynamic'
@@ -40,7 +40,7 @@ export default function InventoryPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setIsLoading(true)
     setError(null)
     try {
@@ -56,11 +56,11 @@ export default function InventoryPage() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [searchTerm, selectedCategory])
 
   useEffect(() => {
     fetchData()
-  }, [searchTerm, selectedCategory])
+  }, [fetchData])
 
   const categories = useMemo(() => {
     const set = new Set<string>()
@@ -137,7 +137,7 @@ export default function InventoryPage() {
                     Total Items
                   </p>
                   <p className="text-2xl font-bold text-surface-900 dark:text-surface-100">
-                    {inventoryItems.length}
+                    {items.length}
                   </p>
                 </div>
               </div>
@@ -179,7 +179,7 @@ export default function InventoryPage() {
                     Well Stocked
                   </p>
                   <p className="text-2xl font-bold text-surface-900 dark:text-surface-100">
-                    {inventoryItems.length - lowStockCount}
+                    {items.length - lowStockCount}
                   </p>
                 </div>
               </div>
