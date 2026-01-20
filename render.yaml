@@ -22,7 +22,7 @@ services:
       - key: FRONTEND_URL
         fromService:
           type: web
-          name: servio-web
+          name: servio-app
           property: host
       - key: OPENAI_API_KEY
         sync: false
@@ -77,7 +77,7 @@ services:
       - key: NEXT_PUBLIC_API_URL
         fromService:
           type: web
-          name: servio-api
+          name: servio-backend
           property: host
 
 databases:
