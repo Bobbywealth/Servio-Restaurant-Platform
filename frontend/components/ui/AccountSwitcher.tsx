@@ -19,6 +19,7 @@ interface AccountSwitcherProps {
 
 const roleIcons = {
   admin: Shield,
+  'platform-admin': Shield,
   owner: Crown, 
   manager: Settings,
   staff: User
@@ -26,6 +27,7 @@ const roleIcons = {
 
 const roleColors = {
   admin: 'text-purple-600 bg-purple-100 dark:text-purple-400 dark:bg-purple-900/30',
+  'platform-admin': 'text-red-600 bg-red-100 dark:text-red-400 dark:bg-red-900/30',
   owner: 'text-yellow-600 bg-yellow-100 dark:text-yellow-400 dark:bg-yellow-900/30',
   manager: 'text-blue-600 bg-blue-100 dark:text-blue-400 dark:bg-blue-900/30',
   staff: 'text-green-600 bg-green-100 dark:text-green-400 dark:bg-green-900/30'
@@ -33,6 +35,7 @@ const roleColors = {
 
 const roleNames = {
   admin: 'System Admin',
+  'platform-admin': 'Platform Admin',
   owner: 'Restaurant Owner',
   manager: 'Restaurant Manager', 
   staff: 'Restaurant Staff'
