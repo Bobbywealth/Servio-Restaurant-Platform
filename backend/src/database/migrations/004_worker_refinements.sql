@@ -36,3 +36,6 @@ CREATE INDEX IF NOT EXISTS idx_sync_jobs_entity ON sync_jobs (entity_type, entit
 
 -- Update audit_logs to include metadata if not present
 ALTER TABLE audit_logs ADD COLUMN metadata TEXT DEFAULT '{}';
+
+-- Add type column to tasks table for task categorization
+ALTER TABLE tasks ADD COLUMN type TEXT DEFAULT 'one_time' CHECK (type IN ('daily', 'weekly', 'one_time', 'recurring'));
