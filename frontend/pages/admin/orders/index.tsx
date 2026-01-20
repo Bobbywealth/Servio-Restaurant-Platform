@@ -1,0 +1,146 @@
+import React, { useEffect, useState } from 'react'
+import AdminLayout from '../../../components/Layout/AdminLayout'
+import { api } from '../../../lib/api'
+import { useSocket } from '../../../lib/socket'
+import Link from 'next/link'
+import { ClipboardList, Clock, CheckCircle, XCircle } from 'lucide-react'
+
+interface Order {
+  id: string
+  status: string
+  customer_name?: string
+  customer_phone?: string
+  total_amount?: number
+  created_at: string
+  source?: string
+}
+
+export default function AdminOrdersPage() {
+  const [orders, setOrders] = useState<Order[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const socket = useSocket()
+
+  const fetchOrders = async () => {
+    try {
+      const res = await api.get('/api/orders')
+      setOrders(res.data.data.orders)
+    } catch (error) {
+      console.error('Failed to fetch orders:', error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchOrders()
+  }, [])
+
+  useEffect(() => {
+    if (!socket) return
+
+    socket.on('notifications.new', (data) => {
+      if (data.notification.type === 'order.created_vapi' || data.notification.type === 'order.created_web') {
+        fetchOrders()
+      }
+    })
+
+    return () => {
+      socket.off('notifications.new')
+    }
+  }, [socket])
+
+  const pendingOrders = orders.filter(o => o.status === 'pending')
+  const otherOrders = orders.filter(o => o.status !== 'pending')
+
+  return (
+    <AdminLayout title="Order Management">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
+        {/* Pending Orders Section */}
+        <section>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center">
+              <Clock className="w-5 h-5 mr-2 text-yellow-500" />
+              Pending Orders
+              {pendingOrders.length > 0 && (
+                <span className="ml-3 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                  {pendingOrders.length}
+                </span>
+              )}
+            </h2>
+          </div>
+
+          <div className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden">
+            {pendingOrders.length === 0 ? (
+              <div className="p-8 text-center text-gray-500">No pending orders</div>
+            ) : (
+              <ul className="divide-y divide-gray-200 dark:divide-gray-700">
+                {pendingOrders.map((order) => (
+                  <li key={order.id}>
+                    <Link href={`/admin/orders/${order.id}`} className="block hover:bg-gray-50 dark:hover:bg-gray-700 p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-red-600 truncate">{order.customer_name || 'Anonymous'}</p>
+                          <p className="text-sm text-gray-500">{order.customer_phone}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm font-bold text-gray-900 dark:text-white">${(order.total_amount || 0).toFixed(2)}</p>
+                          <p className="text-xs text-gray-400">{new Date(order.created_at).toLocaleTimeString()}</p>
+                        </div>
+                      </div>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </section>
+
+        {/* Recent Orders Section */}
+        <section>
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4 flex items-center">
+            <ClipboardList className="w-5 h-5 mr-2 text-gray-400" />
+            Recent Activity
+          </h2>
+          <div className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden">
+            <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+              <thead className="bg-gray-50 dark:bg-gray-900/50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time</th>
+                </tr>
+              </thead>
+              <ul className="divide-y divide-gray-200 dark:divide-gray-700">
+                {otherOrders.map((order) => (
+                  <tr key={order.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <Link href={`/admin/orders/${order.id}`} className="text-sm font-medium text-gray-900 dark:text-white">
+                        {order.customer_name || 'Order'}
+                      </Link>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                        order.status === 'accepted' ? 'bg-green-100 text-green-800' :
+                        order.status === 'cancelled' ? 'bg-red-100 text-red-800' :
+                        'bg-gray-100 text-gray-800'
+                      }`}>
+                        {order.status}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                      ${(order.total_amount || 0).toFixed(2)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                      {new Date(order.created_at).toLocaleDateString()}
+                    </td>
+                  </tr>
+                ))}
+              </ul>
+            </table>
+          </div>
+        </section>
+      </div>
+    </AdminLayout>
+  )
+}

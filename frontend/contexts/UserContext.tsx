@@ -41,6 +41,12 @@ export function UserProvider({ children }: UserProviderProps) {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [availableAccounts, setAvailableAccounts] = useState<Record<string, AccountOption[]>>({})
+  
+  const clearAuthStorage = () => {
+    localStorage.removeItem('servio_user')
+    localStorage.removeItem('servio_access_token')
+    localStorage.removeItem('servio_refresh_token')
+  }
 
   useEffect(() => {
     const loadUser = async () => {
@@ -49,8 +55,11 @@ export function UserProvider({ children }: UserProviderProps) {
         const accessToken = localStorage.getItem('servio_access_token')
         const refreshToken = localStorage.getItem('servio_refresh_token')
 
-        if (savedUser) {
+        if (savedUser && accessToken) {
           setUser(JSON.parse(savedUser))
+        } else if (savedUser && !accessToken && !refreshToken) {
+          setUser(null)
+          clearAuthStorage()
         }
 
         if (accessToken) {
@@ -83,9 +92,12 @@ export function UserProvider({ children }: UserProviderProps) {
               return
             }
           } catch {
-            // fall through to demo login
+            // fall through to clear auth
           }
         }
+
+        setUser(null)
+        clearAuthStorage()
 
         // Development convenience: auto-login disabled for testing
         // const demoEmail = process.env.NEXT_PUBLIC_DEMO_EMAIL || 'admin@servio.com'
@@ -103,8 +115,13 @@ export function UserProvider({ children }: UserProviderProps) {
 
   const login = async (email: string, password: string) => {
     setIsLoading(true)
+    
+    // Clear any existing stale tokens before login
+    clearAuthStorage()
+    
     try {
-      const resp = await api.post('/api/auth/login', { email, password })
+      const normalizedEmail = email.trim().toLowerCase()
+      const resp = await api.post('/api/auth/login', { email: normalizedEmail, password })
       const userData = resp.data?.data?.user as User
       const accessToken = resp.data?.data?.accessToken as string
       const refreshToken = resp.data?.data?.refreshToken as string

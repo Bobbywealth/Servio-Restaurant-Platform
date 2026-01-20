@@ -195,7 +195,8 @@ router.post('/items', upload.array('images', 5), asyncHandler(async (req: Reques
     allergens,
     preparationTime,
     nutritionalInfo,
-    sortOrder = 0
+    sortOrder = 0,
+    isAvailable = true
   } = req.body;
 
   const db = DatabaseService.getInstance().getDatabase();
@@ -232,7 +233,7 @@ router.post('/items', upload.array('images', 5), asyncHandler(async (req: Reques
     INSERT INTO menu_items (
       id, restaurant_id, category_id, name, description, price, cost,
       images, allergens, preparation_time, nutritional_info, sort_order, is_available
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `, [
     itemId,
     restaurantId,
@@ -245,7 +246,8 @@ router.post('/items', upload.array('images', 5), asyncHandler(async (req: Reques
     allergens ? JSON.stringify(allergens) : '[]',
     preparationTime || 0,
     nutritionalInfo ? JSON.stringify(nutritionalInfo) : null,
-    sortOrder
+    sortOrder,
+    isAvailable ? 1 : 0
   ]);
 
   const newItem = await db.get(`
@@ -472,23 +474,33 @@ router.get('/items/full', asyncHandler(async (req: Request, res: Response) => {
 router.get('/items/search', asyncHandler(async (req: Request, res: Response) => {
   const { q, category, available } = req.query;
   const db = DatabaseService.getInstance().getDatabase();
+  const restaurantId = req.user?.restaurantId;
 
-  let query = 'SELECT * FROM menu_items';
+  let query = `
+    SELECT mi.*, mc.name as category_name
+    FROM menu_items mi
+    LEFT JOIN menu_categories mc ON mi.category_id = mc.id
+  `;
   const params: any[] = [];
   const conditions: string[] = [];
 
+  if (restaurantId) {
+    conditions.push('mi.restaurant_id = ?');
+    params.push(restaurantId);
+  }
+
   if (q) {
-    conditions.push('name LIKE ?');
+    conditions.push('mi.name LIKE ?');
     params.push(`%${q}%`);
   }
 
   if (category) {
-    conditions.push('category = ?');
-    params.push(category);
+    conditions.push('(mc.name LIKE ? OR mc.id = ?)');
+    params.push(`%${category}%`, category);
   }
 
   if (available !== undefined) {
-    conditions.push('is_available = ?');
+    conditions.push('mi.is_available = ?');
     params.push(available === 'true' ? 1 : 0);
   }
 
@@ -496,7 +508,7 @@ router.get('/items/search', asyncHandler(async (req: Request, res: Response) => 
     query += ' WHERE ' + conditions.join(' AND ');
   }
 
-  query += ' ORDER BY name';
+  query += ' ORDER BY mi.name';
 
   const items = await db.all(query, params);
 
@@ -697,17 +709,24 @@ router.get('/unavailable', asyncHandler(async (req: Request, res: Response) => {
  */
 router.get('/categories', asyncHandler(async (req: Request, res: Response) => {
   const db = DatabaseService.getInstance().getDatabase();
+  const restaurantId = req.user?.restaurantId;
 
   const categories = await db.all(`
     SELECT
-      category,
-      COUNT(*) as total_items,
-      COUNT(CASE WHEN is_available = 1 THEN 1 END) as available_items,
-      COUNT(CASE WHEN is_available = 0 THEN 1 END) as unavailable_items
-    FROM menu_items
-    GROUP BY category
-    ORDER BY category
-  `);
+      mc.id,
+      mc.name,
+      mc.description,
+      mc.sort_order,
+      mc.is_active,
+      COUNT(mi.id) as total_items,
+      COUNT(CASE WHEN mi.is_available = 1 THEN 1 END) as available_items,
+      COUNT(CASE WHEN mi.is_available = 0 THEN 1 END) as unavailable_items
+    FROM menu_categories mc
+    LEFT JOIN menu_items mi ON mc.id = mi.category_id
+    WHERE mc.restaurant_id = ?
+    GROUP BY mc.id
+    ORDER BY mc.sort_order ASC, mc.name ASC
+  `, [restaurantId]);
 
   res.json({
     success: true,

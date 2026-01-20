@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import { useUser } from '../../contexts/UserContext';
+import { api } from '../../lib/api';
 import toast from 'react-hot-toast';
 
 interface MenuCategory {
@@ -47,6 +48,7 @@ interface MenuItem {
   price: number;
   cost?: number;
   image?: string;
+  images?: string[];
   is_available: boolean;
   is_featured: boolean;
   preparation_time?: number;
@@ -71,6 +73,22 @@ const MenuManagement: React.FC = () => {
   const [showPreview, setShowPreview] = useState(false);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
   const [editingCategory, setEditingCategory] = useState<MenuCategory | null>(null);
+  const [showAddItemModal, setShowAddItemModal] = useState(false);
+  const [showAddCategoryModal, setShowAddCategoryModal] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [newCategory, setNewCategory] = useState({
+    name: '',
+    description: '',
+    sortOrder: 0
+  });
+  const [newItem, setNewItem] = useState({
+    name: '',
+    description: '',
+    price: '',
+    categoryId: '',
+    preparationTime: '',
+    isAvailable: true
+  });
 
   // Load menu data
   const loadMenuData = useCallback(async () => {
@@ -78,20 +96,65 @@ const MenuManagement: React.FC = () => {
 
     try {
       setLoading(true);
-      const response = await fetch(`/api/menu/categories?restaurant_id=${user.id}`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('servio_access_token')}`
-        }
+      const [categoriesResponse, itemsResponse] = await Promise.all([
+        api.get('/api/menu/categories/all'),
+        api.get('/api/menu/items/full')
+      ]);
+
+      const categoryRows = categoriesResponse.data?.data || [];
+      const itemGroups = itemsResponse.data?.data?.categories || [];
+
+      const categoryMap = new Map<string, CategoryWithItems>();
+      categoryRows.forEach((category: MenuCategory) => {
+        categoryMap.set(category.id, {
+          ...category,
+          items: []
+        });
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        setCategories(data.categories || []);
-        // Auto-expand all categories initially
-        setExpandedCategories(new Set(data.categories?.map((cat: MenuCategory) => cat.id) || []));
-      } else {
-        toast.error('Failed to load menu data');
-      }
+      itemGroups.forEach((group: any) => {
+        const existing = categoryMap.get(group.category_id) || {
+          id: group.category_id,
+          name: group.category_name || 'Uncategorized',
+          description: '',
+          image: undefined,
+          sort_order: group.category_sort_order || 0,
+          is_active: true,
+          item_count: 0,
+          created_at: new Date().toISOString(),
+          items: []
+        };
+
+        const items = (group.items || []).map((item: any) => ({
+          id: item.id,
+          restaurant_id: item.restaurant_id,
+          category_id: item.category_id,
+          name: item.name,
+          description: item.description || '',
+          price: Number(item.price || 0),
+          cost: item.cost ? Number(item.cost) : undefined,
+          images: Array.isArray(item.images) ? item.images : [],
+          image: Array.isArray(item.images) ? item.images[0] : undefined,
+          is_available: Boolean(item.is_available),
+          is_featured: Boolean(item.is_featured),
+          preparation_time: item.preparation_time ? Number(item.preparation_time) : undefined,
+          allergens: Array.isArray(item.allergens) ? item.allergens : [],
+          dietary_info: Array.isArray(item.dietary_info) ? item.dietary_info : [],
+          sort_order: Number(item.sort_order || 0),
+          created_at: item.created_at,
+          updated_at: item.updated_at
+        }));
+
+        existing.items = items;
+        existing.item_count = items.length;
+        categoryMap.set(existing.id, existing);
+      });
+
+      const mergedCategories = Array.from(categoryMap.values())
+        .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name));
+
+      setCategories(mergedCategories);
+      setExpandedCategories(new Set(mergedCategories.map((cat) => cat.id)));
     } catch (error) {
       console.error('Error loading menu data:', error);
       toast.error('Failed to load menu data');
@@ -103,6 +166,83 @@ const MenuManagement: React.FC = () => {
   useEffect(() => {
     loadMenuData();
   }, [loadMenuData]);
+
+  const openAddCategoryModal = () => {
+    setNewCategory({ name: '', description: '', sortOrder: 0 });
+    setShowAddCategoryModal(true);
+  };
+
+  const openAddItemModal = (categoryId?: string) => {
+    setNewItem({
+      name: '',
+      description: '',
+      price: '',
+      categoryId: categoryId || (categories[0]?.id ?? ''),
+      preparationTime: '',
+      isAvailable: true
+    });
+    setShowAddItemModal(true);
+  };
+
+  const handleCreateCategory = async () => {
+    if (!newCategory.name.trim()) {
+      toast.error('Category name is required');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await api.post('/api/menu/categories', {
+        name: newCategory.name.trim(),
+        description: newCategory.description.trim(),
+        sortOrder: Number(newCategory.sortOrder || 0)
+      });
+      toast.success('Category created');
+      setShowAddCategoryModal(false);
+      await loadMenuData();
+    } catch (error) {
+      console.error('Failed to create category:', error);
+      toast.error('Failed to create category');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleCreateItem = async () => {
+    if (!newItem.name.trim()) {
+      toast.error('Item name is required');
+      return;
+    }
+    if (!newItem.categoryId) {
+      toast.error('Category is required');
+      return;
+    }
+    if (!newItem.price || Number(newItem.price) <= 0) {
+      toast.error('Price must be greater than 0');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await api.post('/api/menu/items', {
+        name: newItem.name.trim(),
+        description: newItem.description.trim(),
+        price: Number(newItem.price),
+        categoryId: newItem.categoryId,
+        preparationTime: newItem.preparationTime ? Number(newItem.preparationTime) : 0,
+        sortOrder: 0,
+        isAvailable: newItem.isAvailable
+      });
+      toast.success('Menu item created');
+      setShowAddItemModal(false);
+      await loadMenuData();
+    } catch (error) {
+      console.error('Failed to create menu item:', error);
+      toast.error('Failed to create menu item');
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const toggleCategory = (categoryId: string) => {
     setExpandedCategories(prev => {
@@ -162,12 +302,18 @@ const MenuManagement: React.FC = () => {
                   Preview Menu
                 </button>
                 
-                <button className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-colors">
+                <button
+                  onClick={openAddCategoryModal}
+                  className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-colors"
+                >
                   <Settings className="w-4 h-4" />
-                  Menu Settings
+                  Add Category
                 </button>
                 
-                <button className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors">
+                <button
+                  onClick={() => openAddItemModal()}
+                  className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
+                >
                   <Plus className="w-4 h-4" />
                   Add Item
                 </button>
@@ -224,6 +370,7 @@ const MenuManagement: React.FC = () => {
                   isExpanded={expandedCategories.has(category.id)}
                   onToggle={() => toggleCategory(category.id)}
                   searchTerm={searchTerm}
+                  onAddItem={openAddItemModal}
                 />
               ))}
               
@@ -247,6 +394,185 @@ const MenuManagement: React.FC = () => {
           />
         )}
       </AnimatePresence>
+
+      <AnimatePresence>
+        {showAddCategoryModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+            onClick={() => setShowAddCategoryModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white dark:bg-gray-800 rounded-lg max-w-lg w-full p-6"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white">Add Category</h2>
+              <div className="mt-4 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Name</label>
+                  <input
+                    type="text"
+                    value={newCategory.name}
+                    onChange={(e) => setNewCategory((prev) => ({ ...prev, name: e.target.value }))}
+                    className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                    placeholder="e.g. Appetizers"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Description</label>
+                  <textarea
+                    value={newCategory.description}
+                    onChange={(e) => setNewCategory((prev) => ({ ...prev, description: e.target.value }))}
+                    className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                    rows={3}
+                    placeholder="Short description"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Sort order</label>
+                  <input
+                    type="number"
+                    value={newCategory.sortOrder}
+                    onChange={(e) => setNewCategory((prev) => ({ ...prev, sortOrder: Number(e.target.value) }))}
+                    className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  />
+                </div>
+              </div>
+              <div className="mt-6 flex justify-end gap-3">
+                <button
+                  onClick={() => setShowAddCategoryModal(false)}
+                  className="px-4 py-2 rounded-lg border border-gray-200 text-gray-600 hover:text-gray-900 dark:border-gray-600 dark:text-gray-300"
+                  disabled={isSaving}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleCreateCategory}
+                  className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white"
+                  disabled={isSaving}
+                >
+                  {isSaving ? 'Saving...' : 'Create'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showAddItemModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+            onClick={() => setShowAddItemModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white dark:bg-gray-800 rounded-lg max-w-lg w-full p-6"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white">Add Menu Item</h2>
+              <div className="mt-4 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Name</label>
+                  <input
+                    type="text"
+                    value={newItem.name}
+                    onChange={(e) => setNewItem((prev) => ({ ...prev, name: e.target.value }))}
+                    className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                    placeholder="e.g. Jerk Chicken"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Description</label>
+                  <textarea
+                    value={newItem.description}
+                    onChange={(e) => setNewItem((prev) => ({ ...prev, description: e.target.value }))}
+                    className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                    rows={3}
+                    placeholder="Short description"
+                  />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Price</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={newItem.price}
+                      onChange={(e) => setNewItem((prev) => ({ ...prev, price: e.target.value }))}
+                      className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                      placeholder="0.00"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Prep time (mins)</label>
+                    <input
+                      type="number"
+                      value={newItem.preparationTime}
+                      onChange={(e) => setNewItem((prev) => ({ ...prev, preparationTime: e.target.value }))}
+                      className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                      placeholder="15"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Category</label>
+                  <select
+                    value={newItem.categoryId}
+                    onChange={(e) => setNewItem((prev) => ({ ...prev, categoryId: e.target.value }))}
+                    className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  >
+                    <option value="">Select category</option>
+                    {categories.map((category) => (
+                      <option key={category.id} value={category.id}>
+                        {category.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    id="item-available"
+                    type="checkbox"
+                    checked={newItem.isAvailable}
+                    onChange={(e) => setNewItem((prev) => ({ ...prev, isAvailable: e.target.checked }))}
+                    className="h-4 w-4 text-red-600 border-gray-300 rounded"
+                  />
+                  <label htmlFor="item-available" className="text-sm text-gray-700 dark:text-gray-300">
+                    Item is available
+                  </label>
+                </div>
+              </div>
+              <div className="mt-6 flex justify-end gap-3">
+                <button
+                  onClick={() => setShowAddItemModal(false)}
+                  className="px-4 py-2 rounded-lg border border-gray-200 text-gray-600 hover:text-gray-900 dark:border-gray-600 dark:text-gray-300"
+                  disabled={isSaving}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleCreateItem}
+                  className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white"
+                  disabled={isSaving}
+                >
+                  {isSaving ? 'Saving...' : 'Create'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </DashboardLayout>
   );
 };
@@ -257,13 +583,15 @@ interface CategorySectionProps {
   isExpanded: boolean;
   onToggle: () => void;
   searchTerm: string;
+  onAddItem: (categoryId: string) => void;
 }
 
-const CategorySection: React.FC<CategorySectionProps> = ({ 
-  category, 
-  isExpanded, 
+const CategorySection: React.FC<CategorySectionProps> = ({
+  category,
+  isExpanded,
   onToggle,
-  searchTerm 
+  searchTerm,
+  onAddItem
 }) => {
   const filteredItems = category.items?.filter(item =>
     searchTerm === '' ||
@@ -338,7 +666,10 @@ const CategorySection: React.FC<CategorySectionProps> = ({
               ) : (
                 <div className="text-center py-8">
                   <p className="text-gray-500">No items in this category</p>
-                  <button className="text-red-600 hover:text-red-700 text-sm mt-1">
+                  <button
+                    onClick={() => onAddItem(category.id)}
+                    className="text-red-600 hover:text-red-700 text-sm mt-1"
+                  >
                     Add your first item
                   </button>
                 </div>

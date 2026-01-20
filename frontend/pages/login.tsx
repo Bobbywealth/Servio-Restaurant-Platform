@@ -24,7 +24,8 @@ export default function LoginPage() {
       await login(email, password);
       router.push('/dashboard');
     } catch (err: any) {
-      setError(err.message || 'Failed to login. Please check your credentials.');
+      const message = err.response?.data?.error?.message || err.message || 'Failed to login. Please check your credentials.';
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -40,9 +41,13 @@ export default function LoginPage() {
 
       {/* Dynamic Background */}
       <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-[-10%] right-[-10%] w-[60%] h-[60%] bg-primary-50 rounded-full blur-[120px]" />
-        <div className="absolute bottom-[-10%] left-[-10%] w-[50%] h-[50%] bg-surface-100 rounded-full blur-[100px]" />
+        <div className="absolute top-[-10%] right-[-10%] w-[60%] h-[60%] bg-primary-100 rounded-full blur-[140px] opacity-70" />
+        <div className="absolute bottom-[-10%] left-[-10%] w-[50%] h-[50%] bg-emerald-100 rounded-full blur-[120px] opacity-70" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(20,184,166,0.08),_transparent_55%)]" />
       </div>
+
+      {/* Subtle grid texture */}
+      <div className="absolute inset-0 z-0 pointer-events-none opacity-[0.08] bg-[linear-gradient(to_right,#0f172a_1px,transparent_1px),linear-gradient(to_bottom,#0f172a_1px,transparent_1px)] bg-[size:22px_22px]" />
 
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -50,14 +55,14 @@ export default function LoginPage() {
         transition={{ duration: 0.5 }}
         className="w-full max-w-md z-10"
       >
-        <div className="bg-white rounded-2xl shadow-sm border border-surface-200 p-8 md:p-10">
+        <div className="bg-white/95 rounded-2xl shadow-[0_25px_60px_-35px_rgba(15,23,42,0.55)] border border-surface-200 p-8 md:p-10 backdrop-blur">
           <div className="flex flex-col items-center mb-10">
             <motion.div
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               className="mb-6 relative"
             >
-              <div className="bg-primary-600 p-4 rounded-2xl">
+              <div className="bg-gradient-to-br from-primary-500 to-emerald-500 p-4 rounded-2xl shadow-[0_10px_30px_-12px_rgba(20,184,166,0.7)]">
                 <Bot className="w-10 h-10 text-white" />
               </div>
               <motion.div
@@ -75,6 +80,10 @@ export default function LoginPage() {
             <p className="mt-2 text-gray-500 font-medium">
               Restaurant OS v2.0
             </p>
+            <div className="mt-5 flex items-center gap-2 text-[11px] text-gray-500 bg-surface-50 border border-surface-200 px-3 py-1.5 rounded-full">
+              <span className="inline-flex w-2 h-2 rounded-full bg-emerald-500" />
+              Live dashboards, voice ops, inventory insights
+            </div>
           </div>
 
           <form className="space-y-5" onSubmit={handleSubmit}>
@@ -137,7 +146,7 @@ export default function LoginPage() {
                 whileTap={{ scale: 0.98 }}
                 type="submit"
                 disabled={loading}
-                className="w-full bg-primary-600 hover:bg-primary-700 text-white rounded-xl py-3 font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-50 group"
+                className="w-full bg-gradient-to-r from-primary-600 to-emerald-500 hover:from-primary-700 hover:to-emerald-600 text-white rounded-xl py-3 font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-50 group shadow-[0_12px_30px_-16px_rgba(20,184,166,0.7)]"
               >
                 {loading ? (
                   <Loader2 className="w-5 h-5 animate-spin" />
@@ -161,14 +170,14 @@ export default function LoginPage() {
             <div className="grid grid-cols-2 gap-3">
               <button 
                 onClick={() => { setEmail('manager@demo.servio'); setPassword('password'); }}
-                className="bg-surface-50 hover:bg-surface-100 p-3 rounded-xl text-left transition-colors group border border-surface-200"
+                className="bg-surface-50 hover:bg-white p-3 rounded-xl text-left transition-all group border border-surface-200 hover:shadow-[0_10px_24px_-18px_rgba(15,23,42,0.5)]"
               >
                 <p className="text-[10px] font-bold text-gray-400 uppercase mb-1 group-hover:text-primary-600 transition-colors">Manager</p>
                 <p className="text-xs font-bold text-gray-700 italic">One-tap fill</p>
               </button>
               <button 
                 onClick={() => { setEmail('staff@demo.servio'); setPassword('password'); }}
-                className="bg-surface-50 hover:bg-surface-100 p-3 rounded-xl text-left transition-colors group border border-surface-200"
+                className="bg-surface-50 hover:bg-white p-3 rounded-xl text-left transition-all group border border-surface-200 hover:shadow-[0_10px_24px_-18px_rgba(15,23,42,0.5)]"
               >
                 <p className="text-[10px] font-bold text-gray-400 uppercase mb-1 group-hover:text-primary-600 transition-colors">Staff</p>
                 <p className="text-xs font-bold text-gray-700 italic">One-tap fill</p>

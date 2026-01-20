@@ -54,7 +54,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           animate={{ scale: [1, 1.1, 1] }}
           transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
         >
-          <img src="/images/servio_icon_tight.png" alt="Servio" className="h-16 w-16" />
+          <img src="/images/servio_logo_transparent_tight.png" alt="Servio Logo" className="h-16 w-auto" />
         </motion.div>
         <motion.p 
           className="mt-4 text-surface-500 font-medium"

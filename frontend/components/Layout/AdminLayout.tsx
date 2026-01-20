@@ -10,7 +10,7 @@ import {
   LogOut,
   Menu,
   X,
-  Shield
+  ClipboardList
 } from 'lucide-react'
 
 interface AdminLayoutProps {
@@ -30,6 +30,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
   const navigation = [
     { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
     { name: 'Restaurants', href: '/admin/restaurants', icon: Building2 },
+    { name: 'Orders', href: '/admin/orders', icon: ClipboardList },
   ]
 
   const handleLogout = () => {
@@ -63,7 +64,11 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
             {/* Logo */}
             <div className="flex h-16 items-center justify-between px-6 border-b border-gray-200 dark:border-gray-700">
               <div className="flex items-center space-x-3">
-                <Shield className="h-8 w-8 text-red-600" />
+                <img
+                  src="/images/servio_logo_transparent_tight.png"
+                  alt="Servio Logo"
+                  className="h-8 w-auto"
+                />
                 <div>
                   <h1 className="text-xl font-bold text-gray-900 dark:text-white">Servio Admin</h1>
                   <p className="text-xs text-gray-500 dark:text-gray-400">Platform Control</p>
@@ -108,9 +113,13 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-3">
                   <div className="flex-shrink-0">
-                    <div className="h-8 w-8 rounded-full bg-red-100 dark:bg-red-900/20 flex items-center justify-center">
-                      <Shield className="h-4 w-4 text-red-600" />
-                    </div>
+                  <div className="h-8 w-8 rounded-full bg-red-100 dark:bg-red-900/20 flex items-center justify-center">
+                    <img
+                      src="/images/servio_logo_transparent_tight.png"
+                      alt="Servio Logo"
+                      className="h-4 w-auto"
+                    />
+                  </div>
                   </div>
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-gray-900 dark:text-white">Platform Admin</p>

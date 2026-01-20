@@ -1,5 +1,6 @@
 import { AssistantService } from './AssistantService';
 import { DatabaseService } from './DatabaseService';
+import { VoiceOrderingService } from './VoiceOrderingService';
 import { logger } from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
 import { eventBus } from '../events/bus';
@@ -116,11 +117,20 @@ export class VapiService {
 
       // Handle phone-specific functions
       switch (name) {
-        case 'place_order':
-          result = await this.handlePlaceOrder(parameters, userId);
+        case 'getStoreStatus':
+          result = VoiceOrderingService.getInstance().getStoreStatus();
           break;
-        case 'get_menu_info':
-          result = await this.handleGetMenuInfo(parameters, userId);
+        case 'searchMenu':
+          result = VoiceOrderingService.getInstance().searchMenu(parameters.q || '');
+          break;
+        case 'getMenuItem':
+          result = VoiceOrderingService.getInstance().getMenuItem(parameters.id);
+          break;
+        case 'quoteOrder':
+          result = VoiceOrderingService.getInstance().validateQuote(parameters);
+          break;
+        case 'createOrder':
+          result = await VoiceOrderingService.getInstance().createOrder(parameters);
           break;
         case 'check_order_status':
           result = await this.handleCheckOrderStatus(parameters, userId);
@@ -162,7 +172,7 @@ export class VapiService {
     const customerNumber = message.call?.customer?.number;
     const duration = message.call?.duration;
     const endedReason = message.endedReason;
-    const restaurantId = 'demo-restaurant-1'; // Default for v1
+    const restaurantId = process.env.VAPI_RESTAURANT_ID || 'demo-restaurant-1';
 
     // Log the call for analytics
     await DatabaseService.getInstance().logAudit(
@@ -219,6 +229,31 @@ export class VapiService {
   }
 
   private formatActionResultForVoice(result: any): string {
+    if (!result) return "I'm sorry, I couldn't complete that action.";
+
+    // Handle new VoiceOrderingService results
+    if (result.status === 'pending' && result.orderId) {
+      return `Perfect! I've placed your order. Your order number is ${result.orderId.slice(-4)}. Total is $${result.total.toFixed(2)}. We'll start preparing it once the staff confirms.`;
+    }
+
+    if (result.valid !== undefined) {
+      if (result.valid) {
+        return `The order is valid. Subtotal is $${result.subtotal.toFixed(2)}, tax is $${result.tax.toFixed(2)}, making the total $${result.total.toFixed(2)}. Would you like to place it?`;
+      } else {
+        return `I'm sorry, there are some issues with the order: ${result.errors?.join('. ')}.`;
+      }
+    }
+
+    if (Array.isArray(result)) {
+      if (result.length === 0) return "I couldn't find anything matching that.";
+      const items = result.slice(0, 3).map(i => `${i.name} for $${i.price}`).join(', ');
+      return `I found: ${items}. Would you like more details?`;
+    }
+
+    if (result.status === 'open' || result.status === 'closed') {
+      return `The restaurant is currently ${result.status}. ${result.status === 'closed' ? result.closedMessage : 'What can I get for you?'}`;
+    }
+
     switch (result.type) {
       case 'get_orders':
         const orders = result.details;
@@ -262,101 +297,24 @@ export class VapiService {
   // Handle placing a new order via phone
   private async handlePlaceOrder(parameters: any, userId: string): Promise<any> {
     try {
-      const { items, customerInfo, deliveryAddress, orderType } = parameters;
-      const db = DatabaseService.getInstance().getDatabase();
+      const voiceService = VoiceOrderingService.getInstance();
+      const result = await voiceService.createOrder(parameters);
       
-      // Default to demo restaurant for v1 vapi calls if not specified
-      const restaurantId = 'demo-restaurant-1';
-
-      // Validate items against menu
-      const validItems = [];
-      let totalAmount = 0;
-
-      for (const item of items) {
-        const menuItem = await db.get(
-          'SELECT * FROM menu_items WHERE name LIKE ? AND is_available = 1 AND restaurant_id = ?',
-          [`%${item.name}%`, restaurantId]
-        );
-
-        if (!menuItem) {
-          return {
-            type: 'place_order',
-            status: 'error',
-            description: `I'm sorry, "${item.name}" is not available on our menu right now.`,
-            error: `Menu item "${item.name}" not found or unavailable`
-          };
-        }
-
-        validItems.push({
-          id: menuItem.id,
-          name: menuItem.name,
-          price: menuItem.price,
-          quantity: item.quantity,
-          specialInstructions: item.specialInstructions || null
-        });
-
-        totalAmount += menuItem.price * item.quantity;
+      if (!result.orderId) {
+        return {
+          type: 'place_order',
+          status: 'error',
+          description: `I'm sorry, I couldn't place your order. ${result.errors?.join('. ')}`,
+          error: result.errors?.join('. ')
+        };
       }
-
-      // Create the order
-      const orderIdValue = `order_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      await db.run(
-        `INSERT INTO orders (
-          id, restaurant_id, status, total_amount, channel, 
-          created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-        [
-          orderIdValue,
-          restaurantId,
-          'NEW',
-          totalAmount,
-          'phone'
-        ]
-      );
-
-      // Create order items (multi-table support)
-      for (const item of validItems) {
-        await db.run(
-          `INSERT INTO order_items (id, order_id, menu_item_id, name, quantity, unit_price)
-           VALUES (?, ?, ?, ?, ?, ?)`,
-          [uuidv4(), orderIdValue, item.id, item.name, item.quantity, item.price]
-        );
-      }
-
-      // Log the audit
-      await DatabaseService.getInstance().logAudit(
-        restaurantId,
-        null, // No system user for vapi call
-        'order_created_via_vapi',
-        'order',
-        orderIdValue, 
-        { customerInfo, totalAmount }
-      );
-
-      await eventBus.emit('order.created_vapi', {
-        restaurantId,
-        type: 'order.created_vapi',
-        actor: { actorType: 'vapi' },
-        payload: {
-          orderId: orderIdValue,
-          customerName: customerInfo?.name,
-          totalAmount,
-          channel: 'phone'
-        },
-        occurredAt: new Date().toISOString()
-      });
-
-      const itemSummary = validItems.map(item => 
-        `${item.quantity} ${item.name}${item.specialInstructions ? ' (' + item.specialInstructions + ')' : ''}`
-      ).join(', ');
 
       return {
         type: 'place_order',
         status: 'success',
-        description: `Perfect! I've placed your order for ${itemSummary}. Your order number is ${orderIdValue}. Total is $${totalAmount.toFixed(2)} for ${orderType}. ${orderType === 'delivery' ? 'We\'ll have that delivered to you' : orderType === 'pickup' ? 'You can pick it up' : 'We\'ll have that ready for you'} in about 20 to 25 minutes.`,
-        details: { orderId: orderIdValue, items: validItems, totalAmount, orderType }
+        description: `Perfect! I've placed your order. Your order number is ${result.orderId.slice(-4)}. Total is $${result.total.toFixed(2)}. We'll start preparing it once the staff confirms.`,
+        details: result
       };
-
     } catch (error) {
       logger.error('Place order failed:', error);
       return {
@@ -371,52 +329,15 @@ export class VapiService {
   // Handle menu information requests
   private async handleGetMenuInfo(parameters: any, userId: string): Promise<any> {
     try {
-      const { category, itemName } = parameters;
-      const db = DatabaseService.getInstance().getDatabase();
-      const restaurantId = 'demo-restaurant-1'; // Default for v1
-
-      let query = 'SELECT * FROM menu_items WHERE is_available = 1 AND restaurant_id = ?';
-      const params: any[] = [restaurantId];
-
-      if (itemName) {
-        query += ' AND name LIKE ?';
-        params.push(`%${itemName}%`);
-      }
-
-      if (category) {
-        query += ' AND category LIKE ?';
-        params.push(`%${category}%`);
-      }
-
-      query += ' ORDER BY name LIMIT 10';
-
-      const items = await db.all(query, params);
-
-      await DatabaseService.getInstance().logAudit(
-        restaurantId,
-        null,
-        'get_menu_info',
-        'menu',
-        'multiple', 
-        { category, itemName, resultCount: items.length }
-      );
+      const voiceService = VoiceOrderingService.getInstance();
+      const items = voiceService.searchMenu(parameters.itemName || parameters.category || '');
 
       if (items.length === 0) {
         return {
           type: 'get_menu_info',
           status: 'success',
-          description: `I couldn't find any items matching that search. Would you like me to tell you about our most popular dishes instead?`,
+          description: `I couldn't find any items matching that. Would you like me to tell you about our most popular dishes instead?`,
           details: []
-        };
-      }
-
-      if (items.length === 1) {
-        const item = items[0];
-        return {
-          type: 'get_menu_info',
-          status: 'success',
-          description: `${item.name} is ${item.price} dollars. ${item.description || 'It\'s one of our popular items.'}`,
-          details: items
         };
       }
 
@@ -427,16 +348,15 @@ export class VapiService {
       return {
         type: 'get_menu_info',
         status: 'success',
-        description: `I found several options: ${itemList}. Would you like more details about any of these?`,
+        description: `I found: ${itemList}. Would you like to order any of these?`,
         details: items
       };
-
     } catch (error) {
       logger.error('Get menu info failed:', error);
       return {
         type: 'get_menu_info',
         status: 'error',
-        description: 'I\'m having trouble accessing our menu right now. Let me get someone to help you.',
+        description: 'I\'m having trouble accessing our menu right now.',
         error: error instanceof Error ? error.message : 'Unknown error'
       };
     }
@@ -447,14 +367,14 @@ export class VapiService {
     try {
       const { orderId, phoneNumber } = parameters;
       const db = DatabaseService.getInstance().getDatabase();
-      const restaurantId = 'demo-restaurant-1'; // Default for v1
+      const restaurantId = process.env.VAPI_RESTAURANT_ID || 'sasheys-kitchen-union';
 
       let query: string;
       let params: any[];
 
       if (orderId) {
-        query = 'SELECT * FROM orders WHERE id = ? AND restaurant_id = ?';
-        params = [orderId, restaurantId];
+        query = 'SELECT * FROM orders WHERE id LIKE ? AND restaurant_id = ?';
+        params = [`%${orderId}%`, restaurantId];
       } else if (phoneNumber) {
         query = 'SELECT * FROM orders WHERE customer_phone = ? AND restaurant_id = ? ORDER BY created_at DESC LIMIT 3';
         params = [phoneNumber, restaurantId];
@@ -467,17 +387,8 @@ export class VapiService {
         };
       }
 
-      const orders = orderId ? [await db.get(query, params)] : await db.all(query, params);
+      const orders = await db.all(query, params);
       const validOrders = orders.filter(order => order !== undefined);
-
-      await DatabaseService.getInstance().logAudit(
-        restaurantId,
-        null,
-        'check_order_status',
-        'order',
-        orderId || 'by_phone', 
-        { orderId, phoneNumber, foundOrders: validOrders.length }
-      );
 
       if (validOrders.length === 0) {
         return {
@@ -485,7 +396,7 @@ export class VapiService {
           status: 'success',
           description: orderId 
             ? `I couldn't find order number ${orderId}. Could you double-check the number?`
-            : `I couldn't find any recent orders for that phone number. Could you check the number or provide your order number?`,
+            : `I couldn't find any recent orders for that phone number.`,
           details: []
         };
       }
@@ -493,34 +404,27 @@ export class VapiService {
       if (validOrders.length === 1) {
         const order = validOrders[0];
         const statusMessage = this.getOrderStatusMessage(order.status);
-        const timeAgo = this.getTimeAgo(new Date(order.created_at));
         
         return {
           type: 'check_order_status',
           status: 'success',
-          description: `Your order number ${order.id} from ${timeAgo} is currently ${statusMessage}. ${this.getStatusTimeEstimate(order.status)}`,
+          description: `Your order from ${new Date(order.created_at).toLocaleTimeString()} is currently ${statusMessage}. ${order.status === 'pending' ? 'It is waiting for staff confirmation.' : `Our staff says it will be ready in about ${order.prep_time_minutes} minutes.`}`,
           details: validOrders
         };
       }
 
-      // Multiple orders found
-      const orderSummary = validOrders.map(order => 
-        `Order ${order.id} is ${this.getOrderStatusMessage(order.status)}`
-      ).join(', ');
-
       return {
         type: 'check_order_status',
         status: 'success',
-        description: `I found ${validOrders.length} recent orders: ${orderSummary}. Which one would you like details about?`,
+        description: `I found ${validOrders.length} recent orders. Which one would you like details about?`,
         details: validOrders
       };
-
     } catch (error) {
       logger.error('Check order status failed:', error);
       return {
         type: 'check_order_status',
         status: 'error',
-        description: 'I\'m having trouble accessing order information right now. Let me get someone to check on that for you.',
+        description: 'I\'m having trouble accessing order information right now.',
         error: error instanceof Error ? error.message : 'Unknown error'
       };
     }
@@ -564,32 +468,33 @@ export class VapiService {
   }
 
   getPhoneSystemPrompt(): string {
-    return `You are Servio, an AI assistant for a restaurant, speaking to customers and staff over the phone.
+    return `You are Servio, an AI assistant for Sashey's Kitchen, a Jamaican restaurant.
+    
+    YOUR CALL FLOW:
+    1. Greet the customer warmly.
+    2. Get their first name.
+    3. Confirm their phone number.
+    4. Get their last name initial.
+    5. Ask if it is for pickup or delivery.
+    6. If pickup, ask for the pickup time.
+    7. Take the order.
+    8. For any item tagged "dinner", you MUST ask for:
+       - Rice choice (Rice & Peas OR White Rice)
+       - Cabbage (Yes or No)
+       - Spice level (Mild, Medium, or Spicy)
+    9. For Fish dinners, ask for style (Escovitch or Brown Stewed).
+    10. For Wings, ask for size and sauce.
+    11. For Ackee, ask if they want to add callaloo for $3.
+    12. For Oxtail, ask if they want gravy on the side ($0.50).
+    13. Confirm the full order and total.
+    14. Upsell a drink or side.
+    15. Close the call.
 
-IMPORTANT PHONE CALL GUIDELINES:
-- Keep responses concise and conversational (under 500 characters)
-- Speak naturally as if talking to someone face-to-face
-- Don't use visual references (no "click here", "see below", etc.)
-- For numbers, use words when possible (say "order number two fourteen" not "order #214")
-- Add natural pauses with "..." for better voice flow
-- Confirm actions clearly ("Got it, I've updated that for you")
-- If you need clarification, ask direct questions
-- For complex information, offer to transfer to a human
-
-VOICE ORDERING CAPABILITIES:
-1. Take new orders - ask about items, quantities, special instructions
-2. Check order status - by order number or customer phone
-3. Handle menu questions - availability, prices, descriptions  
-4. Process changes - add/remove items, modify orders
-5. Handle complaints or issues professionally
-
-CONVERSATION FLOW:
-- Greet warmly and offer help immediately
-- Listen for the customer's main need first
-- Ask clarifying questions one at a time
-- Confirm important details before proceeding
-- End with clear next steps
-
-Remember: You're representing the restaurant's brand. Be friendly, helpful, and professional.`;
+    IMPORTANT PHONE CALL GUIDELINES:
+    - Keep responses concise and conversational.
+    - Confirm phone numbers and names clearly.
+    - For dinners, always get the defaults (Rice, Cabbage, Spice).
+    - If the store is closed, do not take orders.
+    `;
   }
 }

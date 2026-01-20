@@ -35,6 +35,63 @@ function asNumber(value: any): number {
   return Number(value ?? 0);
 }
 
+function stripSqlComments(sql: string): string {
+  return sql
+    .replace(/--.*$/gm, '')
+    .replace(/\/\*[\s\S]*?\*\//g, '');
+}
+
+function splitSqlStatements(sql: string): string[] {
+  const statements: string[] = [];
+  let current = '';
+  let inSingleQuote = false;
+  let inDoubleQuote = false;
+
+  for (let i = 0; i < sql.length; i += 1) {
+    const char = sql[i];
+    const prev = sql[i - 1];
+
+    if (char === "'" && prev !== '\\' && !inDoubleQuote) {
+      inSingleQuote = !inSingleQuote;
+    }
+    if (char === '"' && prev !== '\\' && !inSingleQuote) {
+      inDoubleQuote = !inDoubleQuote;
+    }
+
+    if (char === ';' && !inSingleQuote && !inDoubleQuote) {
+      statements.push(current);
+      current = '';
+      continue;
+    }
+
+    current += char;
+  }
+
+  if (current.trim()) {
+    statements.push(current);
+  }
+
+  return statements;
+}
+
+function normalizeIdentifier(value: string): string {
+  return value.replace(/^[`"\[]/, '').replace(/[`\]"]$/, '');
+}
+
+function isIgnorableSqliteError(error: any, statement: string): boolean {
+  const message = String(error?.message || error || '');
+  const normalized = statement.trim().toUpperCase();
+
+  if (message.includes('duplicate column name')) return true;
+  if (message.includes('already exists')) return true;
+
+  if (message.includes('no such column') || message.includes('no such table')) {
+    return normalized.startsWith('CREATE INDEX') || normalized.startsWith('CREATE UNIQUE INDEX');
+  }
+
+  return false;
+}
+
 export class DatabaseService {
   private static instance: DatabaseService;
   private _dialect: DatabaseDialect | null = null;
@@ -167,16 +224,42 @@ export class DatabaseService {
             throw err;
           }
         } else {
-          // SQLite exec can handle multiple statements
-          await db.exec('BEGIN TRANSACTION');
+      // SQLite: run statements one by one to allow idempotent ALTERs
+      const cleanedSql = stripSqlComments(sql);
+      const statements = splitSqlStatements(cleanedSql);
+      await db.exec('BEGIN TRANSACTION');
+      try {
+        for (const statement of statements) {
+          const trimmed = statement.trim();
+          if (!trimmed) continue;
+
+          const alterMatch = trimmed.match(/^ALTER TABLE\s+([^\s]+)\s+ADD COLUMN\s+([^\s]+)/i);
+          if (alterMatch) {
+            const tableName = normalizeIdentifier(alterMatch[1]);
+            const columnName = normalizeIdentifier(alterMatch[2]);
+            const columns = await db.all<{ name: string }>(`PRAGMA table_info(${tableName})`);
+            if (columns.some((col) => col.name === columnName)) {
+              continue;
+            }
+          }
+
           try {
-            await db.exec(sql);
-            await db.run('INSERT INTO _migrations (name) VALUES (?)', [file]);
-            await db.exec('COMMIT');
+            await db.exec(trimmed);
           } catch (err) {
-            await db.exec('ROLLBACK');
+            if (isIgnorableSqliteError(err, trimmed)) {
+              logger.warn(`SQLite migration warning (skipped): ${trimmed}`);
+              continue;
+            }
             throw err;
           }
+        }
+
+        await db.run('INSERT INTO _migrations (name) VALUES (?)', [file]);
+        await db.exec('COMMIT');
+      } catch (err) {
+        await db.exec('ROLLBACK');
+        throw err;
+      }
         }
         logger.info(`✅ Migration ${file} applied successfully`);
       } catch (error: any) {
@@ -278,19 +361,31 @@ export class DatabaseService {
   private async seedData(): Promise<void> {
     const db = this.getDatabase();
 
-    // Check if we already have data
-    const restaurantCount = await db.get<{ count: any }>('SELECT COUNT(*) as count FROM restaurants');
-    if (asNumber(restaurantCount?.count) > 0) {
-      logger.info('Database already seeded, skipping...');
-      return;
-    }
-
+    // Ensure demo users are always valid for login
+    const demoEmails = ['staff@demo.servio', 'manager@demo.servio'];
+    logger.info('Ensuring demo users exist with valid credentials...');
     const restaurantId = 'demo-restaurant-1';
     
-    // Create demo restaurant
+    // Create demo restaurant if it doesn't exist
     await db.run(
-      'INSERT INTO restaurants (id, name, slug, settings) VALUES (?, ?, ?, ?)',
-      [restaurantId, 'Demo Restaurant', 'demo-restaurant', JSON.stringify({ currency: 'USD' })]
+      `INSERT INTO restaurants (
+        id, name, slug, settings, operating_hours, timezone, closed_message
+      ) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO NOTHING`,
+      [
+        restaurantId,
+        'Demo Restaurant',
+        'demo-restaurant',
+        JSON.stringify({ currency: 'USD' }),
+        JSON.stringify({
+          tue: ['09:00', '21:00'],
+          wed: ['09:00', '21:00'],
+          thu: ['09:00', '21:00'],
+          fri: ['09:00', '21:00'],
+          sat: ['09:00', '21:00']
+        }),
+        'America/New_York',
+        'We’re temporarily closed right now...'
+      ]
     );
 
     // Sample users
@@ -338,7 +433,8 @@ export class DatabaseService {
         category_id: 'cat-1',
         name: 'Jerk Chicken Plate',
         description: 'Spicy jerk chicken with rice and peas',
-        price: 15.99
+        price: 15.99,
+        tags: ['dinner']
       },
       {
         id: 'item-2',
@@ -346,7 +442,8 @@ export class DatabaseService {
         category_id: 'cat-1',
         name: 'Curry Goat',
         description: 'Tender curry goat with rice',
-        price: 18.99
+        price: 18.99,
+        tags: ['dinner']
       }
     ];
 
@@ -379,19 +476,38 @@ export class DatabaseService {
       try {
         const passwordHash = bcrypt.hashSync(user.password, 10);
         await db.run(
-          'INSERT INTO users (id, restaurant_id, name, email, password_hash, pin, role, permissions) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO NOTHING',
+          `INSERT INTO users (id, restaurant_id, name, email, password_hash, pin, role, permissions, is_active)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, TRUE)
+           ON CONFLICT (email) DO UPDATE SET
+             restaurant_id = excluded.restaurant_id,
+             name = excluded.name,
+             password_hash = excluded.password_hash,
+             pin = excluded.pin,
+             role = excluded.role,
+             permissions = excluded.permissions,
+             is_active = TRUE`,
           [user.id, user.restaurant_id, user.name, user.email, passwordHash, user.pin, user.role, user.permissions]
         );
       } catch (err) {
-        // Ignore duplicate key errors
+        logger.warn('Demo user seed/update failed:', err);
       }
     }
 
     for (const item of menuItems) {
       try {
         await db.run(
-          'INSERT INTO menu_items (id, restaurant_id, category_id, name, description, price) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO NOTHING',
-          [item.id, item.restaurant_id, item.category_id, item.name, item.description, item.price]
+          `INSERT INTO menu_items (
+            id, restaurant_id, category_id, name, description, price, tags
+          ) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO NOTHING`,
+          [
+            item.id,
+            item.restaurant_id,
+            item.category_id,
+            item.name,
+            item.description,
+            item.price,
+            JSON.stringify(item.tags || [])
+          ]
         );
       } catch (err) {}
     }

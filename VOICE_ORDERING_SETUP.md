@@ -43,7 +43,9 @@ VAPI_API_KEY=your_vapi_api_key_here
 VAPI_WEBHOOK_SECRET=your_webhook_secret
 VAPI_ASSISTANT_ID=your_assistant_id
 VAPI_PHONE_NUMBER_ID=your_phone_number_id
+VAPI_RESTAURANT_ID=your_restaurant_id
 ```
+`VAPI_RESTAURANT_ID` should match the restaurant you want Vapi calls to use (for example, `demo-restaurant-1` in local dev).
 
 ### 3. Create Vapi Assistant
 1. In your Vapi dashboard, create a new assistant

@@ -39,7 +39,7 @@ export default function App({ Component, pageProps }: AppProps) {
         <meta name="msapplication-tap-highlight" content="no" />
         <meta name="theme-color" content="#14B8A6" />
         <link rel="manifest" href="/manifest.json" />
-        <link rel="apple-touch-icon" href="/images/servio_icon_tight.png" />
+        <link rel="apple-touch-icon" href="/images/servio_logo_transparent_tight.png" />
 
         {/* PERFORMANCE HINTS */}
         <meta httpEquiv="x-dns-prefetch-control" content="on" />

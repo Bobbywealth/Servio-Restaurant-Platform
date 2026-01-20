@@ -61,6 +61,7 @@ async function initializeServer() {
     const { default: restaurantRoutes } = await import('./routes/restaurant');
     const { default: integrationsRoutes } = await import('./routes/integrations');
     const { default: vapiRoutes } = await import('./routes/vapi');
+    const { default: voiceRoutes } = await import('./routes/voice');
     const { default: adminRoutes } = await import('./routes/admin');
     const { default: notificationsRoutes } = await import('./routes/notifications');
 
@@ -69,6 +70,7 @@ async function initializeServer() {
     
     // Vapi webhook routes (no auth required for external webhooks)
     app.use('/api/vapi', vapiRoutes);
+    app.use('/api', voiceRoutes); // Mount voice ordering APIs under /api
     
     // Admin routes (platform-admin role required)
     app.use('/api/admin', adminRoutes);
