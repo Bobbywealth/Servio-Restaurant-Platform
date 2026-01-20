@@ -8,13 +8,17 @@ import { Lock, Mail, AlertCircle, Loader2, ArrowRight } from 'lucide-react';
 import { useUser } from '../contexts/UserContext';
 
 export default function LoginPage() {
+  const [isSignUpMode, setIsSignUpMode] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [name, setName] = useState('');
+  const [restaurantName, setRestaurantName] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [mounted, setMounted] = React.useState(false);
   const router = useRouter();
-  const { login, user, isLoading } = useUser();
+  const { login, signup, user, isLoading } = useUser();
 
   // Mark component as mounted to prevent SSR issues
   React.useEffect(() => {
@@ -76,10 +80,29 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      await login(email, password);
+      if (isSignUpMode) {
+        // Validate signup form
+        if (!name.trim()) {
+          throw new Error('Name is required');
+        }
+        if (!restaurantName.trim()) {
+          throw new Error('Restaurant name is required');
+        }
+        if (password !== confirmPassword) {
+          throw new Error('Passwords do not match');
+        }
+        if (password.length < 6) {
+          throw new Error('Password must be at least 6 characters long');
+        }
+        
+        await signup(name, email, password, restaurantName);
+      } else {
+        await login(email, password);
+      }
       router.push(routeAfterLogin());
     } catch (err: any) {
-      const message = err.response?.data?.error?.message || err.message || 'Failed to login. Please check your credentials.';
+      const message = err.response?.data?.error?.message || err.message || 
+        (isSignUpMode ? 'Failed to create account. Please try again.' : 'Failed to login. Please check your credentials.');
       setError(message);
     } finally {
       setLoading(false);
@@ -135,7 +158,7 @@ export default function LoginPage() {
         <div className="bg-gray-800/95 rounded-2xl shadow-[0_25px_60px_-35px_rgba(0,0,0,0.8)] border border-gray-700 p-8 md:p-10 backdrop-blur">
           <div className="flex flex-col items-center mb-10">
             <h1 className="text-3xl font-extrabold tracking-tight text-white">
-              Welcome back
+              {isSignUpMode ? 'Join Servio' : 'Welcome back'}
             </h1>
             <p className="mt-2 text-gray-300 font-medium">
               Restaurant Operating System
@@ -161,6 +184,38 @@ export default function LoginPage() {
               )}
             </AnimatePresence>
 
+            {isSignUpMode && (
+              <>
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-gray-300 ml-1">Full Name</label>
+                  <div className="relative group">
+                    <input
+                      type="text"
+                      required
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      className="w-full bg-gray-700/50 border border-gray-600 focus:bg-gray-700 focus:ring-2 focus:ring-teal-500/30 focus:border-teal-400 rounded-xl px-4 py-3 text-white font-medium transition-all outline-none placeholder-gray-400"
+                      placeholder="John Doe"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-gray-300 ml-1">Restaurant Name</label>
+                  <div className="relative group">
+                    <input
+                      type="text"
+                      required
+                      value={restaurantName}
+                      onChange={(e) => setRestaurantName(e.target.value)}
+                      className="w-full bg-gray-700/50 border border-gray-600 focus:bg-gray-700 focus:ring-2 focus:ring-teal-500/30 focus:border-teal-400 rounded-xl px-4 py-3 text-white font-medium transition-all outline-none placeholder-gray-400"
+                      placeholder="Your Restaurant Name"
+                    />
+                  </div>
+                </div>
+              </>
+            )}
+
             <div className="space-y-2">
               <label className="text-sm font-bold text-gray-300 ml-1">Email</label>
               <div className="relative group">
@@ -181,9 +236,11 @@ export default function LoginPage() {
             <div className="space-y-2">
               <div className="flex justify-between items-center ml-1">
                 <label className="text-sm font-bold text-gray-300">Password</label>
-                <button type="button" className="text-xs font-bold text-teal-400 hover:text-teal-300 transition-colors">
-                  Forgot?
-                </button>
+                {!isSignUpMode && (
+                  <button type="button" className="text-xs font-bold text-teal-400 hover:text-teal-300 transition-colors">
+                    Forgot?
+                  </button>
+                )}
               </div>
               <div className="relative group">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
@@ -196,9 +253,30 @@ export default function LoginPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   className="w-full bg-gray-700/50 border border-gray-600 focus:bg-gray-700 focus:ring-2 focus:ring-teal-500/30 focus:border-teal-400 rounded-xl pl-12 pr-4 py-3 text-white font-medium transition-all outline-none placeholder-gray-400"
                   placeholder="••••••••"
+                  minLength={isSignUpMode ? 6 : undefined}
                 />
               </div>
             </div>
+
+            {isSignUpMode && (
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-gray-300 ml-1">Confirm Password</label>
+                <div className="relative group">
+                  <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                    <Lock className="w-5 h-5 text-gray-400 group-focus-within:text-teal-400 transition-colors" />
+                  </div>
+                  <input
+                    type="password"
+                    required
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="w-full bg-gray-700/50 border border-gray-600 focus:bg-gray-700 focus:ring-2 focus:ring-teal-500/30 focus:border-teal-400 rounded-xl pl-12 pr-4 py-3 text-white font-medium transition-all outline-none placeholder-gray-400"
+                    placeholder="••••••••"
+                    minLength={6}
+                  />
+                </div>
+              </div>
+            )}
 
             <div className="pt-2">
               <motion.button
@@ -212,7 +290,7 @@ export default function LoginPage() {
                   <Loader2 className="w-5 h-5 animate-spin" />
                 ) : (
                   <>
-                    Continue to Dashboard
+                    {isSignUpMode ? 'Create Account' : 'Continue to Dashboard'}
                     <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                   </>
                 )}

@@ -21,6 +21,7 @@ interface UserContextType {
   user: User | null
   isLoading: boolean
   login: (email: string, password: string) => Promise<void>
+  signup: (name: string, email: string, password: string, restaurantName: string) => Promise<void>
   logout: () => void
   hasPermission: (resource: string, action?: string) => boolean
   updateUser: (updates: Partial<User>) => void
@@ -149,6 +150,28 @@ export function UserProvider({ children }: UserProviderProps) {
     }
   }
 
+  const signup = async (name: string, email: string, password: string, restaurantName: string) => {
+    setIsLoading(true)
+    
+    // Clear any existing stale tokens before signup
+    clearAuthStorage()
+    
+    try {
+      const normalizedEmail = email.trim().toLowerCase()
+      await api.post('/api/auth/signup', { 
+        name: name.trim(), 
+        email: normalizedEmail, 
+        password, 
+        restaurantName: restaurantName.trim() 
+      })
+      
+      // After successful signup, automatically log in the user
+      await login(normalizedEmail, password)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   const logout = () => {
     setUser(null)
     if (typeof window !== 'undefined') {
@@ -223,6 +246,7 @@ export function UserProvider({ children }: UserProviderProps) {
     user,
     isLoading,
     login,
+    signup,
     logout,
     hasPermission,
     updateUser,
