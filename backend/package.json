@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "dev:worker": "tsx watch src/worker.ts",
-    "build": "tsc",
+    "build": "tsc && mkdir -p dist/database && cp -r src/database/migrations dist/database/",
     "start": "node dist/server.js",
     "start:worker": "node dist/worker.js",
     "lint": "eslint src --ext .ts,.js",

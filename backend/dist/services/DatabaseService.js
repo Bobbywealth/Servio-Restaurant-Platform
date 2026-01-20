@@ -60,9 +60,29 @@ class DatabaseService {
     async runMigrations() {
         const db = this.getDatabase();
         const isPg = db.dialect === 'postgres';
-        const migrationsDir = path_1.default.join(__dirname, '../database/migrations');
-        if (!fs_1.default.existsSync(migrationsDir)) {
-            logger_1.logger.warn(`Migrations directory not found at ${migrationsDir}`);
+        // Try to find migrations directory in multiple possible locations
+        const possiblePaths = [
+            path_1.default.join(__dirname, '../database/migrations'), // After build: dist/database/migrations
+            path_1.default.join(__dirname, '../../src/database/migrations'), // Development: src/database/migrations
+            path_1.default.join(process.cwd(), 'src/database/migrations'), // From project root
+            path_1.default.join(process.cwd(), 'backend/src/database/migrations') // From workspace root
+        ];
+        let migrationsDir = '';
+        logger_1.logger.info(`📍 Current working directory: ${process.cwd()}`);
+        logger_1.logger.info(`📍 __dirname: ${__dirname}`);
+        for (const possiblePath of possiblePaths) {
+            if (fs_1.default.existsSync(possiblePath)) {
+                migrationsDir = possiblePath;
+                logger_1.logger.info(`✅ Found migrations directory at ${migrationsDir}`);
+                break;
+            }
+            else {
+                logger_1.logger.info(`❌ Not found: ${possiblePath}`);
+            }
+        }
+        if (!migrationsDir) {
+            logger_1.logger.error(`🚨 Could not find migrations directory anywhere. Database setup will be skipped.`);
+            logger_1.logger.error(`Tried paths: ${possiblePaths.join(', ')}`);
             return;
         }
         // 1. Ensure migrations table exists
@@ -91,7 +111,8 @@ class DatabaseService {
         const files = fs_1.default.readdirSync(migrationsDir)
             .filter(f => f.endsWith('.sql'))
             .sort();
-        logger_1.logger.info(`🔍 Checking ${files.length} migrations...`);
+        logger_1.logger.info(`🔍 Checking ${files.length} migrations in ${migrationsDir}...`);
+        logger_1.logger.info(`📄 Migration files found: ${files.join(', ')}`);
         for (const file of files) {
             if (appliedMigrations.has(file))
                 continue;

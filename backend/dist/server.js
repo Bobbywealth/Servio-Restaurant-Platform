@@ -202,35 +202,37 @@ app.use((req, res, next) => {
 const cache = new Map();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 const MAX_CACHE_SIZE = 1000;
-// Cache middleware for GET requests
-app.use((req, res, next) => {
-    if (req.method === 'GET' && !req.url.includes('/auth') && !req.url.includes('/timeclock')) {
-        const cacheKey = req.url;
-        const cached = cache.get(cacheKey);
-        if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-            res.set(cached.headers);
-            res.set('X-Cache', 'HIT');
-            return res.json(cached.data);
-        }
-        // Cache the response
-        const originalSend = res.json;
-        res.json = function (data) {
-            if (res.statusCode === 200 && cache.size < MAX_CACHE_SIZE) {
-                cache.set(cacheKey, {
-                    data,
-                    timestamp: Date.now(),
-                    headers: {
-                        'Cache-Control': 'public, max-age=300',
-                        'ETag': Buffer.from(JSON.stringify(data)).toString('base64').slice(0, 20)
-                    }
-                });
-            }
-            res.set('X-Cache', 'MISS');
-            return originalSend.call(this, data);
-        };
-    }
-    next();
-});
+// Cache middleware disabled temporarily for debugging
+// app.use((req, res, next) => {
+//   if (req.method === 'GET' && !req.url.includes('/auth') && !req.url.includes('/timeclock')) {
+//     const cacheKey = req.url;
+//     const cached = cache.get(cacheKey);
+//
+//     if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+//       res.set(cached.headers);
+//       res.set('X-Cache', 'HIT');
+//       return res.json(cached.data);
+//     }
+//
+//     // Cache the response
+//     const originalSend = res.json;
+//     res.json = function(data) {
+//       if (res.statusCode === 200 && cache.size < MAX_CACHE_SIZE) {
+//         cache.set(cacheKey, {
+//           data,
+//           timestamp: Date.now(),
+//           headers: {
+//             'Cache-Control': 'public, max-age=300',
+//             'ETag': Buffer.from(JSON.stringify(data)).toString('base64').slice(0, 20)
+//           }
+//         });
+//       }
+//       res.set('X-Cache', 'MISS');
+//       return originalSend.call(this, data);
+//     };
+//   }
+//   next();
+// });
 // PERFORMANCE HEADERS FOR ALL RESPONSES
 app.use((req, res, next) => {
     res.set('X-Powered-By', 'Servio');

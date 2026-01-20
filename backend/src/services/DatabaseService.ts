@@ -74,10 +74,32 @@ export class DatabaseService {
   private async runMigrations(): Promise<void> {
     const db = this.getDatabase();
     const isPg = db.dialect === 'postgres';
-    const migrationsDir = path.join(__dirname, '../database/migrations');
-
-    if (!fs.existsSync(migrationsDir)) {
-      logger.warn(`Migrations directory not found at ${migrationsDir}`);
+    
+    // Try to find migrations directory in multiple possible locations
+    const possiblePaths = [
+      path.join(__dirname, '../database/migrations'),        // After build: dist/database/migrations
+      path.join(__dirname, '../../src/database/migrations'), // Development: src/database/migrations
+      path.join(process.cwd(), 'src/database/migrations'),   // From project root
+      path.join(process.cwd(), 'backend/src/database/migrations') // From workspace root
+    ];
+    
+    let migrationsDir = '';
+    logger.info(`📍 Current working directory: ${process.cwd()}`);
+    logger.info(`📍 __dirname: ${__dirname}`);
+    
+    for (const possiblePath of possiblePaths) {
+      if (fs.existsSync(possiblePath)) {
+        migrationsDir = possiblePath;
+        logger.info(`✅ Found migrations directory at ${migrationsDir}`);
+        break;
+      } else {
+        logger.info(`❌ Not found: ${possiblePath}`);
+      }
+    }
+    
+    if (!migrationsDir) {
+      logger.error(`🚨 Could not find migrations directory anywhere. Database setup will be skipped.`);
+      logger.error(`Tried paths: ${possiblePaths.join(', ')}`);
       return;
     }
 
@@ -109,7 +131,8 @@ export class DatabaseService {
       .filter(f => f.endsWith('.sql'))
       .sort();
 
-    logger.info(`🔍 Checking ${files.length} migrations...`);
+    logger.info(`🔍 Checking ${files.length} migrations in ${migrationsDir}...`);
+    logger.info(`📄 Migration files found: ${files.join(', ')}`);
 
     for (const file of files) {
       if (appliedMigrations.has(file)) continue;

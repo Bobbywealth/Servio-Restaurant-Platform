@@ -62,7 +62,7 @@ export const errorHandler = (
   req: Request,
   res: Response,
   _next: NextFunction
-): void => {
+) => {
   // Default error values
   let statusCode = error.statusCode || 500;
   let message = error.message || 'Internal Server Error';
@@ -128,7 +128,9 @@ export const errorHandler = (
     errorResponse.requestId = req.headers['x-request-id'];
   }
 
-  res.status(statusCode).json(errorResponse);
+  // Ensure JSON response
+  res.setHeader('Content-Type', 'application/json');
+  return res.status(statusCode).json(errorResponse);
 };
 
 // Async error wrapper
