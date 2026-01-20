@@ -2,7 +2,7 @@
 const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
-  trailingSlash: true,
+  trailingSlash: false,
   // Temporarily disable static export to support dynamic restaurant pages
   // output: 'export', // Enable static export for static site deployment
 

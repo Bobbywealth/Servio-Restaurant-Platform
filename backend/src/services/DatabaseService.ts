@@ -222,6 +222,9 @@ export class DatabaseService {
             customer_id TEXT REFERENCES customers(id),
             external_id TEXT,
             channel TEXT NOT NULL,
+            items TEXT,
+            customer_name TEXT,
+            customer_phone TEXT,
             status TEXT NOT NULL DEFAULT 'NEW',
             total_amount DOUBLE PRECISION NOT NULL DEFAULT 0,
             payment_status TEXT NOT NULL DEFAULT 'unpaid',
@@ -243,6 +246,7 @@ export class DatabaseService {
             restaurant_id TEXT NOT NULL REFERENCES restaurants(id),
             title TEXT NOT NULL,
             description TEXT,
+            type TEXT NOT NULL DEFAULT 'one_time',
             status TEXT NOT NULL DEFAULT 'pending',
             assigned_to TEXT REFERENCES users(id),
             due_date TIMESTAMPTZ,
@@ -400,6 +404,9 @@ export class DatabaseService {
             customer_id TEXT REFERENCES customers(id),
             external_id TEXT,
             channel TEXT NOT NULL,
+            items TEXT,
+            customer_name TEXT,
+            customer_phone TEXT,
             status TEXT NOT NULL DEFAULT 'NEW',
             total_amount REAL NOT NULL DEFAULT 0,
             payment_status TEXT NOT NULL DEFAULT 'unpaid',
@@ -421,6 +428,7 @@ export class DatabaseService {
             restaurant_id TEXT NOT NULL REFERENCES restaurants(id),
             title TEXT NOT NULL,
             description TEXT,
+            type TEXT NOT NULL DEFAULT 'one_time',
             status TEXT NOT NULL DEFAULT 'pending',
             assigned_to TEXT REFERENCES users(id),
             due_date TEXT,
@@ -514,6 +522,13 @@ export class DatabaseService {
       }
     };
     await ensureColumn('users', 'restaurant_id TEXT');
+    await ensureColumn('tasks', 'restaurant_id TEXT');
+    await ensureColumn('tasks', 'type TEXT DEFAULT \'one_time\'');
+    await ensureColumn('inventory_items', 'restaurant_id TEXT');
+    await ensureColumn('menu_items', 'restaurant_id TEXT');
+    await ensureColumn('orders', 'items TEXT');
+    await ensureColumn('orders', 'customer_name TEXT');
+    await ensureColumn('orders', 'customer_phone TEXT');
     await ensureColumn('orders', 'payment_status TEXT DEFAULT \'unpaid\'');
 
     // LIGHTNING FAST INDEXES FOR OPTIMAL PERFORMANCE

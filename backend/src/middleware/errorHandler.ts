@@ -86,13 +86,13 @@ export const errorHandler = (
   } else if (error.name === 'CastError') {
     statusCode = 400;
     message = 'Invalid ID format';
-  } else if (error.name === 'JsonWebTokenError') {
+  } else if (error.name === 'JsonWebTokenError' || error.message.includes('secret or public key must be provided')) {
     statusCode = 401;
     message = 'Invalid token';
   } else if (error.name === 'TokenExpiredError') {
     statusCode = 401;
     message = 'Token expired';
-  } else if (error.code === 'SQLITE_CONSTRAINT') {
+  } else if (error.code === 'SQLITE_CONSTRAINT' || error.message.includes('duplicate key')) {
     statusCode = 400;
     message = 'Database constraint violation';
   }

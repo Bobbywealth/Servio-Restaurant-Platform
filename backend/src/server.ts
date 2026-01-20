@@ -262,6 +262,16 @@ app.get('/health', (req, res) => {
   });
 });
 
+// Root route
+app.get('/', (req, res) => {
+  res.json({
+    message: 'Welcome to Servio Restaurant Platform API',
+    version: '1.0.0',
+    documentation: '/api',
+    health: '/health'
+  });
+});
+
 // API documentation endpoint
 app.get('/api', (req, res) => {
   res.json({
