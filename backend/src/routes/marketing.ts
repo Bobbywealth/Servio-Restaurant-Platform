@@ -35,7 +35,7 @@ const emailTransporter = nodemailer.createTransport({
  */
 router.get('/customers', asyncHandler(async (req: Request, res: Response) => {
   const db = DatabaseService.getInstance().getDatabase();
-  const restaurantId = '00000000-0000-0000-0000-000000000001';
+  const restaurantId = req.user?.restaurantId;
 
   const customers = await db.all(`
     SELECT 
@@ -86,7 +86,7 @@ router.post('/customers', asyncHandler(async (req: Request, res: Response) => {
   } = req.body;
 
   const db = DatabaseService.getInstance().getDatabase();
-  const restaurantId = '00000000-0000-0000-0000-000000000001';
+  const restaurantId = req.user?.restaurantId;
 
   if (!name && !email && !phone) {
     return res.status(400).json({
@@ -185,7 +185,8 @@ router.post('/customers', asyncHandler(async (req: Request, res: Response) => {
   }
 
   await DatabaseService.getInstance().logAudit(
-    'system',
+    restaurantId!,
+    req.user?.id || 'system',
     'customer_upsert',
     'customer',
     existingCustomer?.id || customerId,
@@ -203,7 +204,7 @@ router.post('/customers', asyncHandler(async (req: Request, res: Response) => {
  */
 router.get('/campaigns', asyncHandler(async (req: Request, res: Response) => {
   const db = DatabaseService.getInstance().getDatabase();
-  const restaurantId = '00000000-0000-0000-0000-000000000001';
+  const restaurantId = req.user?.restaurantId;
 
   const campaigns = await db.all(`
     SELECT 
@@ -250,7 +251,7 @@ router.post('/campaigns', asyncHandler(async (req: Request, res: Response) => {
   } = req.body;
 
   const db = DatabaseService.getInstance().getDatabase();
-  const restaurantId = '00000000-0000-0000-0000-000000000001';
+  const restaurantId = req.user?.restaurantId;
 
   if (!name || !type || !message) {
     return res.status(400).json({
@@ -296,7 +297,8 @@ router.post('/campaigns', asyncHandler(async (req: Request, res: Response) => {
   }
 
   await DatabaseService.getInstance().logAudit(
-    'system',
+    restaurantId!,
+    req.user?.id || 'system',
     'create_campaign',
     'marketing_campaign',
     campaignId,
@@ -519,7 +521,7 @@ router.post('/send-email', asyncHandler(async (req: Request, res: Response) => {
 router.get('/analytics', asyncHandler(async (req: Request, res: Response) => {
   const { timeframe = '30d' } = req.query;
   const db = DatabaseService.getInstance().getDatabase();
-  const restaurantId = '00000000-0000-0000-0000-000000000001';
+  const restaurantId = req.user?.restaurantId;
 
   // Calculate date range
   const daysBack = timeframe === '7d' ? 7 : timeframe === '30d' ? 30 : 90;

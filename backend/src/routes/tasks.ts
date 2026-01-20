@@ -14,29 +14,32 @@ router.get('/today', asyncHandler(async (req: Request, res: Response) => {
   const { status } = req.query;
   const db = DatabaseService.getInstance().getDatabase();
   const dialect = DatabaseService.getInstance().getDialect();
+  const restaurantId = req.user?.restaurantId;
 
   let query =
     dialect === 'postgres'
       ? `
           SELECT * FROM tasks
-          WHERE type = 'daily'
+          WHERE (type = 'daily'
           OR (due_date IS NOT NULL AND due_date::date = CURRENT_DATE)
-          OR (type = 'one_time' AND status != 'completed')
+          OR (type = 'one_time' AND status != 'completed'))
+          AND restaurant_id = ?
         `
       : `
           SELECT * FROM tasks
-          WHERE type = 'daily'
+          WHERE (type = 'daily'
           OR (due_date IS NOT NULL AND DATE(due_date) = DATE('now'))
-          OR (type = 'one_time' AND status != 'completed')
+          OR (type = 'one_time' AND status != 'completed'))
+          AND restaurant_id = ?
         `;
-  const params: any[] = [];
+  const params: any[] = [restaurantId];
 
   if (status) {
     query += ' AND status = ?';
     params.push(status);
   }
 
-  query += ' ORDER BY CASE WHEN status = "pending" THEN 1 WHEN status = "in_progress" THEN 2 ELSE 3 END, created_at';
+    query += ' ORDER BY CASE WHEN status = \'pending\' THEN 1 WHEN status = \'in_progress\' THEN 2 ELSE 3 END, created_at';
 
   const tasks = await db.all(query, params);
 
@@ -118,7 +121,8 @@ router.post('/:id/complete', asyncHandler(async (req: Request, res: Response) =>
   );
 
   await DatabaseService.getInstance().logAudit(
-    userId || 'system',
+    req.user?.restaurantId!,
+    req.user?.id || 'system',
     'complete_task',
     'task',
     id,
@@ -170,7 +174,8 @@ router.post('/:id/start', asyncHandler(async (req: Request, res: Response) => {
   );
 
   await DatabaseService.getInstance().logAudit(
-    userId || 'system',
+    req.user?.restaurantId!,
+    req.user?.id || 'system',
     'start_task',
     'task',
     id,
@@ -198,10 +203,12 @@ router.get('/stats', asyncHandler(async (req: Request, res: Response) => {
   const db = DatabaseService.getInstance().getDatabase();
   const dialect = DatabaseService.getInstance().getDialect();
 
+  const restaurantId = req.user?.restaurantId;
+
   const completedTodayCondition =
     dialect === 'postgres'
       ? "status = 'completed' AND completed_at::date = CURRENT_DATE"
-      : 'status = "completed" AND DATE(completed_at) = DATE("now")';
+      : 'status = \'completed\' AND DATE(completed_at) = DATE(\'now\')';
 
   const [
     totalTasks,
@@ -210,11 +217,11 @@ router.get('/stats', asyncHandler(async (req: Request, res: Response) => {
     tasksByType,
     tasksByStatus
   ] = await Promise.all([
-    db.get('SELECT COUNT(*) as count FROM tasks'),
-    db.get('SELECT COUNT(*) as count FROM tasks WHERE status = "pending"'),
-    db.get(`SELECT COUNT(*) as count FROM tasks WHERE ${completedTodayCondition}`),
-    db.all('SELECT type, COUNT(*) as count FROM tasks GROUP BY type'),
-    db.all('SELECT status, COUNT(*) as count FROM tasks GROUP BY status')
+    db.get('SELECT COUNT(*) as count FROM tasks WHERE restaurant_id = ?', [restaurantId]),
+    db.get('SELECT COUNT(*) as count FROM tasks WHERE status = \'pending\' AND restaurant_id = ?', [restaurantId]),
+    db.get(`SELECT COUNT(*) as count FROM tasks WHERE ${completedTodayCondition} AND restaurant_id = ?`, [restaurantId]),
+    db.all('SELECT type, COUNT(*) as count FROM tasks WHERE restaurant_id = ? GROUP BY type', [restaurantId]),
+    db.all('SELECT status, COUNT(*) as count FROM tasks WHERE restaurant_id = ? GROUP BY status', [restaurantId])
   ]);
 
   const stats = {
@@ -277,7 +284,8 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
   ]);
 
   await DatabaseService.getInstance().logAudit(
-    userId || 'system',
+    req.user?.restaurantId!,
+    req.user?.id || 'system',
     'create_task',
     'task',
     taskId,

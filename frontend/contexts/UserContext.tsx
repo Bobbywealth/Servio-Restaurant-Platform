@@ -87,10 +87,10 @@ export function UserProvider({ children }: UserProviderProps) {
           }
         }
 
-        // Development convenience: auto-login as demo admin user for easy testing
-        const demoEmail = process.env.NEXT_PUBLIC_DEMO_EMAIL || 'admin@servio.com'
-        const demoPassword = process.env.NEXT_PUBLIC_DEMO_PASSWORD || 'password'
-        await login(demoEmail, demoPassword)
+        // Development convenience: auto-login disabled for testing
+        // const demoEmail = process.env.NEXT_PUBLIC_DEMO_EMAIL || 'admin@servio.com'
+        // const demoPassword = process.env.NEXT_PUBLIC_DEMO_PASSWORD || 'password'
+        // await login(demoEmail, demoPassword)
       } catch (error) {
         console.error('Failed to load user:', error)
       } finally {

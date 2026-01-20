@@ -22,10 +22,12 @@ router.get('/logs', asyncHandler(async (req: Request, res: Response) => {
   } = req.query;
 
   const db = DatabaseService.getInstance().getDatabase();
+  const restaurantId = req.user?.restaurantId;
 
   let query = 'SELECT * FROM audit_logs';
   const params: any[] = [];
-  const conditions: string[] = [];
+  const conditions: string[] = ['restaurant_id = ?'];
+  params.push(restaurantId);
 
   if (userId) {
     conditions.push('user_id = ?');

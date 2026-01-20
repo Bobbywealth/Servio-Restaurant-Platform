@@ -1,11 +1,13 @@
-import React, { ReactNode, useState } from 'react'
-import Link from 'next/link'
-import { useRouter } from 'next/router'
-import { motion, AnimatePresence } from 'framer-motion'
-import { useUser } from '../../contexts/UserContext'
-import ThemeToggle from '../ui/ThemeToggle'
-import NotificationCenter from '../ui/NotificationCenter'
-import AccountSwitcher from '../ui/AccountSwitcher'
+ 'use client';
+
+import React, { ReactNode, useState } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/router';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useUser } from '../../contexts/UserContext';
+import ThemeToggle from '../ui/ThemeToggle';
+import NotificationCenter from '../ui/NotificationCenter';
+import AccountSwitcher from '../ui/AccountSwitcher';
 import {
   Bot,
   Home,
@@ -16,7 +18,6 @@ import {
   Settings,
   LogOut,
   Clock,
-  User,
   Menu,
   X,
   Sparkles,
@@ -24,20 +25,40 @@ import {
   UtensilsCrossed,
   Mail,
   Store,
-  Wifi
-} from 'lucide-react'
+  Wifi,
+  FileText
+} from 'lucide-react';
 
 interface DashboardLayoutProps {
-  children: ReactNode
+  children: React.ReactNode;
 }
 
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
-  const { user, logout } = useUser()
-  const [sidebarOpen, setSidebarOpen] = useState(false)
-  const router = useRouter()
+  const { user, logout, isLoading } = useUser();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const router = useRouter();
 
-  const normalizePath = (p: string) => (p || '/').split('?')[0].replace(/\/+$/, '') || '/'
-  const currentPath = normalizePath(router.asPath)
+  React.useEffect(() => {
+    if (!isLoading && !user) {
+      router.push('/login');
+    }
+  }, [user, isLoading, router]);
+
+  const normalizePath = (p: string) => (p || '/').split('?')[0].replace(/\/+$/, '') || '/';
+  const currentPath = normalizePath(router.asPath);
+
+  if (isLoading || !user) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <motion.div 
+          animate={{ rotate: 360 }}
+          transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+        >
+          <Bot className="h-10 w-10 text-primary-600" />
+        </motion.div>
+      </div>
+    );
+  }
 
   const navigation = [
     {
@@ -91,6 +112,13 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       color: 'text-servio-green-500'
     },
     {
+      name: 'Receipts',
+      href: '/dashboard/inventory/receipts',
+      icon: FileText,
+      description: 'Upload & track invoices',
+      color: 'text-blue-500'
+    },
+    {
       name: 'Staff',
       href: '/dashboard/staff',
       icon: Users,
@@ -111,13 +139,12 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       description: 'System settings',
       color: 'text-surface-500'
     },
-  ]
+  ];
 
-  const closeSidebar = () => setSidebarOpen(false)
+  const closeSidebar = () => setSidebarOpen(false);
 
   return (
     <div className="min-h-screen gradient-surface">
-      {/* Mobile sidebar overlay */}
       <AnimatePresence>
         {sidebarOpen && (
           <motion.div
@@ -130,19 +157,14 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         )}
       </AnimatePresence>
 
-      {/* Sidebar */}
       <motion.div
         className={`fixed inset-y-0 left-0 z-50 w-72 bg-white/95 dark:bg-surface-900/95 backdrop-blur-xl shadow-2xl transform transition-transform duration-300 ease-out lg:translate-x-0 border-r border-surface-200 dark:border-surface-800 ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
         initial={false}
       >
-        {/* Logo */}
         <div className="flex items-center justify-between h-16 px-6 border-b border-surface-200 dark:border-surface-800">
-          <motion.div
-            className="flex items-center"
-            whileHover={{ scale: 1.02 }}
-          >
+          <motion.div className="flex items-center" whileHover={{ scale: 1.02 }}>
             <div className="relative">
               <Bot className="w-8 h-8 text-primary-600 dark:text-primary-400" />
               <motion.div
@@ -151,9 +173,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                 transition={{ duration: 2, repeat: Infinity }}
               />
             </div>
-            <span className="ml-3 text-xl font-bold text-surface-900 dark:text-surface-100">
-              Servio
-            </span>
+            <span className="ml-3 text-xl font-bold text-surface-900 dark:text-surface-100">Servio</span>
             <motion.div
               className="ml-2 px-2 py-1 bg-servio-orange-100 dark:bg-servio-orange-900/30 text-servio-orange-700 dark:text-servio-orange-300 text-2xs font-medium rounded-full"
               initial={{ scale: 0 }}
@@ -163,19 +183,14 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
               AI
             </motion.div>
           </motion.div>
-          <button
-            onClick={closeSidebar}
-            className="lg:hidden btn-icon"
-          >
+          <button onClick={closeSidebar} className="lg:hidden btn-icon">
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Navigation */}
         <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
           {navigation.map((item, index) => {
-            const isActive = currentPath === normalizePath(item.href)
-
+            const isActive = currentPath === normalizePath(item.href);
             return (
               <motion.div
                 key={item.name}
@@ -204,7 +219,6 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                   `}>
                     <item.icon className={`w-5 h-5 ${isActive ? item.color : 'text-surface-500 dark:text-surface-400'}`} />
                   </div>
-
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between">
                       <span className="font-medium">{item.name}</span>
@@ -218,11 +232,8 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                         </motion.div>
                       )}
                     </div>
-                    <p className="text-2xs text-surface-500 dark:text-surface-400 truncate">
-                      {item.description}
-                    </p>
+                    <p className="text-2xs text-surface-500 dark:text-surface-400 truncate">{item.description}</p>
                   </div>
-
                   {isActive && (
                     <motion.div
                       className="absolute right-2"
@@ -235,45 +246,20 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                   )}
                 </Link>
               </motion.div>
-            )
+            );
           })}
         </nav>
-
       </motion.div>
 
-      {/* Main Content */}
       <div className="pl-0 lg:pl-72 transition-all duration-300">
-        {/* Top Bar */}
         <div className="bg-white/80 dark:bg-surface-900/80 backdrop-blur-xl shadow-sm border-b border-surface-200/50 dark:border-surface-800/50 sticky top-0 z-30">
           <div className="px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between items-center h-16">
               <div className="flex items-center space-x-4">
-                <button
-                  onClick={() => setSidebarOpen(true)}
-                  className="lg:hidden btn-icon"
-                >
+                <button onClick={() => setSidebarOpen(true)} className="lg:hidden btn-icon">
                   <Menu className="w-6 h-6" />
                 </button>
-
-                {false && (
-                  <motion.div
-                    className="hidden sm:flex items-center px-3 py-2 bg-servio-green-100 dark:bg-servio-green-900/30 text-servio-green-700 dark:text-servio-green-300 text-sm font-medium rounded-lg"
-                    initial={{ scale: 0, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    transition={{ delay: 0.3 }}
-                  >
-                    <Clock className="w-4 h-4 mr-2" />
-                    <span>On Shift</span>
-                    {false && (
-                      <span className="ml-2 text-servio-green-600 dark:text-servio-green-400 text-xs">
-                        since {new Date().toLocaleTimeString()}
-                      </span>
-                    )}
-                  </motion.div>
-                )}
               </div>
-
-              {/* Right side actions */}
               <div className="flex items-center space-x-3">
                 <ThemeToggle />
                 <NotificationCenter />
@@ -282,8 +268,6 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
             </div>
           </div>
         </div>
-
-        {/* Page Content */}
         <motion.main
           className="p-4 sm:p-6 lg:p-8"
           initial={{ opacity: 0, y: 20 }}
@@ -294,5 +278,5 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         </motion.main>
       </div>
     </div>
-  )
+  );
 }

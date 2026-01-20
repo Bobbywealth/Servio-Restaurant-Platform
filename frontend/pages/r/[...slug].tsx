@@ -1,643 +1,242 @@
 import React, { useState, useEffect } from 'react';
 import Head from 'next/head';
-import { GetStaticProps, GetStaticPaths } from 'next';
-import { motion } from 'framer-motion';
+import { useRouter } from 'next/router';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   Phone,
-  Mail,
   MapPin,
   Clock,
-  Star,
   ShoppingCart,
   Plus,
   Minus,
-  DollarSign,
-  Globe,
-  Facebook,
-  Instagram,
-  Twitter,
-  AlertTriangle
+  AlertTriangle,
+  Loader2,
+  CheckCircle2
 } from 'lucide-react';
+import { api } from '../../lib/api';
 import toast from 'react-hot-toast';
-
-interface RestaurantData {
-  id: string;
-  name: string;
-  description: string;
-  cuisine_type: string;
-  price_range: string;
-  logo_url: string;
-  cover_image_url: string;
-  phone: string;
-  email: string;
-  website: string;
-  address: any;
-  social_links: any;
-  operating_hours: any;
-  online_ordering_enabled: boolean;
-  delivery_enabled: boolean;
-  pickup_enabled: boolean;
-  delivery_fee: number;
-  minimum_order: number;
-  theme: {
-    primary_color: string;
-    secondary_color: string;
-    text_color: string;
-    background_color: string;
-    font_family: string;
-    layout_style: string;
-  };
-}
 
 interface MenuItem {
   id: string;
   name: string;
   description: string;
   price: number;
-  images: string[];
-  allergens: string[];
-  preparation_time: number;
   is_available: boolean;
+  category_name: string;
 }
 
-interface MenuCategory {
-  category_name: string;
-  items: MenuItem[];
+interface RestaurantInfo {
+  name: string;
+  settings: any;
 }
 
 interface CartItem extends MenuItem {
   quantity: number;
 }
 
-interface PublicProfileProps {
-  restaurant: RestaurantData;
-  menuData: { categories: MenuCategory[] };
-  linkType: string;
-  error?: string;
-}
+export default function PublicProfile() {
+  const router = useRouter();
+  const { slug } = router.query;
+  const restaurantSlug = Array.isArray(slug) ? slug[0] : slug;
 
-const PublicProfile: React.FC<PublicProfileProps> = ({ restaurant, menuData, linkType, error }) => {
+  const [restaurant, setRestaurant] = useState<RestaurantInfo | null>(null);
+  const [items, setItems] = useState<MenuItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState<string>('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [orderComplete, setOrderComplete] = useState<string | null>(null);
 
   useEffect(() => {
-    if (menuData?.categories && menuData.categories.length > 0) {
-      setSelectedCategory(menuData.categories[0].category_name);
-    }
-  }, [menuData]);
+    if (!restaurantSlug) return;
+
+    const fetchData = async () => {
+      try {
+        const resp = await api.get(`/api/menu/public/${restaurantSlug}`);
+        setRestaurant(resp.data.data.restaurant);
+        setItems(resp.data.data.items);
+      } catch (err: any) {
+        setError('Restaurant not found');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [restaurantSlug]);
 
   const addToCart = (item: MenuItem) => {
-    if (!restaurant.online_ordering_enabled) {
-      toast.error('Online ordering is not available');
-      return;
-    }
-
-    setCart(prevCart => {
-      const existingItem = prevCart.find(cartItem => cartItem.id === item.id);
-      if (existingItem) {
-        return prevCart.map(cartItem =>
-          cartItem.id === item.id
-            ? { ...cartItem, quantity: cartItem.quantity + 1 }
-            : cartItem
-        );
-      } else {
-        return [...prevCart, { ...item, quantity: 1 }];
+    setCart(prev => {
+      const existing = prev.find(i => i.id === item.id);
+      if (existing) {
+        return prev.map(i => i.id === item.id ? { ...i, quantity: i.quantity + 1 } : i);
       }
+      return [...prev, { ...item, quantity: 1 }];
     });
-    toast.success('Added to cart!');
+    toast.success('Added to cart');
   };
 
   const removeFromCart = (itemId: string) => {
-    setCart(prevCart => {
-      return prevCart.reduce((acc: CartItem[], cartItem) => {
-        if (cartItem.id === itemId) {
-          if (cartItem.quantity > 1) {
-            acc.push({ ...cartItem, quantity: cartItem.quantity - 1 });
-          }
-        } else {
-          acc.push(cartItem);
-        }
-        return acc;
-      }, []);
+    setCart(prev => {
+      const existing = prev.find(i => i.id === itemId);
+      if (existing && existing.quantity > 1) {
+        return prev.map(i => i.id === itemId ? { ...i, quantity: i.quantity - 1 } : i);
+      }
+      return prev.filter(i => i.id !== itemId);
     });
   };
 
-  const getCartTotal = () => {
-    return cart.reduce((total, item) => total + (item.price * item.quantity), 0);
+  const cartTotal = cart.reduce((sum, i) => sum + (i.price * i.quantity), 0);
+
+  const handleCheckout = async () => {
+    if (cart.length === 0) return;
+    setIsSubmitting(true);
+    try {
+      const resp = await api.post(`/api/orders/public/${restaurantSlug}`, {
+        items: cart.map(i => ({ id: i.id, name: i.name, quantity: i.quantity, price: i.price })),
+        customerName: "Guest", // v1 simplicity
+      });
+      setOrderComplete(resp.data.data.orderId);
+      setCart([]);
+      setIsCartOpen(false);
+    } catch (err) {
+      toast.error('Failed to place order');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const getCartItemCount = () => {
-    return cart.reduce((total, item) => total + item.quantity, 0);
-  };
+  if (isLoading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin h-8 w-8 text-blue-600" /></div>;
+  if (error || !restaurant) return <div className="min-h-screen flex items-center justify-center font-bold text-red-600">{error || 'Restaurant not found'}</div>;
 
-  if (error) {
+  if (orderComplete) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Restaurant Not Found</h1>
-          <p className="text-gray-600">{error}</p>
-        </div>
+      <div className="min-h-screen flex flex-col items-center justify-center p-4 text-center">
+        <CheckCircle2 className="h-16 w-16 text-green-500 mb-4" />
+        <h1 className="text-3xl font-bold mb-2">Order Placed!</h1>
+        <p className="text-gray-600 mb-6">Your order number is <span className="font-mono font-bold text-blue-600">{orderComplete}</span></p>
+        <button onClick={() => setOrderComplete(null)} className="btn-primary">Place Another Order</button>
       </div>
     );
   }
 
-  const theme = restaurant.theme || {
-    primary_color: '#ff6b35',
-    secondary_color: '#f7931e',
-    text_color: '#333333',
-    background_color: '#ffffff',
-    font_family: 'Inter'
-  };
-
-  const customStyle = {
-    '--primary-color': theme.primary_color,
-    '--secondary-color': theme.secondary_color,
-    '--text-color': theme.text_color,
-    '--background-color': theme.background_color,
-    fontFamily: theme.font_family,
-  } as React.CSSProperties;
-
   return (
-    <>
+    <div className="min-h-screen bg-gray-50 pb-20">
       <Head>
-        <title>{restaurant.name} - Menu & Ordering</title>
-        <meta name="description" content={restaurant.description} />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>{restaurant.name} - Online Ordering</title>
       </Head>
 
-      <div className="min-h-screen" style={{...customStyle, backgroundColor: theme.background_color}}>
-        {/* Header */}
-        <div className="relative">
-          {restaurant.cover_image_url && (
-            <div className="h-48 md:h-64 bg-cover bg-center" style={{backgroundImage: `url(${restaurant.cover_image_url})`}}>
-              <div className="absolute inset-0 bg-black bg-opacity-40"></div>
-            </div>
-          )}
-          
-          <div className="relative bg-white border-b">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-              <div className="flex items-center space-x-6">
-                {restaurant.logo_url && (
-                  <img
-                    src={restaurant.logo_url}
-                    alt={restaurant.name}
-                    className="w-16 h-16 md:w-20 md:h-20 rounded-full object-cover border-4 border-white shadow-lg"
-                  />
-                )}
-                <div className="flex-1">
-                  <h1 className="text-2xl md:text-3xl font-bold" style={{color: theme.text_color}}>
-                    {restaurant.name}
-                  </h1>
-                  {restaurant.description && (
-                    <p className="text-gray-600 mt-2">{restaurant.description}</p>
-                  )}
-                  <div className="flex items-center space-x-4 mt-3 text-sm text-gray-500">
-                    {restaurant.cuisine_type && (
-                      <span>{restaurant.cuisine_type}</span>
-                    )}
-                    {restaurant.price_range && (
-                      <span>{restaurant.price_range}</span>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Contact & Hours */}
-              <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-                {restaurant.phone && (
-                  <div className="flex items-center space-x-2">
-                    <Phone className="h-4 w-4 text-gray-400" />
-                    <a href={`tel:${restaurant.phone}`} className="text-gray-600 hover:text-gray-900">
-                      {restaurant.phone}
-                    </a>
-                  </div>
-                )}
-                {restaurant.address && (
-                  <div className="flex items-center space-x-2">
-                    <MapPin className="h-4 w-4 text-gray-400" />
-                    <span className="text-gray-600">
-                      {restaurant.address.street}, {restaurant.address.city}
-                    </span>
-                  </div>
-                )}
-                {restaurant.operating_hours && Object.keys(restaurant.operating_hours).length > 0 && (
-                  <div className="flex items-center space-x-2">
-                    <Clock className="h-4 w-4 text-gray-400" />
-                    <span className="text-gray-600">
-                      Open Today
-                    </span>
-                  </div>
-                )}
-              </div>
-            </div>
+      <div className="bg-white shadow-sm border-b">
+        <div className="max-w-4xl mx-auto px-4 py-6">
+          <h1 className="text-3xl font-bold text-gray-900">{restaurant.name}</h1>
+          <div className="flex flex-wrap gap-4 mt-3 text-sm text-gray-500">
+            <span className="flex items-center"><Clock className="w-4 h-4 mr-1" /> Pickup in 20-30 mins</span>
+            <span className="flex items-center"><MapPin className="w-4 h-4 mr-1" /> New York, NY</span>
           </div>
         </div>
+      </div>
 
-        {/* Navigation for different sections */}
-        {linkType === 'menu' && (
-          <div className="bg-white border-b sticky top-0 z-40">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-              <nav className="flex space-x-8 overflow-x-auto">
-                {menuData?.categories?.map((category, index) => (
-                  <button
-                    key={index}
-                    onClick={() => setSelectedCategory(category.category_name)}
-                    className={`py-4 px-2 border-b-2 font-medium text-sm whitespace-nowrap ${
-                      selectedCategory === category.category_name
-                        ? 'border-current text-primary-600'
-                        : 'border-transparent text-gray-500 hover:text-gray-700'
-                    }`}
-                    style={{
-                      color: selectedCategory === category.category_name ? theme.primary_color : undefined
-                    }}
-                  >
-                    {category.category_name}
-                  </button>
+      <div className="max-w-4xl mx-auto px-4 py-8">
+        <div className="grid grid-cols-1 gap-8">
+          {Array.from(new Set(items.map(i => i.category_name))).map(cat => (
+            <div key={cat}>
+              <h2 className="text-xl font-bold mb-4 border-b pb-2">{cat}</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {items.filter(i => i.category_name === cat).map(item => (
+                  <div key={item.id} className="bg-white p-4 rounded-xl border hover:shadow-md transition-all flex justify-between items-center">
+                    <div>
+                      <h3 className="font-semibold text-lg">{item.name}</h3>
+                      <p className="text-gray-500 text-sm mb-2">{item.description}</p>
+                      <p className="font-bold text-blue-600">${item.price.toFixed(2)}</p>
+                    </div>
+                    <button 
+                      onClick={() => addToCart(item)}
+                      className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
+                    >
+                      <Plus className="w-6 h-6" />
+                    </button>
+                  </div>
                 ))}
-              </nav>
-            </div>
-          </div>
-        )}
-
-        {/* Main Content */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          {linkType === 'menu' && menuData && (
-            <div className="space-y-8">
-              {menuData.categories
-                .filter(category => !selectedCategory || category.category_name === selectedCategory)
-                .map((category, categoryIndex) => (
-                <div key={categoryIndex} className="space-y-4">
-                  <h2 className="text-2xl font-bold" style={{color: theme.text_color}}>
-                    {category.category_name}
-                  </h2>
-                  <div className="grid grid-cols-1 gap-4">
-                    {category.items
-                      .filter(item => item.is_available)
-                      .map((item, itemIndex) => (
-                      <motion.div
-                        key={itemIndex}
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: itemIndex * 0.1 }}
-                        className="bg-white rounded-lg border p-4 hover:shadow-lg transition-all"
-                      >
-                        <div className="flex items-start space-x-4">
-                          {item.images.length > 0 && (
-                            <img
-                              src={item.images[0]}
-                              alt={item.name}
-                              className="w-20 h-20 object-cover rounded-lg flex-shrink-0"
-                            />
-                          )}
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-start justify-between">
-                              <div>
-                                <h3 className="font-medium text-lg" style={{color: theme.text_color}}>
-                                  {item.name}
-                                </h3>
-                                {item.description && (
-                                  <p className="text-gray-600 mt-1 text-sm">
-                                    {item.description}
-                                  </p>
-                                )}
-                                {item.allergens.length > 0 && (
-                                  <div className="flex items-center space-x-1 mt-2">
-                                    <AlertTriangle className="h-3 w-3 text-orange-500" />
-                                    <span className="text-xs text-orange-600">
-                                      Contains: {item.allergens.join(', ')}
-                                    </span>
-                                  </div>
-                                )}
-                                {item.preparation_time > 0 && (
-                                  <p className="text-xs text-gray-500 mt-1">
-                                    Prep time: {item.preparation_time} min
-                                  </p>
-                                )}
-                              </div>
-                              <div className="text-right">
-                                <p className="text-lg font-semibold" style={{color: theme.primary_color}}>
-                                  ${item.price.toFixed(2)}
-                                </p>
-                                {restaurant.online_ordering_enabled && (
-                                  <button
-                                    onClick={() => addToCart(item)}
-                                    className="mt-2 px-4 py-2 rounded-lg text-white text-sm font-medium hover:opacity-90 transition-opacity"
-                                    style={{backgroundColor: theme.primary_color}}
-                                  >
-                                    Add to Cart
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </motion.div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {linkType === 'contact' && (
-            <div className="max-w-2xl space-y-6">
-              <h2 className="text-2xl font-bold" style={{color: theme.text_color}}>
-                Contact Us
-              </h2>
-              <div className="bg-white rounded-lg border p-6 space-y-4">
-                {restaurant.phone && (
-                  <div className="flex items-center space-x-3">
-                    <Phone className="h-5 w-5 text-gray-400" />
-                    <div>
-                      <p className="font-medium">Phone</p>
-                      <a href={`tel:${restaurant.phone}`} className="text-gray-600 hover:text-gray-900">
-                        {restaurant.phone}
-                      </a>
-                    </div>
-                  </div>
-                )}
-                {restaurant.email && (
-                  <div className="flex items-center space-x-3">
-                    <Mail className="h-5 w-5 text-gray-400" />
-                    <div>
-                      <p className="font-medium">Email</p>
-                      <a href={`mailto:${restaurant.email}`} className="text-gray-600 hover:text-gray-900">
-                        {restaurant.email}
-                      </a>
-                    </div>
-                  </div>
-                )}
-                {restaurant.address && (
-                  <div className="flex items-center space-x-3">
-                    <MapPin className="h-5 w-5 text-gray-400" />
-                    <div>
-                      <p className="font-medium">Address</p>
-                      <p className="text-gray-600">
-                        {restaurant.address.street}<br/>
-                        {restaurant.address.city}, {restaurant.address.state} {restaurant.address.zip}
-                      </p>
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
-          )}
-
-          {linkType === 'order' && (
-            <div className="text-center py-12">
-              <ShoppingCart className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-              <h2 className="text-2xl font-bold mb-2" style={{color: theme.text_color}}>
-                Online Ordering
-              </h2>
-              {restaurant.online_ordering_enabled ? (
-                <p className="text-gray-600 mb-6">
-                  Browse our menu and place your order for pickup or delivery.
-                </p>
-              ) : (
-                <div className="text-gray-600 mb-6">
-                  <p>Online ordering is currently unavailable.</p>
-                  <p>Please call us to place an order.</p>
-                </div>
-              )}
-            </div>
-          )}
+          ))}
         </div>
+      </div>
 
-        {/* Floating Cart Button */}
-        {restaurant.online_ordering_enabled && cart.length > 0 && (
-          <motion.button
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            className="fixed bottom-6 right-6 bg-white rounded-full p-4 shadow-2xl border border-gray-200 z-50"
-            onClick={() => setIsCartOpen(true)}
-            style={{borderColor: theme.primary_color}}
-          >
-            <div className="flex items-center space-x-2">
-              <ShoppingCart className="h-6 w-6" style={{color: theme.primary_color}} />
-              <span className="font-medium" style={{color: theme.text_color}}>
-                {getCartItemCount()} items • ${getCartTotal().toFixed(2)}
-              </span>
+      {cart.length > 0 && (
+        <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t shadow-lg z-50">
+          <div className="max-w-4xl mx-auto flex items-center justify-between">
+            <div className="flex items-center">
+              <div className="relative mr-4">
+                <ShoppingCart className="w-8 h-8 text-blue-600" />
+                <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center">{cart.reduce((s, i) => s + i.quantity, 0)}</span>
+              </div>
+              <div className="font-bold text-lg">${cartTotal.toFixed(2)}</div>
             </div>
-          </motion.button>
-        )}
+            <button 
+              onClick={() => setIsCartOpen(true)}
+              className="btn-primary px-8"
+            >
+              View Cart
+            </button>
+          </div>
+        </div>
+      )}
 
-        {/* Cart Modal */}
+      <AnimatePresence>
         {isCartOpen && (
-          <div className="fixed inset-0 z-50 overflow-y-auto">
-            <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-              <div className="fixed inset-0 bg-gray-500 bg-opacity-75" onClick={() => setIsCartOpen(false)}></div>
-              
-              <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
-                <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-                  <h3 className="text-lg font-medium mb-4">Your Order</h3>
-                  
-                  <div className="space-y-3 max-h-60 overflow-y-auto">
-                    {cart.map((item, index) => (
-                      <div key={index} className="flex items-center justify-between">
-                        <div className="flex-1">
-                          <h4 className="font-medium">{item.name}</h4>
-                          <p className="text-sm text-gray-600">${item.price.toFixed(2)} each</p>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <button
-                            onClick={() => removeFromCart(item.id)}
-                            className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center"
-                          >
-                            <Minus className="h-4 w-4" />
-                          </button>
-                          <span className="font-medium">{item.quantity}</span>
-                          <button
-                            onClick={() => addToCart(item)}
-                            className="w-8 h-8 rounded-full flex items-center justify-center text-white"
-                            style={{backgroundColor: theme.primary_color}}
-                          >
-                            <Plus className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {restaurant.delivery_enabled && getCartTotal() < restaurant.minimum_order && (
-                    <div className="mt-4 p-3 bg-orange-50 border border-orange-200 rounded-lg">
-                      <p className="text-sm text-orange-700">
-                        Minimum order: ${restaurant.minimum_order.toFixed(2)}
-                        (Add ${(restaurant.minimum_order - getCartTotal()).toFixed(2)} more)
-                      </p>
-                    </div>
-                  )}
-                  
-                  <div className="mt-4 pt-4 border-t">
-                    <div className="flex justify-between font-semibold text-lg">
-                      <span>Total:</span>
-                      <span>${getCartTotal().toFixed(2)}</span>
-                    </div>
-                    {restaurant.delivery_enabled && restaurant.delivery_fee > 0 && (
-                      <p className="text-sm text-gray-600 mt-1">
-                        + ${restaurant.delivery_fee.toFixed(2)} delivery fee
-                      </p>
-                    )}
-                  </div>
+          <>
+            <motion.div 
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/50 z-[60]" 
+              onClick={() => setIsCartOpen(false)} 
+            />
+            <motion.div 
+              initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
+              className="fixed bottom-0 left-0 right-0 bg-white rounded-t-3xl z-[70] p-6 max-h-[80vh] overflow-y-auto"
+            >
+              <div className="max-w-xl mx-auto">
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className="text-2xl font-bold">Your Order</h2>
+                  <button onClick={() => setIsCartOpen(false)} className="text-gray-400 font-bold">Close</button>
                 </div>
                 
-                <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-                  <button
-                    className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 text-base font-medium text-white sm:ml-3 sm:w-auto sm:text-sm"
-                    style={{backgroundColor: theme.primary_color}}
-                    disabled={restaurant.delivery_enabled && getCartTotal() < restaurant.minimum_order}
-                  >
-                    Checkout
-                  </button>
-                  <button
-                    onClick={() => setIsCartOpen(false)}
-                    className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
-                  >
-                    Continue Shopping
-                  </button>
+                <div className="space-y-4 mb-8">
+                  {cart.map(item => (
+                    <div key={item.id} className="flex justify-between items-center">
+                      <div>
+                        <div className="font-semibold">{item.name}</div>
+                        <div className="text-sm text-gray-500">${item.price.toFixed(2)}</div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <button onClick={() => removeFromCart(item.id)} className="p-1 rounded bg-gray-100"><Minus className="w-4 h-4" /></button>
+                        <span className="font-bold">{item.quantity}</span>
+                        <button onClick={() => addToCart(item)} className="p-1 rounded bg-gray-100"><Plus className="w-4 h-4" /></button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
+
+                <div className="border-t pt-4 mb-8">
+                  <div className="flex justify-between items-center text-xl font-bold">
+                    <span>Total</span>
+                    <span>${cartTotal.toFixed(2)}</span>
+                  </div>
+                </div>
+
+                <button 
+                  disabled={isSubmitting}
+                  onClick={handleCheckout}
+                  className="w-full btn-primary py-4 text-lg flex items-center justify-center gap-2"
+                >
+                  {isSubmitting ? <Loader2 className="animate-spin" /> : 'Confirm Order & Pay at Pickup'}
+                </button>
               </div>
-            </div>
-          </div>
+            </motion.div>
+          </>
         )}
-      </div>
-    </>
+      </AnimatePresence>
+    </div>
   );
-};
-
-export async function getStaticPaths() {
-  return {
-    paths: [],
-    fallback: 'blocking'
-  };
 }
-
-export async function getStaticProps({ params }: { params: { slug: string[] } }) {
-  const slugArray = params?.slug;
-  
-  if (!slugArray || slugArray.length === 0) {
-    return {
-      notFound: true,
-    };
-  }
-
-  // For this demo, we'll simulate the restaurant data
-  // In production, you would fetch this from your API based on the slug
-  const restaurantId = '00000000-0000-0000-0000-000000000001';
-  const linkPath = slugArray[0];
-
-  try {
-    // Simulate API calls - in production, these would be real API calls to your backend
-    const restaurant: RestaurantData = {
-      id: restaurantId,
-      name: 'Demo Restaurant',
-      description: 'Authentic Caribbean cuisine with a modern twist. Fresh ingredients, bold flavors, and warm hospitality.',
-      cuisine_type: 'Caribbean',
-      price_range: '$$',
-      logo_url: '/api/placeholder/logo.jpg',
-      cover_image_url: '/api/placeholder/cover.jpg',
-      phone: '+1 (555) 123-4567',
-      email: 'demo@servio.com',
-      website: 'https://servio.com',
-      address: {
-        street: '123 Main St',
-        city: 'New York',
-        state: 'NY',
-        zip: '10001',
-        country: 'USA'
-      },
-      social_links: {
-        facebook: 'https://facebook.com/restaurant',
-        instagram: 'https://instagram.com/restaurant'
-      },
-      operating_hours: {
-        monday: { open: '09:00', close: '22:00' },
-        tuesday: { open: '09:00', close: '22:00' }
-      },
-      online_ordering_enabled: true,
-      delivery_enabled: true,
-      pickup_enabled: true,
-      delivery_fee: 2.99,
-      minimum_order: 15.00,
-      theme: {
-        primary_color: '#ff6b35',
-        secondary_color: '#f7931e',
-        text_color: '#333333',
-        background_color: '#ffffff',
-        font_family: 'Inter',
-        layout_style: 'modern'
-      }
-    };
-
-    const menuData = {
-      categories: [
-        {
-          category_name: 'Appetizers',
-          items: [
-            {
-              id: '1',
-              name: 'Jerk Chicken Wings',
-              description: 'Spicy Caribbean-style chicken wings with our house jerk seasoning',
-              price: 12.99,
-              images: ['/api/placeholder/wings.jpg'],
-              allergens: ['gluten'],
-              preparation_time: 15,
-              is_available: true
-            }
-          ]
-        },
-        {
-          category_name: 'Main Courses',
-          items: [
-            {
-              id: '2',
-              name: 'Curry Goat',
-              description: 'Traditional Caribbean curry goat served with rice and peas',
-              price: 18.99,
-              images: ['/api/placeholder/curry.jpg'],
-              allergens: [],
-              preparation_time: 25,
-              is_available: true
-            },
-            {
-              id: '3',
-              name: 'Oxtail Dinner',
-              description: 'Slow-cooked oxtail in rich gravy with vegetables',
-              price: 22.99,
-              images: ['/api/placeholder/oxtail.jpg'],
-              allergens: [],
-              preparation_time: 35,
-              is_available: true
-            }
-          ]
-        }
-      ]
-    };
-
-    // Determine link type based on path
-    let linkType = 'menu';
-    if (linkPath === 'contact') linkType = 'contact';
-    if (linkPath === 'order') linkType = 'order';
-
-    return {
-      props: {
-        restaurant,
-        menuData: linkType === 'menu' ? menuData : null,
-        linkType,
-      },
-      revalidate: 60, // Revalidate every minute
-    };
-  } catch (error) {
-    return {
-      props: {
-        restaurant: null,
-        menuData: null,
-        linkType: 'menu',
-        error: 'Restaurant not found or temporarily unavailable',
-      },
-      revalidate: 10, // Try again in 10 seconds on error
-    };
-  }
-};
-
-export default PublicProfile;

@@ -2,7 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react'
 import Head from 'next/head'
 import DashboardLayout from '../../components/Layout/DashboardLayout'
 import { useUser } from '../../contexts/UserContext'
-import axios from 'axios'
+import { api } from '../../lib/api'
+import { useSocket } from '../../lib/socket'
 import { RefreshCw, Filter, ClipboardList } from 'lucide-react'
 
 type OrderStatus = 'received' | 'preparing' | 'ready' | 'completed' | 'cancelled'
@@ -51,8 +52,7 @@ function statusBadgeClass(status: OrderStatus) {
 
 export default function OrdersPage() {
   const { user, hasPermission } = useUser()
-  const backendUrl = process.env.BACKEND_URL || 'http://localhost:3002'
-
+  const socket = useSocket()
   const [orders, setOrders] = useState<Order[]>([])
   const [summary, setSummary] = useState<OrdersSummary | null>(null)
   const [statusFilter, setStatusFilter] = useState<OrderStatus | 'all'>('all')
@@ -76,7 +76,7 @@ export default function OrdersPage() {
     setError(null)
     try {
       const [ordersRes, summaryRes] = await Promise.all([
-        axios.get(`${backendUrl}/api/orders`, {
+        api.get('/api/orders', {
           params: {
             status: statusFilter === 'all' ? undefined : statusFilter,
             channel: channelFilter === 'all' ? undefined : channelFilter,
@@ -84,7 +84,7 @@ export default function OrdersPage() {
             offset: 0
           }
         }),
-        axios.get(`${backendUrl}/api/orders/stats/summary`)
+        api.get('/api/orders/stats/summary')
       ])
 
       const nextOrders: Order[] = ordersRes.data?.data?.orders || []
@@ -108,10 +108,16 @@ export default function OrdersPage() {
     setUpdatingOrderId(orderId)
     setError(null)
     try {
-      await axios.post(`${backendUrl}/api/orders/${orderId}/status`, {
+      await api.post(`/api/orders/${orderId}/status`, {
         status,
         userId: user?.id || 'system'
       })
+      
+      // Notify other clients via socket
+      if (socket) {
+        socket.emit('order:status_changed', { orderId, status, timestamp: new Date() })
+      }
+      
       await fetchData()
     } catch (e: any) {
       setError(e?.response?.data?.error?.message || e?.message || 'Failed to update order')

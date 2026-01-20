@@ -69,6 +69,7 @@ router.post('/clock-in', asyncHandler(async (req: Request, res: Response) => {
 
   // Log the action
   await DatabaseService.getInstance().logAudit(
+    user.restaurant_id,
     user.id,
     'clock_in',
     'time_entry',
@@ -153,6 +154,7 @@ router.post('/clock-out', asyncHandler(async (req: Request, res: Response) => {
 
   // Log the action
   await DatabaseService.getInstance().logAudit(
+    user.restaurant_id,
     user.id,
     'clock_out',
     'time_entry',
@@ -241,6 +243,7 @@ router.post('/start-break', asyncHandler(async (req: Request, res: Response) => 
 
   // Log the action
   await DatabaseService.getInstance().logAudit(
+    timeEntry.restaurant_id,
     userId,
     'start_break',
     'time_entry_break',
@@ -331,6 +334,7 @@ router.post('/end-break', asyncHandler(async (req: Request, res: Response) => {
 
   // Log the action
   await DatabaseService.getInstance().logAudit(
+    timeEntry.restaurant_id,
     userId,
     'end_break',
     'time_entry_break',
@@ -568,6 +572,7 @@ router.put('/entries/:id', asyncHandler(async (req: Request, res: Response) => {
 
   // Log the edit
   await DatabaseService.getInstance().logAudit(
+    existingEntry.restaurant_id,
     editedBy || 'system',
     'edit_time_entry',
     'time_entry',

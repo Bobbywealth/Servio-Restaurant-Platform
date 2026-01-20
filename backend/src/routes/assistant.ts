@@ -29,7 +29,7 @@ const assistantService = new AssistantService();
  * Process audio input from microphone
  */
 router.post('/process-audio', upload.single('audio'), asyncHandler(async (req: Request, res: Response) => {
-  const { userId } = req.body;
+  const userId = req.user?.id;
   const audioFile = req.file;
 
   if (!audioFile) {
@@ -40,10 +40,7 @@ router.post('/process-audio', upload.single('audio'), asyncHandler(async (req: R
   }
 
   if (!userId) {
-    return res.status(400).json({
-      success: false,
-      error: { message: 'User ID is required' }
-    });
+    throw new UnauthorizedError();
   }
 
   logger.info(`Processing audio for user ${userId}, file size: ${audioFile.size} bytes`);
@@ -72,7 +69,8 @@ router.post('/process-audio', upload.single('audio'), asyncHandler(async (req: R
  * Process text input (from quick commands or typed input)
  */
 router.post('/process-text', asyncHandler(async (req: Request, res: Response) => {
-  const { text, userId } = req.body;
+  const { text } = req.body;
+  const userId = req.user?.id;
 
   if (!text || typeof text !== 'string') {
     return res.status(400).json({
@@ -82,10 +80,7 @@ router.post('/process-text', asyncHandler(async (req: Request, res: Response) =>
   }
 
   if (!userId) {
-    return res.status(400).json({
-      success: false,
-      error: { message: 'User ID is required' }
-    });
+    throw new UnauthorizedError();
   }
 
   logger.info(`Processing text for user ${userId}: "${text.substring(0, 100)}${text.length > 100 ? '...' : ''}"`);

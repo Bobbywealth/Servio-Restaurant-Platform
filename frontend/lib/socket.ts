@@ -98,7 +98,7 @@ class SocketManager {
       // Join user room if authenticated
       const user = this.getUserFromStorage()
       if (user) {
-        this.socket?.emit('join:user', { userId: user.id, restaurantId: user.restaurant?.id })
+        this.socket?.emit('join:user', { userId: user.id, restaurantId: user.restaurantId })
       }
     })
 

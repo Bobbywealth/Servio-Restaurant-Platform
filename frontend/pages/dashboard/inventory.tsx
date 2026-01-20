@@ -1,7 +1,8 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import Head from 'next/head'
 import { motion } from 'framer-motion'
 import dynamic from 'next/dynamic'
+import { api } from '../../lib/api'
 import { 
   Package, 
   AlertTriangle, 
@@ -12,7 +13,8 @@ import {
   MoreVertical,
   Edit3,
   Trash2,
-  AlertCircle
+  AlertCircle,
+  RefreshCw
 } from 'lucide-react'
 
 const DashboardLayout = dynamic(() => import('../../components/Layout/DashboardLayout'), {
@@ -20,67 +22,53 @@ const DashboardLayout = dynamic(() => import('../../components/Layout/DashboardL
   loading: () => <div className="min-h-screen bg-gray-50 animate-pulse" />
 })
 
+interface InventoryItem {
+  id: string
+  name: string
+  sku?: string
+  unit: string
+  on_hand_qty: number
+  low_stock_threshold: number
+  category?: string
+  updated_at: string
+}
+
 export default function InventoryPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('all')
+  const [items, setItems] = useState<InventoryItem[]>([])
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  // Mock inventory data
-  const inventoryItems = useMemo(() => [
-    {
-      id: 1,
-      name: 'Chicken Breast',
-      category: 'Protein',
-      currentStock: 15,
-      minStock: 20,
-      unit: 'lbs',
-      cost: '$3.50',
-      status: 'low',
-      lastUpdated: '2 hours ago'
-    },
-    {
-      id: 2,
-      name: 'Rice (Jasmine)',
-      category: 'Grains',
-      currentStock: 45,
-      minStock: 25,
-      unit: 'lbs',
-      cost: '$2.20',
-      status: 'good',
-      lastUpdated: '1 day ago'
-    },
-    {
-      id: 3,
-      name: 'Bell Peppers',
-      category: 'Vegetables',
-      currentStock: 8,
-      minStock: 15,
-      unit: 'lbs',
-      cost: '$4.80',
-      status: 'low',
-      lastUpdated: '3 hours ago'
-    },
-    {
-      id: 4,
-      name: 'Coconut Milk',
-      category: 'Dairy',
-      currentStock: 24,
-      minStock: 12,
-      unit: 'cans',
-      cost: '$1.25',
-      status: 'good',
-      lastUpdated: '6 hours ago'
+  const fetchData = async () => {
+    setIsLoading(true)
+    setError(null)
+    try {
+      const resp = await api.get('/api/inventory/search', {
+        params: {
+          q: searchTerm || undefined,
+          category: selectedCategory === 'all' ? undefined : selectedCategory
+        }
+      })
+      setItems(resp.data?.data || [])
+    } catch (e: any) {
+      setError('Failed to load inventory')
+    } finally {
+      setIsLoading(false)
     }
-  ], [])
+  }
 
-  const categories = ['all', 'Protein', 'Vegetables', 'Grains', 'Dairy', 'Spices']
+  useEffect(() => {
+    fetchData()
+  }, [searchTerm, selectedCategory])
 
-  const filteredItems = inventoryItems.filter(item => {
-    const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesCategory = selectedCategory === 'all' || item.category === selectedCategory
-    return matchesSearch && matchesCategory
-  })
+  const categories = useMemo(() => {
+    const set = new Set<string>()
+    items.forEach(i => { if (i.category) set.add(i.category) })
+    return ['all', ...Array.from(set).sort()]
+  }, [items])
 
-  const lowStockCount = inventoryItems.filter(item => item.status === 'low').length
+  const lowStockCount = items.filter(item => item.on_hand_qty <= item.low_stock_threshold).length
 
   return (
     <>
@@ -258,7 +246,7 @@ export default function InventoryPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-surface-200 dark:divide-surface-700">
-                  {filteredItems.map((item, index) => (
+                  {items.map((item, index) => (
                     <motion.tr
                       key={item.id}
                       className="hover:bg-surface-50 dark:hover:bg-surface-800/50 transition-colors"
@@ -271,30 +259,32 @@ export default function InventoryPage() {
                           <div className="text-sm font-medium text-surface-900 dark:text-surface-100">
                             {item.name}
                           </div>
-                          <div className="text-sm text-surface-500 dark:text-surface-400">
-                            Updated {item.lastUpdated}
-                          </div>
+                          {item.sku && (
+                            <div className="text-xs text-surface-500 dark:text-surface-400">
+                              SKU: {item.sku}
+                            </div>
+                          )}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-surface-500 dark:text-surface-400">
-                        {item.category}
+                        {item.category || 'Uncategorized'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-surface-900 dark:text-surface-100">
-                          {item.currentStock} {item.unit}
+                          {item.on_hand_qty} {item.unit}
                         </div>
                         <div className="text-xs text-surface-500 dark:text-surface-400">
-                          Min: {item.minStock} {item.unit}
+                          Min: {item.low_stock_threshold} {item.unit}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-surface-900 dark:text-surface-100">
-                        {item.cost}
+                        —
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`status-badge ${
-                          item.status === 'low' ? 'status-warning' : 'status-success'
+                          item.on_hand_qty <= item.low_stock_threshold ? 'status-warning' : 'status-success'
                         }`}>
-                          {item.status === 'low' ? 'Low Stock' : 'Good'}
+                          {item.on_hand_qty <= item.low_stock_threshold ? 'Low Stock' : 'Good'}
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">

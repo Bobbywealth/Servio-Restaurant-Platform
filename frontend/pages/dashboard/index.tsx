@@ -1,16 +1,15 @@
-import React, { memo, useMemo } from 'react'
+import React, { memo, useMemo, useEffect, useState } from 'react'
 import Head from 'next/head'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
 import dynamic from 'next/dynamic'
 import { useUser } from '../../contexts/UserContext'
+import { api } from '../../lib/api'
+import { useSocket } from '../../lib/socket'
 import { MessageCircle, ShoppingCart, Package, CheckSquare, TrendingUp, Sparkles, ArrowRight } from 'lucide-react'
+import toast from 'react-hot-toast'
 
-// LAZY LOAD HEAVY COMPONENTS FOR PERFORMANCE
-const DashboardLayout = dynamic(() => import('../../components/Layout/DashboardLayout'), {
-  ssr: true,
-  loading: () => <div className="min-h-screen bg-gray-50 animate-pulse" />
-})
+import DashboardLayout from '../../components/Layout/DashboardLayout'
 
 // MEMOIZED STAT CARD COMPONENT FOR PERFORMANCE
 const StatCard = memo(({ stat, index }: { stat: any; index: number }) => (
@@ -64,12 +63,49 @@ StatCard.displayName = 'StatCard'
 
 const DashboardIndex = memo(() => {
   const { user, isManagerOrOwner } = useUser()
+  const socket = useSocket()
+  const [activeOrders, setActiveOrders] = useState(0)
+  const [recentOrders, setRecentOrders] = useState<any[]>([])
+  const [pendingTasks, setPendingTasks] = useState(0)
+  const [todaySales, setTodaySales] = useState(0)
+
+  const fetchStats = async () => {
+    try {
+      const [ordersRes, summaryRes, tasksRes] = await Promise.all([
+        api.get('/api/orders', { params: { limit: 5 } }),
+        api.get('/api/orders/stats/summary'),
+        api.get('/api/tasks/stats')
+      ])
+      
+      setRecentOrders(ordersRes.data.data.orders)
+      setActiveOrders(summaryRes.data.data.activeOrders)
+      setTodaySales(summaryRes.data.data.completedTodaySales || 0) // adjusted field
+      setPendingTasks(tasksRes.data.data.pending)
+    } catch (err) {
+      console.error('Failed to fetch dashboard stats', err)
+    }
+  }
+
+  useEffect(() => {
+    fetchStats()
+
+    if (socket) {
+      socket.on('order:new', (order) => {
+        toast.success(`New order received! Total: $${order.totalAmount}`)
+        fetchStats()
+      })
+    }
+
+    return () => {
+      if (socket) socket.off('order:new')
+    }
+  }, [socket])
 
   // MEMOIZED STATS DATA FOR PERFORMANCE
   const stats = useMemo(() => [
     {
       name: 'Active Orders',
-      value: '12',
+      value: activeOrders.toString(),
       change: '+2.5%',
       changeType: 'increase' as const,
       icon: ShoppingCart,
@@ -77,15 +113,15 @@ const DashboardIndex = memo(() => {
     },
     {
       name: 'Items 86\'d',
-      value: '3',
-      change: '+1',
+      value: '0',
+      change: '+0',
       changeType: 'increase' as const,
       icon: Package,
       color: 'bg-servio-red-500'
     },
     {
       name: 'Pending Tasks',
-      value: '7',
+      value: pendingTasks.toString(),
       change: '-3',
       changeType: 'decrease' as const,
       icon: CheckSquare,
@@ -93,20 +129,13 @@ const DashboardIndex = memo(() => {
     },
     {
       name: 'Today\'s Sales',
-      value: '$2,847',
+      value: `$${todaySales.toFixed(2)}`,
       change: '+12.5%',
       changeType: 'increase' as const,
       icon: TrendingUp,
       color: 'bg-servio-green-500'
     }
-  ], [])
-
-  // MEMOIZED ORDERS DATA FOR PERFORMANCE
-  const recentOrders = useMemo(() => [
-    { id: '214', item: 'Jerk Chicken Plate', time: '2 min ago', status: 'preparing' },
-    { id: '215', item: 'Curry Goat', time: '5 min ago', status: 'ready' },
-    { id: '216', item: 'Oxtail Dinner', time: '8 min ago', status: 'preparing' }
-  ], [])
+  ], [activeOrders, pendingTasks, todaySales])
 
   // MEMOIZED QUICK ACTIONS FOR PERFORMANCE
   const quickActions = useMemo(() => [
@@ -236,29 +265,33 @@ const DashboardIndex = memo(() => {
                 Recent Orders
               </h3>
               <div className="space-y-3">
-                {recentOrders.map((order, index) => (
-                  <motion.div
-                    key={order.id}
-                    className="flex items-center justify-between py-3 px-4 rounded-xl bg-surface-50 dark:bg-surface-800/50 hover:bg-surface-100 dark:hover:bg-surface-800 transition-colors cursor-pointer"
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.7 + index * 0.1 }}
-                    whileHover={{ x: 4 }}
-                  >
-                    <div>
-                      <p className="font-medium text-surface-900 dark:text-surface-100">Order #{order.id}</p>
-                      <p className="text-sm text-surface-600 dark:text-surface-400">{order.item}</p>
-                    </div>
-                    <div className="text-right">
-                      <span className={`status-badge ${
-                        order.status === 'ready' ? 'status-success' : 'status-warning'
-                      }`}>
-                        {order.status}
-                      </span>
-                      <p className="text-xs text-surface-500 dark:text-surface-400 mt-1">{order.time}</p>
-                    </div>
-                  </motion.div>
-                ))}
+                {recentOrders.length === 0 ? (
+                  <p className="text-surface-500 py-4 text-center">No recent orders</p>
+                ) : (
+                  recentOrders.map((order, index) => (
+                    <motion.div
+                      key={order.id}
+                      className="flex items-center justify-between py-3 px-4 rounded-xl bg-surface-50 dark:bg-surface-800/50 hover:bg-surface-100 dark:hover:bg-surface-800 transition-colors cursor-pointer"
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.7 + index * 0.1 }}
+                      whileHover={{ x: 4 }}
+                    >
+                      <div>
+                        <p className="font-medium text-surface-900 dark:text-surface-100">Order #{order.external_id || order.id.substring(0, 8)}</p>
+                        <p className="text-sm text-surface-600 dark:text-surface-400">Total: ${order.total_amount?.toFixed(2)}</p>
+                      </div>
+                      <div className="text-right">
+                        <span className={`status-badge ${
+                          order.status === 'ready' ? 'status-success' : 'status-warning'
+                        }`}>
+                          {order.status}
+                        </span>
+                        <p className="text-xs text-surface-500 dark:text-surface-400 mt-1">{new Date(order.created_at).toLocaleTimeString()}</p>
+                      </div>
+                    </motion.div>
+                  ))
+                )}
               </div>
             </motion.div>
 

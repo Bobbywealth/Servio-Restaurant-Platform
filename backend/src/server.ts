@@ -203,18 +203,6 @@ app.use((req, res, next) => {
   next();
 });
 
-// AGGRESSIVE STATIC ASSET CACHING
-app.use('/uploads', express.static(path.join(__dirname, '../uploads'), {
-  maxAge: '1y', // 1 year cache
-  etag: true,
-  lastModified: true,
-  immutable: true,
-  setHeaders: (res, path) => {
-    res.set('Cache-Control', 'public, max-age=31536000, immutable');
-    res.set('X-Content-Type-Options', 'nosniff');
-  }
-}));
-
 // PERFORMANCE HEADERS FOR ALL RESPONSES
 app.use((req, res, next) => {
   res.set('X-Powered-By', 'Servio');
@@ -236,9 +224,19 @@ setInterval(() => {
 io.on('connection', (socket) => {
   logger.info(`Client connected: ${socket.id}`);
 
-  socket.on('join-restaurant', (restaurantId: string) => {
+  socket.on('join:restaurant', (data: { restaurantId: string }) => {
+    const { restaurantId } = data;
     socket.join(`restaurant-${restaurantId}`);
     logger.info(`Socket ${socket.id} joined restaurant-${restaurantId}`);
+  });
+
+  socket.on('join:user', (data: { userId: string, restaurantId?: string }) => {
+    const { userId, restaurantId } = data;
+    socket.join(`user-${userId}`);
+    if (restaurantId) {
+      socket.join(`restaurant-${restaurantId}`);
+    }
+    logger.info(`Socket ${socket.id} joined user-${userId} and restaurant-${restaurantId}`);
   });
 
   socket.on('disconnect', () => {

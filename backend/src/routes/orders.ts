@@ -13,10 +13,11 @@ const num = (v: any) => (typeof v === 'number' ? v : Number(v ?? 0));
 router.get('/', asyncHandler(async (req: Request, res: Response) => {
   const { status, channel, limit = 50, offset = 0 } = req.query;
   const db = DatabaseService.getInstance().getDatabase();
+  const restaurantId = req.user?.restaurantId;
 
   let query = 'SELECT * FROM orders';
-  const params: any[] = [];
-  const conditions: string[] = [];
+  const params: any[] = [restaurantId];
+  const conditions: string[] = ['restaurant_id = ?'];
 
   if (status) {
     conditions.push('status = ?');
@@ -135,7 +136,8 @@ router.post('/:id/status', asyncHandler(async (req: Request, res: Response) => {
 
   // Log the action
   await DatabaseService.getInstance().logAudit(
-    userId || 'system',
+    req.user?.restaurantId!,
+    req.user?.id || 'system',
     'update_order_status',
     'order',
     id,
@@ -163,10 +165,12 @@ router.get('/stats/summary', asyncHandler(async (req: Request, res: Response) =>
   const db = DatabaseService.getInstance().getDatabase();
   const dialect = DatabaseService.getInstance().getDialect();
 
+  const restaurantId = req.user?.restaurantId;
+
   const completedTodayCondition =
     dialect === 'postgres'
       ? "status = 'completed' AND created_at::date = CURRENT_DATE"
-      : 'status = "completed" AND DATE(created_at) = DATE("now")';
+      : 'status = \'completed\' AND DATE(created_at) = DATE(\'now\')';
 
   const [
     totalOrders,
@@ -176,12 +180,12 @@ router.get('/stats/summary', asyncHandler(async (req: Request, res: Response) =>
     ordersByStatus,
     ordersByChannel
   ] = await Promise.all([
-    db.get('SELECT COUNT(*) as count FROM orders'),
-    db.get('SELECT COUNT(*) as count FROM orders WHERE status IN ("received", "preparing", "ready")'),
-    db.get(`SELECT COUNT(*) as count FROM orders WHERE ${completedTodayCondition}`),
-    db.get(`SELECT AVG(total_amount) as avg FROM orders WHERE ${completedTodayCondition}`),
-    db.all('SELECT status, COUNT(*) as count FROM orders GROUP BY status'),
-    db.all('SELECT channel, COUNT(*) as count FROM orders GROUP BY channel')
+    db.get('SELECT COUNT(*) as count FROM orders WHERE restaurant_id = ?', [restaurantId]),
+    db.get('SELECT COUNT(*) as count FROM orders WHERE status IN (\'received\', \'preparing\', \'ready\') AND restaurant_id = ?', [restaurantId]),
+    db.get(`SELECT COUNT(*) as count FROM orders WHERE ${completedTodayCondition} AND restaurant_id = ?`, [restaurantId]),
+    db.get(`SELECT AVG(total_amount) as avg FROM orders WHERE ${completedTodayCondition} AND restaurant_id = ?`, [restaurantId]),
+    db.all('SELECT status, COUNT(*) as count FROM orders WHERE restaurant_id = ? GROUP BY status', [restaurantId]),
+    db.all('SELECT channel, COUNT(*) as count FROM orders WHERE restaurant_id = ? GROUP BY channel', [restaurantId])
   ]);
 
   const stats = {
@@ -206,9 +210,57 @@ router.get('/stats/summary', asyncHandler(async (req: Request, res: Response) =>
 }));
 
 /**
- * GET /api/orders/waiting-times
- * Get orders with their waiting times
+ * POST /api/orders/public/:slug
+ * Create a new order via public site
  */
+router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) => {
+  const { slug } = req.params;
+  const { items, customerName, customerPhone, customerEmail } = req.body;
+
+  if (!items || !Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ success: false, error: { message: 'Items are required' } });
+  }
+
+  const db = DatabaseService.getInstance().getDatabase();
+  const restaurant = await db.get('SELECT id FROM restaurants WHERE slug = ?', [slug]);
+  if (!restaurant) throw new BadRequestError('Restaurant not found');
+
+  const orderId = uuidv4();
+  const restaurantId = restaurant.id;
+
+  // Calculate total and validate items (simplified for v1 fast build)
+  let totalAmount = 0;
+  for (const item of items) {
+    totalAmount += (item.price * item.quantity);
+  }
+
+  await db.run(`
+    INSERT INTO orders (
+      id, restaurant_id, channel, status, total_amount, payment_status, created_at, updated_at
+    ) VALUES (?, ?, 'website', 'NEW', ?, 'unpaid', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+  `, [orderId, restaurantId, totalAmount]);
+
+  // Create order items
+  for (const item of items) {
+    await db.run(`
+      INSERT INTO order_items (id, order_id, menu_item_id, name, quantity, unit_price)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `, [uuidv4(), orderId, item.id, item.name, item.quantity, item.price]);
+  }
+
+  // Notify dashboard via Socket.IO
+  const io = req.app.get('socketio');
+  if (io) {
+    io.to(`restaurant-${restaurantId}`).emit('new-order', { orderId, totalAmount });
+  }
+
+  await DatabaseService.getInstance().logAudit(restaurantId, null, 'create_public_order', 'order', orderId, { totalAmount });
+
+  res.status(201).json({
+    success: true,
+    data: { orderId, status: 'NEW' }
+  });
+}));
 router.get('/waiting-times', asyncHandler(async (req: Request, res: Response) => {
   const db = DatabaseService.getInstance().getDatabase();
   const dialect = DatabaseService.getInstance().getDialect();
@@ -291,7 +343,8 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
 
   // Log the action
   await DatabaseService.getInstance().logAudit(
-    userId || 'system',
+    req.user?.restaurantId!,
+    req.user?.id || 'system',
     'create_order',
     'order',
     orderId,

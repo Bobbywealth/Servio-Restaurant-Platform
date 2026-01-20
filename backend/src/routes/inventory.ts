@@ -12,10 +12,11 @@ const router = Router();
 router.get('/search', asyncHandler(async (req: Request, res: Response) => {
   const { q, category, lowStock } = req.query;
   const db = DatabaseService.getInstance().getDatabase();
+  const restaurantId = req.user?.restaurantId;
 
-  let query = 'SELECT * FROM inventory';
-  const params: any[] = [];
-  const conditions: string[] = [];
+  let query = 'SELECT * FROM inventory_items';
+  const params: any[] = [restaurantId];
+  const conditions: string[] = ['restaurant_id = ?'];
 
   if (q) {
     conditions.push('(name LIKE ? OR sku LIKE ?)');
@@ -28,7 +29,7 @@ router.get('/search', asyncHandler(async (req: Request, res: Response) => {
   }
 
   if (lowStock === 'true') {
-    conditions.push('current_quantity <= low_stock_threshold');
+    conditions.push('on_hand_qty <= low_stock_threshold');
   }
 
   if (conditions.length > 0) {
@@ -60,6 +61,7 @@ router.post('/receive', asyncHandler(async (req: Request, res: Response) => {
   }
 
   const db = DatabaseService.getInstance().getDatabase();
+  const restaurantId = req.user?.restaurantId;
   const results = [];
 
   for (const item of items) {
@@ -71,24 +73,25 @@ router.post('/receive', asyncHandler(async (req: Request, res: Response) => {
 
     // Find the inventory item
     const inventoryItem = await db.get(
-      'SELECT * FROM inventory WHERE name LIKE ?',
-      [`%${name}%`]
+      'SELECT * FROM inventory_items WHERE name LIKE ? AND restaurant_id = ?',
+      [`%${name}%`, restaurantId]
     );
 
     if (inventoryItem) {
-      const newQuantity = inventoryItem.current_quantity + quantity;
+      const newQuantity = inventoryItem.on_hand_qty + quantity;
 
       await db.run(
-        'UPDATE inventory SET current_quantity = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+        'UPDATE inventory_items SET on_hand_qty = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
         [newQuantity, inventoryItem.id]
       );
 
       await DatabaseService.getInstance().logAudit(
-        userId || 'system',
+        restaurantId!,
+        req.user?.id || 'system',
         'receive_inventory',
         'inventory',
         inventoryItem.id,
-        { name, previousQuantity: inventoryItem.current_quantity, received: quantity, newQuantity }
+        { name, previousQuantity: inventoryItem.on_hand_qty, received: quantity, newQuantity }
       );
 
       results.push({
@@ -123,8 +126,9 @@ router.post('/adjust', asyncHandler(async (req: Request, res: Response) => {
   }
 
   const db = DatabaseService.getInstance().getDatabase();
+  const restaurantId = req.user?.restaurantId;
 
-  const item = await db.get('SELECT * FROM inventory WHERE id = ?', [itemId]);
+  const item = await db.get('SELECT * FROM inventory_items WHERE id = ? AND restaurant_id = ?', [itemId, restaurantId]);
   if (!item) {
     return res.status(404).json({
       success: false,
@@ -132,28 +136,29 @@ router.post('/adjust', asyncHandler(async (req: Request, res: Response) => {
     });
   }
 
-  const newQuantity = item.current_quantity + quantity;
+  const newQuantity = item.on_hand_qty + quantity;
 
   if (newQuantity < 0) {
     return res.status(400).json({
       success: false,
       error: {
-        message: `Cannot reduce ${item.name} below 0. Current: ${item.current_quantity}, Requested: ${quantity}`
+        message: `Cannot reduce ${item.name} below 0. Current: ${item.on_hand_qty}, Requested: ${quantity}`
       }
     });
   }
 
   await db.run(
-    'UPDATE inventory SET current_quantity = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+    'UPDATE inventory_items SET on_hand_qty = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
     [newQuantity, itemId]
   );
 
   await DatabaseService.getInstance().logAudit(
-    userId || 'system',
+    restaurantId!,
+    req.user?.id || 'system',
     'adjust_inventory',
     'inventory',
     itemId,
-    { itemName: item.name, previousQuantity: item.current_quantity, adjustment: quantity, newQuantity, reason }
+    { itemName: item.name, previousQuantity: item.on_hand_qty, adjustment: quantity, newQuantity, reason }
   );
 
   logger.info(`Inventory adjusted: ${item.name} ${quantity > 0 ? '+' : ''}${quantity} (reason: ${reason})`);
@@ -163,7 +168,7 @@ router.post('/adjust', asyncHandler(async (req: Request, res: Response) => {
     data: {
       itemId,
       itemName: item.name,
-      previousQuantity: item.current_quantity,
+      previousQuantity: item.on_hand_qty,
       adjustment: quantity,
       newQuantity,
       reason,
@@ -178,18 +183,19 @@ router.post('/adjust', asyncHandler(async (req: Request, res: Response) => {
  */
 router.get('/low-stock', asyncHandler(async (req: Request, res: Response) => {
   const db = DatabaseService.getInstance().getDatabase();
+  const restaurantId = req.user?.restaurantId;
 
   const lowStockItems = await db.all(`
     SELECT *,
            CASE
-             WHEN current_quantity = 0 THEN 'out_of_stock'
-             WHEN current_quantity <= low_stock_threshold THEN 'low_stock'
+             WHEN on_hand_qty = 0 THEN 'out_of_stock'
+             WHEN on_hand_qty <= low_stock_threshold THEN 'low_stock'
              ELSE 'normal'
            END as stock_status
-    FROM inventory
-    WHERE current_quantity <= low_stock_threshold
-    ORDER BY current_quantity ASC
-  `);
+    FROM inventory_items
+    WHERE restaurant_id = ? AND on_hand_qty <= low_stock_threshold
+    ORDER BY on_hand_qty ASC
+  `, [restaurantId]);
 
   res.json({
     success: true,
@@ -203,13 +209,15 @@ router.get('/low-stock', asyncHandler(async (req: Request, res: Response) => {
  */
 router.get('/categories', asyncHandler(async (req: Request, res: Response) => {
   const db = DatabaseService.getInstance().getDatabase();
+  const restaurantId = req.user?.restaurantId;
 
   const categories = await db.all(`
     SELECT category, COUNT(*) as item_count
-    FROM inventory
+    FROM inventory_items
+    WHERE restaurant_id = ?
     GROUP BY category
     ORDER BY category
-  `);
+  `, [restaurantId]);
 
   res.json({
     success: true,

@@ -45,6 +45,7 @@ export async function requireAuth(req: Request, _res: Response, next: NextFuncti
 
     const user: AuthUser = {
       id: userRow.id,
+      restaurantId: userRow.restaurant_id,
       name: userRow.name,
       email: userRow.email ?? null,
       role: userRow.role,
