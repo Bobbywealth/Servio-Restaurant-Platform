@@ -1,7 +1,7 @@
-import React from 'react'
+import React, { useState } from 'react'
 import Head from 'next/head'
 import Link from 'next/link'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   ArrowRight,
   BarChart3,
@@ -14,7 +14,9 @@ import {
   Package,
   Shield,
   ShoppingCart,
-  Users
+  Users,
+  Menu,
+  X
 } from 'lucide-react'
 
 const fadeIn = {
@@ -23,6 +25,8 @@ const fadeIn = {
 }
 
 export default function HomePage() {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+
   return (
     <div className="min-h-screen bg-[#0A0A0B] text-white overflow-x-hidden relative">
       <Head>
@@ -43,23 +47,83 @@ export default function HomePage() {
 
       <div className="relative z-10 min-h-screen flex flex-col">
         {/* Navigation */}
-        <nav className="w-full pt-10 px-6 sm:px-10">
-          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-6 sm:gap-0">
+        <nav className="w-full pt-6 sm:pt-10 px-4 sm:px-6 lg:px-10">
+          <div className="max-w-7xl mx-auto flex items-center justify-between">
             <Link href="/" className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-[#14b8a6] flex items-center justify-center">
-                <span className="text-white font-bold text-xl">S</span>
+              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-[#14b8a6] flex items-center justify-center">
+                <span className="text-white font-bold text-lg sm:text-xl">S</span>
               </div>
-              <span className="text-2xl font-semibold tracking-tight text-white">Servio</span>
+              <span className="text-xl sm:text-2xl font-semibold tracking-tight text-white">Servio</span>
             </Link>
 
-            <div className="flex items-center gap-6 text-sm font-medium text-white">
+            {/* Desktop Navigation */}
+            <div className="hidden md:flex items-center gap-6 text-sm font-medium text-white">
               <a href="#services" className="hover:text-[#2dd4bf] transition-colors">Services</a>
               <a href="#features" className="hover:text-[#2dd4bf] transition-colors">Features</a>
               <a href="#pricing" className="hover:text-[#2dd4bf] transition-colors">Pricing</a>
               <a href="#faq" className="hover:text-[#2dd4bf] transition-colors">FAQ</a>
               <Link href="/login" className="hover:text-[#2dd4bf] transition-colors">Login</Link>
             </div>
+
+            {/* Mobile Menu Button */}
+            <button
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="md:hidden p-2 text-white hover:text-[#2dd4bf] transition-colors"
+              aria-label="Toggle menu"
+            >
+              {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+            </button>
           </div>
+
+          {/* Mobile Menu */}
+          <AnimatePresence>
+            {mobileMenuOpen && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="md:hidden mt-4 pb-4 border-t border-white/10"
+              >
+                <div className="flex flex-col gap-4 pt-4">
+                  <a
+                    href="#services"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="text-white hover:text-[#2dd4bf] transition-colors py-2"
+                  >
+                    Services
+                  </a>
+                  <a
+                    href="#features"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="text-white hover:text-[#2dd4bf] transition-colors py-2"
+                  >
+                    Features
+                  </a>
+                  <a
+                    href="#pricing"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="text-white hover:text-[#2dd4bf] transition-colors py-2"
+                  >
+                    Pricing
+                  </a>
+                  <a
+                    href="#faq"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="text-white hover:text-[#2dd4bf] transition-colors py-2"
+                  >
+                    FAQ
+                  </a>
+                  <Link
+                    href="/login"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="text-white hover:text-[#2dd4bf] transition-colors py-2"
+                  >
+                    Login
+                  </Link>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </nav>
 
         {/* Hero Content */}
