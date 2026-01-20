@@ -49,13 +49,21 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
   if (isLoading || !user) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center">
         <motion.div 
-          animate={{ rotate: 360 }}
-          transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+          animate={{ scale: [1, 1.1, 1] }}
+          transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
         >
-          <Bot className="h-10 w-10 text-primary-600" />
+          <img src="/images/servio_icon_tight.png" alt="Servio" className="h-16 w-16" />
         </motion.div>
+        <motion.p 
+          className="mt-4 text-surface-500 font-medium"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.5 }}
+        >
+          Initializing your AI Command Center...
+        </motion.p>
       </div>
     );
   }
@@ -165,23 +173,21 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       >
         <div className="flex items-center justify-between h-16 px-6 border-b border-surface-200 dark:border-surface-800">
           <motion.div className="flex items-center" whileHover={{ scale: 1.02 }}>
-            <div className="relative">
-              <Bot className="w-8 h-8 text-primary-600 dark:text-primary-400" />
-              <motion.div
-                className="absolute -top-1 -right-1 w-3 h-3 bg-servio-orange-500 rounded-full"
-                animate={{ scale: [1, 1.2, 1] }}
-                transition={{ duration: 2, repeat: Infinity }}
+            <Link href="/dashboard" className="flex items-center">
+              <img 
+                src="/images/servio_logo_transparent_tight.png" 
+                alt="Servio Logo" 
+                className="h-8 w-auto dark:brightness-0 dark:invert" 
               />
-            </div>
-            <span className="ml-3 text-xl font-bold text-surface-900 dark:text-surface-100">Servio</span>
-            <motion.div
-              className="ml-2 px-2 py-1 bg-servio-orange-100 dark:bg-servio-orange-900/30 text-servio-orange-700 dark:text-servio-orange-300 text-2xs font-medium rounded-full"
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              transition={{ delay: 0.2 }}
-            >
-              AI
-            </motion.div>
+              <motion.div
+                className="ml-2 px-2 py-1 bg-servio-orange-100 dark:bg-servio-orange-900/30 text-servio-orange-700 dark:text-servio-orange-300 text-[10px] leading-none font-bold rounded-full"
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ delay: 0.2 }}
+              >
+                AI
+              </motion.div>
+            </Link>
           </motion.div>
           <button onClick={closeSidebar} className="lg:hidden btn-icon">
             <X className="w-5 h-5" />

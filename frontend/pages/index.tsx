@@ -33,23 +33,21 @@ export default function HomePage() {
                 className="flex items-center"
                 whileHover={{ scale: 1.02 }}
               >
-                <div className="relative">
-                  <Bot className="h-8 w-8 text-primary-600 dark:text-primary-400" />
-                  <motion.div
-                    className="absolute -top-1 -right-1 w-3 h-3 bg-servio-orange-500 rounded-full"
-                    animate={{ scale: [1, 1.2, 1] }}
-                    transition={{ duration: 2, repeat: Infinity }}
+                <Link href="/" className="flex items-center">
+                  <img 
+                    src="/images/servio_logo_transparent_tight.png" 
+                    alt="Servio Logo" 
+                    className="h-8 w-auto dark:brightness-0 dark:invert" 
                   />
-                </div>
-                <span className="ml-2 text-xl font-bold text-surface-900 dark:text-surface-100">Servio</span>
-                <motion.div
-                  className="ml-2 px-2 py-1 bg-servio-orange-100 dark:bg-servio-orange-900/30 text-servio-orange-700 dark:text-servio-orange-300 text-2xs font-medium rounded-full"
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  transition={{ delay: 0.2 }}
-                >
-                  AI
-                </motion.div>
+                  <motion.div
+                    className="ml-2 px-2 py-1 bg-servio-orange-100 dark:bg-servio-orange-900/30 text-servio-orange-700 dark:text-servio-orange-300 text-[10px] leading-none font-bold rounded-full"
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    transition={{ delay: 0.2 }}
+                  >
+                    AI
+                  </motion.div>
+                </Link>
               </motion.div>
 
               <div className="hidden md:flex items-center space-x-8">
@@ -325,10 +323,13 @@ export default function HomePage() {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex items-center justify-between">
               <div className="flex items-center">
-                <Bot className="h-6 w-6 text-blue-600" />
-                <span className="ml-2 text-lg font-semibold text-gray-900">Servio</span>
+                <img 
+                  src="/images/servio_logo_transparent_tight.png" 
+                  alt="Servio Logo" 
+                  className="h-6 w-auto" 
+                />
               </div>
-              <p className="text-gray-500">© 2026 Servio. All rights reserved.</p>
+              <p className="text-gray-500 text-sm">© 2026 Servio. All rights reserved.</p>
             </div>
           </div>
         </footer>
