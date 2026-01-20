@@ -268,7 +268,7 @@ export default function AssistantPage() {
 
       // **ALWAYS LISTENING: Check for wake word in transcript**
       if (stateRef.current.alwaysListening && transcript) {
-        const lowerTranscript = transcript.toLowerCase();
+        const lowerTranscript = transcript.toLowerCase().trim();
         const hasWakeWord = lowerTranscript.includes('servio') || 
                             lowerTranscript.includes('sergio') ||
                             lowerTranscript.includes('serveio');
@@ -276,17 +276,22 @@ export default function AssistantPage() {
         // Check if we're in an active conversation window
         const inConversationWindow = inConversationWindowRef.current;
         
+        console.log(`🔍 Transcript: "${transcript}" | Has wake word: ${hasWakeWord} | In window: ${inConversationWindow}`);
+        
         if (!hasWakeWord && !inConversationWindow) {
-          console.log(`⏭️ No wake word and not in conversation window - skipping: "${transcript}"`);
+          console.log(`⏭️ IGNORING - No wake word and not in conversation window`);
           addMessageRef.current?.({
             type: 'system',
-            content: `🔇 Ignored: "${transcript}" (say "Servio" to start conversation)`,
+            content: `🔇 Ignored: "${transcript.substring(0, 50)}..." (say "Servio" to start)`,
             metadata: { action: { type: 'ignored', status: 'completed' } }
           });
           // Don't process - just restart listening
           setState(prev => ({ ...prev, isProcessing: false }));
           audioChunksRef.current = [];
-          setTimeout(() => startRecordingRef.current?.(), 500);
+          setTimeout(() => {
+            console.log('🔄 Restarting recording after ignoring...');
+            startRecordingRef.current?.();
+          }, 500);
           return;
         }
         
