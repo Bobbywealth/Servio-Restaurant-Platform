@@ -4,10 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "NODE_OPTIONS='--max-old-space-size=1024' next build",
     "export": "next export",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "install:ci": "NODE_OPTIONS='--max-old-space-size=1024' npm ci --legacy-peer-deps"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
