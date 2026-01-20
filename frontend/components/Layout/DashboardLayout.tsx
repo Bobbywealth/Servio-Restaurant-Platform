@@ -49,7 +49,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
   if (isLoading || !user) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-surface-950 flex flex-col items-center justify-center">
+      <div className="min-h-screen bg-[#F9FAFB] dark:bg-surface-950 flex flex-col items-center justify-center">
         <motion.div 
           animate={{ scale: [1, 1.1, 1] }}
           transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
