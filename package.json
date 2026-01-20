@@ -7,7 +7,9 @@
     "dev:frontend": "cd frontend && npm run dev",
     "dev:backend": "cd backend && npm run dev",
     "dev:worker": "cd backend && npm run dev:worker",
-    "build": "cd frontend && npm run build",
+    "build": "echo 'Use service-specific build commands in render.yaml'",
+    "build:backend": "cd backend && npm ci --legacy-peer-deps && npm run build",
+    "build:frontend": "cd frontend && npm ci --legacy-peer-deps && npm run build",
     "start": "cd backend && npm start",
     "install-all": "npm install && cd frontend && npm install && cd ../backend && npm install"
   },
