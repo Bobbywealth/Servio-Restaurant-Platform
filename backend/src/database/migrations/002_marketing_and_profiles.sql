@@ -226,7 +226,7 @@ SELECT
     '["gluten"]',
     15,
     1,
-    1,
+    TRUE,
     'Appetizers'
 FROM restaurants r
 JOIN menu_categories c ON c.restaurant_id = r.id
@@ -248,7 +248,7 @@ SELECT
     '[]',
     25,
     1,
-    1,
+    TRUE,
     'Main Courses'
 FROM restaurants r
 JOIN menu_categories c ON c.restaurant_id = r.id
@@ -270,7 +270,7 @@ SELECT
     '[]',
     35,
     2,
-    1,
+    TRUE,
     'Main Courses'
 FROM restaurants r
 JOIN menu_categories c ON c.restaurant_id = r.id
