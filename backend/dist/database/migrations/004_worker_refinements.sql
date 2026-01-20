@@ -8,11 +8,11 @@ CREATE TABLE IF NOT EXISTS sync_jobs (
     entity_type TEXT NOT NULL,
     entity_id TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'pending',
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Add refinements to sync_jobs for the background worker
-ALTER TABLE sync_jobs ADD COLUMN next_run_at DATETIME DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE sync_jobs ADD COLUMN next_run_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
 ALTER TABLE sync_jobs ADD COLUMN priority INTEGER DEFAULT 10;
 ALTER TABLE sync_jobs ADD COLUMN metadata TEXT DEFAULT '{}';
 

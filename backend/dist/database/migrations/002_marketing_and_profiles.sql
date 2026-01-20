@@ -12,9 +12,9 @@ ALTER TABLE customers ADD COLUMN tags TEXT DEFAULT '[]';
 ALTER TABLE customers ADD COLUMN total_orders INTEGER DEFAULT 0;
 ALTER TABLE customers ADD COLUMN total_spent DECIMAL(10,2) DEFAULT 0;
 ALTER TABLE customers ADD COLUMN last_order_date DATE;
-ALTER TABLE customers ADD COLUMN opt_in_sms BOOLEAN DEFAULT 0;
-ALTER TABLE customers ADD COLUMN opt_in_email BOOLEAN DEFAULT 0;
-ALTER TABLE customers ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE customers ADD COLUMN opt_in_sms BOOLEAN DEFAULT FALSE;
+ALTER TABLE customers ADD COLUMN opt_in_email BOOLEAN DEFAULT FALSE;
+ALTER TABLE customers ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
 
 CREATE INDEX IF NOT EXISTS idx_customers_restaurant ON customers(restaurant_id);
 CREATE INDEX IF NOT EXISTS idx_customers_email ON customers(email);
@@ -84,9 +84,9 @@ ALTER TABLE restaurants ADD COLUMN cuisine_type VARCHAR(100);
 ALTER TABLE restaurants ADD COLUMN price_range VARCHAR(20);
 ALTER TABLE restaurants ADD COLUMN social_links TEXT DEFAULT '{}'; -- JSON for social media links
 ALTER TABLE restaurants ADD COLUMN menu_pdf_url VARCHAR(500);
-ALTER TABLE restaurants ADD COLUMN online_ordering_enabled BOOLEAN DEFAULT 0;
-ALTER TABLE restaurants ADD COLUMN delivery_enabled BOOLEAN DEFAULT 0;
-ALTER TABLE restaurants ADD COLUMN pickup_enabled BOOLEAN DEFAULT 1;
+ALTER TABLE restaurants ADD COLUMN online_ordering_enabled BOOLEAN DEFAULT FALSE;
+ALTER TABLE restaurants ADD COLUMN delivery_enabled BOOLEAN DEFAULT FALSE;
+ALTER TABLE restaurants ADD COLUMN pickup_enabled BOOLEAN DEFAULT TRUE;
 ALTER TABLE restaurants ADD COLUMN delivery_radius INTEGER DEFAULT 0; -- in miles
 ALTER TABLE restaurants ADD COLUMN delivery_fee DECIMAL(10,2) DEFAULT 0;
 ALTER TABLE restaurants ADD COLUMN minimum_order DECIMAL(10,2) DEFAULT 0;
@@ -106,12 +106,13 @@ CREATE TABLE IF NOT EXISTS restaurant_themes (
     custom_css TEXT,
     font_family VARCHAR(100) DEFAULT 'Inter',
     layout_style VARCHAR(50) DEFAULT 'modern', -- 'modern', 'classic', 'minimal'
-    is_active BOOLEAN DEFAULT 1,
+    is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_restaurant_themes_restaurant ON restaurant_themes(restaurant_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_restaurant_themes_unique ON restaurant_themes(restaurant_id);
 
 -- ============================================================================
 -- RESTAURANT LINKS AND QR CODES
@@ -125,7 +126,7 @@ CREATE TABLE IF NOT EXISTS restaurant_links (
     url_path VARCHAR(255) NOT NULL, -- e.g., 'menu', 'order', 'specials'
     target_url VARCHAR(500), -- External URL if redirecting
     link_type VARCHAR(50) DEFAULT 'menu', -- 'menu', 'order', 'contact', 'custom'
-    is_active BOOLEAN DEFAULT 1,
+    is_active BOOLEAN DEFAULT TRUE,
     click_count INTEGER DEFAULT 0,
     qr_code_url VARCHAR(500), -- Generated QR code image URL
     custom_styling TEXT DEFAULT '{}', -- JSON for custom link styling
@@ -155,6 +156,9 @@ ALTER TABLE menu_items ADD COLUMN channel_availability TEXT DEFAULT '{}'; -- JSO
 -- Add category field directly to menu_items for backward compatibility
 ALTER TABLE menu_items ADD COLUMN category VARCHAR(255);
 
+-- Add unique constraint for menu items (restaurant_id, name)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_menu_items_unique ON menu_items(restaurant_id, name);
+
 -- Create menu_categories table if it doesn't exist (SQLite compatible)
 CREATE TABLE IF NOT EXISTS menu_categories (
     id TEXT PRIMARY KEY,
@@ -162,7 +166,7 @@ CREATE TABLE IF NOT EXISTS menu_categories (
     name VARCHAR(255) NOT NULL,
     description TEXT,
     sort_order INTEGER DEFAULT 0,
-    is_active BOOLEAN DEFAULT 1,
+    is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -170,6 +174,7 @@ CREATE TABLE IF NOT EXISTS menu_categories (
 CREATE INDEX IF NOT EXISTS idx_menu_categories_restaurant ON menu_categories(restaurant_id);
 CREATE INDEX IF NOT EXISTS idx_menu_categories_active ON menu_categories(is_active);
 CREATE INDEX IF NOT EXISTS idx_menu_categories_sort ON menu_categories(sort_order);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_menu_categories_unique ON menu_categories(restaurant_id, name);
 
 -- category_id already exists in menu_items from migration 001
 
@@ -178,30 +183,35 @@ CREATE INDEX IF NOT EXISTS idx_menu_categories_sort ON menu_categories(sort_orde
 -- ============================================================================
 
 -- Insert default restaurant theme
-INSERT OR IGNORE INTO restaurant_themes (restaurant_id, name, primary_color, secondary_color)
+INSERT INTO restaurant_themes (restaurant_id, name, primary_color, secondary_color)
 SELECT id, 'Default Theme', '#ff6b35', '#f7931e'
 FROM restaurants
-WHERE slug = 'demo-restaurant';
+WHERE slug = 'demo-restaurant'
+ON CONFLICT (restaurant_id) DO NOTHING;
 
 -- Insert default menu categories
-INSERT OR IGNORE INTO menu_categories (restaurant_id, name, description, sort_order)
+INSERT INTO menu_categories (restaurant_id, name, description, sort_order)
 SELECT r.id, 'Appetizers', 'Start your meal with our delicious appetizers', 1
-FROM restaurants r WHERE r.slug = 'demo-restaurant';
+FROM restaurants r WHERE r.slug = 'demo-restaurant'
+ON CONFLICT (restaurant_id, name) DO NOTHING;
 
-INSERT OR IGNORE INTO menu_categories (restaurant_id, name, description, sort_order)
+INSERT INTO menu_categories (restaurant_id, name, description, sort_order)
 SELECT r.id, 'Main Courses', 'Our signature main dishes', 2
-FROM restaurants r WHERE r.slug = 'demo-restaurant';
+FROM restaurants r WHERE r.slug = 'demo-restaurant'
+ON CONFLICT (restaurant_id, name) DO NOTHING;
 
-INSERT OR IGNORE INTO menu_categories (restaurant_id, name, description, sort_order)
+INSERT INTO menu_categories (restaurant_id, name, description, sort_order)
 SELECT r.id, 'Beverages', 'Refreshing drinks to complement your meal', 3
-FROM restaurants r WHERE r.slug = 'demo-restaurant';
+FROM restaurants r WHERE r.slug = 'demo-restaurant'
+ON CONFLICT (restaurant_id, name) DO NOTHING;
 
-INSERT OR IGNORE INTO menu_categories (restaurant_id, name, description, sort_order)
+INSERT INTO menu_categories (restaurant_id, name, description, sort_order)
 SELECT r.id, 'Desserts', 'Sweet treats to end your meal perfectly', 4
-FROM restaurants r WHERE r.slug = 'demo-restaurant';
+FROM restaurants r WHERE r.slug = 'demo-restaurant'
+ON CONFLICT (restaurant_id, name) DO NOTHING;
 
 -- Insert some sample menu items with enhanced data
-INSERT OR IGNORE INTO menu_items (
+INSERT INTO menu_items (
     restaurant_id, category_id, name, description, price, cost, images, allergens,
     preparation_time, sort_order, is_available, category
 )
@@ -220,9 +230,10 @@ SELECT
     'Appetizers'
 FROM restaurants r
 JOIN menu_categories c ON c.restaurant_id = r.id
-WHERE r.slug = 'demo-restaurant' AND c.name = 'Appetizers';
+WHERE r.slug = 'demo-restaurant' AND c.name = 'Appetizers'
+ON CONFLICT (restaurant_id, name) DO NOTHING;
 
-INSERT OR IGNORE INTO menu_items (
+INSERT INTO menu_items (
     restaurant_id, category_id, name, description, price, cost, images, allergens,
     preparation_time, sort_order, is_available, category
 )
@@ -241,9 +252,10 @@ SELECT
     'Main Courses'
 FROM restaurants r
 JOIN menu_categories c ON c.restaurant_id = r.id
-WHERE r.slug = 'demo-restaurant' AND c.name = 'Main Courses';
+WHERE r.slug = 'demo-restaurant' AND c.name = 'Main Courses'
+ON CONFLICT (restaurant_id, name) DO NOTHING;
 
-INSERT OR IGNORE INTO menu_items (
+INSERT INTO menu_items (
     restaurant_id, category_id, name, description, price, cost, images, allergens,
     preparation_time, sort_order, is_available, category
 )
@@ -262,17 +274,21 @@ SELECT
     'Main Courses'
 FROM restaurants r
 JOIN menu_categories c ON c.restaurant_id = r.id
-WHERE r.slug = 'demo-restaurant' AND c.name = 'Main Courses';
+WHERE r.slug = 'demo-restaurant' AND c.name = 'Main Courses'
+ON CONFLICT (restaurant_id, name) DO NOTHING;
 
 -- Insert default restaurant links
-INSERT OR IGNORE INTO restaurant_links (restaurant_id, name, description, url_path, link_type)
+INSERT INTO restaurant_links (restaurant_id, name, description, url_path, link_type)
 SELECT id, 'View Menu', 'Browse our full menu online', 'menu', 'menu'
-FROM restaurants WHERE slug = 'demo-restaurant';
+FROM restaurants WHERE slug = 'demo-restaurant'
+ON CONFLICT (restaurant_id, url_path) DO NOTHING;
 
-INSERT OR IGNORE INTO restaurant_links (restaurant_id, name, description, url_path, link_type)
+INSERT INTO restaurant_links (restaurant_id, name, description, url_path, link_type)
 SELECT id, 'Order Online', 'Place your order for pickup or delivery', 'order', 'order'
-FROM restaurants WHERE slug = 'demo-restaurant';
+FROM restaurants WHERE slug = 'demo-restaurant'
+ON CONFLICT (restaurant_id, url_path) DO NOTHING;
 
-INSERT OR IGNORE INTO restaurant_links (restaurant_id, name, description, url_path, link_type)
+INSERT INTO restaurant_links (restaurant_id, name, description, url_path, link_type)
 SELECT id, 'Contact Us', 'Get in touch with our restaurant', 'contact', 'contact'
-FROM restaurants WHERE slug = 'demo-restaurant';
+FROM restaurants WHERE slug = 'demo-restaurant'
+ON CONFLICT (restaurant_id, url_path) DO NOTHING;

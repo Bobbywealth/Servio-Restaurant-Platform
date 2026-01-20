@@ -7,7 +7,7 @@
 
 -- Create initial platform admin user (password: admin123)
 -- Note: This should be changed immediately in production
-INSERT OR IGNORE INTO restaurants (id, name, slug, address, settings, is_active, created_at, updated_at) 
+INSERT INTO restaurants (id, name, slug, address, settings, is_active, created_at, updated_at) 
 VALUES (
     'platform-admin-org',
     'Servio Platform Administration',
@@ -17,10 +17,11 @@ VALUES (
     1,
     CURRENT_TIMESTAMP,
     CURRENT_TIMESTAMP
-);
+)
+ON CONFLICT (id) DO NOTHING;
 
 -- Hash for 'admin123' - MUST BE CHANGED IN PRODUCTION
-INSERT OR IGNORE INTO users (id, restaurant_id, name, email, password_hash, role, permissions, is_active, created_at, updated_at)
+INSERT INTO users (id, restaurant_id, name, email, password_hash, role, permissions, is_active, created_at, updated_at)
 VALUES (
     'platform-admin-user',
     'platform-admin-org', 
@@ -32,4 +33,5 @@ VALUES (
     1,
     CURRENT_TIMESTAMP,
     CURRENT_TIMESTAMP
-);
+)
+ON CONFLICT (id) DO NOTHING;

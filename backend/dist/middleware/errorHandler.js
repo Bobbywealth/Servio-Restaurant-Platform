@@ -111,7 +111,9 @@ const errorHandler = (error, req, res, _next) => {
     if (req.headers['x-request-id']) {
         errorResponse.requestId = req.headers['x-request-id'];
     }
-    res.status(statusCode).json(errorResponse);
+    // Ensure JSON response
+    res.setHeader('Content-Type', 'application/json');
+    return res.status(statusCode).json(errorResponse);
 };
 exports.errorHandler = errorHandler;
 // Async error wrapper
