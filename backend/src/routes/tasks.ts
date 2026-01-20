@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { DatabaseService } from '../services/DatabaseService';
 import { asyncHandler } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
+import { eventBus } from '../events/eventBus';
 
 const router = Router();
 const num = (v: any) => (typeof v === 'number' ? v : Number(v ?? 0));
@@ -128,6 +129,14 @@ router.post('/:id/complete', asyncHandler(async (req: Request, res: Response) =>
     id,
     { taskTitle: task.title, taskType: task.type }
   );
+
+  await eventBus.emit('task.completed', {
+    restaurantId: req.user?.restaurantId!,
+    type: 'task.completed',
+    actor: { actorType: 'user', actorId: req.user?.id },
+    payload: { taskId: id, title: task.title },
+    occurredAt: new Date().toISOString()
+  });
 
   logger.info(`Task completed: ${task.title}`);
 
@@ -291,6 +300,14 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
     taskId,
     { title, type, assignedTo }
   );
+
+  await eventBus.emit('task.created', {
+    restaurantId: req.user?.restaurantId!,
+    type: 'task.created',
+    actor: { actorType: 'user', actorId: req.user?.id },
+    payload: { taskId, title, assignedTo },
+    occurredAt: new Date().toISOString()
+  });
 
   logger.info(`New task created: ${title}`);
 

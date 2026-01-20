@@ -3,6 +3,7 @@ import { DatabaseService } from '../services/DatabaseService';
 import { asyncHandler } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
+import { eventBus } from '../events/eventBus';
 
 const router = Router();
 const num = (v: any) => (typeof v === 'number' ? v : Number(v ?? 0));
@@ -76,6 +77,19 @@ router.post('/clock-in', asyncHandler(async (req: Request, res: Response) => {
     entryId,
     { position, clockInTime }
   );
+
+  await eventBus.emit('staff.clock_in', {
+    restaurantId: user.restaurant_id,
+    type: 'staff.clock_in',
+    actor: { actorType: 'user', actorId: user.id },
+    payload: {
+      staffId: user.id,
+      staffName: user.name,
+      timeEntryId: entryId,
+      position
+    },
+    occurredAt: clockInTime
+  });
 
   logger.info(`User ${user.name} clocked in at ${clockInTime}`);
 
@@ -167,6 +181,20 @@ router.post('/clock-out', asyncHandler(async (req: Request, res: Response) => {
     }
   );
 
+  await eventBus.emit('staff.clock_out', {
+    restaurantId: user.restaurant_id,
+    type: 'staff.clock_out',
+    actor: { actorType: 'user', actorId: user.id },
+    payload: {
+      staffId: user.id,
+      staffName: user.name,
+      timeEntryId: timeEntry.id,
+      totalHours: Number(totalHours.toFixed(2)),
+      breakMinutes: timeEntry.break_minutes
+    },
+    occurredAt: clockOutTime
+  });
+
   logger.info(`User ${user.name} clocked out at ${clockOutTime}, worked ${totalHours.toFixed(2)} hours`);
 
   res.json({
@@ -250,6 +278,20 @@ router.post('/start-break', asyncHandler(async (req: Request, res: Response) => 
     breakId,
     { timeEntryId: timeEntry.id, breakStart }
   );
+
+  const staff = await db.get('SELECT name FROM users WHERE id = ?', [userId]);
+  await eventBus.emit('staff.break_start', {
+    restaurantId: timeEntry.restaurant_id,
+    type: 'staff.break_start',
+    actor: { actorType: 'user', actorId: userId },
+    payload: {
+      staffId: userId,
+      staffName: staff?.name,
+      timeEntryId: timeEntry.id,
+      breakId
+    },
+    occurredAt: breakStart
+  });
 
   res.json({
     success: true,
@@ -346,6 +388,21 @@ router.post('/end-break', asyncHandler(async (req: Request, res: Response) => {
       totalBreakMinutes: totalBreaks.total_break_minutes
     }
   );
+
+  const staff = await db.get('SELECT name FROM users WHERE id = ?', [userId]);
+  await eventBus.emit('staff.break_end', {
+    restaurantId: timeEntry.restaurant_id,
+    type: 'staff.break_end',
+    actor: { actorType: 'user', actorId: userId },
+    payload: {
+      staffId: userId,
+      staffName: staff?.name,
+      timeEntryId: timeEntry.id,
+      breakId: activeBreak.id,
+      durationMinutes
+    },
+    occurredAt: breakEnd
+  });
 
   res.json({
     success: true,

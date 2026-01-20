@@ -45,6 +45,7 @@ export default function AssistantPage() {
   const rafRef = useRef<number | null>(null)
   const wakeWordServiceRef = useRef<WakeWordService | null>(null)
   const isInitializingMediaRecorderRef = useRef(false)
+  const recorderMimeTypeRef = useRef<string | null>(null)
   const isInitializingWakeWordRef = useRef(false)
   
   // Create refs for callbacks to avoid re-initializing services when they change
@@ -200,9 +201,11 @@ export default function AssistantPage() {
     }
 
     try {
-      const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm;codecs=opus' })
+      const mimeType = recorderMimeTypeRef.current || 'audio/webm;codecs=opus'
+      const extension = mimeType.includes('mp4') ? 'mp4' : 'webm'
+      const audioBlob = new Blob(audioChunksRef.current, { type: mimeType })
       const formData = new FormData()
-      formData.append('audio', audioBlob, 'recording.webm')
+      formData.append('audio', audioBlob, `recording.${extension}`)
       formData.append('userId', user?.id || 'anonymous')
 
       console.log('Sending audio to backend...');
@@ -282,6 +285,16 @@ export default function AssistantPage() {
     }
   }, [user?.id, addMessage, playAudio])
 
+  const getSupportedMimeType = useCallback(() => {
+    const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4']
+    for (const candidate of candidates) {
+      if (MediaRecorder.isTypeSupported(candidate)) {
+        return candidate
+      }
+    }
+    return null
+  }, [])
+
   // Initialize media recorder
   useEffect(() => {
     let stream: MediaStream | null = null;
@@ -299,9 +312,11 @@ export default function AssistantPage() {
           }
         })
 
-        const recorder = new MediaRecorder(stream, {
-          mimeType: 'audio/webm;codecs=opus'
-        })
+        const supportedMimeType = getSupportedMimeType()
+        const recorder = supportedMimeType
+          ? new MediaRecorder(stream, { mimeType: supportedMimeType })
+          : new MediaRecorder(stream)
+        recorderMimeTypeRef.current = supportedMimeType ?? recorder.mimeType ?? null
 
         recorder.ondataavailable = (event) => {
           if (event.data.size > 0) {
@@ -335,7 +350,7 @@ export default function AssistantPage() {
         stream.getTracks().forEach(track => track.stop())
       }
     }
-  }, [processRecording, mediaRecorder]) // Added mediaRecorder back so it can check if it's already set
+  }, [processRecording, mediaRecorder, getSupportedMimeType]) // Added mediaRecorder back so it can check if it's already set
 
   useEffect(() => {
     return () => {
@@ -354,6 +369,7 @@ export default function AssistantPage() {
 
   const startRecording = useCallback(() => {
     if (!mediaRecorder || state.isProcessing) return
+    if (mediaRecorder.state !== 'inactive') return
 
     audioChunksRef.current = []
     mediaRecorder.start(100) // Collect data every 100ms
@@ -371,6 +387,7 @@ export default function AssistantPage() {
 
   const stopRecording = useCallback(() => {
     if (!mediaRecorder || !state.isRecording) return
+    if (mediaRecorder.state !== 'recording') return
 
     mediaRecorder.stop()
 

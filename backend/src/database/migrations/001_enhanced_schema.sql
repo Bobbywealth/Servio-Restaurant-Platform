@@ -49,7 +49,7 @@ CREATE TABLE users (
     email TEXT UNIQUE,
     password_hash TEXT,
     pin TEXT,
-    role TEXT NOT NULL CHECK (role IN ('staff', 'manager', 'owner', 'admin')),
+    role TEXT NOT NULL CHECK (role IN ('staff', 'manager', 'owner', 'admin', 'platform-admin')),
     permissions TEXT NOT NULL DEFAULT '[]',
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,

@@ -16,6 +16,7 @@ import { DatabaseService } from './services/DatabaseService';
 import { logger } from './utils/logger';
 import { errorHandler } from './middleware/errorHandler';
 import { requireAuth } from './middleware/auth';
+import { initializeNotifications } from './notifications/initNotifications';
 
 const app = express();
 const server = createServer(app);
@@ -43,6 +44,8 @@ async function initializeServer() {
     await DatabaseService.initialize();
     logger.info('Database initialized successfully');
 
+    initializeNotifications(io);
+
     // Now load routes after database is ready
     const { default: authRoutes } = await import('./routes/auth');
     const { default: assistantRoutes } = await import('./routes/assistant');
@@ -59,6 +62,7 @@ async function initializeServer() {
     const { default: integrationsRoutes } = await import('./routes/integrations');
     const { default: vapiRoutes } = await import('./routes/vapi');
     const { default: adminRoutes } = await import('./routes/admin');
+    const { default: notificationsRoutes } = await import('./routes/notifications');
 
     // API Routes
     app.use('/api/auth', authRoutes);
@@ -92,6 +96,7 @@ async function initializeServer() {
     app.use('/api/marketing', requireAuth, marketingRoutes);
     app.use('/api/restaurant', requireAuth, restaurantRoutes);
     app.use('/api/integrations', requireAuth, integrationsRoutes);
+    app.use('/api/notifications', requireAuth, notificationsRoutes);
 
     // 404 handler (must be last)
     app.use((req, res) => {

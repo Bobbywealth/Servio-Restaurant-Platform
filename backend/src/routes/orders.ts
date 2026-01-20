@@ -3,6 +3,7 @@ import { DatabaseService } from '../services/DatabaseService';
 import { asyncHandler, BadRequestError } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
+import { eventBus } from '../events/eventBus';
 
 const router = Router();
 const num = (v: any) => (typeof v === 'number' ? v : Number(v ?? 0));
@@ -145,6 +146,14 @@ router.post('/:id/status', asyncHandler(async (req: Request, res: Response) => {
     { previousStatus: order.status, newStatus: status }
   );
 
+  await eventBus.emit('order.status_changed', {
+    restaurantId: req.user?.restaurantId!,
+    type: 'order.status_changed',
+    actor: { actorType: 'user', actorId: req.user?.id },
+    payload: { orderId: id, previousStatus: order.status, newStatus: status },
+    occurredAt: new Date().toISOString()
+  });
+
   logger.info(`Order ${id} status updated from ${order.status} to ${status}`);
 
   res.json({
@@ -255,6 +264,19 @@ router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) =>
     io.to(`restaurant-${restaurantId}`).emit('new-order', { orderId, totalAmount });
   }
 
+  await eventBus.emit('order.created_web', {
+    restaurantId,
+    type: 'order.created_web',
+    actor: { actorType: 'system' },
+    payload: {
+      orderId,
+      customerName,
+      totalAmount,
+      channel: 'website'
+    },
+    occurredAt: new Date().toISOString()
+  });
+
   await DatabaseService.getInstance().logAudit(restaurantId, null, 'create_public_order', 'order', orderId, { totalAmount });
 
   res.status(201).json({
@@ -351,6 +373,19 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
     orderId,
     { externalId, channel, totalAmount, itemCount: items.length }
   );
+
+  await eventBus.emit('order.created_web', {
+    restaurantId: req.user?.restaurantId!,
+    type: 'order.created_web',
+    actor: { actorType: 'user', actorId: req.user?.id },
+    payload: {
+      orderId,
+      customerName,
+      totalAmount,
+      channel
+    },
+    occurredAt: new Date().toISOString()
+  });
 
   logger.info(`New order created: ${orderId} from ${channel}`);
 

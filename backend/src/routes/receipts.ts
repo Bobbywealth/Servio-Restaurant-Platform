@@ -5,6 +5,7 @@ import { asyncHandler, UnauthorizedError, BadRequestError } from '../middleware/
 import { requireAuth } from '../middleware/auth';
 import { logger } from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
+import { eventBus } from '../events/eventBus';
 
 const router = Router();
 
@@ -115,6 +116,18 @@ router.post('/:id/confirm-upload', requireAuth, asyncHandler(async (req: Request
     id,
     { supplierName, status: PROCESSING_STATUS.NEEDS_REVIEW }
   );
+
+  await eventBus.emit('receipt.uploaded', {
+    restaurantId: receipt.restaurant_id,
+    type: 'receipt.uploaded',
+    actor: { actorType: 'user', actorId: user.id },
+    payload: {
+      receiptId: id,
+      supplierName,
+      totalAmount
+    },
+    occurredAt: new Date().toISOString()
+  });
 
   res.json({
     success: true,
@@ -324,6 +337,14 @@ router.post('/:id/apply', requireAuth, asyncHandler(async (req: Request, res: Re
     id,
     { appliedItemsCount: items.length, summary: results }
   );
+
+  await eventBus.emit('receipt.applied', {
+    restaurantId: receipt.restaurant_id,
+    type: 'receipt.applied',
+    actor: { actorType: 'user', actorId: user.id },
+    payload: { receiptId: id, appliedItemsCount: items.length },
+    occurredAt: new Date().toISOString()
+  });
 
   res.json({
     success: true,

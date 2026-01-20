@@ -2,6 +2,7 @@ import { AssistantService } from './AssistantService';
 import { DatabaseService } from './DatabaseService';
 import { logger } from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
+import { eventBus } from '../events/eventBus';
 
 export interface VapiWebhookPayload {
   message: {
@@ -331,6 +332,19 @@ export class VapiService {
         orderIdValue, 
         { customerInfo, totalAmount }
       );
+
+      await eventBus.emit('order.created_vapi', {
+        restaurantId,
+        type: 'order.created_vapi',
+        actor: { actorType: 'vapi' },
+        payload: {
+          orderId: orderIdValue,
+          customerName: customerInfo?.name,
+          totalAmount,
+          channel: 'phone'
+        },
+        occurredAt: new Date().toISOString()
+      });
 
       const itemSummary = validItems.map(item => 
         `${item.quantity} ${item.name}${item.specialInstructions ? ' (' + item.specialInstructions + ')' : ''}`
