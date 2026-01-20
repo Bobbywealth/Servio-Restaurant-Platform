@@ -8,13 +8,13 @@
 -- ============================================================================
 
 -- restaurant_id
-ALTER TABLE sync_jobs ADD COLUMN IF NOT EXISTS restaurant_id TEXT REFERENCES restaurants(id);
+-- ALTER TABLE sync_jobs ADD COLUMN restaurant_id TEXT REFERENCES restaurants(id);
 -- job_type (rename entity_type if it exists, otherwise add)
-ALTER TABLE sync_jobs ADD COLUMN IF NOT EXISTS job_type TEXT;
+-- ALTER TABLE sync_jobs ADD COLUMN job_type TEXT;
 -- attempt_count
-ALTER TABLE sync_jobs ADD COLUMN IF NOT EXISTS attempt_count INTEGER DEFAULT 0;
+-- ALTER TABLE sync_jobs ADD COLUMN attempt_count INTEGER DEFAULT 0;
 -- payload
-ALTER TABLE sync_jobs ADD COLUMN IF NOT EXISTS payload TEXT DEFAULT '{}';
+-- ALTER TABLE sync_jobs ADD COLUMN payload TEXT DEFAULT '{}';
 
 -- Migrate data if needed
 UPDATE sync_jobs SET job_type = entity_type WHERE job_type IS NULL AND entity_type IS NOT NULL;

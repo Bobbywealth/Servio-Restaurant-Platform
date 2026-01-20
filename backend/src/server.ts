@@ -99,12 +99,15 @@ async function initializeServer() {
     app.use('/api/notifications', requireAuth, notificationsRoutes);
 
     // 404 handler (must be last)
-    app.use((req, res) => {
+    app.use((req, res, next) => {
       res.status(404).json({
         error: 'Not Found',
         message: `Route ${req.method} ${req.originalUrl} not found`
       });
     });
+
+    // Error handler MUST be after all routes and 404 handler
+    app.use(errorHandler);
 
     logger.info('Routes loaded successfully');
   } catch (error) {
@@ -309,9 +312,6 @@ app.get('/api', (req, res) => {
     }
   });
 });
-
-// Error handling
-app.use(errorHandler);
 
 // 404 handler moved to initializeServer() to ensure it comes after route registration
 

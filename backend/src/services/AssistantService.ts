@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import { DatabaseService } from './DatabaseService';
 import { logger } from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
@@ -150,14 +151,8 @@ export class AssistantService {
 
   private async transcribeAudio(audioBuffer: Buffer): Promise<string> {
     try {
-      // Save buffer to temporary file
-      const tempPath = path.join(__dirname, `../../temp/audio_${Date.now()}.webm`);
-
-      // Ensure temp directory exists
-      const tempDir = path.dirname(tempPath);
-      if (!fs.existsSync(tempDir)) {
-        fs.mkdirSync(tempDir, { recursive: true });
-      }
+      // Save buffer to temporary file in OS temp directory
+      const tempPath = path.join(os.tmpdir(), `servio_audio_${Date.now()}_${uuidv4()}.webm`);
 
       fs.writeFileSync(tempPath, audioBuffer);
 

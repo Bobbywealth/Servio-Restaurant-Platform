@@ -22,6 +22,7 @@ async function seedDemoUsers() {
       email: 'admin@servio.com',
       name: 'System Admin',
       role: 'admin',
+      restaurant_id: 'platform-admin-org',
       permissions: JSON.stringify(['*']), // All permissions
       password_hash: passwordHash,
       is_active: 1
@@ -31,6 +32,7 @@ async function seedDemoUsers() {
       email: 'superadmin@servio.com',
       name: 'Super Admin',
       role: 'admin',
+      restaurant_id: 'platform-admin-org',
       permissions: JSON.stringify(['*']),
       password_hash: passwordHash,
       is_active: 1
@@ -40,6 +42,7 @@ async function seedDemoUsers() {
       email: 'owner@demo.servio',
       name: 'Restaurant Owner',
       role: 'owner',
+      restaurant_id: 'demo-restaurant-1',
       permissions: JSON.stringify(['orders.*', 'inventory.*', 'menu.*', 'staff.*', 'analytics.*']),
       password_hash: passwordHash,
       is_active: 1
@@ -49,6 +52,7 @@ async function seedDemoUsers() {
       email: 'manager@demo.servio',
       name: 'Restaurant Manager',
       role: 'manager', 
+      restaurant_id: 'demo-restaurant-1',
       permissions: JSON.stringify(['orders.*', 'inventory.*', 'menu.read', 'staff.read']),
       password_hash: passwordHash,
       is_active: 1
@@ -58,6 +62,7 @@ async function seedDemoUsers() {
       email: 'staff@demo.servio',
       name: 'Restaurant Staff',
       role: 'staff',
+      restaurant_id: 'demo-restaurant-1',
       permissions: JSON.stringify(['orders.read', 'orders.update', 'inventory.read']),
       password_hash: passwordHash,
       is_active: 1
@@ -114,16 +119,16 @@ async function seedDemoUsers() {
           // Update existing user
           await db.run(`
             UPDATE users 
-            SET name = ?, role = ?, permissions = ?, password_hash = ?, email = ?, is_active = ?, updated_at = CURRENT_TIMESTAMP
+            SET name = ?, role = ?, permissions = ?, password_hash = ?, email = ?, is_active = ?, restaurant_id = ?, updated_at = CURRENT_TIMESTAMP
             WHERE id = ? OR email = ?
-          `, [user.name, user.role, user.permissions, user.password_hash, user.email, user.is_active, user.id, user.email]);
+          `, [user.name, user.role, user.permissions, user.password_hash, user.email, user.is_active, user.restaurant_id, user.id, user.email]);
           console.log(`🔄 Updated user: ${user.email}`);
         } else {
           // Insert new user
           await db.run(`
-            INSERT INTO users (id, email, name, role, permissions, password_hash, is_active, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-          `, [user.id, user.email, user.name, user.role, user.permissions, user.password_hash, user.is_active]);
+            INSERT INTO users (id, email, name, role, permissions, password_hash, is_active, restaurant_id, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          `, [user.id, user.email, user.name, user.role, user.permissions, user.password_hash, user.is_active, user.restaurant_id]);
           console.log(`✅ Created user: ${user.email}`);
         }
       } catch (err) {
