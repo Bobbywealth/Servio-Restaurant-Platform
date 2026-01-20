@@ -48,10 +48,23 @@ export class VapiService {
     logger.info('Vapi webhook received:', { 
       type: message.type, 
       callId: message.call?.id,
-      customerNumber: message.call?.customer?.number 
+      customerNumber: message.call?.customer?.number,
+      phoneNumberId: message.call?.phoneNumberId
     });
 
     try {
+      // Get restaurant for this call
+      const restaurantId = await this.getRestaurantIdFromCall(message.call);
+      if (!restaurantId) {
+        logger.error('Could not determine restaurant for call', { phoneNumberId: message.call?.phoneNumberId });
+        return { 
+          result: "I'm sorry, we're experiencing technical difficulties. Please try again later." 
+        };
+      }
+
+      // Store restaurantId in message for downstream handlers
+      (message as any).restaurantId = restaurantId;
+
       switch (message.type) {
         case 'assistant-request':
           return await this.handleAssistantRequest(message);
@@ -75,6 +88,40 @@ export class VapiService {
       logger.error('Vapi webhook error:', error);
       return { error: 'Internal server error' };
     }
+  }
+
+  /**
+   * Get restaurant ID from the incoming call
+   * First tries to match by Vapi phone_number_id from restaurant settings
+   * Falls back to VAPI_RESTAURANT_ID env var for backwards compatibility
+   */
+  private async getRestaurantIdFromCall(call: any): Promise<string | null> {
+    const phoneNumberId = call?.phoneNumberId;
+    
+    if (phoneNumberId) {
+      // Look up restaurant by phone_number_id in settings
+      const db = DatabaseService.getInstance().getDatabase();
+      const restaurant = await db.get(
+        `SELECT id, settings FROM restaurants 
+         WHERE json_extract(settings, '$.vapi.phoneNumberId') = ? 
+         AND is_active = TRUE`,
+        [phoneNumberId]
+      );
+      
+      if (restaurant) {
+        logger.info('Restaurant found for phone number', { restaurantId: restaurant.id, phoneNumberId });
+        return restaurant.id;
+      }
+    }
+
+    // Fallback to env var for backwards compatibility (testing)
+    const envRestaurantId = process.env.VAPI_RESTAURANT_ID;
+    if (envRestaurantId) {
+      logger.warn('Using fallback VAPI_RESTAURANT_ID from env', { restaurantId: envRestaurantId });
+      return envRestaurantId;
+    }
+
+    return null;
   }
 
   private async handleAssistantRequest(message: any): Promise<VapiResponse> {
@@ -111,6 +158,7 @@ export class VapiService {
 
     const { name, parameters } = message.functionCall;
     const userId = this.getPhoneUserId(message.call?.customer?.number);
+    const restaurantId = message.restaurantId;
 
     try {
       let result;
@@ -133,7 +181,7 @@ export class VapiService {
           result = await VoiceOrderingService.getInstance().createOrder(parameters);
           break;
         case 'check_order_status':
-          result = await this.handleCheckOrderStatus(parameters, userId);
+          result = await this.handleCheckOrderStatus(parameters, userId, restaurantId);
           break;
         default:
           // Fall back to existing assistant service functions
@@ -172,7 +220,7 @@ export class VapiService {
     const customerNumber = message.call?.customer?.number;
     const duration = message.call?.duration;
     const endedReason = message.endedReason;
-    const restaurantId = process.env.VAPI_RESTAURANT_ID || 'demo-restaurant-1';
+    const restaurantId = message.restaurantId;
 
     // Log the call for analytics
     await DatabaseService.getInstance().logAudit(
@@ -363,21 +411,23 @@ export class VapiService {
   }
 
   // Handle order status checks
-  private async handleCheckOrderStatus(parameters: any, userId: string): Promise<any> {
+  private async handleCheckOrderStatus(parameters: any, userId: string, restaurantId?: string): Promise<any> {
     try {
       const { orderId, phoneNumber } = parameters;
       const db = DatabaseService.getInstance().getDatabase();
-      const restaurantId = process.env.VAPI_RESTAURANT_ID || 'sasheys-kitchen-union';
+      
+      // Use passed restaurantId or fallback to env
+      const targetRestaurantId = restaurantId || process.env.VAPI_RESTAURANT_ID || 'sasheys-kitchen-union';
 
       let query: string;
       let params: any[];
 
       if (orderId) {
         query = 'SELECT * FROM orders WHERE id LIKE ? AND restaurant_id = ?';
-        params = [`%${orderId}%`, restaurantId];
+        params = [`%${orderId}%`, targetRestaurantId];
       } else if (phoneNumber) {
         query = 'SELECT * FROM orders WHERE customer_phone = ? AND restaurant_id = ? ORDER BY created_at DESC LIMIT 3';
-        params = [phoneNumber, restaurantId];
+        params = [phoneNumber, targetRestaurantId];
       } else {
         return {
           type: 'check_order_status',

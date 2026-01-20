@@ -6,6 +6,14 @@ import Router from 'next/router'
 import dynamic from 'next/dynamic'
 import { UserProvider } from '../contexts/UserContext'
 import { ThemeProvider } from '../contexts/ThemeContext'
+import { Inter } from 'next/font/google'
+
+// LOAD INTER FONT VIA NEXT.JS FONT OPTIMIZATION
+const inter = Inter({
+  subsets: ['latin'],
+  variable: '--font-inter',
+  display: 'swap',
+})
 
 // LAZY LOAD TOAST PROVIDER FOR PERFORMANCE
 const ToastProvider = dynamic(() => import('../components/ui/Toast'), {
@@ -34,10 +42,6 @@ export default function App({ Component, pageProps }: AppProps) {
   return (
     <>
       <Head>
-        {/* DNS PREFETCH FOR EXTERNAL RESOURCES */}
-        <link rel="dns-prefetch" href="//fonts.googleapis.com" />
-        <link rel="dns-prefetch" href="//fonts.gstatic.com" />
-
         {/* OPTIMIZE VIEWPORT */}
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
 
@@ -55,6 +59,12 @@ export default function App({ Component, pageProps }: AppProps) {
         {/* PERFORMANCE HINTS */}
         <meta httpEquiv="x-dns-prefetch-control" content="on" />
       </Head>
+
+      <style jsx global>{`
+        html {
+          font-family: ${inter.style.fontFamily};
+        }
+      `}</style>
 
       <ThemeProvider>
         <UserProvider>

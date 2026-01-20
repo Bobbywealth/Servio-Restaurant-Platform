@@ -45,7 +45,7 @@ router.get('/stats/summary', async (req, res) => {
     const openShifts = await db.get(`
       SELECT COUNT(*) as count 
       FROM time_entries 
-      WHERE clock_out IS NULL
+      WHERE clock_out_time IS NULL
     `);
 
     // Get failed jobs

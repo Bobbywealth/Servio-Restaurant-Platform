@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/router'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
@@ -105,7 +105,7 @@ interface AuditLog {
   created_at: string
 }
 
-type TabName = 'overview' | 'orders' | 'campaigns' | 'inventory' | 'timeclock' | 'audit' | 'integrations'
+type TabName = 'overview' | 'orders' | 'campaigns' | 'inventory' | 'timeclock' | 'audit' | 'integrations' | 'phone'
 
 export default function RestaurantDetail() {
   const router = useRouter()
@@ -122,6 +122,7 @@ export default function RestaurantDetail() {
     { id: 'overview', name: 'Overview', icon: Building2 },
     { id: 'orders', name: 'Orders', icon: ShoppingCart },
     { id: 'campaigns', name: 'Campaigns', icon: Megaphone },
+    { id: 'phone', name: 'Phone System', icon: Phone },
     { id: 'inventory', name: 'Inventory', icon: Package },
     { id: 'timeclock', name: 'Time Clock', icon: Clock },
     { id: 'audit', name: 'Audit Logs', icon: FileText },
@@ -167,6 +168,7 @@ export default function RestaurantDetail() {
           endpoint = `/api/admin/restaurants/${id}/audit-logs`
           break
         case 'integrations':
+        case 'phone':
           // Read-only view, no endpoint needed
           return
       }
@@ -416,6 +418,8 @@ const TabContent: React.FC<TabContentProps> = ({ tab, restaurant, userBreakdown,
       return <AuditTab logs={data?.auditLogs || []} pagination={data?.pagination} />
     case 'integrations':
       return <IntegrationsTab restaurant={restaurant} />
+    case 'phone':
+      return <PhoneSystemTab restaurant={restaurant} />
     default:
       return <div>Tab not implemented</div>
   }
@@ -604,20 +608,232 @@ const CampaignsTab: React.FC<{ campaigns: Campaign[]; pagination: any }> = ({ ca
 )
 
 // Integrations Tab Component
+// Phone System Tab - Separate from in-app AI Assistant
+const PhoneSystemTab: React.FC<{ restaurant: Restaurant }> = ({ restaurant }) => {
+  const [vapiSettings, setVapiSettings] = useState<any>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [isSaving, setIsSaving] = useState(false)
+  const [isTesting, setIsTesting] = useState(false)
+  const [testResult, setTestResult] = useState<any>(null)
+  const [formData, setFormData] = useState({
+    enabled: false,
+    apiKey: '',
+    webhookSecret: '',
+    assistantId: '',
+    phoneNumberId: '',
+    phoneNumber: ''
+  })
+
+  useEffect(() => {
+    loadVapiSettings()
+  }, [restaurant.id])
+
+  const loadVapiSettings = async () => {
+    try {
+      const response = await api.get(`/api/restaurants/${restaurant.id}/vapi`)
+      setVapiSettings(response.data)
+      setFormData({
+        enabled: response.data.enabled || false,
+        apiKey: '',  // Don't pre-fill sensitive data
+        webhookSecret: '',
+        assistantId: response.data.assistantId || '',
+        phoneNumberId: response.data.phoneNumberId || '',
+        phoneNumber: response.data.phoneNumber || ''
+      })
+    } catch (err: any) {
+      console.error('Failed to load Vapi settings:', err)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const saveSettings = async () => {
+    setIsSaving(true)
+    try {
+      await api.put(`/api/restaurants/${restaurant.id}/vapi`, formData)
+      alert('Phone system settings saved successfully!')
+      await loadVapiSettings()
+    } catch (err: any) {
+      alert(getErrorMessage(err, 'Failed to save settings'))
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const testConnection = async () => {
+    setIsTesting(true)
+    setTestResult(null)
+    try {
+      const response = await api.post(`/api/restaurants/${restaurant.id}/vapi/test`)
+      setTestResult({ success: true, data: response.data })
+    } catch (err: any) {
+      setTestResult({ success: false, error: getErrorMessage(err, 'Connection test failed') })
+    } finally {
+      setIsTesting(false)
+    }
+  }
+
+  if (isLoading) {
+    return <div className="text-center py-8">Loading phone system settings...</div>
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+        <div className="flex items-start">
+          <Phone className="w-5 h-5 text-blue-600 dark:text-blue-400 mr-3 mt-0.5" />
+          <div>
+            <h3 className="text-sm font-medium text-blue-900 dark:text-blue-300">
+              Phone System (Vapi) - For Incoming Customer Calls
+            </h3>
+            <p className="text-xs text-blue-700 dark:text-blue-400 mt-1">
+              This is separate from the in-app AI Assistant. Vapi handles incoming phone calls from customers who want to place orders by calling your restaurant.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-white dark:bg-gray-800 rounded-lg p-6">
+        <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Vapi Configuration</h3>
+        
+        <div className="space-y-4">
+          <div className="flex items-center">
+            <input
+              type="checkbox"
+              checked={formData.enabled}
+              onChange={(e) => setFormData({ ...formData, enabled: e.target.checked })}
+              className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+            />
+            <label className="ml-2 text-sm font-medium text-gray-900 dark:text-white">
+              Enable Phone System
+            </label>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Vapi API Key {vapiSettings?.hasApiKey && <span className="text-green-600">(Configured)</span>}
+            </label>
+            <input
+              type="password"
+              value={formData.apiKey}
+              onChange={(e) => setFormData({ ...formData, apiKey: e.target.value })}
+              placeholder={vapiSettings?.hasApiKey ? '••••••••••••' : 'Enter your Vapi API key'}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              Get this from <a href="https://vapi.ai" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">vapi.ai</a> dashboard
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Phone Number ID
+            </label>
+            <input
+              type="text"
+              value={formData.phoneNumberId}
+              onChange={(e) => setFormData({ ...formData, phoneNumberId: e.target.value })}
+              placeholder="e.g., 12345678-1234-1234-1234-123456789012"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              The Vapi phone number ID from your dashboard
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Phone Number (Display)
+            </label>
+            <input
+              type="text"
+              value={formData.phoneNumber}
+              onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })}
+              placeholder="e.g., +1 (555) 123-4567"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Assistant ID
+            </label>
+            <input
+              type="text"
+              value={formData.assistantId}
+              onChange={(e) => setFormData({ ...formData, assistantId: e.target.value })}
+              placeholder="Optional - Vapi assistant ID"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+            />
+          </div>
+
+          <div className="flex gap-3 pt-4">
+            <button
+              onClick={saveSettings}
+              disabled={isSaving}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            >
+              {isSaving ? 'Saving...' : 'Save Settings'}
+            </button>
+            
+            <button
+              onClick={testConnection}
+              disabled={isTesting || !formData.enabled || !vapiSettings?.hasApiKey}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+            >
+              {isTesting ? 'Testing...' : 'Test Connection'}
+            </button>
+          </div>
+
+          {testResult && (
+            <div className={`p-4 rounded-lg ${testResult.success ? 'bg-green-50 dark:bg-green-900/20' : 'bg-red-50 dark:bg-red-900/20'}`}>
+              <div className={`text-sm ${testResult.success ? 'text-green-800 dark:text-green-300' : 'text-red-800 dark:text-red-300'}`}>
+                {testResult.success ? '✓ Connection successful!' : '✗ ' + testResult.error}
+              </div>
+              {testResult.data && (
+                <div className="text-xs text-gray-600 dark:text-gray-400 mt-2">
+                  Phone: {testResult.data.phoneNumber}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-6">
+        <h3 className="text-sm font-medium text-gray-900 dark:text-white mb-3">Setup Instructions</h3>
+        <ol className="list-decimal list-inside space-y-2 text-sm text-gray-600 dark:text-gray-400">
+          <li>Sign up at <a href="https://vapi.ai" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">vapi.ai</a></li>
+          <li>Purchase a phone number ($2/month)</li>
+          <li>Create an assistant in the Vapi dashboard</li>
+          <li>Copy your API key and phone number ID here</li>
+          <li>Configure webhook URL: <code className="text-xs bg-gray-200 dark:bg-gray-800 px-2 py-1 rounded">{process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/vapi/webhook</code></li>
+          <li>Enable the phone system and test</li>
+        </ol>
+      </div>
+    </div>
+  )
+}
+
 const IntegrationsTab: React.FC<{ restaurant: Restaurant }> = ({ restaurant }) => (
   <div className="space-y-6">
-    <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-6">
-      <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Integration Status</h3>
-      <div className="space-y-4">
-        <div className="flex items-center justify-between p-4 bg-white dark:bg-gray-800 rounded-lg">
-          <div>
-            <div className="font-medium text-gray-900 dark:text-white">VAPI (Voice)</div>
-            <div className="text-sm text-gray-500 dark:text-gray-400">Voice ordering integration</div>
-          </div>
-          <span className="px-3 py-1 text-sm font-medium rounded-full bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300">
-            Active
-          </span>
+    <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4 mb-4">
+      <div className="flex items-start">
+        <AlertCircle className="w-5 h-5 text-yellow-600 dark:text-yellow-400 mr-3 mt-0.5" />
+        <div>
+          <h3 className="text-sm font-medium text-yellow-900 dark:text-yellow-300">
+            Looking for Phone System?
+          </h3>
+          <p className="text-xs text-yellow-700 dark:text-yellow-400 mt-1">
+            Vapi phone configuration has been moved to the "Phone System" tab (not shown here to avoid confusion with in-app AI Assistant)
+          </p>
         </div>
+      </div>
+    </div>
+
+    <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-6">
+      <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Other Integration Status</h3>
+      <div className="space-y-4">
         <div className="flex items-center justify-between p-4 bg-white dark:bg-gray-800 rounded-lg">
           <div>
             <div className="font-medium text-gray-900 dark:text-white">Twilio</div>

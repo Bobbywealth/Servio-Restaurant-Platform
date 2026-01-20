@@ -157,16 +157,16 @@ router.get('/stats', asyncHandler(async (req: Request, res: Response) => {
   let dateCondition = '';
   switch (period) {
     case 'today':
-      dateCondition = 'created_at::date = CURRENT_DATE';
+      dateCondition = "date(created_at) = date('now')";
       break;
     case 'week':
-      dateCondition = "created_at >= (NOW() - INTERVAL '7 days')";
+      dateCondition = "created_at >= datetime('now', '-7 days')";
       break;
     case 'month':
-      dateCondition = "created_at >= (NOW() - INTERVAL '30 days')";
+      dateCondition = "created_at >= datetime('now', '-30 days')";
       break;
     default:
-      dateCondition = 'created_at::date = CURRENT_DATE';
+      dateCondition = "date(created_at) = date('now')";
   }
 
   const [

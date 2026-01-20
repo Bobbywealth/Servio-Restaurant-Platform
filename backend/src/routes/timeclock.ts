@@ -461,11 +461,11 @@ router.get('/current-staff', asyncHandler(async (req: Request, res: Response) =>
       te.position,
       te.break_minutes,
       CASE
-        WHEN teb.break_end IS NULL THEN TRUE
-        ELSE FALSE
+        WHEN teb.break_end IS NULL THEN 1
+        ELSE 0
       END as is_on_break,
       teb.break_start as current_break_start,
-      ROUND(EXTRACT(EPOCH FROM (NOW() - te.clock_in_time)) / 3600, 2) as hours_worked
+      ROUND((julianday('now') - julianday(te.clock_in_time)) * 24, 2) as hours_worked
     FROM time_entries te
     JOIN users u ON te.user_id = u.id
     LEFT JOIN time_entry_breaks teb ON te.id = teb.time_entry_id AND teb.break_end IS NULL
@@ -688,8 +688,8 @@ router.get('/stats', asyncHandler(async (req: Request, res: Response) => {
     FROM time_entries te
     JOIN users u ON te.user_id = u.id
     WHERE te.restaurant_id = ?
-    AND te.clock_in_time::date >= ?
-    AND te.clock_in_time::date <= ?
+    AND date(te.clock_in_time) >= ?
+    AND date(te.clock_in_time) <= ?
     AND te.clock_out_time IS NOT NULL
   `;
 
@@ -718,13 +718,13 @@ router.get('/stats', asyncHandler(async (req: Request, res: Response) => {
     // Daily breakdown
     db.all(`
       SELECT
-        te.clock_in_time::date as date,
+        date(te.clock_in_time) as date,
         COUNT(*) as entries_count,
         ROUND(SUM(te.total_hours), 2) as total_hours,
         COUNT(DISTINCT te.user_id) as unique_staff
       ${baseQuery}
-      GROUP BY te.clock_in_time::date
-      ORDER BY te.clock_in_time::date
+      GROUP BY date(te.clock_in_time)
+      ORDER BY date(te.clock_in_time)
     `, params),
 
     // Per-user statistics (if not filtering by specific user)

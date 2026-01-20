@@ -9,6 +9,7 @@ interface MicrophoneButtonProps {
   onStopRecording: () => void
   disabled?: boolean
   className?: string
+  toggleMode?: boolean // If true, click to toggle on/off. If false, hold to talk
 }
 
 export default function MicrophoneButton({
@@ -17,7 +18,8 @@ export default function MicrophoneButton({
   onStartRecording,
   onStopRecording,
   disabled = false,
-  className = ''
+  className = '',
+  toggleMode = true // Default to toggle mode for easier testing
 }: MicrophoneButtonProps) {
   const [isHovered, setIsHovered] = useState(false)
   const [pressStartTime, setPressStartTime] = useState<number | null>(null)
@@ -101,7 +103,7 @@ export default function MicrophoneButton({
         textColor: 'text-white',
         iconColor: 'text-white',
         shadowColor: 'shadow-red-300',
-        label: 'Recording... (Click to stop)'
+        label: toggleMode ? 'Recording... (Click to stop)' : 'Recording... (Release to stop)'
       }
     } else {
       return {
@@ -110,7 +112,7 @@ export default function MicrophoneButton({
         textColor: 'text-white',
         iconColor: 'text-white',
         shadowColor: 'shadow-blue-300',
-        label: 'Hold to talk or click to toggle'
+        label: toggleMode ? 'Click to start recording' : 'Hold to talk or click to toggle'
       }
     }
   }
@@ -129,18 +131,18 @@ export default function MicrophoneButton({
           touch-manipulation mobile-tap-highlight
         `}
         onClick={handleClick}
-        onMouseDown={handleMouseDown}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={() => {
+        onMouseDown={toggleMode ? undefined : handleMouseDown}
+        onMouseUp={toggleMode ? undefined : handleMouseUp}
+        onMouseLeave={toggleMode ? () => setIsHovered(false) : () => {
           handleMouseUp(); // Stop recording if mouse leaves button
           setIsHovered(false);
         }}
         onMouseEnter={() => setIsHovered(true)}
-        onTouchStart={handleTouchStart}
-        onTouchEnd={handleTouchEnd}
-        onTouchCancel={handleTouchEnd} // Stop recording if touch is cancelled
-        onKeyDown={handleKeyDown}
-        onKeyUp={handleKeyUp}
+        onTouchStart={toggleMode ? undefined : handleTouchStart}
+        onTouchEnd={toggleMode ? undefined : handleTouchEnd}
+        onTouchCancel={toggleMode ? undefined : handleTouchEnd}
+        onKeyDown={toggleMode ? undefined : handleKeyDown}
+        onKeyUp={toggleMode ? undefined : handleKeyUp}
         disabled={disabled}
         whileHover={{ scale: disabled ? 1 : 1.05 }}
         whileTap={{ scale: disabled ? 1 : 0.95 }}
@@ -230,7 +232,7 @@ export default function MicrophoneButton({
           animate={{ opacity: isHovered ? 1 : 0 }}
           className="mt-2 text-xs text-gray-500 text-center"
         >
-          <p>Press Space or Enter to record</p>
+          <p>{toggleMode ? 'Click to toggle recording' : 'Press Space or Enter to record'}</p>
         </motion.div>
       )}
     </div>

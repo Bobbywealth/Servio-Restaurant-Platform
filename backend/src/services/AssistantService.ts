@@ -36,6 +36,7 @@ interface AssistantResponse {
 export class AssistantService {
   private openai: OpenAI;
   private _db: any = null;
+  private conversationHistory: Map<string, Array<{role: string, content: string}>> = new Map();
 
   constructor() {
     this.openai = new OpenAI({
@@ -97,15 +98,31 @@ export class AssistantService {
       // Get system prompt with current context
       const systemPrompt = await this.getSystemPrompt(userId);
 
+      // Get conversation history for this user (keep last 6 messages for context)
+      if (!this.conversationHistory.has(userId)) {
+        this.conversationHistory.set(userId, []);
+      }
+      const history = this.conversationHistory.get(userId)!;
+      
+      // Add current message to history
+      history.push({ role: 'user', content: text });
+      
+      // Keep only last 6 messages (3 exchanges) for speed
+      if (history.length > 6) {
+        history.splice(0, history.length - 6);
+      }
+
       const completion = await this.openai.chat.completions.create({
-        model: 'gpt-4',
+        model: 'gpt-4o-mini', // Much faster than gpt-4-turbo, still very capable
         messages: [
           { role: 'system', content: systemPrompt },
-          { role: 'user', content: text }
+          ...history // Include conversation history for natural flow
         ],
         tools: this.getTools(),
         tool_choice: 'auto',
-        temperature: 0.3
+        temperature: 0.5, // Slightly more natural
+        max_tokens: 300, // Shorter responses for faster processing
+        stream: false
       });
 
       const message = completion.choices[0]?.message;
@@ -124,7 +141,10 @@ export class AssistantService {
         }
       }
 
-      // Generate TTS audio
+      // Add assistant response to history for natural conversation flow
+      history.push({ role: 'assistant', content: response });
+
+      // Generate TTS audio (in parallel for speed)
       const audioUrl = await this.generateSpeech(response);
 
       return {
@@ -179,15 +199,17 @@ export class AssistantService {
       }
 
       // Keep responses bounded for latency/cost.
-      const input = text.length > 2000 ? text.slice(0, 2000) : text;
-      const model = process.env.OPENAI_TTS_MODEL || 'tts-1';
-      const voice = (process.env.OPENAI_TTS_VOICE || 'alloy') as any;
+      const input = text.length > 500 ? text.slice(0, 500) : text; // Shorter for faster TTS
+      const model = 'tts-1'; // Fast model (not tts-1-hd)
+      const voice = (process.env.OPENAI_TTS_VOICE || 'nova') as any; // Nova is clearer and faster
+      const speed = 1.1; // Slightly faster speech
 
       const speech = await this.openai.audio.speech.create({
         model,
         voice,
         input,
-        response_format: 'mp3'
+        response_format: 'mp3',
+        speed
       });
 
       const arrayBuffer = await speech.arrayBuffer();
@@ -209,55 +231,150 @@ export class AssistantService {
   }
 
   private async getSystemPrompt(userId: string): Promise<string> {
-    const user = await this.db.get('SELECT restaurant_id FROM users WHERE id = ?', [userId]);
+    const user = await this.db.get('SELECT * FROM users WHERE id = ?', [userId]);
     const restaurantId = user?.restaurant_id || 'demo-restaurant-1';
 
-    // Get current restaurant context
+    // Get comprehensive restaurant context
     const orders = await this.db.all('SELECT * FROM orders WHERE restaurant_id = ? AND status != "completed" ORDER BY created_at DESC LIMIT 10', [restaurantId]);
-    const unavailableItems = await this.db.all('SELECT * FROM menu_items WHERE restaurant_id = ? AND is_available = FALSE', [restaurantId]);
-    const lowStockItems = await this.db.all('SELECT * FROM inventory_items WHERE restaurant_id = ? AND on_hand_qty <= low_stock_threshold', [restaurantId]);
-    const pendingTasks = await this.db.all('SELECT * FROM tasks WHERE restaurant_id = ? AND status = "pending" LIMIT 5', [restaurantId]);
+    const unavailableItems = await this.db.all('SELECT name, updated_at FROM menu_items WHERE restaurant_id = ? AND is_available = FALSE ORDER BY updated_at DESC', [restaurantId]);
+    const lowStockItems = await this.db.all('SELECT name, on_hand_qty, unit, low_stock_threshold FROM inventory_items WHERE restaurant_id = ? AND on_hand_qty <= low_stock_threshold', [restaurantId]);
+    const pendingTasks = await this.db.all('SELECT title FROM tasks WHERE restaurant_id = ? AND status = "pending" LIMIT 5', [restaurantId]);
+    const menuItems = await this.db.all('SELECT name FROM menu_items WHERE restaurant_id = ? AND is_available = TRUE LIMIT 20', [restaurantId]);
+    
+    // Get time context
+    const now = new Date();
+    const hour = now.getHours();
+    const dayOfWeek = now.toLocaleDateString('en-US', { weekday: 'long' });
+    const timeOfDay = hour < 11 ? 'breakfast' : hour < 15 ? 'lunch' : hour < 21 ? 'dinner' : 'late night';
 
-    const context = {
-      activeOrders: orders.length,
-      unavailableItems: unavailableItems.length,
-      lowStockItems: lowStockItems.length,
-      pendingTasks: pendingTasks.length
-    };
+    // Build detailed context strings
+    const unavailableList = unavailableItems.map(item => item.name).join(', ') || 'None';
+    const lowStockList = lowStockItems.map(item => `${item.name} (${item.on_hand_qty} ${item.unit})`).join(', ') || 'None';
+    const urgentOrders = orders.filter((o: any) => {
+      const createdTime = new Date(o.created_at).getTime();
+      const now = Date.now();
+      return (now - createdTime) > 15 * 60 * 1000; // Over 15 minutes
+    });
 
-    return `You are Servio, an AI assistant for restaurant staff. You help with orders, inventory, menu availability (86ing items), and tasks.
+    return `You are Servio, an intelligent AI assistant specifically designed for restaurant operations. You have deep knowledge of restaurant workflows, terminology, and best practices.
 
-CURRENT RESTAURANT STATUS:
-- Active orders: ${context.activeOrders}
-- Unavailable items (86'd): ${context.unavailableItems}
-- Low stock items: ${context.lowStockItems}
-- Pending tasks: ${context.pendingTasks}
+CURRENT CONTEXT:
+Time: ${dayOfWeek}, ${timeOfDay} service (${hour}:00)
+Restaurant: ${user?.name || 'Restaurant'}'s location
+Active Orders: ${orders.length} ${orders.length > 5 ? '⚠️ (High volume)' : ''}
+Urgent Orders (>15min): ${urgentOrders.length}
+Currently 86'd Items: ${unavailableList}
+Low Stock Items: ${lowStockList}
+Pending Tasks: ${pendingTasks.length}
 
-YOUR CAPABILITIES:
-1. Orders: Check status, update progress, view wait times
-2. Menu/86: Mark items unavailable/available on delivery platforms
-3. Inventory: Record receipts, adjust quantities, check levels
-4. Tasks: View daily tasks, mark as complete
-5. General info: Provide restaurant operational assistance
+YOUR ADVANCED CAPABILITIES:
+1. 📦 Order Management:
+   - Track order status and timing
+   - Identify bottlenecks and urgent orders
+   - Update order progression (received → preparing → ready → completed)
+   - Calculate wait times and provide ETAs
 
-SAFETY RULES:
-1. Always confirm destructive actions (86ing items, large inventory changes)
-2. If multiple items match a request, ask for clarification
-3. Log all actions for audit purposes
-4. For 86 operations, confirm which channels (DoorDash, Uber Eats, GrubHub)
+2. 🍽️ Menu & 86 Operations:
+   - Mark items unavailable ("86") across all delivery platforms
+   - Restore item availability when back in stock
+   - Sync with DoorDash, Uber Eats, GrubHub automatically
+   - Track which items are currently unavailable
+
+3. 📊 Inventory Intelligence:
+   - Monitor stock levels in real-time
+   - Alert on low inventory before it runs out
+   - Record receipts and deliveries
+   - Adjust quantities for waste, prep, or corrections
+   - Predict when items need reordering
+
+4. ✅ Task Management:
+   - View daily, weekly, and monthly tasks
+   - Mark tasks complete
+   - Prioritize urgent items
+   - Track completion rates
+
+5. 🎯 Proactive Assistance:
+   - Anticipate needs based on time of day and order volume
+   - Suggest actions when detecting issues
+   - Provide operational insights and recommendations
+   - Remember context from previous interactions
+
+INTELLIGENT BEHAVIOR:
+- Understand natural language and restaurant slang ("86", "in the weeds", "fire", "on the fly")
+- Infer intent from context (e.g., "we're out of chicken" → mark chicken items as 86'd)
+- **ALWAYS ASK FOR CLARIFICATION when ambiguous** - Don't guess!
+- If multiple items match, list them and ask which one
+- Provide relevant suggestions based on current situation
+- Learn from patterns and remember context from conversation
+- Be proactive: warn about potential issues before they escalate
+
+**DISAMBIGUATION EXAMPLES:**
+User: "86 the jerk"
+You: "I found 2 items: Jerk Chicken Plate, Jerk Pork Ribs. Which one?"
+
+User: "we're out of chicken"
+You: "I see 3 chicken items: Jerk Chicken Plate, Fried Chicken, Chicken Wings. All of them or specific ones?"
+
+User: "restore the rice"
+You: "Which rice dish? I have: Rice and Peas, Fried Rice, Yellow Rice."
+
+SAFETY & CONFIRMATION:
+- Confirm destructive actions: "Are you sure you want to 86 ALL chicken items?"
+- List affected items before bulk changes
+- Always log actions for audit trail
+- For 86 operations, default to all channels unless specified
+- Never assume quantities for inventory adjustments
 
 RESPONSE STYLE:
-- Be concise and actionable
-- Use restaurant terminology naturally
-- Confirm actions taken with specific details
-- If you need clarification, ask direct questions
+- **Conversational and Natural**: Talk like a helpful coworker, not a robot
+- **Ultra-Fast Responses**: Keep it brief - one or two sentences max
+- **Action-Oriented**: Lead with what you're doing, not pleasantries
+- **Restaurant Terminology**: Use "86'd", "fired", "in the weeds" naturally
+- **Skip Formalities**: No "I understand" or "let me help" - just do it and confirm
+- **Emoji Sparingly**: Only when it adds value
+- **Remember Context**: Reference previous parts of the conversation
 
-Examples:
-- "I'm marking Jerk Chicken unavailable on all platforms. This will take about 30 seconds to sync."
-- "I found 3 orders waiting over 15 minutes: #214, #215, #217. Which one do you want to update?"
-- "Added 2 cases of chicken to inventory. Current level: 27 pieces."
+FAST RESPONSE EXAMPLES:
+User: "no more jerk chicken"
+You: "Got it, marking Jerk Chicken as 86'd on all platforms now."
 
-Use the available tools to perform actions. Always be helpful and professional.`;
+User: "check orders"
+You: "1 active order right now. All looking good."
+
+User: "what's low?"
+You: "Chicken is running low - 5 pieces left."
+
+User: "thanks"
+You: "No problem! Anything else?"
+
+SMART EXAMPLES:
+User: "no more jerk chicken"
+You: "Got it! Marking Jerk Chicken as 86'd on all platforms (DoorDash, Uber Eats, GrubHub). Syncing now..."
+[Takes action, then confirms with specifics]
+
+User: "check orders"
+You: "You have ${orders.length} active orders. ${urgentOrders.length > 0 ? `⚠️ ${urgentOrders.length} have been waiting over 15 minutes and need attention.` : 'All orders are within normal timing.'}"
+
+User: "what's low?"
+You: "Low stock items: ${lowStockList}. ${lowStockItems.length > 3 ? 'You might want to place orders soon.' : ''}"
+
+User: "we're slammed"
+You: "I see ${orders.length} active orders. ${urgentOrders.length > 0 ? `Prioritize these urgent ones first: [list]. ` : ''}Need me to check if any items should be 86'd to reduce ticket times?"
+
+MENU ITEMS AVAILABLE (for context):
+${menuItems.map(i => i.name).slice(0, 10).join(', ')}${menuItems.length > 10 ? '...' : ''}
+
+UNAVAILABLE ITEMS (Currently 86'd):
+${unavailableList}
+
+IMPORTANT NOTES ON MENU ITEMS:
+- When marking items available/unavailable, use the exact item name when possible
+- If you're unsure about the exact name, use key words like "chicken" or "jerk"
+- If restoring availability, check the unavailable items list above
+- The system will try to match partial names intelligently
+- Always confirm what item was actually modified in your response
+
+Remember: You're not just executing commands - you're a smart restaurant assistant that understands context, anticipates needs, and provides valuable operational support. Be helpful, be smart, and help the team succeed during service!`;
   }
 
   private getTools(): any[] {
@@ -526,15 +643,63 @@ Use the available tools to perform actions. Always be helpful and professional.`
     const user = await this.db.get('SELECT restaurant_id FROM users WHERE id = ?', [userId]);
     const restaurantId = user?.restaurant_id || 'demo-restaurant-1';
 
-    // Find the menu item
-    const item = await this.db.get(
+    // Search for ALL matching items to detect ambiguity
+    let matchingItems: any[] = [];
+    
+    // Strategy 1: Exact partial match - find ALL matches
+    matchingItems = await this.db.all(
       'SELECT * FROM menu_items WHERE name LIKE ? AND restaurant_id = ?',
       [`%${itemName}%`, restaurantId]
     );
-
-    if (!item) {
-      throw new Error(`Menu item "${itemName}" not found`);
+    
+    // Strategy 2: If no exact matches, try word-by-word search
+    if (matchingItems.length === 0) {
+      const words = itemName.split(/\s+/).filter(w => w.length > 2);
+      for (const word of words) {
+        const wordMatches = await this.db.all(
+          'SELECT * FROM menu_items WHERE name LIKE ? AND restaurant_id = ?',
+          [`%${word}%`, restaurantId]
+        );
+        if (wordMatches.length > 0) {
+          matchingItems = wordMatches;
+          logger.info(`Found ${wordMatches.length} items by word match: "${word}"`);
+          break;
+        }
+      }
     }
+    
+    // Strategy 3: If trying to restore, search unavailable items
+    if (matchingItems.length === 0 && available === true) {
+      matchingItems = await this.db.all(
+        'SELECT * FROM menu_items WHERE restaurant_id = ? AND is_available = FALSE ORDER BY updated_at DESC',
+        [restaurantId]
+      );
+      
+      if (matchingItems.length > 1) {
+        const itemNames = matchingItems.map((i: any) => i.name).join(', ');
+        throw new Error(`Which item? Currently 86'd: ${itemNames}`);
+      }
+    }
+
+    // **DISAMBIGUATION: Multiple matches found**
+    if (matchingItems.length > 1) {
+      const itemNames = matchingItems.map((i: any) => i.name).join(', ');
+      const action = available ? 'restore' : '86';
+      throw new Error(`I found ${matchingItems.length} items matching "${itemName}": ${itemNames}. Which one did you mean?`);
+    }
+
+    // No matches found
+    if (matchingItems.length === 0) {
+      const allItems = await this.db.all(
+        'SELECT name FROM menu_items WHERE restaurant_id = ? LIMIT 10',
+        [restaurantId]
+      );
+      const suggestions = allItems.map((i: any) => i.name).join(', ');
+      throw new Error(`I couldn't find "${itemName}". Available items: ${suggestions}`);
+    }
+
+    // Single match - proceed with the action
+    const item = matchingItems[0];
 
     // Update availability
     await this.db.run(

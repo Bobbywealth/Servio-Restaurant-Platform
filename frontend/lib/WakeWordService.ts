@@ -74,6 +74,7 @@ export class WakeWordService {
   private recognition: SpeechRecognition | null = null;
   private isInitialized = false;
   private isListening = false;
+  private shouldBeListening = false; // Track if we want to be listening
   private config: WakeWordConfig;
   private restartTimeout: NodeJS.Timeout | null = null;
   private lastRestartTime = 0;
@@ -138,13 +139,13 @@ export class WakeWordService {
       this.isListening = false;
       this.config.onListeningStateChange?.(false);
 
-      // Auto-restart if we're supposed to be listening
+      // Auto-restart ONLY if we're supposed to be listening
       // Add debounce to prevent rapid restarts
       const now = Date.now();
-      if (now - this.lastRestartTime > 1000) {
+      if (this.shouldBeListening && now - this.lastRestartTime > 1000) {
         this.lastRestartTime = now;
         this.restartTimeout = setTimeout(() => {
-          if (this.isInitialized) {
+          if (this.isInitialized && this.shouldBeListening) {
             console.log('Auto-restarting wake word detection');
             this.startListening();
           }
@@ -230,6 +231,7 @@ export class WakeWordService {
       return false;
     }
 
+    // Check if already listening to prevent "already started" error
     if (this.isListening) {
       console.log('Already listening for wake words');
       return true;
@@ -242,11 +244,27 @@ export class WakeWordService {
         this.restartTimeout = null;
       }
 
+      // Set flags BEFORE calling start() to prevent race conditions
+      this.shouldBeListening = true;
+      this.isListening = true; // Set immediately to prevent double-start
+      
       this.recognition.start();
       console.log('Started listening for wake words:', this.config.wakeWords);
       return true;
 
-    } catch (error) {
+    } catch (error: any) {
+      // Reset flags if start() fails
+      this.isListening = false;
+      this.shouldBeListening = false;
+      
+      // If already started, that's actually okay - we're listening
+      if (error?.message?.includes('already started')) {
+        console.log('Recognition already active, continuing...');
+        this.isListening = true;
+        this.shouldBeListening = true;
+        return true;
+      }
+      
       console.error('Failed to start wake word listening:', error);
       this.config.onError?.(error as Error);
       return false;
@@ -254,17 +272,23 @@ export class WakeWordService {
   }
 
   async stopListening(): Promise<void> {
-    if (!this.isListening || !this.recognition) return;
+    if (!this.recognition) return;
 
     try {
+      // Mark that we don't want to be listening (prevents auto-restart)
+      this.shouldBeListening = false;
+      
       // Clear restart timeout
       if (this.restartTimeout) {
         clearTimeout(this.restartTimeout);
         this.restartTimeout = null;
       }
 
-      this.recognition.stop();
-      console.log('Stopped listening for wake words');
+      // Stop recognition if it's running
+      if (this.isListening) {
+        this.recognition.stop();
+        console.log('Stopped listening for wake words');
+      }
 
     } catch (error) {
       console.error('Error stopping wake word listening:', error);
@@ -301,6 +325,8 @@ export class WakeWordService {
   }
 
   async cleanup(): Promise<void> {
+    // Stop listening and prevent auto-restart
+    this.shouldBeListening = false;
     await this.stopListening();
     
     if (this.restartTimeout) {
@@ -310,6 +336,7 @@ export class WakeWordService {
 
     this.recognition = null;
     this.isInitialized = false;
+    this.isListening = false;
     console.log('WakeWordService cleaned up');
   }
 }

@@ -19,7 +19,7 @@ router.get('/today', asyncHandler(async (req: Request, res: Response) => {
   let query = `
     SELECT * FROM tasks
     WHERE (type = 'daily'
-    OR (due_date IS NOT NULL AND due_date::date = CURRENT_DATE)
+    OR (due_date IS NOT NULL AND date(due_date) = date('now'))
     OR (type = 'one_time' AND status != 'completed'))
     AND restaurant_id = ?
   `;
@@ -203,7 +203,7 @@ router.get('/stats', asyncHandler(async (req: Request, res: Response) => {
 
   const restaurantId = req.user?.restaurantId;
 
-  const completedTodayCondition = "status = 'completed' AND completed_at::date = CURRENT_DATE";
+  const completedTodayCondition = "status = 'completed' AND date(completed_at) = date('now')";
 
   const [
     totalTasks,

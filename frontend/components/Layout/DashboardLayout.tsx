@@ -78,13 +78,14 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     return null;
   }
 
-  const navigation = [
+  const allNavigation = [
     {
       name: 'Dashboard',
       href: '/dashboard',
       icon: Home,
       description: 'Overview & quick actions',
-      color: 'text-servio-blue-500'
+      color: 'text-servio-blue-500',
+      roles: ['staff', 'manager', 'owner', 'admin']
     },
     {
       name: 'Assistant',
@@ -92,82 +93,111 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       icon: Mic,
       description: 'AI voice assistant',
       color: 'text-servio-orange-500',
-      highlight: true
+      highlight: true,
+      roles: ['manager', 'owner', 'admin']
     },
     {
       name: 'Orders',
       href: '/dashboard/orders',
       icon: ClipboardList,
       description: 'Manage all orders',
-      color: 'text-primary-500'
+      color: 'text-primary-500',
+      roles: ['staff', 'manager', 'owner', 'admin']
+    },
+    {
+      name: 'Time Clock',
+      href: '/dashboard/timeclock',
+      icon: Clock,
+      description: 'View your hours',
+      color: 'text-emerald-500',
+      roles: ['staff', 'manager', 'owner', 'admin']
     },
     {
       name: 'Menu',
       href: '/dashboard/menu-management',
       icon: UtensilsCrossed,
       description: 'Menu & categories',
-      color: 'text-amber-500'
+      color: 'text-amber-500',
+      roles: ['manager', 'owner', 'admin']
     },
     {
       name: 'Marketing',
       href: '/dashboard/marketing',
       icon: Mail,
       description: 'SMS & email campaigns',
-      color: 'text-pink-500'
+      color: 'text-pink-500',
+      roles: ['manager', 'owner', 'admin']
     },
     {
       name: 'Profile',
       href: '/dashboard/restaurant-profile',
       icon: Store,
       description: 'Restaurant branding',
-      color: 'text-indigo-500'
+      color: 'text-indigo-500',
+      roles: ['manager', 'owner', 'admin']
     },
     {
       name: 'Inventory',
       href: '/dashboard/inventory',
       icon: Package,
       description: 'Stock management',
-      color: 'text-servio-green-500'
+      color: 'text-servio-green-500',
+      roles: ['manager', 'owner', 'admin']
     },
     {
       name: 'Receipts',
       href: '/dashboard/inventory/receipts',
       icon: FileText,
       description: 'Upload & track invoices',
-      color: 'text-blue-500'
+      color: 'text-blue-500',
+      roles: ['manager', 'owner', 'admin']
     },
     {
       name: 'Staff',
       href: '/dashboard/staff',
       icon: Users,
       description: 'Team & schedules',
-      color: 'text-purple-500'
+      color: 'text-purple-500',
+      roles: ['manager', 'owner', 'admin']
     },
     {
       name: 'Integrations',
       href: '/dashboard/integrations',
       icon: Wifi,
       description: 'API connections',
-      color: 'text-cyan-500'
+      color: 'text-cyan-500',
+      roles: ['owner', 'admin']
     },
     {
       name: 'Settings',
       href: '/dashboard/settings',
       icon: Settings,
       description: 'System settings',
-      color: 'text-surface-500'
+      color: 'text-surface-500',
+      roles: ['staff', 'manager', 'owner', 'admin']
     },
   ];
+
+  // Filter navigation based on user role
+  const navigation = allNavigation.filter(item => 
+    item.roles.includes(user.role)
+  );
   const currentItem = navigation.find((item) => currentPath === normalizePath(item.href));
   const pageTitle = currentItem?.name || 'Dashboard';
 
-  const mobileNav = [
-    { name: 'Home', href: '/dashboard', icon: Home },
-    { name: 'Orders', href: '/dashboard/orders', icon: ClipboardList },
-    { name: 'Assistant', href: '/dashboard/assistant', icon: Mic },
-    { name: 'Inventory', href: '/dashboard/inventory', icon: Package },
-    { name: 'Staff', href: '/dashboard/staff', icon: Users }
+  // Mobile navigation - role-based
+  const allMobileNav = [
+    { name: 'Home', href: '/dashboard', icon: Home, roles: ['staff', 'manager', 'owner', 'admin'] },
+    { name: 'Orders', href: '/dashboard/orders', icon: ClipboardList, roles: ['staff', 'manager', 'owner', 'admin'] },
+    { name: 'Clock', href: '/dashboard/timeclock', icon: Clock, roles: ['staff', 'manager', 'owner', 'admin'] },
+    { name: 'Assistant', href: '/dashboard/assistant', icon: Mic, roles: ['manager', 'owner', 'admin'] },
+    { name: 'Inventory', href: '/dashboard/inventory', icon: Package, roles: ['manager', 'owner', 'admin'] },
+    { name: 'Staff', href: '/dashboard/staff', icon: Users, roles: ['manager', 'owner', 'admin'] }
   ];
+
+  const mobileNav = allMobileNav.filter(item => 
+    item.roles.includes(user.role)
+  );
 
   const closeSidebar = () => setSidebarOpen(false);
 
@@ -194,10 +224,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         <div className="flex items-center justify-between h-16 px-6 border-b border-gray-200 dark:border-gray-700">
           <motion.div className="flex items-center" whileHover={{ scale: 1.02 }}>
             <Link href="/dashboard" className="flex items-center">
-              <div className="w-8 h-8 rounded-lg bg-teal-600 flex items-center justify-center">
-                <span className="text-white font-bold text-xl">S</span>
-              </div>
-              <span className="ml-2 text-xl font-semibold tracking-tight text-gray-900 dark:text-white">servio</span>
+              <img src="/images/servio_logo_transparent_tight.png" alt="Servio Logo" className="h-8 w-auto" />
             </Link>
           </motion.div>
           <button onClick={closeSidebar} className="lg:hidden btn-icon">

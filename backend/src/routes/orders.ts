@@ -176,7 +176,7 @@ router.get('/stats/summary', asyncHandler(async (req: Request, res: Response) =>
 
   const restaurantId = req.user?.restaurantId;
 
-  const completedTodayCondition = "status = 'completed' AND created_at::date = CURRENT_DATE";
+  const completedTodayCondition = "status = 'completed' AND date(created_at) = date('now')";
 
   const [
     totalOrders,
@@ -291,7 +291,7 @@ router.get('/waiting-times', asyncHandler(async (req: Request, res: Response) =>
       status,
       customer_name,
       created_at,
-      ROUND(EXTRACT(EPOCH FROM (NOW() - created_at)) / 60) as waiting_minutes
+      ROUND((julianday('now') - julianday(created_at)) * 1440) as waiting_minutes
     FROM orders
     WHERE status IN ('received', 'preparing', 'ready')
     ORDER BY waiting_minutes DESC

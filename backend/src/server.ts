@@ -105,6 +105,7 @@ async function initializeServer() {
     const { default: timeclockRoutes } = await import('./routes/timeclock');
     const { default: marketingRoutes } = await import('./routes/marketing');
     const { default: restaurantRoutes } = await import('./routes/restaurant');
+    const { default: restaurantSettingsRoutes } = await import('./routes/restaurant-settings');
     const { default: integrationsRoutes } = await import('./routes/integrations');
     const { default: vapiRoutes } = await import('./routes/vapi');
     const { default: voiceRoutes } = await import('./routes/voice');
@@ -117,7 +118,7 @@ async function initializeServer() {
     
     // Vapi webhook routes (no auth required for external webhooks)
     app.use('/api/vapi', vapiRoutes);
-    app.use('/api', voiceRoutes); // Mount voice ordering APIs under /api
+    app.use('/api/voice', voiceRoutes); // Mount voice ordering APIs under /api/voice
 
     // Public booking routes (demo booking / calendar)
     app.use('/api/bookings', bookingsRoutes);
@@ -147,6 +148,7 @@ async function initializeServer() {
     app.use('/api/timeclock', requireAuth, timeclockRoutes);
     app.use('/api/marketing', requireAuth, marketingRoutes);
     app.use('/api/restaurant', requireAuth, restaurantRoutes);
+    app.use('/api/restaurants', requireAuth, restaurantSettingsRoutes);
     app.use('/api/integrations', requireAuth, integrationsRoutes);
     app.use('/api/notifications', requireAuth, notificationsRoutes);
 
@@ -327,6 +329,9 @@ io.on('connection', (socket) => {
 
 // Make io available to routes
 app.set('socketio', io);
+
+// Serve static files from uploads directory
+app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
 // Routes will be loaded after database initialization
 

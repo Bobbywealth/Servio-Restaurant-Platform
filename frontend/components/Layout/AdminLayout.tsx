@@ -19,6 +19,7 @@ import {
   User,
   CalendarDays
 } from 'lucide-react'
+import { useUser } from '../../contexts/UserContext'
 
 interface AdminLayoutProps {
   children: React.ReactNode
@@ -32,6 +33,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
   description = 'Servio Platform Administration'
 }) => {
   const router = useRouter()
+  const { logout } = useUser()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [currentUser, setCurrentUser] = useState<any | null>(null)
   const [mounted, setMounted] = useState(false)
@@ -47,10 +49,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
   ]
 
   const handleLogout = () => {
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('servio_token')
-      localStorage.removeItem('servio_user')
-    }
+    logout()
     router.push('/login')
   }
 
