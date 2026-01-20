@@ -110,7 +110,6 @@ export class WakeWordService {
       this.setupEventHandlers();
 
       this.isInitialized = true;
-      console.log('WakeWordService initialized successfully');
       return true;
 
     } catch (error) {

@@ -184,10 +184,10 @@ export default function QuickCommands({
 
       {/* Category Filter */}
       <div className="mb-4">
-        <div className="flex flex-wrap gap-2">
+        <div className="flex overflow-x-auto gap-2 pb-2 scrollbar-hide">
           <button
             onClick={() => setSelectedCategory(null)}
-            className={`px-3 py-2 sm:py-1 rounded-full text-sm sm:text-xs font-medium border transition-colors duration-200 touch-manipulation mobile-tap-highlight min-h-touch ${
+            className={`flex-shrink-0 px-3 py-2 sm:py-1 rounded-full text-sm sm:text-xs font-medium border transition-colors duration-200 touch-manipulation mobile-tap-highlight min-h-touch ${
               selectedCategory === null
                 ? 'bg-gray-900 text-white border-gray-900'
                 : 'bg-gray-100 text-gray-600 border-gray-300 hover:bg-gray-200'
@@ -199,7 +199,7 @@ export default function QuickCommands({
             <button
               key={key}
               onClick={() => setSelectedCategory(key)}
-              className={`px-3 py-2 sm:py-1 rounded-full text-sm sm:text-xs font-medium border transition-colors duration-200 touch-manipulation mobile-tap-highlight min-h-touch ${
+              className={`flex-shrink-0 px-3 py-2 sm:py-1 rounded-full text-sm sm:text-xs font-medium border transition-colors duration-200 touch-manipulation mobile-tap-highlight min-h-touch ${
                 selectedCategory === key
                   ? 'bg-gray-900 text-white border-gray-900'
                   : getCategoryColor(category.color)
@@ -211,26 +211,26 @@ export default function QuickCommands({
         </div>
       </div>
 
-      {/* Commands Grid */}
-      <div className="grid grid-cols-1 gap-3 sm:gap-2 max-h-96 overflow-y-auto mobile-scrolling">
+      {/* Commands List - Horizontal Scroll */}
+      <div className="flex overflow-x-auto gap-4 pb-4 -mx-1 px-1 snap-x mobile-scrolling scrollbar-hide">
         {filteredCommands.map((command, index) => (
           <motion.button
             key={command.id}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
             transition={{ delay: index * 0.05 }}
             onClick={() => !disabled && onCommand(command.command)}
             onMouseEnter={() => setHoveredCommand(command.id)}
             onMouseLeave={() => setHoveredCommand(null)}
             disabled={disabled}
             className={`
-              flex items-start space-x-3 p-4 sm:p-3 rounded-lg border text-left transition-all duration-200
+              flex-shrink-0 w-72 snap-start flex items-start space-x-3 p-4 rounded-xl border text-left transition-all duration-200
               ${getCommandButtonColor(command.category)}
               ${disabled
                 ? 'opacity-50 cursor-not-allowed'
-                : 'cursor-pointer transform hover:scale-[1.02] active:scale-[0.98] touch-manipulation mobile-tap-highlight'
+                : 'cursor-pointer transform hover:scale-[1.02] active:scale-[0.98] shadow-sm hover:shadow-md touch-manipulation mobile-tap-highlight'
               }
-              min-h-touch
+              min-h-[100px]
             `}
           >
             {/* Icon */}
@@ -256,59 +256,6 @@ export default function QuickCommands({
           </motion.button>
         ))}
       </div>
-
-      {/* Custom Command Input */}
-      <div className="mt-4 pt-4 border-t border-gray-200">
-        <CustomCommandInput
-          onCommand={onCommand}
-          disabled={disabled}
-        />
-      </div>
     </div>
-  )
-}
-
-// Custom Command Input Component
-function CustomCommandInput({
-  onCommand,
-  disabled
-}: {
-  onCommand: (command: string) => void
-  disabled: boolean
-}) {
-  const [customCommand, setCustomCommand] = useState('')
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (customCommand.trim() && !disabled) {
-      onCommand(customCommand.trim())
-      setCustomCommand('')
-    }
-  }
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-2">
-      <label htmlFor="custom-command" className="text-sm font-medium text-gray-900">
-        Custom Command
-      </label>
-      <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
-        <input
-          id="custom-command"
-          type="text"
-          value={customCommand}
-          onChange={(e) => setCustomCommand(e.target.value)}
-          placeholder="Type a custom command..."
-          disabled={disabled}
-          className="flex-1 input-mobile px-3 py-3 sm:py-2 border border-gray-300 rounded-lg text-base sm:text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
-        />
-        <button
-          type="submit"
-          disabled={disabled || !customCommand.trim()}
-          className="btn-mobile-primary px-6 sm:px-4 py-3 sm:py-2 bg-blue-600 text-white text-base sm:text-sm font-medium rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 min-h-touch"
-        >
-          Send
-        </button>
-      </div>
-    </form>
   )
 }

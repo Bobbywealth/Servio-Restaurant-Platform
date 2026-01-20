@@ -515,21 +515,22 @@ export default function AssistantPage() {
           }
         },
         onListeningStateChange: (isListening: boolean) => {
-          setState(prev => ({
-            ...prev,
-            isListeningForWakeWord: isListening
-          }));
+          setState(prev => {
+            if (prev.isListeningForWakeWord === isListening) return prev;
+            return {
+              ...prev,
+              isListeningForWakeWord: isListening
+            };
+          });
         },
         onPartialResult: (transcript: string) => {
           // Optional: Show what's being heard (for debugging)
-          console.log('Wake word listening:', transcript);
         }
       } as any);
 
       const initialized = await wakeWordServiceRef.current.initialize();
       
       if (initialized) {
-        console.log('Wake word service initialized successfully');
         return true;
       } else {
         console.error('Failed to initialize wake word service');
@@ -542,7 +543,7 @@ export default function AssistantPage() {
     } finally {
       isInitializingWakeWordRef.current = false;
     }
-  }, [state.wakeWordSupported]); // Removed dependencies that change frequently
+  }, []); // Truly stable callback
 
   const toggleWakeWordListening = useCallback(async () => {
     if (!wakeWordServiceRef.current || !wakeWordServiceRef.current.getState().isInitialized) {
@@ -576,16 +577,10 @@ export default function AssistantPage() {
 
   // Auto-initialize wake word service on component mount
   useEffect(() => {
-    let mounted = true;
-    
-    if (state.wakeWordSupported) {
+    if (isWakeWordSupported()) {
       initializeWakeWordService();
     }
-    
-    return () => {
-      mounted = false;
-    };
-  }, [state.wakeWordSupported, initializeWakeWordService]);
+  }, [initializeWakeWordService]);
 
   return (
     <>
@@ -603,6 +598,14 @@ export default function AssistantPage() {
             <p className="mt-2 text-sm sm:text-base text-gray-600 dark:text-gray-400">
               Your AI-powered restaurant operations assistant. Talk to Servio to manage orders, inventory, and tasks.
             </p>
+          </div>
+
+          {/* Quick Commands - Moved to top and made horizontal */}
+          <div className="mb-6 card-mobile">
+            <QuickCommands
+              onCommand={handleQuickCommand}
+              disabled={state.isProcessing || state.isRecording}
+            />
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
@@ -665,14 +668,6 @@ export default function AssistantPage() {
                     )}
                   </div>
                 )}
-              </div>
-
-              {/* Quick Commands */}
-              <div className="mt-4 sm:mt-6 card-mobile">
-                <QuickCommands
-                  onCommand={handleQuickCommand}
-                  disabled={state.isProcessing || state.isRecording}
-                />
               </div>
             </div>
 
