@@ -1,9 +1,10 @@
- 'use client';
+'use client';
 
 import React, { useState } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
-import { Bot, Lock, Mail, AlertCircle, Loader2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Bot, Lock, Mail, AlertCircle, Loader2, ArrowRight, Sparkles } from 'lucide-react';
 import { useUser } from '../contexts/UserContext';
 
 export default function LoginPage() {
@@ -30,144 +31,156 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-[#F9FAFB] text-gray-900 flex items-center justify-center p-4 relative overflow-hidden">
       <Head>
         <title>Login | Servio</title>
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0" />
       </Head>
 
-      <div className="sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="flex justify-center">
-          <img 
-            src="/images/servio_logo_transparent_tight.png" 
-            alt="Servio Logo" 
-            className="h-12 w-auto" 
-          />
-        </div>
-        <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-          Sign in to your restaurant
-        </h2>
-        <p className="mt-2 text-center text-sm text-gray-600">
-          Servio Restaurant Operating System
-        </p>
+      {/* Dynamic Background */}
+      <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-[-10%] right-[-10%] w-[60%] h-[60%] bg-primary-50 rounded-full blur-[120px]" />
+        <div className="absolute bottom-[-10%] left-[-10%] w-[50%] h-[50%] bg-surface-100 rounded-full blur-[100px]" />
       </div>
 
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10 border border-gray-100">
-          <form className="space-y-6" onSubmit={handleSubmit}>
-            {error && (
-              <div className="bg-red-50 border-l-4 border-red-400 p-4 rounded-md">
-                <div className="flex">
-                  <div className="flex-shrink-0">
-                    <AlertCircle className="h-5 w-5 text-red-400" />
-                  </div>
-                  <div className="ml-3">
-                    <p className="text-sm text-red-700">{error}</p>
-                  </div>
-                </div>
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+        className="w-full max-w-md z-10"
+      >
+        <div className="bg-white rounded-2xl shadow-sm border border-surface-200 p-8 md:p-10">
+          <div className="flex flex-col items-center mb-10">
+            <motion.div
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              className="mb-6 relative"
+            >
+              <div className="bg-primary-600 p-4 rounded-2xl">
+                <Bot className="w-10 h-10 text-white" />
               </div>
-            )}
+              <motion.div
+                animate={{ scale: [1, 1.2, 1], opacity: [1, 0.5, 1] }}
+                transition={{ duration: 2, repeat: Infinity }}
+                className="absolute -top-1 -right-1"
+              >
+                <Sparkles className="w-5 h-5 text-primary-500" />
+              </motion.div>
+            </motion.div>
+            
+            <h1 className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">
+              Welcome back
+            </h1>
+            <p className="mt-2 text-gray-500 font-medium">
+              Restaurant OS v2.0
+            </p>
+          </div>
 
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-                Email address
-              </label>
-              <div className="mt-1 relative rounded-md shadow-sm">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Mail className="h-5 w-5 text-gray-400" />
+          <form className="space-y-5" onSubmit={handleSubmit}>
+            <AnimatePresence mode="wait">
+              {error && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="bg-red-50 text-red-600 p-4 rounded-2xl flex items-start gap-3 border border-red-100"
+                >
+                  <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+                  <p className="text-sm font-medium">{error}</p>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <div className="space-y-2">
+              <label className="text-sm font-bold text-gray-700 ml-1">Email</label>
+              <div className="relative group">
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                  <Mail className="w-5 h-5 text-gray-400 group-focus-within:text-primary-600 transition-colors" />
                 </div>
                 <input
-                  id="email"
-                  name="email"
                   type="email"
-                  autoComplete="email"
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="focus:ring-blue-500 focus:border-blue-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-md py-3 border"
+                  className="w-full bg-surface-50 border border-surface-200 focus:bg-white focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 rounded-xl pl-12 pr-4 py-3 text-gray-900 font-medium transition-all outline-none"
                   placeholder="name@restaurant.com"
                 />
               </div>
             </div>
 
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-                Password
-              </label>
-              <div className="mt-1 relative rounded-md shadow-sm">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Lock className="h-5 w-5 text-gray-400" />
+            <div className="space-y-2">
+              <div className="flex justify-between items-center ml-1">
+                <label className="text-sm font-bold text-gray-700">Password</label>
+                <button type="button" className="text-xs font-bold text-primary-600 hover:text-primary-700 transition-colors">
+                  Forgot?
+                </button>
+              </div>
+              <div className="relative group">
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                  <Lock className="w-5 h-5 text-gray-400 group-focus-within:text-primary-600 transition-colors" />
                 </div>
                 <input
-                  id="password"
-                  name="password"
                   type="password"
-                  autoComplete="current-password"
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="focus:ring-blue-500 focus:border-blue-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-md py-3 border"
+                  className="w-full bg-surface-50 border border-surface-200 focus:bg-white focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400 rounded-xl pl-12 pr-4 py-3 text-gray-900 font-medium transition-all outline-none"
                   placeholder="••••••••"
                 />
               </div>
             </div>
 
-            <div className="flex items-center justify-between">
-              <div className="flex items-center">
-                <input
-                  id="remember-me"
-                  name="remember-me"
-                  type="checkbox"
-                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                />
-                <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-900">
-                  Remember me
-                </label>
-              </div>
-
-              <div className="text-sm">
-                <a href="#" className="font-medium text-blue-600 hover:text-blue-500">
-                  Forgot your password?
-                </a>
-              </div>
-            </div>
-
-            <div>
-              <button
+            <div className="pt-2">
+              <motion.button
+                whileHover={{ scale: 1.01 }}
+                whileTap={{ scale: 0.98 }}
                 type="submit"
                 disabled={loading}
-                className="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                className="w-full bg-primary-600 hover:bg-primary-700 text-white rounded-xl py-3 font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-50 group"
               >
                 {loading ? (
-                  <>
-                    <Loader2 className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" />
-                    Signing in...
-                  </>
+                  <Loader2 className="w-5 h-5 animate-spin" />
                 ) : (
-                  'Sign in'
+                  <>
+                    Continue to Dashboard
+                    <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                  </>
                 )}
-              </button>
+              </motion.button>
             </div>
           </form>
 
-          <div className="mt-6">
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-300" />
-              </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-white text-gray-500">Demo Account Credentials</span>
-              </div>
+          <div className="mt-10">
+            <div className="flex items-center gap-4 mb-6">
+              <div className="h-px flex-1 bg-surface-200" />
+              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-2">Demo Access</span>
+              <div className="h-px flex-1 bg-surface-200" />
             </div>
 
-            <div className="mt-6 grid grid-cols-1 gap-3">
-              <div className="text-xs text-center text-gray-500 bg-gray-50 p-3 rounded-lg border border-gray-100">
-                <p><strong>Owner/Manager:</strong> manager@demo.servio / password</p>
-                <p className="mt-1"><strong>Staff:</strong> staff@demo.servio / password</p>
-              </div>
+            <div className="grid grid-cols-2 gap-3">
+              <button 
+                onClick={() => { setEmail('manager@demo.servio'); setPassword('password'); }}
+                className="bg-surface-50 hover:bg-surface-100 p-3 rounded-xl text-left transition-colors group border border-surface-200"
+              >
+                <p className="text-[10px] font-bold text-gray-400 uppercase mb-1 group-hover:text-primary-600 transition-colors">Manager</p>
+                <p className="text-xs font-bold text-gray-700 italic">One-tap fill</p>
+              </button>
+              <button 
+                onClick={() => { setEmail('staff@demo.servio'); setPassword('password'); }}
+                className="bg-surface-50 hover:bg-surface-100 p-3 rounded-xl text-left transition-colors group border border-surface-200"
+              >
+                <p className="text-[10px] font-bold text-gray-400 uppercase mb-1 group-hover:text-primary-600 transition-colors">Staff</p>
+                <p className="text-xs font-bold text-gray-700 italic">One-tap fill</p>
+              </button>
             </div>
           </div>
         </div>
-      </div>
+        
+        <p className="mt-8 text-center text-gray-400 text-sm font-medium">
+          Powered by <span className="text-gray-600">Servio Intelligence</span>
+        </p>
+      </motion.div>
     </div>
   );
 }

@@ -46,7 +46,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
         <meta name="robots" content="noindex, nofollow" />
       </Head>
 
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <div className="min-h-screen bg-[#F9FAFB] dark:bg-gray-900">
         {/* Mobile sidebar overlay */}
         {sidebarOpen && (
           <div 
@@ -56,7 +56,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
         )}
 
         {/* Sidebar */}
-        <div className={`fixed inset-y-0 left-0 z-50 w-64 transform bg-white dark:bg-gray-800 shadow-lg transition-transform duration-300 ease-in-out lg:translate-x-0 ${
+        <div className={`fixed inset-y-0 left-0 z-50 w-64 transform bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 transition-transform duration-300 ease-in-out lg:translate-x-0 ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         } lg:static lg:inset-0`}>
           <div className="flex h-full flex-col">
@@ -132,7 +132,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
         {/* Main content */}
         <div className="lg:ml-64">
           {/* Top bar */}
-          <div className="sticky top-0 z-10 bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700">
+          <div className="sticky top-0 z-10 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 pt-safe-top">
             <div className="flex h-16 items-center justify-between px-4 sm:px-6">
               <div className="flex items-center">
                 <button
@@ -152,7 +152,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
           </div>
 
           {/* Page content */}
-          <main className="flex-1">
+          <main className="flex-1 pb-24 lg:pb-6">
             <div className="py-6">
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
@@ -163,6 +163,27 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
               </motion.div>
             </div>
           </main>
+        </div>
+
+        {/* Mobile bottom navigation */}
+        <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 border-t border-gray-200 backdrop-blur-md lg:hidden pb-safe-bottom">
+          <div className="grid grid-cols-2 px-2 py-2">
+            {navigation.map((item) => {
+              const isActive = router.pathname === item.href || router.pathname.startsWith(item.href)
+              return (
+                <Link
+                  key={item.name}
+                  href={item.href}
+                  className={`flex flex-col items-center justify-center py-2 rounded-lg text-xs font-medium ${
+                    isActive ? 'text-red-600' : 'text-gray-500'
+                  }`}
+                >
+                  <item.icon className="w-5 h-5" />
+                  <span className="mt-1">{item.name}</span>
+                </Link>
+              )
+            })}
+          </div>
         </div>
       </div>
     </>

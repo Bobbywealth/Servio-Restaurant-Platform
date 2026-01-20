@@ -8,6 +8,7 @@ const IMAGE_CACHE_NAME = 'servio-images-v2.0.0'
 // AGGRESSIVE PRE-CACHING
 const STATIC_CACHE_URLS = [
   '/',
+  '/login',
   '/dashboard/',
   '/dashboard/assistant/',
   '/dashboard/orders/',
@@ -147,16 +148,32 @@ self.addEventListener('fetch', (event) => {
 // API REQUEST HANDLER - STALE WHILE REVALIDATE WITH SMART CACHING
 async function handleAPIRequest(request) {
   const url = new URL(request.url)
-  const isReadOnlyAPI = request.method === 'GET' &&
-    (url.pathname.includes('/menu') || url.pathname.includes('/inventory'))
+  const hasAuth =
+    request.headers.get('Authorization') ||
+    request.headers.get('authorization') ||
+    request.credentials === 'include'
 
-  if (isReadOnlyAPI) {
-    // Use stale-while-revalidate for read-only APIs
-    return staleWhileRevalidate(request, API_CACHE_NAME, CACHE_EXPIRATION.API)
+  if (hasAuth) {
+    // Do NOT cache authenticated API responses
+    try {
+      return await fetch(request)
+    } catch (error) {
+      return new Response(
+        JSON.stringify({
+          error: 'Offline',
+          message: 'Network unavailable - please try again',
+          cached: false
+        }),
+        {
+          status: 503,
+          headers: { 'Content-Type': 'application/json' }
+        }
+      )
+    }
   }
 
   try {
-    // For write operations, always try network first
+    // For unauthenticated APIs, always try network first
     const response = await fetch(request)
 
     // Cache successful GET responses

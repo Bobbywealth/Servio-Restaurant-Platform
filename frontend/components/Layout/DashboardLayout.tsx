@@ -148,11 +148,21 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       color: 'text-surface-500'
     },
   ];
+  const currentItem = navigation.find((item) => currentPath === normalizePath(item.href));
+  const pageTitle = currentItem?.name || 'Dashboard';
+
+  const mobileNav = [
+    { name: 'Home', href: '/dashboard', icon: Home },
+    { name: 'Orders', href: '/dashboard/orders', icon: ClipboardList },
+    { name: 'Assistant', href: '/dashboard/assistant', icon: Mic },
+    { name: 'Inventory', href: '/dashboard/inventory', icon: Package },
+    { name: 'Staff', href: '/dashboard/staff', icon: Users }
+  ];
 
   const closeSidebar = () => setSidebarOpen(false);
 
   return (
-    <div className="min-h-screen gradient-surface">
+    <div className="min-h-screen bg-[#F9FAFB] text-gray-900">
       <AnimatePresence>
         {sidebarOpen && (
           <motion.div
@@ -166,7 +176,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       </AnimatePresence>
 
       <motion.div
-        className={`fixed inset-y-0 left-0 z-50 w-72 bg-white/95 dark:bg-surface-900/95 backdrop-blur-xl shadow-2xl transform transition-transform duration-300 ease-out lg:translate-x-0 border-r border-surface-200 dark:border-surface-800 ${
+        className={`fixed inset-y-0 left-0 z-50 w-72 bg-white dark:bg-surface-900 transform transition-transform duration-300 ease-out lg:translate-x-0 border-r border-surface-200 dark:border-surface-800 ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
         initial={false}
@@ -209,17 +219,17 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                   onClick={closeSidebar}
                   className={`
                     group relative flex items-center px-4 py-3 text-sm font-medium rounded-xl
-                    transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]
+                    transition-all duration-200 hover:bg-surface-100 dark:hover:bg-surface-800
                     ${isActive
-                      ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 shadow-sm'
-                      : 'text-surface-600 dark:text-surface-400 hover:bg-surface-100 dark:hover:bg-surface-800 hover:text-surface-900 dark:hover:text-surface-200'
+                      ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300'
+                      : 'text-surface-600 dark:text-surface-400 hover:text-surface-900 dark:hover:text-surface-200'
                     }
                   `}
                 >
                   <div className={`
                     flex items-center justify-center w-10 h-10 rounded-lg mr-3 transition-colors
                     ${isActive
-                      ? 'bg-primary-200 dark:bg-primary-800/50'
+                      ? 'bg-primary-100 dark:bg-primary-800/50'
                       : 'bg-surface-100 dark:bg-surface-800 group-hover:bg-surface-200 dark:group-hover:bg-surface-700'
                     }
                   `}>
@@ -258,30 +268,52 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       </motion.div>
 
       <div className="pl-0 lg:pl-72 transition-all duration-300">
-        <div className="bg-white/80 dark:bg-surface-900/80 backdrop-blur-xl shadow-sm border-b border-surface-200/50 dark:border-surface-800/50 sticky top-0 z-30">
+        <div className="bg-white/95 dark:bg-surface-900 sticky top-0 z-30 border-b border-surface-200 dark:border-surface-800 pt-safe-top">
           <div className="px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between items-center h-16">
-              <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-3">
                 <button onClick={() => setSidebarOpen(true)} className="lg:hidden btn-icon">
                   <Menu className="w-6 h-6" />
                 </button>
+                <div className="text-sm font-semibold text-gray-900">{pageTitle}</div>
               </div>
               <div className="flex items-center space-x-3">
-                <ThemeToggle />
                 <NotificationCenter />
+                <ThemeToggle />
                 <AccountSwitcher />
               </div>
             </div>
           </div>
         </div>
         <motion.main
-          className="p-4 sm:p-6 lg:p-8"
+          className="px-4 sm:px-6 lg:px-8 py-6 pb-24 lg:pb-8"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3 }}
         >
           {children}
         </motion.main>
+      </div>
+
+      {/* Mobile bottom navigation */}
+      <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 border-t border-surface-200 backdrop-blur-md lg:hidden pb-safe-bottom">
+        <div className="grid grid-cols-5 px-2 py-2">
+          {mobileNav.map((item) => {
+            const isActive = currentPath === normalizePath(item.href);
+            return (
+              <Link
+                key={item.name}
+                href={item.href}
+                className={`flex flex-col items-center justify-center py-2 rounded-lg text-xs font-medium ${
+                  isActive ? 'text-primary-700' : 'text-gray-500'
+                }`}
+              >
+                <item.icon className="w-5 h-5" />
+                <span className="mt-1">{item.name}</span>
+              </Link>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

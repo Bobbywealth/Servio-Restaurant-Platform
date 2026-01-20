@@ -61,6 +61,24 @@ const StatCard = memo(({ stat, index }: { stat: any; index: number }) => (
 
 StatCard.displayName = 'StatCard'
 
+const SkeletonCard = memo(() => (
+  <div className="card animate-pulse">
+    <div className="flex items-center">
+      <div className="h-12 w-12 rounded-xl bg-surface-200" />
+      <div className="ml-4 flex-1">
+        <div className="h-3 w-24 rounded bg-surface-200" />
+        <div className="mt-3 h-6 w-16 rounded bg-surface-200" />
+      </div>
+    </div>
+    <div className="mt-4 flex items-center justify-between">
+      <div className="h-5 w-20 rounded bg-surface-200" />
+      <div className="h-3 w-16 rounded bg-surface-200" />
+    </div>
+  </div>
+))
+
+SkeletonCard.displayName = 'SkeletonCard'
+
 const DashboardIndex = memo(() => {
   const { user, isManagerOrOwner } = useUser()
   const socket = useSocket()
@@ -68,8 +86,10 @@ const DashboardIndex = memo(() => {
   const [recentOrders, setRecentOrders] = useState<any[]>([])
   const [pendingTasks, setPendingTasks] = useState(0)
   const [todaySales, setTodaySales] = useState(0)
+  const [isFetching, setIsFetching] = useState(true)
 
   const fetchStats = async () => {
+    setIsFetching(true)
     try {
       const [ordersRes, summaryRes, tasksRes] = await Promise.all([
         api.get('/api/orders', { params: { limit: 5 } }),
@@ -83,6 +103,8 @@ const DashboardIndex = memo(() => {
       setPendingTasks(tasksRes.data.data.pending)
     } catch (err) {
       console.error('Failed to fetch dashboard stats', err)
+    } finally {
+      setIsFetching(false)
     }
   }
 
@@ -247,9 +269,11 @@ const DashboardIndex = memo(() => {
 
           {/* Stats Grid - Optimized with Memoized Components */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {stats.map((stat, index) => (
-              <StatCard key={stat.name} stat={stat} index={index} />
-            ))}
+            {isFetching
+              ? Array.from({ length: 4 }).map((_, idx) => <SkeletonCard key={`skeleton-${idx}`} />)
+              : stats.map((stat, index) => (
+                  <StatCard key={stat.name} stat={stat} index={index} />
+                ))}
           </div>
 
           {/* Recent Activity */}
