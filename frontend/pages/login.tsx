@@ -37,9 +37,11 @@ export default function LoginPage() {
 
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="flex justify-center">
-          <div className="bg-blue-600 p-3 rounded-2xl shadow-lg">
-            <Bot className="h-10 w-10 text-white" />
-          </div>
+          <img 
+            src="/images/servio_logo_transparent_tight.png" 
+            alt="Servio Logo" 
+            className="h-12 w-auto" 
+          />
         </div>
         <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
           Sign in to your restaurant
