@@ -3,6 +3,7 @@ import { api } from '../lib/api'
 
 export interface User {
   id: string
+  restaurantId?: string
   name: string
   email?: string | null
   role: 'staff' | 'manager' | 'owner' | 'admin'

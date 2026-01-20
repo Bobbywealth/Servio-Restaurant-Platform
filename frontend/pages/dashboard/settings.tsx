@@ -81,17 +81,17 @@ export default function SettingsPage() {
 
   // Load Vapi settings when phone tab is active
   useEffect(() => {
-    if (activeTab === 'phone' && user?.restaurant_id) {
+    if (activeTab === 'phone' && user?.restaurantId) {
       loadVapiSettings()
     }
-  }, [activeTab, user?.restaurant_id])
+  }, [activeTab, user?.restaurantId])
 
   const loadVapiSettings = async () => {
-    if (!user?.restaurant_id) return
+    if (!user?.restaurantId) return
     
     setIsLoadingVapi(true)
     try {
-      const response = await api.get(`/api/restaurants/${user.restaurant_id}/vapi`)
+      const response = await api.get(`/api/restaurants/${user.restaurantId}/vapi`)
       setVapiSettings(response.data)
       setVapiFormData({
         enabled: response.data.enabled || false,
@@ -109,11 +109,11 @@ export default function SettingsPage() {
   }
 
   const saveVapiSettings = async () => {
-    if (!user?.restaurant_id) return
+    if (!user?.restaurantId) return
     
     setIsSavingVapi(true)
     try {
-      await api.put(`/api/restaurants/${user.restaurant_id}/vapi`, vapiFormData)
+      await api.put(`/api/restaurants/${user.restaurantId}/vapi`, vapiFormData)
       alert('Phone system settings saved successfully!')
       await loadVapiSettings()
     } catch (err: any) {
@@ -124,12 +124,12 @@ export default function SettingsPage() {
   }
 
   const testVapiConnection = async () => {
-    if (!user?.restaurant_id) return
+    if (!user?.restaurantId) return
     
     setIsTestingVapi(true)
     setVapiTestResult(null)
     try {
-      const response = await api.post(`/api/restaurants/${user.restaurant_id}/vapi/test`)
+      const response = await api.post(`/api/restaurants/${user.restaurantId}/vapi/test`)
       setVapiTestResult({ success: true, data: response.data })
     } catch (err: any) {
       setVapiTestResult({ success: false, error: getErrorMessage(err, 'Connection test failed') })

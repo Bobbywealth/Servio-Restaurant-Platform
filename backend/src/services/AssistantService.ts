@@ -36,7 +36,7 @@ interface AssistantResponse {
 export class AssistantService {
   private openai: OpenAI;
   private _db: any = null;
-  private conversationHistory: Map<string, Array<{role: string, content: string}>> = new Map();
+  private conversationHistory: Map<string, Array<{role: 'user' | 'assistant' | 'system', content: string}>> = new Map();
 
   constructor() {
     this.openai = new OpenAI({
@@ -248,8 +248,8 @@ export class AssistantService {
     const timeOfDay = hour < 11 ? 'breakfast' : hour < 15 ? 'lunch' : hour < 21 ? 'dinner' : 'late night';
 
     // Build detailed context strings
-    const unavailableList = unavailableItems.map(item => item.name).join(', ') || 'None';
-    const lowStockList = lowStockItems.map(item => `${item.name} (${item.on_hand_qty} ${item.unit})`).join(', ') || 'None';
+    const unavailableList = unavailableItems.map((item: any) => item.name).join(', ') || 'None';
+    const lowStockList = lowStockItems.map((item: any) => `${item.name} (${item.on_hand_qty} ${item.unit})`).join(', ') || 'None';
     const urgentOrders = orders.filter((o: any) => {
       const createdTime = new Date(o.created_at).getTime();
       const now = Date.now();
@@ -362,7 +362,7 @@ User: "we're slammed"
 You: "I see ${orders.length} active orders. ${urgentOrders.length > 0 ? `Prioritize these urgent ones first: [list]. ` : ''}Need me to check if any items should be 86'd to reduce ticket times?"
 
 MENU ITEMS AVAILABLE (for context):
-${menuItems.map(i => i.name).slice(0, 10).join(', ')}${menuItems.length > 10 ? '...' : ''}
+${menuItems.map((i: any) => i.name).slice(0, 10).join(', ')}${menuItems.length > 10 ? '...' : ''}
 
 UNAVAILABLE ITEMS (Currently 86'd):
 ${unavailableList}
@@ -654,7 +654,7 @@ Remember: You're not just executing commands - you're a smart restaurant assista
     
     // Strategy 2: If no exact matches, try word-by-word search
     if (matchingItems.length === 0) {
-      const words = itemName.split(/\s+/).filter(w => w.length > 2);
+      const words = itemName.split(/\s+/).filter((w: string) => w.length > 2);
       for (const word of words) {
         const wordMatches = await this.db.all(
           'SELECT * FROM menu_items WHERE name LIKE ? AND restaurant_id = ?',

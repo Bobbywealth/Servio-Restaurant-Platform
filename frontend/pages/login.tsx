@@ -25,7 +25,7 @@ export default function LoginPage() {
   React.useEffect(() => {
     if (mounted && !isLoading && user) {
       const role = user.role;
-      const targetRoute = (role === 'admin' || role === 'platform-admin') 
+      const targetRoute = (role === 'admin') 
         ? '/admin/demo-bookings' 
         : '/dashboard';
       
