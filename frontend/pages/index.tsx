@@ -38,7 +38,7 @@ export default function HomePage() {
       {/* Background Image with Overlay */}
       <div className="absolute inset-0 z-0 overflow-hidden">
         <img
-          src="https://images.unsplash.com/photo-1556910103-1c02745aae4d?auto=format&fit=crop&q=80&w=2070"
+          src="/images/hero_background.png"
           alt="Kitchen Background"
           className="w-full h-full object-cover scale-105 blur-sm"
         />
@@ -50,9 +50,7 @@ export default function HomePage() {
         <nav className="w-full pt-6 sm:pt-10 px-4 sm:px-6 lg:px-10">
           <div className="max-w-7xl mx-auto flex items-center justify-between">
             <Link href="/" className="flex items-center gap-2">
-              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-[#14b8a6] flex items-center justify-center">
-                <span className="text-white font-bold text-lg sm:text-xl">S</span>
-              </div>
+              <img src="/images/servio_logo_transparent_tight.png" alt="Servio Logo" className="h-8 w-auto brightness-0 invert" />
               <span className="text-xl sm:text-2xl font-semibold tracking-tight text-white">Servio</span>
             </Link>
 
