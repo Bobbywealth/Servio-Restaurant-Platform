@@ -21,17 +21,20 @@ VALUES (
 ON CONFLICT (id) DO NOTHING;
 
 -- Hash for 'admin123' - MUST BE CHANGED IN PRODUCTION
+-- Generated with: bcrypt.hash('admin123', 10)
 INSERT INTO users (id, restaurant_id, name, email, password_hash, role, permissions, is_active, created_at, updated_at)
 VALUES (
     'platform-admin-user',
     'platform-admin-org', 
     'Platform Administrator',
     'admin@servio.com',
-    '$2b$10$rZ8qJqE7qW8kC5vP2hN5G.YvP8CZ3FJ4HqT2wR9L6nE8K3mC1gX7O', -- admin123
+    '$2a$10$0ksuNKXM4yj7vIu49Gy.ROXbXpDBqmJ1P3GpEmTl1CZmRIjGa12Iy', -- admin123
     'platform-admin',
     '["platform:read", "restaurants:read", "orders:read", "inventory:read", "timeclock:read", "audit:read"]',
     TRUE,
     CURRENT_TIMESTAMP,
     CURRENT_TIMESTAMP
 )
-ON CONFLICT (id) DO NOTHING;
+ON CONFLICT (id) DO UPDATE SET
+    password_hash = excluded.password_hash,
+    is_active = TRUE;

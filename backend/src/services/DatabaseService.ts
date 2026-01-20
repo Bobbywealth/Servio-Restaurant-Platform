@@ -361,6 +361,45 @@ export class DatabaseService {
   private async seedData(): Promise<void> {
     const db = this.getDatabase();
 
+    // Ensure platform admin user exists
+    try {
+      const platformAdminHash = await bcrypt.hash('admin123', 10);
+      await db.run(
+        `INSERT INTO restaurants (id, name, slug, address, settings, is_active, created_at, updated_at) 
+         VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) 
+         ON CONFLICT (id) DO NOTHING`,
+        [
+          'platform-admin-org',
+          'Servio Platform Administration',
+          'servio-platform-admin',
+          'Internal Admin Organization',
+          JSON.stringify({ type: 'platform' }),
+          true
+        ]
+      );
+      
+      await db.run(
+        `INSERT INTO users (id, restaurant_id, name, email, password_hash, role, permissions, is_active, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+         ON CONFLICT (id) DO UPDATE SET
+           password_hash = excluded.password_hash,
+           is_active = TRUE`,
+        [
+          'platform-admin-user',
+          'platform-admin-org',
+          'Platform Administrator',
+          'admin@servio.com',
+          platformAdminHash,
+          'platform-admin',
+          JSON.stringify(['platform:read', 'restaurants:read', 'orders:read', 'inventory:read', 'timeclock:read', 'audit:read']),
+          true
+        ]
+      );
+      logger.info('Platform admin user ensured');
+    } catch (err) {
+      logger.warn('Platform admin seed failed:', err);
+    }
+
     // Ensure demo users are always valid for login
     const demoEmails = ['staff@demo.servio', 'manager@demo.servio'];
     logger.info('Ensuring demo users exist with valid credentials...');
