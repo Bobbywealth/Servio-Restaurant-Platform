@@ -14,7 +14,7 @@ router.get('/:restaurantId/vapi', requireAuth, asyncHandler(async (req: Request,
   const db = DatabaseService.getInstance().getDatabase();
 
   // Check user has access to this restaurant
-  if (req.user?.restaurantId !== restaurantId && req.user?.role !== 'admin') {
+  if (req.user?.restaurantId !== restaurantId && req.user?.role !== 'platform-admin') {
     return res.status(403).json({ error: 'Unauthorized' });
   }
 
@@ -57,7 +57,7 @@ router.put('/:restaurantId/vapi', requireAuth, asyncHandler(async (req: Request,
   const db = DatabaseService.getInstance().getDatabase();
 
   // Check user has access to this restaurant
-  if (req.user?.restaurantId !== restaurantId && req.user?.role !== 'admin') {
+  if (req.user?.restaurantId !== restaurantId && req.user?.role !== 'platform-admin') {
     return res.status(403).json({ error: 'Unauthorized' });
   }
 
@@ -116,7 +116,7 @@ router.post('/:restaurantId/vapi/test', requireAuth, asyncHandler(async (req: Re
   const db = DatabaseService.getInstance().getDatabase();
 
   // Check user has access to this restaurant
-  if (req.user?.restaurantId !== restaurantId && req.user?.role !== 'admin') {
+  if (req.user?.restaurantId !== restaurantId && req.user?.role !== 'platform-admin') {
     return res.status(403).json({ error: 'Unauthorized' });
   }
 
@@ -179,7 +179,7 @@ router.get('/:restaurantId/vapi/webhook-url', requireAuth, asyncHandler(async (r
   const { restaurantId } = req.params;
 
   // Check user has access to this restaurant
-  if (req.user?.restaurantId !== restaurantId && req.user?.role !== 'admin') {
+  if (req.user?.restaurantId !== restaurantId && req.user?.role !== 'platform-admin') {
     return res.status(403).json({ error: 'Unauthorized' });
   }
 
