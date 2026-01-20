@@ -6,7 +6,7 @@ export interface User {
   restaurantId?: string
   name: string
   email?: string | null
-  role: 'staff' | 'manager' | 'owner' | 'admin'
+  role: 'staff' | 'manager' | 'owner' | 'admin' | 'platform-admin'
   permissions: string[]
 }
 
@@ -14,7 +14,7 @@ interface AccountOption {
   id: string
   email: string
   name: string
-  role: 'staff' | 'manager' | 'owner' | 'admin'
+  role: 'staff' | 'manager' | 'owner' | 'admin' | 'platform-admin'
 }
 
 interface UserContextType {

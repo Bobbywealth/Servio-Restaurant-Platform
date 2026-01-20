@@ -5,9 +5,9 @@
 -- ============================================================================
 -- RESTAURANT STORE STATUS FIELDS
 -- ============================================================================
-ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS operating_hours TEXT DEFAULT '{}';
-ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS timezone TEXT DEFAULT 'America/New_York';
-ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS closed_message TEXT DEFAULT 'We’re temporarily closed right now...';
+ALTER TABLE restaurants ADD COLUMN operating_hours TEXT DEFAULT '{}';
+ALTER TABLE restaurants ADD COLUMN timezone TEXT DEFAULT 'America/New_York';
+ALTER TABLE restaurants ADD COLUMN closed_message TEXT DEFAULT 'We’re temporarily closed right now...';
 
 -- ============================================================================
 -- MENU ITEM TAGS

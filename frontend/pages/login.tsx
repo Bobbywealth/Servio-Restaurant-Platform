@@ -108,11 +108,11 @@ export default function LoginPage() {
       <nav className="fixed top-0 left-0 right-0 bg-gray-900/95 backdrop-blur-md border-b border-gray-800 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-3">
               <img
-                src="/images/servio_logo_transparent_tight.png"
+                src="/images/servio_icon_tight.png"
                 alt="Servio"
-                className="h-8 w-auto brightness-0 invert"
+                className="h-10 w-auto"
               />
               <span className="text-xl font-bold text-white">Servio</span>
             </div>
