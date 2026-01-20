@@ -14,7 +14,7 @@ VALUES (
     'servio-platform-admin',
     'Internal Admin Organization',
     '{"type": "platform"}',
-    1,
+    TRUE,
     CURRENT_TIMESTAMP,
     CURRENT_TIMESTAMP
 )
@@ -30,7 +30,7 @@ VALUES (
     '$2b$10$rZ8qJqE7qW8kC5vP2hN5G.YvP8CZ3FJ4HqT2wR9L6nE8K3mC1gX7O', -- admin123
     'platform-admin',
     '["platform:read", "restaurants:read", "orders:read", "inventory:read", "timeclock:read", "audit:read"]',
-    1,
+    TRUE,
     CURRENT_TIMESTAMP,
     CURRENT_TIMESTAMP
 )
