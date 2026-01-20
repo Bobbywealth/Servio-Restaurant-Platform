@@ -6,6 +6,7 @@ import Router from 'next/router'
 import dynamic from 'next/dynamic'
 import { UserProvider } from '../contexts/UserContext'
 import { ThemeProvider } from '../contexts/ThemeContext'
+import { TourProvider } from '../contexts/TourContext'
 import { Inter } from 'next/font/google'
 
 // LOAD INTER FONT VIA NEXT.JS FONT OPTIMIZATION
@@ -17,6 +18,12 @@ const inter = Inter({
 
 // LAZY LOAD TOAST PROVIDER FOR PERFORMANCE
 const ToastProvider = dynamic(() => import('../components/ui/Toast'), {
+  ssr: false,
+  loading: () => null
+})
+
+// LAZY LOAD TOUR GUIDE FOR PERFORMANCE
+const TourGuide = dynamic(() => import('../components/ui/TourGuide'), {
   ssr: false,
   loading: () => null
 })
@@ -68,11 +75,14 @@ export default function App({ Component, pageProps }: AppProps) {
 
       <ThemeProvider>
         <UserProvider>
-          {routeLoading && (
-            <div className="fixed top-0 left-0 right-0 z-[9999] h-0.5 bg-primary-500 animate-route-progress" />
-          )}
-          <Component {...pageProps} />
-          <ToastProvider />
+          <TourProvider>
+            {routeLoading && (
+              <div className="fixed top-0 left-0 right-0 z-[9999] h-0.5 bg-primary-500 animate-route-progress" />
+            )}
+            <Component {...pageProps} />
+            <ToastProvider />
+            <TourGuide />
+          </TourProvider>
         </UserProvider>
       </ThemeProvider>
     </>

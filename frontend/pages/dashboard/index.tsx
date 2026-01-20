@@ -202,7 +202,7 @@ const DashboardIndex = memo(() => {
         <div className="space-y-6">
           {/* Welcome Section */}
           <motion.div
-            className="mb-2"
+            className="mb-2 welcome-header"
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
@@ -247,7 +247,7 @@ const DashboardIndex = memo(() => {
 
           {/* Hero Assistant Section */}
           <motion.div
-            className="relative bg-gradient-to-r from-teal-500 via-teal-400 to-orange-500 rounded-3xl p-8 text-white overflow-hidden shadow-2xl"
+            className="relative bg-gradient-to-r from-teal-500 via-teal-400 to-orange-500 rounded-3xl p-8 text-white overflow-hidden shadow-2xl assistant-hero"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
@@ -354,7 +354,7 @@ const DashboardIndex = memo(() => {
           </motion.div>
 
           {/* Stats Grid - Optimized with Memoized Components */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 stats-grid">
             {isFetching
               ? Array.from({ length: 4 }).map((_, idx) => <SkeletonCard key={`skeleton-${idx}`} />)
               : stats.map((stat, index) => (

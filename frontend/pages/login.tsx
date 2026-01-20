@@ -298,7 +298,29 @@ export default function LoginPage() {
             </div>
           </form>
 
-          <div className="mt-10">
+          {/* Toggle between Login and Sign Up */}
+          <div className="mt-8 text-center">
+            <p className="text-sm text-gray-400">
+              {isSignUpMode ? 'Already have an account?' : "Don't have an account?"}{' '}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsSignUpMode(!isSignUpMode);
+                  setError('');
+                  // Clear form when switching modes
+                  setName('');
+                  setRestaurantName('');
+                  setConfirmPassword('');
+                }}
+                className="text-teal-400 hover:text-teal-300 font-medium transition-colors"
+              >
+                {isSignUpMode ? 'Sign in' : 'Sign up'}
+              </button>
+            </p>
+          </div>
+
+          {!isSignUpMode && (
+            <div className="mt-10">
             <div className="flex items-center gap-4 mb-6">
               <div className="h-px flex-1 bg-gray-600" />
               <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-2">Demo Access</span>
@@ -340,6 +362,7 @@ export default function LoginPage() {
               </button>
             </div>
           </div>
+          )}
         </div>
         
         <p className="mt-8 text-center text-gray-400 text-sm font-medium">

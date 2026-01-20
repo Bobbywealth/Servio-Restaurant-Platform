@@ -26,7 +26,8 @@ import {
   Mail,
   Store,
   Wifi,
-  FileText
+  FileText,
+  HelpCircle
 } from 'lucide-react';
 
 interface DashboardLayoutProps {
@@ -232,7 +233,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           </button>
         </div>
 
-        <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
+        <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto sidebar-nav">
           {navigation.map((item, index) => {
             const isActive = currentPath === normalizePath(item.href);
             return (
@@ -308,7 +309,9 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
               <div className="flex items-center space-x-3">
                 <NotificationCenter />
                 <ThemeToggle />
-                <AccountSwitcher />
+                <div className="account-switcher">
+                  <AccountSwitcher />
+                </div>
               </div>
             </div>
           </div>

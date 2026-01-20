@@ -167,6 +167,11 @@ export function UserProvider({ children }: UserProviderProps) {
       
       // After successful signup, automatically log in the user
       await login(normalizedEmail, password)
+      
+      // Mark as new user for tour
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('servio_new_signup', 'true')
+      }
     } finally {
       setIsLoading(false)
     }
