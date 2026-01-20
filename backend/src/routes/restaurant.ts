@@ -207,15 +207,15 @@ router.put('/profile', upload.fields([
   }
   if (onlineOrderingEnabled !== undefined) {
     updateFields.push('online_ordering_enabled = ?');
-    updateValues.push(onlineOrderingEnabled ? 1 : 0);
+    updateValues.push(onlineOrderingEnabled ? true : false);
   }
   if (deliveryEnabled !== undefined) {
     updateFields.push('delivery_enabled = ?');
-    updateValues.push(deliveryEnabled ? 1 : 0);
+    updateValues.push(deliveryEnabled ? true : false);
   }
   if (pickupEnabled !== undefined) {
     updateFields.push('pickup_enabled = ?');
-    updateValues.push(pickupEnabled ? 1 : 0);
+    updateValues.push(pickupEnabled ? true : false);
   }
   if (deliveryRadius !== undefined) {
     updateFields.push('delivery_radius = ?');
@@ -406,8 +406,8 @@ router.put('/theme', asyncHandler(async (req: Request, res: Response) => {
     await db.run(`
       INSERT INTO restaurant_themes (
         id, restaurant_id, name, primary_color, secondary_color, 
-        text_color, background_color, font_family, layout_style, custom_css, is_active
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+        text_color, background_color,         font_family, layout_style, custom_css, is_active
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE)
     `, [
       themeId,
       restaurantId,
@@ -537,7 +537,7 @@ router.post('/links', asyncHandler(async (req: Request, res: Response) => {
     INSERT INTO restaurant_links (
       id, restaurant_id, name, description, url_path, target_url,
       link_type, qr_code_url, custom_styling, is_active
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE)
   `, [
     linkId,
     restaurantId,
@@ -639,7 +639,7 @@ router.put('/links/:id', asyncHandler(async (req: Request, res: Response) => {
   }
   if (isActive !== undefined) {
     updateFields.push('is_active = ?');
-    updateValues.push(isActive ? 1 : 0);
+    updateValues.push(isActive ? true : false);
   }
   if (customStyling !== undefined) {
     updateFields.push('custom_styling = ?');

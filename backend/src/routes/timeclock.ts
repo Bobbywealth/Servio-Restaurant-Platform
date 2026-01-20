@@ -437,8 +437,8 @@ router.get('/current-staff', asyncHandler(async (req: Request, res: Response) =>
             te.position,
             te.break_minutes,
             CASE
-              WHEN teb.break_end IS NULL THEN 1
-              ELSE 0
+              WHEN teb.break_end IS NULL THEN TRUE
+              ELSE FALSE
             END as is_on_break,
             teb.break_start as current_break_start,
             ROUND(EXTRACT(EPOCH FROM (NOW() - te.clock_in_time)) / 3600, 2) as hours_worked
@@ -459,8 +459,8 @@ router.get('/current-staff', asyncHandler(async (req: Request, res: Response) =>
             te.position,
             te.break_minutes,
             CASE
-              WHEN teb.break_end IS NULL THEN 1
-              ELSE 0
+              WHEN teb.break_end IS NULL THEN TRUE
+              ELSE FALSE
             END as is_on_break,
             teb.break_start as current_break_start,
             ROUND((julianday('now') - julianday(te.clock_in_time)) * 24, 2) as hours_worked

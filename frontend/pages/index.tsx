@@ -24,92 +24,92 @@ const fadeIn = {
 
 export default function HomePage() {
   return (
-    <div className="min-h-screen bg-[#F9FAFB] text-gray-900 overflow-x-hidden">
+    <div className="min-h-screen bg-[#0A0A0B] text-white overflow-x-hidden relative">
       <Head>
         <title>Servio — Restaurant Operating System</title>
         <meta name="description" content="Servio unifies orders, voice, staff, and inventory into one premium restaurant operating system." />
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0" />
       </Head>
 
-      {/* Navigation */}
-      <nav className="fixed top-0 left-0 right-0 z-[100] bg-white/90 backdrop-blur-md border-b border-surface-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
+      {/* Background Image with Overlay */}
+      <div className="absolute inset-0 z-0">
+        <img
+          src="https://images.unsplash.com/photo-1556910103-1c02745aae4d?auto=format&fit=crop&q=80&w=2070"
+          alt="Kitchen Background"
+          className="w-full h-full object-cover opacity-40"
+        />
+        <div className="absolute inset-0 bg-gradient-to-b from-[#0A0A0B]/80 via-[#0A0A0B]/40 to-[#0A0A0B]" />
+      </div>
+
+      <div className="relative z-10 min-h-screen flex flex-col">
+        {/* Navigation */}
+        <nav className="w-full pt-10 px-6 sm:px-10">
+          <div className="max-w-4xl mx-auto flex flex-col items-center gap-8">
             <Link href="/" className="flex items-center gap-2">
-              <img src="/images/servio_logo_transparent_tight.png" alt="Servio Logo" className="h-8 w-auto" />
-              <span className="text-lg font-semibold">Servio</span>
+              <img
+                src="/images/servio_logo_transparent_tight.png"
+                alt="Servio Logo"
+                className="h-8 w-auto brightness-0 invert"
+              />
+              <span className="text-2xl font-semibold tracking-tight">servio</span>
             </Link>
-            <div className="hidden lg:flex items-center gap-8 text-sm font-medium text-gray-700">
-              <a href="#services" className="text-gray-700 hover:text-gray-900">Services</a>
-              <a href="#features" className="text-gray-700 hover:text-gray-900">Features</a>
-              <a href="#pricing" className="text-gray-700 hover:text-gray-900">Pricing</a>
-              <a href="#faq" className="text-gray-700 hover:text-gray-900">FAQ</a>
-              <Link href="/login" className="text-gray-700 hover:text-gray-900">Login</Link>
-              <Link
-                href="/dashboard/assistant"
-                className="bg-primary-600 hover:bg-primary-700 text-white px-5 py-2 rounded-full"
-              >
-                Get Started
-              </Link>
-            </div>
-            <div className="lg:hidden">
-              <Link
-                href="/login"
-                className="bg-primary-600 text-white px-4 py-2 rounded-full text-xs font-medium"
-              >
-                Login
-              </Link>
+
+            <div className="flex items-center gap-6 text-sm font-medium text-white/80">
+              <a href="#services" className="hover:text-white transition-colors">Services</a>
+              <a href="#features" className="hover:text-white transition-colors">Features</a>
+              <a href="#pricing" className="hover:text-white transition-colors">Pricing</a>
+              <a href="#faq" className="hover:text-white transition-colors">FAQ</a>
+              <Link href="/login" className="hover:text-white transition-colors">Login</Link>
             </div>
           </div>
-        </div>
-      </nav>
+        </nav>
 
-      {/* Hero */}
-      <section className="pt-28 pb-16 lg:pt-40 lg:pb-24">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <motion.div initial="hidden" whileInView="visible" viewport={{ once: true }} variants={fadeIn}>
-            <div className="flex justify-center mb-12">
-              <div className="relative">
-                <div className="absolute -inset-1 bg-gradient-to-r from-primary-500 to-emerald-500 rounded-[2rem] blur-2xl opacity-20"></div>
-                <div className="relative bg-white border border-surface-200 rounded-[2rem] p-12 shadow-[0_30px_80px_-50px_rgba(15,23,42,0.55)] flex items-center justify-center">
-                  <img
-                    src="/images/servio_logo_transparent_tight.png"
-                    alt="Servio Logo"
-                    className="h-24 lg:h-32 w-auto"
-                  />
-                </div>
+        {/* Hero Content */}
+        <main className="flex-grow flex items-center justify-center px-6 py-20">
+          <div className="max-w-2xl mx-auto text-center">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.8 }}
+            >
+              <div className="mb-10">
+                <span className="inline-flex items-center px-4 py-1.5 rounded-full text-xs font-medium bg-[#14b8a6]/20 text-[#2dd4bf] border border-[#14b8a6]/30">
+                  Restaurant Operating System
+                </span>
               </div>
-            </div>
-            <span className="inline-flex items-center gap-2 text-xs font-medium text-primary-700 bg-primary-50 px-3 py-1 rounded-full border border-primary-100">
-              Restaurant Operating System
-            </span>
-            <h1 className="mt-6 text-4xl lg:text-6xl font-semibold text-gray-900">
-              The premium, voice-first platform for restaurant teams.
-            </h1>
-            <p className="mt-4 text-lg text-gray-700 max-w-2xl mx-auto">
-              Servio unifies orders, inventory, staff operations, and communications into a single, app-like system.
-            </p>
-            <div className="mt-8 flex flex-col sm:flex-row gap-4 justify-center">
-              <Link
-                href="/dashboard/assistant"
-                className="bg-primary-600 hover:bg-primary-700 text-white px-6 py-3 rounded-xl font-medium"
-              >
-                Get Started
-              </Link>
-              <Link
-                href="/login"
-                className="bg-white border border-surface-200 text-gray-900 px-6 py-3 rounded-xl font-medium"
-              >
-                Book Demo
-              </Link>
-            </div>
-          </motion.div>
-        </div>
-      </section>
 
-      {/* Dashboard Preview */}
-      <section className="pb-16 lg:pb-24">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+              <h1 className="text-5xl sm:text-6xl font-bold tracking-tight mb-8 leading-[1.1]">
+                The premium, voice-first platform for restaurant teams.
+              </h1>
+
+              <p className="text-lg sm:text-xl text-white/70 max-w-lg mx-auto mb-12 leading-relaxed">
+                Servio unifies orders, inventory, staff operations, and communications into a single, app-like system.
+              </p>
+
+              <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
+                <Link
+                  href="/dashboard/assistant"
+                  className="w-full sm:w-auto px-8 py-4 rounded-2xl bg-[#14b8a6] hover:bg-[#0d9488] text-white font-semibold transition-all shadow-lg shadow-[#14b8a6]/20"
+                >
+                  Get Started
+                </Link>
+                <Link
+                  href="/login"
+                  className="w-full sm:w-auto px-8 py-4 rounded-2xl bg-white text-black font-semibold hover:bg-gray-100 transition-all"
+                >
+                  Book Demo
+                </Link>
+              </div>
+            </motion.div>
+          </div>
+        </main>
+      </div>
+
+      {/* Content Sections (Transition to Dark) */}
+      <div className="relative z-10 bg-[#0A0A0B]">
+        {/* Dashboard Preview */}
+        <section className="py-24 border-t border-white/5">
+          <div className="max-w-6xl mx-auto px-6">
           <div className="grid lg:grid-cols-2 gap-10 items-center">
             <div>
               <span className="inline-flex items-center gap-2 text-xs font-medium text-gray-700 bg-white px-3 py-1 rounded-full border border-surface-200">
