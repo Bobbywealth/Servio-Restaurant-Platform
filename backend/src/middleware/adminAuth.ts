@@ -11,7 +11,7 @@ declare global {
 }
 
 /**
- * Middleware to ensure only platform-admin users can access admin endpoints
+ * Middleware to ensure only platform admin users can access admin endpoints
  */
 export const requirePlatformAdmin = (req: Request, res: Response, next: NextFunction) => {
   if (!req.user) {
@@ -21,7 +21,7 @@ export const requirePlatformAdmin = (req: Request, res: Response, next: NextFunc
     });
   }
 
-  if (req.user.role !== 'platform-admin') {
+  if (req.user.role !== 'platform-admin' && req.user.role !== 'admin') {
     return res.status(403).json({ 
       error: 'Platform admin access required',
       message: 'This endpoint requires platform administrator privileges',
@@ -36,7 +36,7 @@ export const requirePlatformAdmin = (req: Request, res: Response, next: NextFunc
  * Middleware to prevent access to tenant-specific endpoints for platform admins
  */
 export const preventTenantAccess = (req: Request, res: Response, next: NextFunction) => {
-  if (req.user && req.user.role === 'platform-admin') {
+  if (req.user && (req.user.role === 'platform-admin' || req.user.role === 'admin')) {
     return res.status(403).json({
       error: 'Platform admin cannot access tenant endpoints',
       message: 'Use admin-specific endpoints instead'
