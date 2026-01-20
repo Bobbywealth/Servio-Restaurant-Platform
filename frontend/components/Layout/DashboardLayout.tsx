@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useUser } from '../../contexts/UserContext';
+import { useTour } from '../../contexts/TourContext';
 import ThemeToggle from '../ui/ThemeToggle';
 import NotificationCenter from '../ui/NotificationCenter';
 import AccountSwitcher from '../ui/AccountSwitcher';
@@ -36,6 +37,7 @@ interface DashboardLayoutProps {
 
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const { user, logout, isLoading } = useUser();
+  const { resetTour } = useTour();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [mounted, setMounted] = React.useState(false);
   const router = useRouter();
@@ -308,6 +310,15 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
               </div>
               <div className="flex items-center space-x-3">
                 <NotificationCenter />
+                <motion.button
+                  onClick={resetTour}
+                  className="p-2 text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.9 }}
+                  title="Restart Dashboard Tour"
+                >
+                  <HelpCircle className="w-5 h-5" />
+                </motion.button>
                 <ThemeToggle />
                 <div className="account-switcher">
                   <AccountSwitcher />
