@@ -1,8 +1,10 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import Head from 'next/head'
 import { motion } from 'framer-motion'
 import dynamic from 'next/dynamic'
 import { useUser } from '../../contexts/UserContext'
+import { api } from '../../lib/api'
+import { getErrorMessage } from '../../lib/utils'
 import { 
   Settings as SettingsIcon, 
   User,
@@ -18,7 +20,8 @@ import {
   LogOut,
   UserCog,
   Mail,
-  Calendar
+  Calendar,
+  Phone
 } from 'lucide-react'
 
 const DashboardLayout = dynamic(() => import('../../components/Layout/DashboardLayout'), {
@@ -60,10 +63,85 @@ export default function SettingsPage() {
   })
 
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  
+  // Vapi Phone System State
+  const [vapiSettings, setVapiSettings] = useState<any>(null)
+  const [isLoadingVapi, setIsLoadingVapi] = useState(false)
+  const [isSavingVapi, setIsSavingVapi] = useState(false)
+  const [isTestingVapi, setIsTestingVapi] = useState(false)
+  const [vapiTestResult, setVapiTestResult] = useState<any>(null)
+  const [vapiFormData, setVapiFormData] = useState({
+    enabled: false,
+    apiKey: '',
+    webhookSecret: '',
+    assistantId: '',
+    phoneNumberId: '',
+    phoneNumber: ''
+  })
+
+  // Load Vapi settings when phone tab is active
+  useEffect(() => {
+    if (activeTab === 'phone' && user?.restaurant_id) {
+      loadVapiSettings()
+    }
+  }, [activeTab, user?.restaurant_id])
+
+  const loadVapiSettings = async () => {
+    if (!user?.restaurant_id) return
+    
+    setIsLoadingVapi(true)
+    try {
+      const response = await api.get(`/api/restaurants/${user.restaurant_id}/vapi`)
+      setVapiSettings(response.data)
+      setVapiFormData({
+        enabled: response.data.enabled || false,
+        apiKey: '',  // Don't pre-fill sensitive data
+        webhookSecret: '',
+        assistantId: response.data.assistantId || '',
+        phoneNumberId: response.data.phoneNumberId || '',
+        phoneNumber: response.data.phoneNumber || ''
+      })
+    } catch (err: any) {
+      console.error('Failed to load Vapi settings:', err)
+    } finally {
+      setIsLoadingVapi(false)
+    }
+  }
+
+  const saveVapiSettings = async () => {
+    if (!user?.restaurant_id) return
+    
+    setIsSavingVapi(true)
+    try {
+      await api.put(`/api/restaurants/${user.restaurant_id}/vapi`, vapiFormData)
+      alert('Phone system settings saved successfully!')
+      await loadVapiSettings()
+    } catch (err: any) {
+      alert(getErrorMessage(err, 'Failed to save settings'))
+    } finally {
+      setIsSavingVapi(false)
+    }
+  }
+
+  const testVapiConnection = async () => {
+    if (!user?.restaurant_id) return
+    
+    setIsTestingVapi(true)
+    setVapiTestResult(null)
+    try {
+      const response = await api.post(`/api/restaurants/${user.restaurant_id}/vapi/test`)
+      setVapiTestResult({ success: true, data: response.data })
+    } catch (err: any) {
+      setVapiTestResult({ success: false, error: getErrorMessage(err, 'Connection test failed') })
+    } finally {
+      setIsTestingVapi(false)
+    }
+  }
 
   const tabs = [
     { id: 'account', name: 'Account', icon: User },
     { id: 'general', name: 'General', icon: SettingsIcon },
+    { id: 'phone', name: 'Phone System', icon: Phone },
     { id: 'notifications', name: 'Notifications', icon: Bell },
     { id: 'security', name: 'Security', icon: Shield },
     { id: 'display', name: 'Display', icon: Palette },
@@ -399,6 +477,158 @@ export default function SettingsPage() {
           </div>
         )
 
+      case 'phone':
+        if (isLoadingVapi) {
+          return <div className="text-center py-8">Loading phone system settings...</div>
+        }
+        
+        return (
+          <div className="space-y-6">
+            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+              <div className="flex items-start">
+                <Phone className="w-5 h-5 text-blue-600 dark:text-blue-400 mr-3 mt-0.5" />
+                <div>
+                  <h3 className="text-sm font-medium text-blue-900 dark:text-blue-300">
+                    Phone System (Vapi) - Answer Customer Calls Automatically
+                  </h3>
+                  <p className="text-xs text-blue-700 dark:text-blue-400 mt-1">
+                    Configure Vapi to handle incoming phone calls from customers who want to place orders. This is separate from the in-app AI Assistant.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={vapiFormData.enabled}
+                  onChange={(e) => setVapiFormData({ ...vapiFormData, enabled: e.target.checked })}
+                  className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                />
+                <label className="ml-2 text-sm font-medium text-surface-900 dark:text-surface-100">
+                  Enable Phone System
+                </label>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">
+                  Vapi API Key {vapiSettings?.hasApiKey && <span className="text-green-600">(Configured ✓)</span>}
+                </label>
+                <input
+                  type="password"
+                  value={vapiFormData.apiKey}
+                  onChange={(e) => setVapiFormData({ ...vapiFormData, apiKey: e.target.value })}
+                  placeholder={vapiSettings?.hasApiKey ? '••••••••••••' : 'Enter your Vapi API key'}
+                  className="input-field"
+                />
+                <p className="text-xs text-surface-500 mt-1">
+                  Get this from <a href="https://vapi.ai" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">vapi.ai</a> dashboard
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">
+                  Phone Number ID
+                </label>
+                <input
+                  type="text"
+                  value={vapiFormData.phoneNumberId}
+                  onChange={(e) => setVapiFormData({ ...vapiFormData, phoneNumberId: e.target.value })}
+                  placeholder="e.g., 12345678-1234-1234-1234-123456789012"
+                  className="input-field"
+                />
+                <p className="text-xs text-surface-500 mt-1">
+                  The Vapi phone number ID from your dashboard
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">
+                  Phone Number (Display)
+                </label>
+                <input
+                  type="text"
+                  value={vapiFormData.phoneNumber}
+                  onChange={(e) => setVapiFormData({ ...vapiFormData, phoneNumber: e.target.value })}
+                  placeholder="e.g., +1 (555) 123-4567"
+                  className="input-field"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">
+                  Assistant ID (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={vapiFormData.assistantId}
+                  onChange={(e) => setVapiFormData({ ...vapiFormData, assistantId: e.target.value })}
+                  placeholder="Optional - Vapi assistant ID"
+                  className="input-field"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <motion.button
+                  onClick={saveVapiSettings}
+                  disabled={isSavingVapi}
+                  className="btn-primary inline-flex items-center space-x-2"
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                >
+                  {isSavingVapi ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <Save className="w-4 h-4" />
+                  )}
+                  <span>{isSavingVapi ? 'Saving...' : 'Save Settings'}</span>
+                </motion.button>
+                
+                <motion.button
+                  onClick={testVapiConnection}
+                  disabled={isTestingVapi || !vapiFormData.enabled || !vapiSettings?.hasApiKey}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 inline-flex items-center space-x-2"
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                >
+                  {isTestingVapi ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <Check className="w-4 h-4" />
+                  )}
+                  <span>{isTestingVapi ? 'Testing...' : 'Test Connection'}</span>
+                </motion.button>
+              </div>
+
+              {vapiTestResult && (
+                <div className={`p-4 rounded-lg ${vapiTestResult.success ? 'bg-green-50 dark:bg-green-900/20' : 'bg-red-50 dark:bg-red-900/20'}`}>
+                  <div className={`text-sm ${vapiTestResult.success ? 'text-green-800 dark:text-green-300' : 'text-red-800 dark:text-red-300'}`}>
+                    {vapiTestResult.success ? '✓ Connection successful!' : '✗ ' + vapiTestResult.error}
+                  </div>
+                  {vapiTestResult.data && (
+                    <div className="text-xs text-surface-600 dark:text-surface-400 mt-2">
+                      Phone: {vapiTestResult.data.phoneNumber}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="bg-surface-50 dark:bg-surface-800 rounded-lg p-4 border border-surface-200 dark:border-surface-700">
+              <h3 className="text-sm font-medium text-surface-900 dark:text-surface-100 mb-2">Setup Instructions</h3>
+              <ol className="list-decimal list-inside space-y-2 text-sm text-surface-600 dark:text-surface-400">
+                <li>Sign up at <a href="https://vapi.ai" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">vapi.ai</a></li>
+                <li>Purchase a phone number ($2/month)</li>
+                <li>Create an assistant in the Vapi dashboard</li>
+                <li>Copy your API key and phone number ID here</li>
+                <li>Configure webhook URL in Vapi: <code className="text-xs bg-surface-200 dark:bg-surface-900 px-2 py-1 rounded">{process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/vapi/webhook</code></li>
+                <li>Enable the phone system and test!</li>
+              </ol>
+            </div>
+          </div>
+        )
+      
       case 'integrations':
         return (
           <div className="space-y-6">
