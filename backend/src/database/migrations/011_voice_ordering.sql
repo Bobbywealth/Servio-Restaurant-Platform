@@ -5,33 +5,33 @@
 -- ============================================================================
 -- RESTAURANT STORE STATUS FIELDS
 -- ============================================================================
-ALTER TABLE restaurants ADD COLUMN operating_hours TEXT DEFAULT '{}';
-ALTER TABLE restaurants ADD COLUMN timezone TEXT DEFAULT 'America/New_York';
-ALTER TABLE restaurants ADD COLUMN closed_message TEXT DEFAULT 'We’re temporarily closed right now...';
+ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS operating_hours TEXT DEFAULT '{}';
+ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS timezone TEXT DEFAULT 'America/New_York';
+ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS closed_message TEXT DEFAULT 'We’re temporarily closed right now...';
 
 -- ============================================================================
 -- MENU ITEM TAGS
 -- ============================================================================
-ALTER TABLE menu_items ADD COLUMN tags TEXT DEFAULT '[]';
+ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS tags TEXT DEFAULT '[]';
 
 -- ============================================================================
 -- ORDER ENHANCEMENTS FOR VOICE
 -- ============================================================================
-ALTER TABLE orders ADD COLUMN status TEXT DEFAULT 'pending';
-ALTER TABLE orders ADD COLUMN customer_name TEXT;
-ALTER TABLE orders ADD COLUMN customer_phone TEXT;
-ALTER TABLE orders ADD COLUMN last_initial TEXT;
-ALTER TABLE orders ADD COLUMN order_type TEXT;
-ALTER TABLE orders ADD COLUMN pickup_time TEXT;
-ALTER TABLE orders ADD COLUMN subtotal DOUBLE PRECISION DEFAULT 0;
-ALTER TABLE orders ADD COLUMN tax DOUBLE PRECISION DEFAULT 0;
-ALTER TABLE orders ADD COLUMN fees DOUBLE PRECISION DEFAULT 0;
-ALTER TABLE orders ADD COLUMN total DOUBLE PRECISION DEFAULT 0;
-ALTER TABLE orders ADD COLUMN prep_time_minutes INTEGER;
-ALTER TABLE orders ADD COLUMN accepted_at TIMESTAMP;
-ALTER TABLE orders ADD COLUMN accepted_by_user_id TEXT REFERENCES users(id);
-ALTER TABLE orders ADD COLUMN source TEXT;
-ALTER TABLE orders ADD COLUMN call_id TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending';
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_name TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_phone TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS last_initial TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS order_type TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS pickup_time TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS subtotal DOUBLE PRECISION DEFAULT 0;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS tax DOUBLE PRECISION DEFAULT 0;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS fees DOUBLE PRECISION DEFAULT 0;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS total DOUBLE PRECISION DEFAULT 0;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS prep_time_minutes INTEGER;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS accepted_at TIMESTAMP;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS accepted_by_user_id TEXT REFERENCES users(id);
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS source TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS call_id TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
 CREATE INDEX IF NOT EXISTS idx_orders_source ON orders(source);
@@ -40,11 +40,11 @@ CREATE INDEX IF NOT EXISTS idx_orders_call_id ON orders(call_id);
 -- ============================================================================
 -- ORDER ITEMS ENHANCEMENTS
 -- ============================================================================
-ALTER TABLE order_items ADD COLUMN item_id TEXT;
-ALTER TABLE order_items ADD COLUMN item_name_snapshot TEXT;
-ALTER TABLE order_items ADD COLUMN qty INTEGER;
-ALTER TABLE order_items ADD COLUMN unit_price_snapshot DOUBLE PRECISION;
-ALTER TABLE order_items ADD COLUMN modifiers_json TEXT DEFAULT '{}';
+ALTER TABLE order_items ADD COLUMN IF NOT EXISTS item_id TEXT;
+ALTER TABLE order_items ADD COLUMN IF NOT EXISTS item_name_snapshot TEXT;
+ALTER TABLE order_items ADD COLUMN IF NOT EXISTS qty INTEGER;
+ALTER TABLE order_items ADD COLUMN IF NOT EXISTS unit_price_snapshot DOUBLE PRECISION;
+ALTER TABLE order_items ADD COLUMN IF NOT EXISTS modifiers_json TEXT DEFAULT '{}';
 
 CREATE INDEX IF NOT EXISTS idx_order_items_order ON order_items(order_id);
 
