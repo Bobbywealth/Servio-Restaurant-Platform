@@ -7,8 +7,11 @@ import { WifiOff, RefreshCw, Home, Mic, Clock } from 'lucide-react'
 export default function OfflinePage() {
   const [isOnline, setIsOnline] = useState(false)
   const [lastOnline, setLastOnline] = useState<Date | null>(null)
+  const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
+    setMounted(true)
+    
     const handleOnline = () => {
       setIsOnline(true)
       setTimeout(() => {
@@ -21,8 +24,10 @@ export default function OfflinePage() {
       setLastOnline(new Date())
     }
 
-    // Check initial status
-    setIsOnline(navigator.onLine)
+    // Check initial status (only in browser)
+    if (typeof window !== 'undefined' && typeof navigator !== 'undefined') {
+      setIsOnline(navigator.onLine)
+    }
 
     window.addEventListener('online', handleOnline)
     window.addEventListener('offline', handleOffline)
@@ -34,7 +39,7 @@ export default function OfflinePage() {
   }, [])
 
   const retryConnection = () => {
-    if (navigator.onLine) {
+    if (typeof window !== 'undefined' && typeof navigator !== 'undefined' && navigator.onLine) {
       window.location.reload()
     }
   }
@@ -155,7 +160,7 @@ export default function OfflinePage() {
 
             {/* Network Info */}
             <div className="mt-4 text-2xs text-surface-400 dark:text-surface-500">
-              <p>Connection: {navigator.onLine ? 'Online' : 'Offline'}</p>
+              <p>Connection: {mounted && typeof navigator !== 'undefined' ? (navigator.onLine ? 'Online' : 'Offline') : 'Checking...'}</p>
               <p>Servio will sync when connection is restored</p>
             </div>
           </motion.div>
