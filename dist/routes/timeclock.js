@@ -5,6 +5,7 @@ const DatabaseService_1 = require("../services/DatabaseService");
 const errorHandler_1 = require("../middleware/errorHandler");
 const logger_1 = require("../utils/logger");
 const uuid_1 = require("uuid");
+const bus_1 = require("../events/bus");
 const router = (0, express_1.Router)();
 const num = (v) => (typeof v === 'number' ? v : Number(v ?? 0));
 /**
@@ -60,6 +61,18 @@ router.post('/clock-in', (0, errorHandler_1.asyncHandler)(async (req, res) => {
   `, [entryId, user.id, clockInTime, position || null, 0]);
     // Log the action
     await DatabaseService_1.DatabaseService.getInstance().logAudit(user.restaurant_id, user.id, 'clock_in', 'time_entry', entryId, { position, clockInTime });
+    await bus_1.eventBus.emit('staff.clock_in', {
+        restaurantId: user.restaurant_id,
+        type: 'staff.clock_in',
+        actor: { actorType: 'user', actorId: user.id },
+        payload: {
+            staffId: user.id,
+            staffName: user.name,
+            timeEntryId: entryId,
+            position
+        },
+        occurredAt: clockInTime
+    });
     logger_1.logger.info(`User ${user.name} clocked in at ${clockInTime}`);
     res.json({
         success: true,
@@ -131,6 +144,19 @@ router.post('/clock-out', (0, errorHandler_1.asyncHandler)(async (req, res) => {
         breakMinutes: timeEntry.break_minutes,
         notes
     });
+    await bus_1.eventBus.emit('staff.clock_out', {
+        restaurantId: user.restaurant_id,
+        type: 'staff.clock_out',
+        actor: { actorType: 'user', actorId: user.id },
+        payload: {
+            staffId: user.id,
+            staffName: user.name,
+            timeEntryId: timeEntry.id,
+            totalHours: Number(totalHours.toFixed(2)),
+            breakMinutes: timeEntry.break_minutes
+        },
+        occurredAt: clockOutTime
+    });
     logger_1.logger.info(`User ${user.name} clocked out at ${clockOutTime}, worked ${totalHours.toFixed(2)} hours`);
     res.json({
         success: true,
@@ -196,6 +222,19 @@ router.post('/start-break', (0, errorHandler_1.asyncHandler)(async (req, res) =>
   `, [breakId, timeEntry.id, breakStart]);
     // Log the action
     await DatabaseService_1.DatabaseService.getInstance().logAudit(timeEntry.restaurant_id, userId, 'start_break', 'time_entry_break', breakId, { timeEntryId: timeEntry.id, breakStart });
+    const staff = await db.get('SELECT name FROM users WHERE id = ?', [userId]);
+    await bus_1.eventBus.emit('staff.break_start', {
+        restaurantId: timeEntry.restaurant_id,
+        type: 'staff.break_start',
+        actor: { actorType: 'user', actorId: userId },
+        payload: {
+            staffId: userId,
+            staffName: staff?.name,
+            timeEntryId: timeEntry.id,
+            breakId
+        },
+        occurredAt: breakStart
+    });
     res.json({
         success: true,
         data: {
@@ -271,6 +310,20 @@ router.post('/end-break', (0, errorHandler_1.asyncHandler)(async (req, res) => {
         breakEnd,
         durationMinutes,
         totalBreakMinutes: totalBreaks.total_break_minutes
+    });
+    const staff = await db.get('SELECT name FROM users WHERE id = ?', [userId]);
+    await bus_1.eventBus.emit('staff.break_end', {
+        restaurantId: timeEntry.restaurant_id,
+        type: 'staff.break_end',
+        actor: { actorType: 'user', actorId: userId },
+        payload: {
+            staffId: userId,
+            staffName: staff?.name,
+            timeEntryId: timeEntry.id,
+            breakId: activeBreak.id,
+            durationMinutes
+        },
+        occurredAt: breakEnd
     });
     res.json({
         success: true,

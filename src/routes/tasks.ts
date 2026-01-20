@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { DatabaseService } from '../services/DatabaseService';
 import { asyncHandler } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
-import { eventBus } from '../events/eventBus';
+import { eventBus } from '../events/bus';
 
 const router = Router();
 const num = (v: any) => (typeof v === 'number' ? v : Number(v ?? 0));

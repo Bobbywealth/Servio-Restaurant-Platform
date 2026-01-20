@@ -81,7 +81,7 @@ const errorHandler = (error, req, res, _next) => {
         statusCode = 400;
         message = 'Invalid ID format';
     }
-    else if (error.name === 'JsonWebTokenError' || error.message.includes('secret or public key must be provided')) {
+    else if (error.name === 'JsonWebTokenError' || (error.message && error.message.includes('secret or public key must be provided'))) {
         statusCode = 401;
         message = 'Invalid token';
     }
@@ -89,7 +89,7 @@ const errorHandler = (error, req, res, _next) => {
         statusCode = 401;
         message = 'Token expired';
     }
-    else if (error.code === 'SQLITE_CONSTRAINT' || error.message.includes('duplicate key')) {
+    else if (error.code === 'SQLITE_CONSTRAINT' || (error.message && error.message.includes('duplicate key'))) {
         statusCode = 400;
         message = 'Database constraint violation';
     }

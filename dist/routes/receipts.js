@@ -7,6 +7,7 @@ const errorHandler_1 = require("../middleware/errorHandler");
 const auth_1 = require("../middleware/auth");
 const logger_1 = require("../utils/logger");
 const uuid_1 = require("uuid");
+const bus_1 = require("../events/bus");
 const router = (0, express_1.Router)();
 // v1 statuses: 'pending', 'uploaded', 'needs_review', 'processed', 'failed'
 const PROCESSING_STATUS = {
@@ -83,6 +84,17 @@ router.post('/:id/confirm-upload', auth_1.requireAuth, (0, errorHandler_1.asyncH
         id
     ]);
     await DatabaseService_1.DatabaseService.getInstance().logAudit(receipt.restaurant_id, user.id, 'receipt_upload_confirmed', 'receipt', id, { supplierName, status: PROCESSING_STATUS.NEEDS_REVIEW });
+    await bus_1.eventBus.emit('receipt.uploaded', {
+        restaurantId: receipt.restaurant_id,
+        type: 'receipt.uploaded',
+        actor: { actorType: 'user', actorId: user.id },
+        payload: {
+            receiptId: id,
+            supplierName,
+            totalAmount
+        },
+        occurredAt: new Date().toISOString()
+    });
     res.json({
         success: true,
         data: {
@@ -235,6 +247,13 @@ router.post('/:id/apply', auth_1.requireAuth, (0, errorHandler_1.asyncHandler)(a
     // 3. Mark receipt as processed
     await db.run("UPDATE receipts SET status = 'processed', updated_at = CURRENT_TIMESTAMP WHERE id = ?", [id]);
     await dbService.logAudit(receipt.restaurant_id, user.id, 'receipt_applied_to_inventory', 'receipt', id, { appliedItemsCount: items.length, summary: results });
+    await bus_1.eventBus.emit('receipt.applied', {
+        restaurantId: receipt.restaurant_id,
+        type: 'receipt.applied',
+        actor: { actorType: 'user', actorId: user.id },
+        payload: { receiptId: id, appliedItemsCount: items.length },
+        occurredAt: new Date().toISOString()
+    });
     res.json({
         success: true,
         data: {

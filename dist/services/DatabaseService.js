@@ -26,6 +26,52 @@ function asNumber(value) {
         return Number(value);
     return Number(value ?? 0);
 }
+function stripSqlComments(sql) {
+    return sql
+        .replace(/--.*$/gm, '')
+        .replace(/\/\*[\s\S]*?\*\//g, '');
+}
+function splitSqlStatements(sql) {
+    const statements = [];
+    let current = '';
+    let inSingleQuote = false;
+    let inDoubleQuote = false;
+    for (let i = 0; i < sql.length; i += 1) {
+        const char = sql[i];
+        const prev = sql[i - 1];
+        if (char === "'" && prev !== '\\' && !inDoubleQuote) {
+            inSingleQuote = !inSingleQuote;
+        }
+        if (char === '"' && prev !== '\\' && !inSingleQuote) {
+            inDoubleQuote = !inDoubleQuote;
+        }
+        if (char === ';' && !inSingleQuote && !inDoubleQuote) {
+            statements.push(current);
+            current = '';
+            continue;
+        }
+        current += char;
+    }
+    if (current.trim()) {
+        statements.push(current);
+    }
+    return statements;
+}
+function normalizeIdentifier(value) {
+    return value.replace(/^[`"\[]/, '').replace(/[`\]"]$/, '');
+}
+function isIgnorableSqliteError(error, statement) {
+    const message = String(error?.message || error || '');
+    const normalized = statement.trim().toUpperCase();
+    if (message.includes('duplicate column name'))
+        return true;
+    if (message.includes('already exists'))
+        return true;
+    if (message.includes('no such column') || message.includes('no such table')) {
+        return normalized.startsWith('CREATE INDEX') || normalized.startsWith('CREATE UNIQUE INDEX');
+    }
+    return false;
+}
 class DatabaseService {
     constructor() {
         this._dialect = null;
@@ -145,10 +191,35 @@ class DatabaseService {
                     }
                 }
                 else {
-                    // SQLite exec can handle multiple statements
+                    // SQLite: run statements one by one to allow idempotent ALTERs
+                    const cleanedSql = stripSqlComments(sql);
+                    const statements = splitSqlStatements(cleanedSql);
                     await db.exec('BEGIN TRANSACTION');
                     try {
-                        await db.exec(sql);
+                        for (const statement of statements) {
+                            const trimmed = statement.trim();
+                            if (!trimmed)
+                                continue;
+                            const alterMatch = trimmed.match(/^ALTER TABLE\s+([^\s]+)\s+ADD COLUMN\s+([^\s]+)/i);
+                            if (alterMatch) {
+                                const tableName = normalizeIdentifier(alterMatch[1]);
+                                const columnName = normalizeIdentifier(alterMatch[2]);
+                                const columns = await db.all(`PRAGMA table_info(${tableName})`);
+                                if (columns.some((col) => col.name === columnName)) {
+                                    continue;
+                                }
+                            }
+                            try {
+                                await db.exec(trimmed);
+                            }
+                            catch (err) {
+                                if (isIgnorableSqliteError(err, trimmed)) {
+                                    logger_1.logger.warn(`SQLite migration warning (skipped): ${trimmed}`);
+                                    continue;
+                                }
+                                throw err;
+                            }
+                        }
                         await db.run('INSERT INTO _migrations (name) VALUES (?)', [file]);
                         await db.exec('COMMIT');
                     }
@@ -245,15 +316,28 @@ class DatabaseService {
     }
     async seedData() {
         const db = this.getDatabase();
-        // Check if we already have data
-        const restaurantCount = await db.get('SELECT COUNT(*) as count FROM restaurants');
-        if (asNumber(restaurantCount?.count) > 0) {
-            logger_1.logger.info('Database already seeded, skipping...');
-            return;
-        }
+        // Ensure demo users are always valid for login
+        const demoEmails = ['staff@demo.servio', 'manager@demo.servio'];
+        logger_1.logger.info('Ensuring demo users exist with valid credentials...');
         const restaurantId = 'demo-restaurant-1';
-        // Create demo restaurant
-        await db.run('INSERT INTO restaurants (id, name, slug, settings) VALUES (?, ?, ?, ?)', [restaurantId, 'Demo Restaurant', 'demo-restaurant', JSON.stringify({ currency: 'USD' })]);
+        // Create demo restaurant if it doesn't exist
+        await db.run(`INSERT INTO restaurants (
+        id, name, slug, settings, operating_hours, timezone, closed_message
+      ) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO NOTHING`, [
+            restaurantId,
+            'Demo Restaurant',
+            'demo-restaurant',
+            JSON.stringify({ currency: 'USD' }),
+            JSON.stringify({
+                tue: ['09:00', '21:00'],
+                wed: ['09:00', '21:00'],
+                thu: ['09:00', '21:00'],
+                fri: ['09:00', '21:00'],
+                sat: ['09:00', '21:00']
+            }),
+            'America/New_York',
+            'We’re temporarily closed right now...'
+        ]);
         // Sample users
         const users = [
             {
@@ -293,7 +377,8 @@ class DatabaseService {
                 category_id: 'cat-1',
                 name: 'Jerk Chicken Plate',
                 description: 'Spicy jerk chicken with rice and peas',
-                price: 15.99
+                price: 15.99,
+                tags: ['dinner']
             },
             {
                 id: 'item-2',
@@ -301,7 +386,8 @@ class DatabaseService {
                 category_id: 'cat-1',
                 name: 'Curry Goat',
                 description: 'Tender curry goat with rice',
-                price: 18.99
+                price: 18.99,
+                tags: ['dinner']
             }
         ];
         // Sample inventory
@@ -330,15 +416,34 @@ class DatabaseService {
         for (const user of users) {
             try {
                 const passwordHash = bcryptjs_1.default.hashSync(user.password, 10);
-                await db.run('INSERT INTO users (id, restaurant_id, name, email, password_hash, pin, role, permissions) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO NOTHING', [user.id, user.restaurant_id, user.name, user.email, passwordHash, user.pin, user.role, user.permissions]);
+                await db.run(`INSERT INTO users (id, restaurant_id, name, email, password_hash, pin, role, permissions, is_active)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, TRUE)
+           ON CONFLICT (email) DO UPDATE SET
+             restaurant_id = excluded.restaurant_id,
+             name = excluded.name,
+             password_hash = excluded.password_hash,
+             pin = excluded.pin,
+             role = excluded.role,
+             permissions = excluded.permissions,
+             is_active = TRUE`, [user.id, user.restaurant_id, user.name, user.email, passwordHash, user.pin, user.role, user.permissions]);
             }
             catch (err) {
-                // Ignore duplicate key errors
+                logger_1.logger.warn('Demo user seed/update failed:', err);
             }
         }
         for (const item of menuItems) {
             try {
-                await db.run('INSERT INTO menu_items (id, restaurant_id, category_id, name, description, price) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO NOTHING', [item.id, item.restaurant_id, item.category_id, item.name, item.description, item.price]);
+                await db.run(`INSERT INTO menu_items (
+            id, restaurant_id, category_id, name, description, price, tags
+          ) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO NOTHING`, [
+                    item.id,
+                    item.restaurant_id,
+                    item.category_id,
+                    item.name,
+                    item.description,
+                    item.price,
+                    JSON.stringify(item.tags || [])
+                ]);
             }
             catch (err) { }
         }

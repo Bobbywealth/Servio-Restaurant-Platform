@@ -55,8 +55,9 @@ router.post('/login', (0, errorHandler_1.asyncHandler)(async (req, res) => {
     if (!email || !password) {
         throw new errorHandler_1.UnauthorizedError('Email and password are required');
     }
+    const normalizedEmail = String(email).trim().toLowerCase();
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
-    const user = await db.get('SELECT * FROM users WHERE email = ? AND is_active = TRUE', [email]);
+    const user = await db.get('SELECT * FROM users WHERE LOWER(email) = ? AND (is_active = 1 OR is_active = TRUE)', [normalizedEmail]);
     if (!user || !user.password_hash) {
         throw new errorHandler_1.UnauthorizedError('Invalid email or password');
     }

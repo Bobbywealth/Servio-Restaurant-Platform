@@ -161,7 +161,7 @@ router.delete('/categories/:id', (0, errorHandler_1.asyncHandler)(async (req, re
  * Create a new menu item with image upload
  */
 router.post('/items', upload.array('images', 5), (0, errorHandler_1.asyncHandler)(async (req, res) => {
-    const { name, description, price, cost, categoryId, allergens, preparationTime, nutritionalInfo, sortOrder = 0 } = req.body;
+    const { name, description, price, cost, categoryId, allergens, preparationTime, nutritionalInfo, sortOrder = 0, isAvailable = true } = req.body;
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
     if (!name?.trim() || !price || !categoryId) {
         return res.status(400).json({
@@ -190,7 +190,7 @@ router.post('/items', upload.array('images', 5), (0, errorHandler_1.asyncHandler
     INSERT INTO menu_items (
       id, restaurant_id, category_id, name, description, price, cost,
       images, allergens, preparation_time, nutritional_info, sort_order, is_available
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `, [
         itemId,
         restaurantId,
@@ -203,7 +203,8 @@ router.post('/items', upload.array('images', 5), (0, errorHandler_1.asyncHandler
         allergens ? JSON.stringify(allergens) : '[]',
         preparationTime || 0,
         nutritionalInfo ? JSON.stringify(nutritionalInfo) : null,
-        sortOrder
+        sortOrder,
+        isAvailable ? 1 : 0
     ]);
     const newItem = await db.get(`
     SELECT mi.*, mc.name as category_name
@@ -375,25 +376,34 @@ router.get('/items/full', (0, errorHandler_1.asyncHandler)(async (req, res) => {
 router.get('/items/search', (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const { q, category, available } = req.query;
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
-    let query = 'SELECT * FROM menu_items';
+    const restaurantId = req.user?.restaurantId;
+    let query = `
+    SELECT mi.*, mc.name as category_name
+    FROM menu_items mi
+    LEFT JOIN menu_categories mc ON mi.category_id = mc.id
+  `;
     const params = [];
     const conditions = [];
+    if (restaurantId) {
+        conditions.push('mi.restaurant_id = ?');
+        params.push(restaurantId);
+    }
     if (q) {
-        conditions.push('name LIKE ?');
+        conditions.push('mi.name LIKE ?');
         params.push(`%${q}%`);
     }
     if (category) {
-        conditions.push('category = ?');
-        params.push(category);
+        conditions.push('(mc.name LIKE ? OR mc.id = ?)');
+        params.push(`%${category}%`, category);
     }
     if (available !== undefined) {
-        conditions.push('is_available = ?');
+        conditions.push('mi.is_available = ?');
         params.push(available === 'true' ? 1 : 0);
     }
     if (conditions.length > 0) {
         query += ' WHERE ' + conditions.join(' AND ');
     }
-    query += ' ORDER BY name';
+    query += ' ORDER BY mi.name';
     const items = await db.all(query, params);
     // Parse channel availability JSON
     const formattedItems = items.map((item) => ({
@@ -542,16 +552,23 @@ router.get('/unavailable', (0, errorHandler_1.asyncHandler)(async (req, res) => 
  */
 router.get('/categories', (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
+    const restaurantId = req.user?.restaurantId;
     const categories = await db.all(`
     SELECT
-      category,
-      COUNT(*) as total_items,
-      COUNT(CASE WHEN is_available = 1 THEN 1 END) as available_items,
-      COUNT(CASE WHEN is_available = 0 THEN 1 END) as unavailable_items
-    FROM menu_items
-    GROUP BY category
-    ORDER BY category
-  `);
+      mc.id,
+      mc.name,
+      mc.description,
+      mc.sort_order,
+      mc.is_active,
+      COUNT(mi.id) as total_items,
+      COUNT(CASE WHEN mi.is_available = 1 THEN 1 END) as available_items,
+      COUNT(CASE WHEN mi.is_available = 0 THEN 1 END) as unavailable_items
+    FROM menu_categories mc
+    LEFT JOIN menu_items mi ON mc.id = mi.category_id
+    WHERE mc.restaurant_id = ?
+    GROUP BY mc.id
+    ORDER BY mc.sort_order ASC, mc.name ASC
+  `, [restaurantId]);
     res.json({
         success: true,
         data: categories

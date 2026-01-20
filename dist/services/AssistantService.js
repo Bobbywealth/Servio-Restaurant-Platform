@@ -7,6 +7,7 @@ exports.AssistantService = void 0;
 const openai_1 = __importDefault(require("openai"));
 const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
+const os_1 = __importDefault(require("os"));
 const DatabaseService_1 = require("./DatabaseService");
 const logger_1 = require("../utils/logger");
 const uuid_1 = require("uuid");
@@ -111,13 +112,8 @@ class AssistantService {
     }
     async transcribeAudio(audioBuffer) {
         try {
-            // Save buffer to temporary file
-            const tempPath = path_1.default.join(__dirname, `../../temp/audio_${Date.now()}.webm`);
-            // Ensure temp directory exists
-            const tempDir = path_1.default.dirname(tempPath);
-            if (!fs_1.default.existsSync(tempDir)) {
-                fs_1.default.mkdirSync(tempDir, { recursive: true });
-            }
+            // Save buffer to temporary file in OS temp directory
+            const tempPath = path_1.default.join(os_1.default.tmpdir(), `servio_audio_${Date.now()}_${(0, uuid_1.v4)()}.webm`);
             fs_1.default.writeFileSync(tempPath, audioBuffer);
             const transcription = await this.openai.audio.transcriptions.create({
                 file: fs_1.default.createReadStream(tempPath),

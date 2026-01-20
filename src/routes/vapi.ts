@@ -76,84 +76,86 @@ router.get('/assistant-config', async (req: Request, res: Response) => {
       }],
       functions: [
         {
-          name: 'place_order',
-          description: 'Place a new food order for the customer',
+          name: 'getStoreStatus',
+          description: 'Check if the restaurant is currently open and get operating hours',
+          parameters: { type: 'object', properties: {} }
+        },
+        {
+          name: 'searchMenu',
+          description: 'Search for items on the menu by name or category',
+          parameters: {
+            type: 'object',
+            properties: {
+              q: { type: 'string', description: 'Search query' }
+            }
+          }
+        },
+        {
+          name: 'getMenuItem',
+          description: 'Get full details for a specific menu item by ID',
+          parameters: {
+            type: 'object',
+            properties: {
+              id: { type: 'string', description: 'The item ID' }
+            },
+            required: ['id']
+          }
+        },
+        {
+          name: 'quoteOrder',
+          description: 'Validate an order and get the subtotal, tax, and total before placing it',
           parameters: {
             type: 'object',
             properties: {
               items: {
                 type: 'array',
-                description: 'List of items to order',
                 items: {
                   type: 'object',
                   properties: {
-                    name: { type: 'string', description: 'Name of the menu item' },
-                    quantity: { type: 'number', description: 'Quantity to order' },
-                    specialInstructions: { type: 'string', description: 'Any special preparation instructions' }
+                    itemId: { type: 'string' },
+                    qty: { type: 'number' },
+                    modifiers: { type: 'object' }
                   },
-                  required: ['name', 'quantity']
+                  required: ['itemId', 'qty']
                 }
               },
-              customerInfo: {
-                type: 'object',
-                properties: {
-                  name: { type: 'string', description: 'Customer name' },
-                  phone: { type: 'string', description: 'Customer phone number' },
-                  email: { type: 'string', description: 'Customer email address' }
-                },
-                required: ['name', 'phone']
-              },
-              deliveryAddress: {
-                type: 'object',
-                properties: {
-                  street: { type: 'string' },
-                  city: { type: 'string' },
-                  state: { type: 'string' },
-                  zipCode: { type: 'string' },
-                  deliveryInstructions: { type: 'string' }
-                }
-              },
-              orderType: {
-                type: 'string',
-                enum: ['pickup', 'delivery', 'dine-in'],
-                description: 'Type of order'
-              }
+              orderType: { type: 'string', enum: ['pickup', 'delivery'] }
             },
-            required: ['items', 'customerInfo', 'orderType']
+            required: ['items', 'orderType']
           }
         },
         {
-          name: 'get_menu_info',
-          description: 'Get information about menu items including availability and prices',
+          name: 'createOrder',
+          description: 'Place the final order in the system as PENDING',
           parameters: {
             type: 'object',
             properties: {
-              category: {
-                type: 'string',
-                description: 'Menu category to search (appetizers, entrees, desserts, etc.)'
+              items: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    itemId: { type: 'string' },
+                    qty: { type: 'number' },
+                    modifiers: { type: 'object' }
+                  },
+                  required: ['itemId', 'qty']
+                }
               },
-              itemName: {
-                type: 'string',
-                description: 'Specific item name to search for'
-              }
-            }
-          }
-        },
-        {
-          name: 'check_order_status',
-          description: 'Check the status of an existing order',
-          parameters: {
-            type: 'object',
-            properties: {
-              orderId: {
-                type: 'string',
-                description: 'Order ID or confirmation number'
+              customer: {
+                type: 'object',
+                properties: {
+                  name: { type: 'string' },
+                  phone: { type: 'string' },
+                  lastInitial: { type: 'string' }
+                },
+                required: ['name', 'phone', 'lastInitial']
               },
-              phoneNumber: {
-                type: 'string',
-                description: 'Customer phone number to lookup orders'
-              }
-            }
+              orderType: { type: 'string', enum: ['pickup', 'delivery'] },
+              pickupTime: { type: 'string' },
+              callId: { type: 'string' }
+            },
+            required: ['items', 'customer', 'orderType']
           }
         }
       ]

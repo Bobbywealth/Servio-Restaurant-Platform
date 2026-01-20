@@ -51,6 +51,7 @@ const DatabaseService_1 = require("./services/DatabaseService");
 const logger_1 = require("./utils/logger");
 const errorHandler_1 = require("./middleware/errorHandler");
 const auth_1 = require("./middleware/auth");
+const initNotifications_1 = require("./notifications/initNotifications");
 const app = (0, express_1.default)();
 const server = (0, http_1.createServer)(app);
 const io = new socket_io_1.Server(server, {
@@ -74,6 +75,7 @@ async function initializeServer() {
     try {
         await DatabaseService_1.DatabaseService.initialize();
         logger_1.logger.info('Database initialized successfully');
+        (0, initNotifications_1.initializeNotifications)(io);
         // Now load routes after database is ready
         const { default: authRoutes } = await Promise.resolve().then(() => __importStar(require('./routes/auth')));
         const { default: assistantRoutes } = await Promise.resolve().then(() => __importStar(require('./routes/assistant')));
@@ -89,11 +91,14 @@ async function initializeServer() {
         const { default: restaurantRoutes } = await Promise.resolve().then(() => __importStar(require('./routes/restaurant')));
         const { default: integrationsRoutes } = await Promise.resolve().then(() => __importStar(require('./routes/integrations')));
         const { default: vapiRoutes } = await Promise.resolve().then(() => __importStar(require('./routes/vapi')));
+        const { default: voiceRoutes } = await Promise.resolve().then(() => __importStar(require('./routes/voice')));
         const { default: adminRoutes } = await Promise.resolve().then(() => __importStar(require('./routes/admin')));
+        const { default: notificationsRoutes } = await Promise.resolve().then(() => __importStar(require('./routes/notifications')));
         // API Routes
         app.use('/api/auth', authRoutes);
         // Vapi webhook routes (no auth required for external webhooks)
         app.use('/api/vapi', vapiRoutes);
+        app.use('/api', voiceRoutes); // Mount voice ordering APIs under /api
         // Admin routes (platform-admin role required)
         app.use('/api/admin', adminRoutes);
         // Debug: Add a test auth route to verify mounting
@@ -117,13 +122,16 @@ async function initializeServer() {
         app.use('/api/marketing', auth_1.requireAuth, marketingRoutes);
         app.use('/api/restaurant', auth_1.requireAuth, restaurantRoutes);
         app.use('/api/integrations', auth_1.requireAuth, integrationsRoutes);
+        app.use('/api/notifications', auth_1.requireAuth, notificationsRoutes);
         // 404 handler (must be last)
-        app.use((req, res) => {
+        app.use((req, res, next) => {
             res.status(404).json({
                 error: 'Not Found',
                 message: `Route ${req.method} ${req.originalUrl} not found`
             });
         });
+        // Error handler MUST be after all routes and 404 handler
+        app.use(errorHandler_1.errorHandler);
         logger_1.logger.info('Routes loaded successfully');
     }
     catch (error) {
@@ -310,8 +318,6 @@ app.get('/api', (req, res) => {
         }
     });
 });
-// Error handling
-app.use(errorHandler_1.errorHandler);
 // 404 handler moved to initializeServer() to ensure it comes after route registration
 // Initialize server and start listening
 initializeServer().then(() => {

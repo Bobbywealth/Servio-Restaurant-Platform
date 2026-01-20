@@ -5,6 +5,7 @@ const DatabaseService_1 = require("../services/DatabaseService");
 const errorHandler_1 = require("../middleware/errorHandler");
 const logger_1 = require("../utils/logger");
 const uuid_1 = require("uuid");
+const bus_1 = require("../events/bus");
 const router = (0, express_1.Router)();
 const num = (v) => (typeof v === 'number' ? v : Number(v ?? 0));
 /**
@@ -111,6 +112,13 @@ router.post('/:id/status', (0, errorHandler_1.asyncHandler)(async (req, res) => 
     await db.run('UPDATE orders SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [status, id]);
     // Log the action
     await DatabaseService_1.DatabaseService.getInstance().logAudit(req.user?.restaurantId, req.user?.id || 'system', 'update_order_status', 'order', id, { previousStatus: order.status, newStatus: status });
+    await bus_1.eventBus.emit('order.status_changed', {
+        restaurantId: req.user?.restaurantId,
+        type: 'order.status_changed',
+        actor: { actorType: 'user', actorId: req.user?.id },
+        payload: { orderId: id, previousStatus: order.status, newStatus: status },
+        occurredAt: new Date().toISOString()
+    });
     logger_1.logger.info(`Order ${id} status updated from ${order.status} to ${status}`);
     res.json({
         success: true,
@@ -198,6 +206,18 @@ router.post('/public/:slug', (0, errorHandler_1.asyncHandler)(async (req, res) =
     if (io) {
         io.to(`restaurant-${restaurantId}`).emit('new-order', { orderId, totalAmount });
     }
+    await bus_1.eventBus.emit('order.created_web', {
+        restaurantId,
+        type: 'order.created_web',
+        actor: { actorType: 'system' },
+        payload: {
+            orderId,
+            customerName,
+            totalAmount,
+            channel: 'website'
+        },
+        occurredAt: new Date().toISOString()
+    });
     await DatabaseService_1.DatabaseService.getInstance().logAudit(restaurantId, null, 'create_public_order', 'order', orderId, { totalAmount });
     res.status(201).json({
         success: true,
@@ -270,6 +290,18 @@ router.post('/', (0, errorHandler_1.asyncHandler)(async (req, res) => {
     ]);
     // Log the action
     await DatabaseService_1.DatabaseService.getInstance().logAudit(req.user?.restaurantId, req.user?.id || 'system', 'create_order', 'order', orderId, { externalId, channel, totalAmount, itemCount: items.length });
+    await bus_1.eventBus.emit('order.created_web', {
+        restaurantId: req.user?.restaurantId,
+        type: 'order.created_web',
+        actor: { actorType: 'user', actorId: req.user?.id },
+        payload: {
+            orderId,
+            customerName,
+            totalAmount,
+            channel
+        },
+        occurredAt: new Date().toISOString()
+    });
     logger_1.logger.info(`New order created: ${orderId} from ${channel}`);
     res.status(201).json({
         success: true,

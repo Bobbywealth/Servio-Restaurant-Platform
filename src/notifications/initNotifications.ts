@@ -1,5 +1,5 @@
 import type { Server as IOServer } from 'socket.io';
-import { eventBus } from '../events/eventBus';
+import { eventBus } from '../events/bus';
 import { DatabaseService } from '../services/DatabaseService';
 import { NotificationDispatcher } from './NotificationDispatcher';
 import { NotificationService } from './NotificationService';

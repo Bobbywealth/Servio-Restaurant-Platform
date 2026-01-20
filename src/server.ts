@@ -61,6 +61,7 @@ async function initializeServer() {
     const { default: restaurantRoutes } = await import('./routes/restaurant');
     const { default: integrationsRoutes } = await import('./routes/integrations');
     const { default: vapiRoutes } = await import('./routes/vapi');
+    const { default: voiceRoutes } = await import('./routes/voice');
     const { default: adminRoutes } = await import('./routes/admin');
     const { default: notificationsRoutes } = await import('./routes/notifications');
 
@@ -69,6 +70,7 @@ async function initializeServer() {
     
     // Vapi webhook routes (no auth required for external webhooks)
     app.use('/api/vapi', vapiRoutes);
+    app.use('/api', voiceRoutes); // Mount voice ordering APIs under /api
     
     // Admin routes (platform-admin role required)
     app.use('/api/admin', adminRoutes);
@@ -99,12 +101,15 @@ async function initializeServer() {
     app.use('/api/notifications', requireAuth, notificationsRoutes);
 
     // 404 handler (must be last)
-    app.use((req, res) => {
+    app.use((req, res, next) => {
       res.status(404).json({
         error: 'Not Found',
         message: `Route ${req.method} ${req.originalUrl} not found`
       });
     });
+
+    // Error handler MUST be after all routes and 404 handler
+    app.use(errorHandler);
 
     logger.info('Routes loaded successfully');
   } catch (error) {
@@ -309,9 +314,6 @@ app.get('/api', (req, res) => {
     }
   });
 });
-
-// Error handling
-app.use(errorHandler);
 
 // 404 handler moved to initializeServer() to ensure it comes after route registration
 

@@ -2,7 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.preventTenantAccess = exports.requirePlatformAdmin = void 0;
 /**
- * Middleware to ensure only platform-admin users can access admin endpoints
+ * Middleware to ensure only platform admin users can access admin endpoints
  */
 const requirePlatformAdmin = (req, res, next) => {
     if (!req.user) {
@@ -11,7 +11,7 @@ const requirePlatformAdmin = (req, res, next) => {
             message: 'You must be logged in to access admin endpoints'
         });
     }
-    if (req.user.role !== 'platform-admin') {
+    if (req.user.role !== 'platform-admin' && req.user.role !== 'admin') {
         return res.status(403).json({
             error: 'Platform admin access required',
             message: 'This endpoint requires platform administrator privileges',
@@ -25,7 +25,7 @@ exports.requirePlatformAdmin = requirePlatformAdmin;
  * Middleware to prevent access to tenant-specific endpoints for platform admins
  */
 const preventTenantAccess = (req, res, next) => {
-    if (req.user && req.user.role === 'platform-admin') {
+    if (req.user && (req.user.role === 'platform-admin' || req.user.role === 'admin')) {
         return res.status(403).json({
             error: 'Platform admin cannot access tenant endpoints',
             message: 'Use admin-specific endpoints instead'

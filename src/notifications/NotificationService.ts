@@ -1,4 +1,4 @@
-import type { EventBus } from '../events/eventBus';
+import type { EventBus } from '../events/bus';
 import type { DomainEvent, NotificationEventType } from './types';
 import { buildNotificationDraft } from './templates';
 import { NotificationStore } from './NotificationStore';

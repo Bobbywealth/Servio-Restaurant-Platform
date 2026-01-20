@@ -4,6 +4,7 @@ const express_1 = require("express");
 const DatabaseService_1 = require("../services/DatabaseService");
 const errorHandler_1 = require("../middleware/errorHandler");
 const logger_1 = require("../utils/logger");
+const bus_1 = require("../events/bus");
 const router = (0, express_1.Router)();
 const num = (v) => (typeof v === 'number' ? v : Number(v ?? 0));
 /**
@@ -97,6 +98,13 @@ router.post('/:id/complete', (0, errorHandler_1.asyncHandler)(async (req, res) =
     }
     await db.run('UPDATE tasks SET status = ?, completed_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', ['completed', new Date().toISOString(), id]);
     await DatabaseService_1.DatabaseService.getInstance().logAudit(req.user?.restaurantId, req.user?.id || 'system', 'complete_task', 'task', id, { taskTitle: task.title, taskType: task.type });
+    await bus_1.eventBus.emit('task.completed', {
+        restaurantId: req.user?.restaurantId,
+        type: 'task.completed',
+        actor: { actorType: 'user', actorId: req.user?.id },
+        payload: { taskId: id, title: task.title },
+        occurredAt: new Date().toISOString()
+    });
     logger_1.logger.info(`Task completed: ${task.title}`);
     res.json({
         success: true,
@@ -214,6 +222,13 @@ router.post('/', (0, errorHandler_1.asyncHandler)(async (req, res) => {
         'pending'
     ]);
     await DatabaseService_1.DatabaseService.getInstance().logAudit(req.user?.restaurantId, req.user?.id || 'system', 'create_task', 'task', taskId, { title, type, assignedTo });
+    await bus_1.eventBus.emit('task.created', {
+        restaurantId: req.user?.restaurantId,
+        type: 'task.created',
+        actor: { actorType: 'user', actorId: req.user?.id },
+        payload: { taskId, title, assignedTo },
+        occurredAt: new Date().toISOString()
+    });
     logger_1.logger.info(`New task created: ${title}`);
     res.status(201).json({
         success: true,
