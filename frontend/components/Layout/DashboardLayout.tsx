@@ -49,7 +49,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
   if (isLoading || !user) {
     return (
-      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center">
+      <div className="min-h-screen bg-gray-50 dark:bg-surface-950 flex flex-col items-center justify-center">
         <motion.div 
           animate={{ scale: [1, 1.1, 1] }}
           transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
@@ -162,7 +162,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const closeSidebar = () => setSidebarOpen(false);
 
   return (
-    <div className="min-h-screen bg-[#F9FAFB] text-gray-900">
+    <div className="min-h-screen bg-[#F9FAFB] dark:bg-surface-950 text-gray-900 dark:text-surface-100">
       <AnimatePresence>
         {sidebarOpen && (
           <motion.div
@@ -275,7 +275,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                 <button onClick={() => setSidebarOpen(true)} className="lg:hidden btn-icon">
                   <Menu className="w-6 h-6" />
                 </button>
-                <div className="text-sm font-semibold text-gray-900">{pageTitle}</div>
+                <div className="text-sm font-semibold text-gray-900 dark:text-surface-100">{pageTitle}</div>
               </div>
               <div className="flex items-center space-x-3">
                 <NotificationCenter />
@@ -296,7 +296,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       </div>
 
       {/* Mobile bottom navigation */}
-      <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 border-t border-surface-200 backdrop-blur-md lg:hidden pb-safe-bottom">
+      <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-surface-900/95 border-t border-surface-200 dark:border-surface-800 backdrop-blur-md lg:hidden pb-safe-bottom">
         <div className="grid grid-cols-5 px-2 py-2">
           {mobileNav.map((item) => {
             const isActive = currentPath === normalizePath(item.href);
@@ -305,7 +305,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                 key={item.name}
                 href={item.href}
                 className={`flex flex-col items-center justify-center py-2 rounded-lg text-xs font-medium ${
-                  isActive ? 'text-primary-700' : 'text-gray-500'
+                  isActive ? 'text-primary-700 dark:text-primary-300' : 'text-gray-500 dark:text-surface-400'
                 }`}
               >
                 <item.icon className="w-5 h-5" />

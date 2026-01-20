@@ -64,15 +64,15 @@ StatCard.displayName = 'StatCard'
 const SkeletonCard = memo(() => (
   <div className="card animate-pulse">
     <div className="flex items-center">
-      <div className="h-12 w-12 rounded-xl bg-surface-200" />
+      <div className="h-12 w-12 rounded-xl bg-surface-200 dark:bg-surface-700" />
       <div className="ml-4 flex-1">
-        <div className="h-3 w-24 rounded bg-surface-200" />
-        <div className="mt-3 h-6 w-16 rounded bg-surface-200" />
+        <div className="h-3 w-24 rounded bg-surface-200 dark:bg-surface-700" />
+        <div className="mt-3 h-6 w-16 rounded bg-surface-200 dark:bg-surface-700" />
       </div>
     </div>
     <div className="mt-4 flex items-center justify-between">
-      <div className="h-5 w-20 rounded bg-surface-200" />
-      <div className="h-3 w-16 rounded bg-surface-200" />
+      <div className="h-5 w-20 rounded bg-surface-200 dark:bg-surface-700" />
+      <div className="h-3 w-16 rounded bg-surface-200 dark:bg-surface-700" />
     </div>
   </div>
 ))
@@ -196,10 +196,10 @@ const DashboardIndex = memo(() => {
         <div className="space-y-6">
           {/* Welcome Section */}
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-surface-100">
               Welcome back, {user?.name || 'Team'}!
             </h1>
-            <p className="mt-2 text-gray-600">
+            <p className="mt-2 text-gray-600 dark:text-surface-400">
               Here&apos;s what&apos;s happening with your restaurant today.
             </p>
           </div>
