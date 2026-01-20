@@ -142,22 +142,27 @@ interface TourProviderProps {
 export function TourProvider({ children }: TourProviderProps) {
   const [isActive, setIsActive] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
-  const [hasSeenTour, setHasSeenTour] = useState(false);
+  const [hasSeenTour, setHasSeenTour] = useState<boolean | null>(null); // null = not checked yet
   const { user } = useUser();
 
   const steps = DASHBOARD_TOUR_STEPS;
 
   useEffect(() => {
     // Check if user has seen the tour
-    const tourCompleted = localStorage.getItem(`servio_tour_completed_${user?.id}`);
-    setHasSeenTour(!!tourCompleted);
+    if (user?.id) {
+      const tourCompleted = localStorage.getItem(`servio_tour_completed_${user.id}`);
+      setHasSeenTour(!!tourCompleted);
+    } else {
+      setHasSeenTour(null);
+    }
   }, [user?.id]);
 
   useEffect(() => {
-    // Auto-start tour for new users who haven't seen it or just signed up
-    if (user && !isActive) {
+    // Only auto-start tour after we've checked if user has seen it
+    if (user && !isActive && hasSeenTour !== null) {
       const isNewSignup = localStorage.getItem('servio_new_signup');
       
+      // Only start tour if it's a new signup OR they haven't seen it before
       if (isNewSignup || !hasSeenTour) {
         // Clear the new signup flag
         if (isNewSignup) {
@@ -169,12 +174,12 @@ export function TourProvider({ children }: TourProviderProps) {
           if (window.location.pathname === '/dashboard') {
             startTour();
           }
-        }, 2000); // Slightly longer delay for better UX
+        }, 2000);
         
         return () => clearTimeout(timer);
       }
     }
-  }, [user, hasSeenTour, isActive]);
+  }, [user, hasSeenTour, isActive]); // hasSeenTour dependency ensures we wait for localStorage check
 
   const startTour = () => {
     setIsActive(true);

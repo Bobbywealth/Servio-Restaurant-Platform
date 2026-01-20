@@ -13,6 +13,7 @@
     "seed:menu": "tsx src/scripts/seed-menu-items.ts",
     "seed:modifiers": "tsx src/scripts/seed-modifiers.ts",
     "seed:all": "tsx src/scripts/seed-menu-items.ts && tsx src/scripts/seed-modifiers.ts",
+    "create-owner": "tsx src/scripts/create-owner-user.ts",
     "lint": "eslint src --ext .ts,.js",
     "test": "jest --passWithNoTests",
     "install:ci": "NODE_OPTIONS='--max-old-space-size=1024' npm ci --legacy-peer-deps"
