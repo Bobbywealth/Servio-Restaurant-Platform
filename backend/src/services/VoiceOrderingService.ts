@@ -125,7 +125,7 @@ export class VoiceOrderingService {
         return null;
       }
 
-      let itemPrice = menuItem.price || 0;
+      let itemPrice = menuItem.basePrice || 0;
       const tags = menuItem.tags || [];
       const itemName = menuItem.name.toLowerCase();
       const itemId = menuItem.id.toLowerCase();
@@ -194,7 +194,8 @@ export class VoiceOrderingService {
       tax: parseFloat(tax.toFixed(2)),
       fees: 0,
       total: parseFloat(total.toFixed(2)),
-      errors
+      errors,
+      items: validatedItems.filter(Boolean)
     };
   }
 
@@ -218,7 +219,7 @@ export class VoiceOrderingService {
       input.source || 'vapi', input.callId
     ]);
 
-    for (const item of input.items) {
+    for (const item of (quote.items as any[])) {
       const menuItem = this.getMenuItem(item.itemId);
       await db.run(`
         INSERT INTO order_items (
