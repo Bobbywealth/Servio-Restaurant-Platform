@@ -2,7 +2,7 @@ import { AssistantService } from './AssistantService';
 import { DatabaseService } from './DatabaseService';
 import { logger } from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
-import { eventBus } from '../events/eventBus';
+import { eventBus } from '../events/bus';
 
 export interface VapiWebhookPayload {
   message: {

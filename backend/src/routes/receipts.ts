@@ -5,7 +5,7 @@ import { asyncHandler, UnauthorizedError, BadRequestError } from '../middleware/
 import { requireAuth } from '../middleware/auth';
 import { logger } from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
-import { eventBus } from '../events/eventBus';
+import { eventBus } from '../events/bus';
 
 const router = Router();
 

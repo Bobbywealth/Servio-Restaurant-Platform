@@ -8,8 +8,8 @@
 -- ============================================================================
 
 -- Add image field to menu categories
-ALTER TABLE menu_categories ADD COLUMN image VARCHAR(500);
-ALTER TABLE menu_categories ADD COLUMN image_alt_text VARCHAR(255);
+ALTER TABLE menu_categories ADD COLUMN IF NOT EXISTS image VARCHAR(500);
+ALTER TABLE menu_categories ADD COLUMN IF NOT EXISTS image_alt_text VARCHAR(255);
 
 -- ============================================================================
 -- MENU MODIFIER ENHANCEMENTS
@@ -19,16 +19,16 @@ ALTER TABLE menu_categories ADD COLUMN image_alt_text VARCHAR(255);
 DROP TABLE IF EXISTS item_modifications;
 
 -- Enhance existing modifier_groups table with additional columns
-ALTER TABLE modifier_groups ADD COLUMN description TEXT;
-ALTER TABLE modifier_groups ADD COLUMN sort_order INTEGER DEFAULT 0;
-ALTER TABLE modifier_groups ADD COLUMN is_active BOOLEAN DEFAULT TRUE;
-ALTER TABLE modifier_groups ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE modifier_groups ADD COLUMN IF NOT EXISTS description TEXT;
+ALTER TABLE modifier_groups ADD COLUMN IF NOT EXISTS sort_order INTEGER DEFAULT 0;
+ALTER TABLE modifier_groups ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
+ALTER TABLE modifier_groups ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
 -- Note: min_selections and max_selections columns already exist as min_selection and max_selection
 
 -- Enhance existing modifier_options table with additional columns
-ALTER TABLE modifier_options ADD COLUMN description TEXT;
-ALTER TABLE modifier_options ADD COLUMN sort_order INTEGER DEFAULT 0;
-ALTER TABLE modifier_options ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE modifier_options ADD COLUMN IF NOT EXISTS description TEXT;
+ALTER TABLE modifier_options ADD COLUMN IF NOT EXISTS sort_order INTEGER DEFAULT 0;
+ALTER TABLE modifier_options ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
 -- Note: price_modifier and is_available columns already exist
 
 -- Link menu items to modifier groups
