@@ -32,70 +32,68 @@ export default function HomePage() {
       </Head>
 
       {/* Background Image with Overlay */}
-      <div className="absolute inset-0 z-0">
+      <div className="absolute inset-0 z-0 overflow-hidden">
         <img
           src="https://images.unsplash.com/photo-1556910103-1c02745aae4d?auto=format&fit=crop&q=80&w=2070"
           alt="Kitchen Background"
-          className="w-full h-full object-cover opacity-40"
+          className="w-full h-full object-cover scale-105 blur-sm"
         />
-        <div className="absolute inset-0 bg-gradient-to-b from-[#0A0A0B]/80 via-[#0A0A0B]/40 to-[#0A0A0B]" />
+        <div className="absolute inset-0 bg-gradient-to-b from-teal-900/50 via-teal-800/70 to-[#0A0A0B]/95" />
       </div>
 
       <div className="relative z-10 min-h-screen flex flex-col">
         {/* Navigation */}
         <nav className="w-full pt-10 px-6 sm:px-10">
-          <div className="max-w-4xl mx-auto flex flex-col items-center gap-8">
+          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-6 sm:gap-0">
             <Link href="/" className="flex items-center gap-2">
-              <img
-                src="/images/servio_logo_transparent_tight.png"
-                alt="Servio Logo"
-                className="h-8 w-auto brightness-0 invert"
-              />
-              <span className="text-2xl font-semibold tracking-tight">servio</span>
+              <div className="w-8 h-8 rounded-lg bg-[#14b8a6] flex items-center justify-center">
+                <span className="text-white font-bold text-xl">S</span>
+              </div>
+              <span className="text-2xl font-semibold tracking-tight text-white">Servio</span>
             </Link>
 
-            <div className="flex items-center gap-6 text-sm font-medium text-white/80">
-              <a href="#services" className="hover:text-white transition-colors">Services</a>
-              <a href="#features" className="hover:text-white transition-colors">Features</a>
-              <a href="#pricing" className="hover:text-white transition-colors">Pricing</a>
-              <a href="#faq" className="hover:text-white transition-colors">FAQ</a>
-              <Link href="/login" className="hover:text-white transition-colors">Login</Link>
+            <div className="flex items-center gap-6 text-sm font-medium text-white">
+              <a href="#services" className="hover:text-[#2dd4bf] transition-colors">Services</a>
+              <a href="#features" className="hover:text-[#2dd4bf] transition-colors">Features</a>
+              <a href="#pricing" className="hover:text-[#2dd4bf] transition-colors">Pricing</a>
+              <a href="#faq" className="hover:text-[#2dd4bf] transition-colors">FAQ</a>
+              <Link href="/login" className="hover:text-[#2dd4bf] transition-colors">Login</Link>
             </div>
           </div>
         </nav>
 
         {/* Hero Content */}
-        <main className="flex-grow flex items-center justify-center px-6 py-20">
-          <div className="max-w-2xl mx-auto text-center">
+        <main className="flex-grow flex items-center justify-center px-6 py-20 min-h-[calc(100vh-200px)]">
+          <div className="max-w-3xl mx-auto text-center">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8 }}
             >
               <div className="mb-10">
-                <span className="inline-flex items-center px-4 py-1.5 rounded-full text-xs font-medium bg-[#14b8a6]/20 text-[#2dd4bf] border border-[#14b8a6]/30">
+                <span className="inline-flex items-center px-4 py-1.5 rounded-full text-xs font-medium bg-[#0A0A0B]/60 backdrop-blur-sm text-white border border-[#14b8a6]">
                   Restaurant Operating System
                 </span>
               </div>
 
-              <h1 className="text-5xl sm:text-6xl font-bold tracking-tight mb-8 leading-[1.1]">
+              <h1 className="text-5xl sm:text-6xl font-bold tracking-tight mb-8 leading-[1.1] text-white">
                 The premium, voice-first platform for restaurant teams.
               </h1>
 
-              <p className="text-lg sm:text-xl text-white/70 max-w-lg mx-auto mb-12 leading-relaxed">
+              <p className="text-lg sm:text-xl text-white max-w-lg mx-auto mb-12 leading-relaxed">
                 Servio unifies orders, inventory, staff operations, and communications into a single, app-like system.
               </p>
 
               <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
                 <Link
                   href="/dashboard/assistant"
-                  className="w-full sm:w-auto px-8 py-4 rounded-2xl bg-[#14b8a6] hover:bg-[#0d9488] text-white font-semibold transition-all shadow-lg shadow-[#14b8a6]/20"
+                  className="w-full sm:w-auto px-8 py-4 rounded-xl bg-[#14b8a6] hover:bg-[#0d9488] text-white font-semibold transition-all shadow-lg"
                 >
                   Get Started
                 </Link>
                 <Link
                   href="/login"
-                  className="w-full sm:w-auto px-8 py-4 rounded-2xl bg-white text-black font-semibold hover:bg-gray-100 transition-all"
+                  className="w-full sm:w-auto px-8 py-4 rounded-xl bg-[#0A0A0B]/60 backdrop-blur-sm border border-[#14b8a6] text-white font-semibold hover:bg-[#14b8a6]/10 transition-all"
                 >
                   Book Demo
                 </Link>
