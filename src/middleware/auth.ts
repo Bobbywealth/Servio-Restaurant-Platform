@@ -4,7 +4,7 @@ import { DatabaseService } from '../services/DatabaseService';
 import { UnauthorizedError, ForbiddenError } from './errorHandler';
 import type { AccessTokenPayload, AuthUser } from '../types/auth';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'dev_insecure_jwt_secret_change_me';
+const getJwtSecret = () => process.env.JWT_SECRET || 'dev_insecure_jwt_secret_change_me';
 const ACCESS_TOKEN_TTL_SECONDS = Number(process.env.ACCESS_TOKEN_TTL_SECONDS ?? 60 * 15); // 15m default
 
 function parsePermissions(value: any): string[] {
@@ -24,7 +24,7 @@ function parsePermissions(value: any): string[] {
 }
 
 export function issueAccessToken(payload: Omit<AccessTokenPayload, 'iat' | 'exp'>): string {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: ACCESS_TOKEN_TTL_SECONDS });
+  return jwt.sign(payload, getJwtSecret(), { expiresIn: ACCESS_TOKEN_TTL_SECONDS });
 }
 
 export async function requireAuth(req: Request, _res: Response, next: NextFunction) {
@@ -35,7 +35,7 @@ export async function requireAuth(req: Request, _res: Response, next: NextFuncti
     }
 
     const token = header.slice('Bearer '.length).trim();
-    const decoded = jwt.verify(token, JWT_SECRET) as AccessTokenPayload;
+    const decoded = jwt.verify(token, getJwtSecret()) as AccessTokenPayload;
     const userId = decoded?.sub;
     if (!userId) throw new UnauthorizedError('Invalid token payload');
 
@@ -45,6 +45,7 @@ export async function requireAuth(req: Request, _res: Response, next: NextFuncti
 
     const user: AuthUser = {
       id: userRow.id,
+      restaurantId: userRow.restaurant_id,
       name: userRow.name,
       email: userRow.email ?? null,
       role: userRow.role,

@@ -16,6 +16,7 @@ import { DatabaseService } from './services/DatabaseService';
 import { logger } from './utils/logger';
 import { errorHandler } from './middleware/errorHandler';
 import { requireAuth } from './middleware/auth';
+import { initializeNotifications } from './notifications/initNotifications';
 
 const app = express();
 const server = createServer(app);
@@ -23,11 +24,16 @@ const io = new SocketIOServer(server, {
   cors: {
     origin: [
       process.env.FRONTEND_URL || "http://localhost:3000",
-      "https://serviorestaurantplatform.netlify.app"
+      "https://serviorestaurantplatform.netlify.app",
+      "https://servio-app.onrender.com"
     ],
     methods: ["GET", "POST"],
     credentials: true
-  }
+  },
+  transports: ['polling', 'websocket'],
+  allowEIO3: true,
+  pingTimeout: 60000,
+  pingInterval: 25000
 });
 
 const PORT = process.env.PORT || 3002;
@@ -37,6 +43,8 @@ async function initializeServer() {
   try {
     await DatabaseService.initialize();
     logger.info('Database initialized successfully');
+
+    initializeNotifications(io);
 
     // Now load routes after database is ready
     const { default: authRoutes } = await import('./routes/auth');
@@ -53,12 +61,17 @@ async function initializeServer() {
     const { default: restaurantRoutes } = await import('./routes/restaurant');
     const { default: integrationsRoutes } = await import('./routes/integrations');
     const { default: vapiRoutes } = await import('./routes/vapi');
+    const { default: adminRoutes } = await import('./routes/admin');
+    const { default: notificationsRoutes } = await import('./routes/notifications');
 
     // API Routes
     app.use('/api/auth', authRoutes);
     
     // Vapi webhook routes (no auth required for external webhooks)
     app.use('/api/vapi', vapiRoutes);
+    
+    // Admin routes (platform-admin role required)
+    app.use('/api/admin', adminRoutes);
     
     // Debug: Add a test auth route to verify mounting
     app.get('/api/auth/test', (req, res) => {
@@ -83,6 +96,7 @@ async function initializeServer() {
     app.use('/api/marketing', requireAuth, marketingRoutes);
     app.use('/api/restaurant', requireAuth, restaurantRoutes);
     app.use('/api/integrations', requireAuth, integrationsRoutes);
+    app.use('/api/notifications', requireAuth, notificationsRoutes);
 
     // 404 handler (must be last)
     app.use((req, res) => {
@@ -120,7 +134,8 @@ app.use(helmet({
 app.use(cors({
   origin: [
     process.env.FRONTEND_URL || "http://localhost:3000",
-    "https://serviorestaurantplatform.netlify.app"
+    "https://serviorestaurantplatform.netlify.app",
+    "https://servio-app.onrender.com"
   ],
   credentials: true,
   optionsSuccessStatus: 200,
@@ -160,54 +175,52 @@ app.use(express.urlencoded({
   parameterLimit: 1000
 }));
 
+// Handle trailing slashes in URLs
+app.use((req, res, next) => {
+  if (req.path.length > 1 && req.path.endsWith('/') && !req.path.includes('/_next/')) {
+    const query = req.url.slice(req.path.length);
+    const safepath = req.path.slice(0, -1);
+    req.url = safepath + query;
+  }
+  next();
+});
+
 // IN-MEMORY CACHE FOR API RESPONSES
 const cache = new Map();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 const MAX_CACHE_SIZE = 1000;
 
-// Cache middleware for GET requests
-app.use((req, res, next) => {
-  if (req.method === 'GET' && !req.url.includes('/auth') && !req.url.includes('/timeclock')) {
-    const cacheKey = req.url;
-    const cached = cache.get(cacheKey);
-
-    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-      res.set(cached.headers);
-      res.set('X-Cache', 'HIT');
-      return res.json(cached.data);
-    }
-
-    // Cache the response
-    const originalSend = res.json;
-    res.json = function(data) {
-      if (res.statusCode === 200 && cache.size < MAX_CACHE_SIZE) {
-        cache.set(cacheKey, {
-          data,
-          timestamp: Date.now(),
-          headers: {
-            'Cache-Control': 'public, max-age=300',
-            'ETag': Buffer.from(JSON.stringify(data)).toString('base64').slice(0, 20)
-          }
-        });
-      }
-      res.set('X-Cache', 'MISS');
-      return originalSend.call(this, data);
-    };
-  }
-  next();
-});
-
-// AGGRESSIVE STATIC ASSET CACHING
-app.use('/uploads', express.static(path.join(__dirname, '../uploads'), {
-  maxAge: '1y', // 1 year cache
-  etag: true,
-  lastModified: true,
-  immutable: true,
-  setHeaders: (res, path) => {
-    res.set('Cache-Control', 'public, max-age=31536000, immutable');
-    res.set('X-Content-Type-Options', 'nosniff');
-  }
-}));
+// Cache middleware disabled temporarily for debugging
+// app.use((req, res, next) => {
+//   if (req.method === 'GET' && !req.url.includes('/auth') && !req.url.includes('/timeclock')) {
+//     const cacheKey = req.url;
+//     const cached = cache.get(cacheKey);
+//
+//     if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+//       res.set(cached.headers);
+//       res.set('X-Cache', 'HIT');
+//       return res.json(cached.data);
+//     }
+//
+//     // Cache the response
+//     const originalSend = res.json;
+//     res.json = function(data) {
+//       if (res.statusCode === 200 && cache.size < MAX_CACHE_SIZE) {
+//         cache.set(cacheKey, {
+//           data,
+//           timestamp: Date.now(),
+//           headers: {
+//             'Cache-Control': 'public, max-age=300',
+//             'ETag': Buffer.from(JSON.stringify(data)).toString('base64').slice(0, 20)
+//           }
+//         });
+//       }
+//       res.set('X-Cache', 'MISS');
+//       return originalSend.call(this, data);
+//     };
+//   }
+//   next();
+// });
 
 // PERFORMANCE HEADERS FOR ALL RESPONSES
 app.use((req, res, next) => {
@@ -230,9 +243,19 @@ setInterval(() => {
 io.on('connection', (socket) => {
   logger.info(`Client connected: ${socket.id}`);
 
-  socket.on('join-restaurant', (restaurantId: string) => {
+  socket.on('join:restaurant', (data: { restaurantId: string }) => {
+    const { restaurantId } = data;
     socket.join(`restaurant-${restaurantId}`);
     logger.info(`Socket ${socket.id} joined restaurant-${restaurantId}`);
+  });
+
+  socket.on('join:user', (data: { userId: string, restaurantId?: string }) => {
+    const { userId, restaurantId } = data;
+    socket.join(`user-${userId}`);
+    if (restaurantId) {
+      socket.join(`restaurant-${restaurantId}`);
+    }
+    logger.info(`Socket ${socket.id} joined user-${userId} and restaurant-${restaurantId}`);
   });
 
   socket.on('disconnect', () => {
@@ -251,6 +274,16 @@ app.get('/health', (req, res) => {
     status: 'ok',
     timestamp: new Date().toISOString(),
     version: '1.0.0'
+  });
+});
+
+// Root route
+app.get('/', (req, res) => {
+  res.json({
+    message: 'Welcome to Servio Restaurant Platform API',
+    version: '1.0.0',
+    documentation: '/api',
+    health: '/health'
   });
 });
 

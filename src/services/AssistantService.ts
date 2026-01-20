@@ -213,12 +213,15 @@ export class AssistantService {
     }
   }
 
-  private async getSystemPrompt(_userId: string): Promise<string> {
+  private async getSystemPrompt(userId: string): Promise<string> {
+    const user = await this.db.get('SELECT restaurant_id FROM users WHERE id = ?', [userId]);
+    const restaurantId = user?.restaurant_id || 'demo-restaurant-1';
+
     // Get current restaurant context
-    const orders = await this.db.all('SELECT * FROM orders WHERE status != "completed" ORDER BY created_at DESC LIMIT 10');
-    const unavailableItems = await this.db.all('SELECT * FROM menu_items WHERE is_available = 0');
-    const lowStockItems = await this.db.all('SELECT * FROM inventory WHERE current_quantity <= low_stock_threshold');
-    const pendingTasks = await this.db.all('SELECT * FROM tasks WHERE status = "pending" LIMIT 5');
+    const orders = await this.db.all('SELECT * FROM orders WHERE restaurant_id = ? AND status != "completed" ORDER BY created_at DESC LIMIT 10', [restaurantId]);
+    const unavailableItems = await this.db.all('SELECT * FROM menu_items WHERE restaurant_id = ? AND is_available = 0', [restaurantId]);
+    const lowStockItems = await this.db.all('SELECT * FROM inventory_items WHERE restaurant_id = ? AND on_hand_qty <= low_stock_threshold', [restaurantId]);
+    const pendingTasks = await this.db.all('SELECT * FROM tasks WHERE restaurant_id = ? AND status = "pending" LIMIT 5', [restaurantId]);
 
     const context = {
       activeOrders: orders.length,
@@ -463,12 +466,14 @@ Use the available tools to perform actions. Always be helpful and professional.`
 
   private async handleGetOrders(args: any, userId: string): Promise<AssistantResponse['actions'][0]> {
     const { status, limit = 10 } = args;
+    const user = await this.db.get('SELECT restaurant_id FROM users WHERE id = ?', [userId]);
+    const restaurantId = user?.restaurant_id || 'demo-restaurant-1';
 
-    let query = 'SELECT * FROM orders';
-    const params: any[] = [];
+    let query = 'SELECT * FROM orders WHERE restaurant_id = ?';
+    const params: any[] = [restaurantId];
 
     if (status) {
-      query += ' WHERE status = ?';
+      query += ' AND status = ?';
       params.push(status);
     }
 
@@ -484,7 +489,7 @@ Use the available tools to perform actions. Always be helpful and professional.`
     }));
 
     await DatabaseService.getInstance().logAudit(
-      userId, 'get_orders', 'orders', 'multiple', { status, count: orders.length }
+      restaurantId, userId, 'get_orders', 'orders', 'multiple', { status, count: orders.length }
     );
 
     return {
@@ -497,10 +502,12 @@ Use the available tools to perform actions. Always be helpful and professional.`
 
   private async handleUpdateOrderStatus(args: any, userId: string): Promise<AssistantResponse['actions'][0]> {
     const { orderId, status } = args;
+    const user = await this.db.get('SELECT restaurant_id FROM users WHERE id = ?', [userId]);
+    const restaurantId = user?.restaurant_id || 'demo-restaurant-1';
 
     const result = await this.db.run(
-      'UPDATE orders SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-      [status, orderId]
+      'UPDATE orders SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND restaurant_id = ?',
+      [status, orderId, restaurantId]
     );
 
     if (result.changes === 0) {
@@ -508,7 +515,7 @@ Use the available tools to perform actions. Always be helpful and professional.`
     }
 
     await DatabaseService.getInstance().logAudit(
-      userId, 'update_order_status', 'order', orderId, { newStatus: status }
+      restaurantId, userId, 'update_order_status', 'order', orderId, { newStatus: status }
     );
 
     return {
@@ -521,11 +528,13 @@ Use the available tools to perform actions. Always be helpful and professional.`
 
   private async handleSetItemAvailability(args: any, userId: string): Promise<AssistantResponse['actions'][0]> {
     const { itemName, available, channels = ['all'] } = args;
+    const user = await this.db.get('SELECT restaurant_id FROM users WHERE id = ?', [userId]);
+    const restaurantId = user?.restaurant_id || 'demo-restaurant-1';
 
     // Find the menu item
     const item = await this.db.get(
-      'SELECT * FROM menu_items WHERE name LIKE ?',
-      [`%${itemName}%`]
+      'SELECT * FROM menu_items WHERE name LIKE ? AND restaurant_id = ?',
+      [`%${itemName}%`, restaurantId]
     );
 
     if (!item) {
@@ -534,15 +543,15 @@ Use the available tools to perform actions. Always be helpful and professional.`
 
     // Update availability
     await this.db.run(
-      'UPDATE menu_items SET is_available = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-      [available ? 1 : 0, item.id]
+      'UPDATE menu_items SET is_available = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND restaurant_id = ?',
+      [available ? 1 : 0, item.id, restaurantId]
     );
 
     const action = available ? 'restored' : '86\'d';
     const channelText = channels.includes('all') ? 'all platforms' : channels.join(', ');
 
     await DatabaseService.getInstance().logAudit(
-      userId, 'set_item_availability', 'menu_item', item.id,
+      restaurantId, userId, 'set_item_availability', 'menu_item', item.id,
       { itemName, available, channels }
     );
 
@@ -556,9 +565,11 @@ Use the available tools to perform actions. Always be helpful and professional.`
 
   private async handleGetInventory(args: any, userId: string): Promise<AssistantResponse['actions'][0]> {
     const { search, lowStock } = args;
+    const user = await this.db.get('SELECT restaurant_id FROM users WHERE id = ?', [userId]);
+    const restaurantId = user?.restaurant_id || 'demo-restaurant-1';
 
-    let query = 'SELECT * FROM inventory';
-    const params: any[] = [];
+    let query = 'SELECT * FROM inventory_items WHERE restaurant_id = ?';
+    const params: any[] = [restaurantId];
 
     const conditions: string[] = [];
 
@@ -568,11 +579,11 @@ Use the available tools to perform actions. Always be helpful and professional.`
     }
 
     if (lowStock) {
-      conditions.push('current_quantity <= low_stock_threshold');
+      conditions.push('on_hand_qty <= low_stock_threshold');
     }
 
     if (conditions.length > 0) {
-      query += ' WHERE ' + conditions.join(' AND ');
+      query += ' AND ' + conditions.join(' AND ');
     }
 
     query += ' ORDER BY name';
@@ -580,7 +591,7 @@ Use the available tools to perform actions. Always be helpful and professional.`
     const items = await this.db.all(query, params);
 
     await DatabaseService.getInstance().logAudit(
-      userId, 'get_inventory', 'inventory', 'multiple', { search, lowStock, count: items.length }
+      restaurantId, userId, 'get_inventory', 'inventory', 'multiple', { search, lowStock, count: items.length }
     );
 
     return {
@@ -593,31 +604,33 @@ Use the available tools to perform actions. Always be helpful and professional.`
 
   private async handleAdjustInventory(args: any, userId: string): Promise<AssistantResponse['actions'][0]> {
     const { itemName, quantity, reason } = args;
+    const user = await this.db.get('SELECT restaurant_id FROM users WHERE id = ?', [userId]);
+    const restaurantId = user?.restaurant_id || 'demo-restaurant-1';
 
     // Find the inventory item
     const item = await this.db.get(
-      'SELECT * FROM inventory WHERE name LIKE ?',
-      [`%${itemName}%`]
+      'SELECT * FROM inventory_items WHERE name LIKE ? AND restaurant_id = ?',
+      [`%${itemName}%`, restaurantId]
     );
 
     if (!item) {
       throw new Error(`Inventory item "${itemName}" not found`);
     }
 
-    const newQuantity = item.current_quantity + quantity;
+    const newQuantity = item.on_hand_qty + quantity;
 
     if (newQuantity < 0) {
-      throw new Error(`Cannot reduce ${itemName} below 0. Current: ${item.current_quantity}, Requested: ${quantity}`);
+      throw new Error(`Cannot reduce ${itemName} below 0. Current: ${item.on_hand_qty}, Requested: ${quantity}`);
     }
 
     await this.db.run(
-      'UPDATE inventory SET current_quantity = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-      [newQuantity, item.id]
+      'UPDATE inventory_items SET on_hand_qty = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND restaurant_id = ?',
+      [newQuantity, item.id, restaurantId]
     );
 
     await DatabaseService.getInstance().logAudit(
-      userId, 'adjust_inventory', 'inventory', item.id,
-      { itemName, previousQuantity: item.current_quantity, adjustment: quantity, newQuantity, reason }
+      restaurantId, userId, 'adjust_inventory', 'inventory', item.id,
+      { itemName, previousQuantity: item.on_hand_qty, adjustment: quantity, newQuantity, reason }
     );
 
     const action = quantity > 0 ? 'Added' : 'Removed';
@@ -633,9 +646,11 @@ Use the available tools to perform actions. Always be helpful and professional.`
 
   private async handleGetTasks(args: any, userId: string): Promise<AssistantResponse['actions'][0]> {
     const { status, type } = args;
+    const user = await this.db.get('SELECT restaurant_id FROM users WHERE id = ?', [userId]);
+    const restaurantId = user?.restaurant_id || 'demo-restaurant-1';
 
-    let query = 'SELECT * FROM tasks';
-    const params: any[] = [];
+    let query = 'SELECT * FROM tasks WHERE restaurant_id = ?';
+    const params: any[] = [restaurantId];
     const conditions: string[] = [];
 
     if (status) {
@@ -657,7 +672,7 @@ Use the available tools to perform actions. Always be helpful and professional.`
     const tasks = await this.db.all(query, params);
 
     await DatabaseService.getInstance().logAudit(
-      userId, 'get_tasks', 'tasks', 'multiple', { status, type, count: tasks.length }
+      restaurantId, userId, 'get_tasks', 'tasks', 'multiple', { status, type, count: tasks.length }
     );
 
     return {
@@ -670,20 +685,22 @@ Use the available tools to perform actions. Always be helpful and professional.`
 
   private async handleCompleteTask(args: any, userId: string): Promise<AssistantResponse['actions'][0]> {
     const { taskId } = args;
+    const user = await this.db.get('SELECT restaurant_id FROM users WHERE id = ?', [userId]);
+    const restaurantId = user?.restaurant_id || 'demo-restaurant-1';
 
-    const task = await this.db.get('SELECT * FROM tasks WHERE id = ?', [taskId]);
+    const task = await this.db.get('SELECT * FROM tasks WHERE id = ? AND restaurant_id = ?', [taskId, restaurantId]);
 
     if (!task) {
       throw new Error(`Task ${taskId} not found`);
     }
 
     await this.db.run(
-      'UPDATE tasks SET status = ?, completed_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-      ['completed', new Date().toISOString(), taskId]
+      'UPDATE tasks SET status = ?, completed_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND restaurant_id = ?',
+      ['completed', new Date().toISOString(), taskId, restaurantId]
     );
 
     await DatabaseService.getInstance().logAudit(
-      userId, 'complete_task', 'task', taskId, { taskTitle: task.title }
+      restaurantId, userId, 'complete_task', 'task', taskId, { taskTitle: task.title }
     );
 
     return {

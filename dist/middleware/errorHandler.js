@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.notFoundHandler = exports.asyncHandler = exports.errorHandler = exports.ForbiddenError = exports.UnauthorizedError = exports.NotFoundError = exports.ValidationError = void 0;
+exports.notFoundHandler = exports.asyncHandler = exports.errorHandler = exports.ForbiddenError = exports.BadRequestError = exports.UnauthorizedError = exports.NotFoundError = exports.ValidationError = void 0;
 const logger_1 = require("../utils/logger");
 class ValidationError extends Error {
     constructor(message) {
@@ -29,6 +29,15 @@ class UnauthorizedError extends Error {
     }
 }
 exports.UnauthorizedError = UnauthorizedError;
+class BadRequestError extends Error {
+    constructor(message = 'Bad Request') {
+        super(message);
+        this.statusCode = 400;
+        this.isOperational = true;
+        this.name = 'BadRequestError';
+    }
+}
+exports.BadRequestError = BadRequestError;
 class ForbiddenError extends Error {
     constructor(message = 'Forbidden') {
         super(message);
@@ -72,7 +81,7 @@ const errorHandler = (error, req, res, _next) => {
         statusCode = 400;
         message = 'Invalid ID format';
     }
-    else if (error.name === 'JsonWebTokenError') {
+    else if (error.name === 'JsonWebTokenError' || error.message.includes('secret or public key must be provided')) {
         statusCode = 401;
         message = 'Invalid token';
     }
@@ -80,7 +89,7 @@ const errorHandler = (error, req, res, _next) => {
         statusCode = 401;
         message = 'Token expired';
     }
-    else if (error.code === 'SQLITE_CONSTRAINT') {
+    else if (error.code === 'SQLITE_CONSTRAINT' || error.message.includes('duplicate key')) {
         statusCode = 400;
         message = 'Database constraint violation';
     }
@@ -102,7 +111,9 @@ const errorHandler = (error, req, res, _next) => {
     if (req.headers['x-request-id']) {
         errorResponse.requestId = req.headers['x-request-id'];
     }
-    res.status(statusCode).json(errorResponse);
+    // Ensure JSON response
+    res.setHeader('Content-Type', 'application/json');
+    return res.status(statusCode).json(errorResponse);
 };
 exports.errorHandler = errorHandler;
 // Async error wrapper

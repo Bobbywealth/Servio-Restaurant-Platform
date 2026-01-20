@@ -59,7 +59,7 @@ router.post('/clock-in', (0, errorHandler_1.asyncHandler)(async (req, res) => {
     ) VALUES (?, ?, ?, ?, ?)
   `, [entryId, user.id, clockInTime, position || null, 0]);
     // Log the action
-    await DatabaseService_1.DatabaseService.getInstance().logAudit(user.id, 'clock_in', 'time_entry', entryId, { position, clockInTime });
+    await DatabaseService_1.DatabaseService.getInstance().logAudit(user.restaurant_id, user.id, 'clock_in', 'time_entry', entryId, { position, clockInTime });
     logger_1.logger.info(`User ${user.name} clocked in at ${clockInTime}`);
     res.json({
         success: true,
@@ -125,7 +125,7 @@ router.post('/clock-out', (0, errorHandler_1.asyncHandler)(async (req, res) => {
     WHERE id = ?
   `, [clockOutTime, totalHours.toFixed(2), notes || null, timeEntry.id]);
     // Log the action
-    await DatabaseService_1.DatabaseService.getInstance().logAudit(user.id, 'clock_out', 'time_entry', timeEntry.id, {
+    await DatabaseService_1.DatabaseService.getInstance().logAudit(user.restaurant_id, user.id, 'clock_out', 'time_entry', timeEntry.id, {
         clockOutTime,
         totalHours: totalHours.toFixed(2),
         breakMinutes: timeEntry.break_minutes,
@@ -195,7 +195,7 @@ router.post('/start-break', (0, errorHandler_1.asyncHandler)(async (req, res) =>
     VALUES (?, ?, ?)
   `, [breakId, timeEntry.id, breakStart]);
     // Log the action
-    await DatabaseService_1.DatabaseService.getInstance().logAudit(userId, 'start_break', 'time_entry_break', breakId, { timeEntryId: timeEntry.id, breakStart });
+    await DatabaseService_1.DatabaseService.getInstance().logAudit(timeEntry.restaurant_id, userId, 'start_break', 'time_entry_break', breakId, { timeEntryId: timeEntry.id, breakStart });
     res.json({
         success: true,
         data: {
@@ -266,7 +266,7 @@ router.post('/end-break', (0, errorHandler_1.asyncHandler)(async (req, res) => {
     WHERE id = ?
   `, [totalBreaks.total_break_minutes, timeEntry.id]);
     // Log the action
-    await DatabaseService_1.DatabaseService.getInstance().logAudit(userId, 'end_break', 'time_entry_break', activeBreak.id, {
+    await DatabaseService_1.DatabaseService.getInstance().logAudit(timeEntry.restaurant_id, userId, 'end_break', 'time_entry_break', activeBreak.id, {
         timeEntryId: timeEntry.id,
         breakEnd,
         durationMinutes,
@@ -458,7 +458,7 @@ router.put('/entries/:id', (0, errorHandler_1.asyncHandler)(async (req, res) => 
         id
     ]);
     // Log the edit
-    await DatabaseService_1.DatabaseService.getInstance().logAudit(editedBy || 'system', 'edit_time_entry', 'time_entry', id, {
+    await DatabaseService_1.DatabaseService.getInstance().logAudit(existingEntry.restaurant_id, editedBy || 'system', 'edit_time_entry', 'time_entry', id, {
         originalEntry: existingEntry,
         changes: {
             clockInTime,

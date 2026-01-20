@@ -35,7 +35,7 @@ const emailTransporter = nodemailer_1.default.createTransport({
  */
 router.get('/customers', (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
-    const restaurantId = '00000000-0000-0000-0000-000000000001';
+    const restaurantId = req.user?.restaurantId;
     const customers = await db.all(`
     SELECT 
       id,
@@ -73,7 +73,7 @@ router.get('/customers', (0, errorHandler_1.asyncHandler)(async (req, res) => {
 router.post('/customers', (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const { name, email, phone, preferences = {}, tags = [], optInSms = false, optInEmail = false } = req.body;
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
-    const restaurantId = '00000000-0000-0000-0000-000000000001';
+    const restaurantId = req.user?.restaurantId;
     if (!name && !email && !phone) {
         return res.status(400).json({
             success: false,
@@ -157,7 +157,7 @@ router.post('/customers', (0, errorHandler_1.asyncHandler)(async (req, res) => {
             }
         });
     }
-    await DatabaseService_1.DatabaseService.getInstance().logAudit('system', 'customer_upsert', 'customer', existingCustomer?.id || customerId, { name, email, phone, optInSms, optInEmail });
+    await DatabaseService_1.DatabaseService.getInstance().logAudit(restaurantId, req.user?.id || 'system', 'customer_upsert', 'customer', existingCustomer?.id || customerId, { name, email, phone, optInSms, optInEmail });
 }));
 // ============================================================================
 // CAMPAIGN MANAGEMENT
@@ -168,7 +168,7 @@ router.post('/customers', (0, errorHandler_1.asyncHandler)(async (req, res) => {
  */
 router.get('/campaigns', (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
-    const restaurantId = '00000000-0000-0000-0000-000000000001';
+    const restaurantId = req.user?.restaurantId;
     const campaigns = await db.all(`
     SELECT 
       id,
@@ -205,7 +205,7 @@ router.post('/campaigns', (0, errorHandler_1.asyncHandler)(async (req, res) => {
     message, subject, // for email campaigns
     targetCriteria = {}, scheduleAt } = req.body;
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
-    const restaurantId = '00000000-0000-0000-0000-000000000001';
+    const restaurantId = req.user?.restaurantId;
     if (!name || !type || !message) {
         return res.status(400).json({
             success: false,
@@ -243,7 +243,7 @@ router.post('/campaigns', (0, errorHandler_1.asyncHandler)(async (req, res) => {
         // Queue for sending (in production, use a job queue like Bull)
         setImmediate(() => sendCampaign(campaignId));
     }
-    await DatabaseService_1.DatabaseService.getInstance().logAudit('system', 'create_campaign', 'marketing_campaign', campaignId, { name, type, scheduled_at: scheduledAt.toISOString() });
+    await DatabaseService_1.DatabaseService.getInstance().logAudit(restaurantId, req.user?.id || 'system', 'create_campaign', 'marketing_campaign', campaignId, { name, type, scheduled_at: scheduledAt.toISOString() });
     res.status(201).json({
         success: true,
         data: {
@@ -432,7 +432,7 @@ router.post('/send-email', (0, errorHandler_1.asyncHandler)(async (req, res) => 
 router.get('/analytics', (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const { timeframe = '30d' } = req.query;
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
-    const restaurantId = '00000000-0000-0000-0000-000000000001';
+    const restaurantId = req.user?.restaurantId;
     // Calculate date range
     const daysBack = timeframe === '7d' ? 7 : timeframe === '30d' ? 30 : 90;
     const startDate = new Date();

@@ -37,6 +37,16 @@ export class UnauthorizedError extends Error {
   }
 }
 
+export class BadRequestError extends Error {
+  statusCode = 400;
+  isOperational = true;
+
+  constructor(message: string = 'Bad Request') {
+    super(message);
+    this.name = 'BadRequestError';
+  }
+}
+
 export class ForbiddenError extends Error {
   statusCode = 403;
   isOperational = true;
@@ -52,7 +62,7 @@ export const errorHandler = (
   req: Request,
   res: Response,
   _next: NextFunction
-): void => {
+) => {
   // Default error values
   let statusCode = error.statusCode || 500;
   let message = error.message || 'Internal Server Error';
@@ -86,13 +96,13 @@ export const errorHandler = (
   } else if (error.name === 'CastError') {
     statusCode = 400;
     message = 'Invalid ID format';
-  } else if (error.name === 'JsonWebTokenError') {
+  } else if (error.name === 'JsonWebTokenError' || error.message.includes('secret or public key must be provided')) {
     statusCode = 401;
     message = 'Invalid token';
   } else if (error.name === 'TokenExpiredError') {
     statusCode = 401;
     message = 'Token expired';
-  } else if (error.code === 'SQLITE_CONSTRAINT') {
+  } else if (error.code === 'SQLITE_CONSTRAINT' || error.message.includes('duplicate key')) {
     statusCode = 400;
     message = 'Database constraint violation';
   }
@@ -118,7 +128,9 @@ export const errorHandler = (
     errorResponse.requestId = req.headers['x-request-id'];
   }
 
-  res.status(statusCode).json(errorResponse);
+  // Ensure JSON response
+  res.setHeader('Content-Type', 'application/json');
+  return res.status(statusCode).json(errorResponse);
 };
 
 // Async error wrapper

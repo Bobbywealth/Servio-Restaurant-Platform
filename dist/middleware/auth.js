@@ -9,7 +9,7 @@ exports.requirePermission = requirePermission;
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const DatabaseService_1 = require("../services/DatabaseService");
 const errorHandler_1 = require("./errorHandler");
-const JWT_SECRET = process.env.JWT_SECRET || 'dev_insecure_jwt_secret_change_me';
+const getJwtSecret = () => process.env.JWT_SECRET || 'dev_insecure_jwt_secret_change_me';
 const ACCESS_TOKEN_TTL_SECONDS = Number(process.env.ACCESS_TOKEN_TTL_SECONDS ?? 60 * 15); // 15m default
 function parsePermissions(value) {
     if (!value)
@@ -32,7 +32,7 @@ function parsePermissions(value) {
     return [];
 }
 function issueAccessToken(payload) {
-    return jsonwebtoken_1.default.sign(payload, JWT_SECRET, { expiresIn: ACCESS_TOKEN_TTL_SECONDS });
+    return jsonwebtoken_1.default.sign(payload, getJwtSecret(), { expiresIn: ACCESS_TOKEN_TTL_SECONDS });
 }
 async function requireAuth(req, _res, next) {
     try {
@@ -41,7 +41,7 @@ async function requireAuth(req, _res, next) {
             throw new errorHandler_1.UnauthorizedError('Missing Authorization header');
         }
         const token = header.slice('Bearer '.length).trim();
-        const decoded = jsonwebtoken_1.default.verify(token, JWT_SECRET);
+        const decoded = jsonwebtoken_1.default.verify(token, getJwtSecret());
         const userId = decoded?.sub;
         if (!userId)
             throw new errorHandler_1.UnauthorizedError('Invalid token payload');
@@ -51,6 +51,7 @@ async function requireAuth(req, _res, next) {
             throw new errorHandler_1.UnauthorizedError('User not found or inactive');
         const user = {
             id: userRow.id,
+            restaurantId: userRow.restaurant_id,
             name: userRow.name,
             email: userRow.email ?? null,
             role: userRow.role,

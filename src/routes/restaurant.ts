@@ -46,7 +46,7 @@ const ensureUploadsDir = async (subdir: string = '') => {
  */
 router.get('/profile', asyncHandler(async (req: Request, res: Response) => {
   const db = DatabaseService.getInstance().getDatabase();
-  const restaurantId = '00000000-0000-0000-0000-000000000001'; // Default restaurant
+  const restaurantId = req.user?.restaurantId;
 
   const restaurant = await db.get(`
     SELECT 
@@ -114,7 +114,7 @@ router.put('/profile', upload.fields([
   } = req.body;
 
   const db = DatabaseService.getInstance().getDatabase();
-  const restaurantId = '00000000-0000-0000-0000-000000000001';
+  const restaurantId = req.user?.restaurantId;
 
   const existingRestaurant = await db.get('SELECT * FROM restaurants WHERE id = ?', [restaurantId]);
   if (!existingRestaurant) {
@@ -250,10 +250,11 @@ router.put('/profile', upload.fields([
   `, [restaurantId]);
 
   await DatabaseService.getInstance().logAudit(
-    'system',
+    restaurantId!,
+    req.user?.id || 'system',
     'update_restaurant_profile',
     'restaurant',
-    restaurantId,
+    restaurantId!,
     { name, description, cuisineType }
   );
 
@@ -281,7 +282,7 @@ router.put('/profile', upload.fields([
  */
 router.get('/theme', asyncHandler(async (req: Request, res: Response) => {
   const db = DatabaseService.getInstance().getDatabase();
-  const restaurantId = '00000000-0000-0000-0000-000000000001';
+  const restaurantId = req.user?.restaurantId;
 
   const theme = await db.get(`
     SELECT * FROM restaurant_themes 
@@ -334,7 +335,7 @@ router.put('/theme', asyncHandler(async (req: Request, res: Response) => {
   } = req.body;
 
   const db = DatabaseService.getInstance().getDatabase();
-  const restaurantId = '00000000-0000-0000-0000-000000000001';
+  const restaurantId = req.user?.restaurantId;
 
   // Check if theme exists
   const existingTheme = await db.get(`
@@ -432,7 +433,8 @@ router.put('/theme', asyncHandler(async (req: Request, res: Response) => {
   }
 
   await DatabaseService.getInstance().logAudit(
-    'system',
+    restaurantId!,
+    req.user?.id || 'system',
     'update_restaurant_theme',
     'restaurant_theme',
     existingTheme?.id || 'new',
@@ -450,7 +452,7 @@ router.put('/theme', asyncHandler(async (req: Request, res: Response) => {
  */
 router.get('/links', asyncHandler(async (req: Request, res: Response) => {
   const db = DatabaseService.getInstance().getDatabase();
-  const restaurantId = '00000000-0000-0000-0000-000000000001';
+  const restaurantId = req.user?.restaurantId;
 
   const links = await db.all(`
     SELECT 
@@ -488,7 +490,7 @@ router.post('/links', asyncHandler(async (req: Request, res: Response) => {
   } = req.body;
 
   const db = DatabaseService.getInstance().getDatabase();
-  const restaurantId = '00000000-0000-0000-0000-000000000001';
+  const restaurantId = req.user?.restaurantId;
 
   if (!name || !urlPath) {
     return res.status(400).json({
@@ -551,7 +553,8 @@ router.post('/links', asyncHandler(async (req: Request, res: Response) => {
   const newLink = await db.get('SELECT * FROM restaurant_links WHERE id = ?', [linkId]);
 
   await DatabaseService.getInstance().logAudit(
-    'system',
+    restaurantId!,
+    req.user?.id || 'system',
     'create_restaurant_link',
     'restaurant_link',
     linkId,
@@ -657,7 +660,8 @@ router.put('/links/:id', asyncHandler(async (req: Request, res: Response) => {
   const updatedLink = await db.get('SELECT * FROM restaurant_links WHERE id = ?', [id]);
 
   await DatabaseService.getInstance().logAudit(
-    'system',
+    existingLink.restaurant_id,
+    req.user?.id || 'system',
     'update_restaurant_link',
     'restaurant_link',
     id,
@@ -703,7 +707,8 @@ router.delete('/links/:id', asyncHandler(async (req: Request, res: Response) => 
   }
 
   await DatabaseService.getInstance().logAudit(
-    'system',
+    link.restaurant_id,
+    req.user?.id || 'system',
     'delete_restaurant_link',
     'restaurant_link',
     id,

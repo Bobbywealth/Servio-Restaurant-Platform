@@ -12,9 +12,11 @@ const num = (v) => (typeof v === 'number' ? v : Number(v ?? 0));
 router.get('/logs', (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const { userId, action, entityType, source = 'all', limit = 100, offset = 0, startDate, endDate } = req.query;
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
+    const restaurantId = req.user?.restaurantId;
     let query = 'SELECT * FROM audit_logs';
     const params = [];
-    const conditions = [];
+    const conditions = ['restaurant_id = ?'];
+    params.push(restaurantId);
     if (userId) {
         conditions.push('user_id = ?');
         params.push(userId);
