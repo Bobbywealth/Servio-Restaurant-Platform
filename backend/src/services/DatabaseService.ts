@@ -419,10 +419,14 @@ export class DatabaseService {
     ];
 
     for (const cat of categories) {
-      await db.run(
-        'INSERT INTO menu_categories (id, restaurant_id, name) VALUES (?, ?, ?)',
-        [cat.id, cat.restaurant_id, cat.name]
-      );
+      try {
+        await db.run(
+          'INSERT INTO menu_categories (id, restaurant_id, name) VALUES (?, ?, ?) ON CONFLICT (id) DO NOTHING',
+          [cat.id, cat.restaurant_id, cat.name]
+        );
+      } catch (err) {
+        logger.warn('Menu category seed failed:', err);
+      }
     }
 
     // Sample menu items
