@@ -10,6 +10,7 @@ interface SystemHealth {
   recentErrors: Array<{
     action: string
     entity_type?: string
+    entity_id?: string
     restaurant_id?: string
     created_at: string
   }>
