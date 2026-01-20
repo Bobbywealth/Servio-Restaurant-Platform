@@ -12,7 +12,7 @@ ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS closed_message TEXT DEFAULT 'We
 -- ============================================================================
 -- MENU ITEM TAGS
 -- ============================================================================
-ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS tags TEXT DEFAULT '[]';
+ALTER TABLE menu_items ADD COLUMN tags TEXT DEFAULT '[]';
 
 -- ============================================================================
 -- ORDER ENHANCEMENTS FOR VOICE

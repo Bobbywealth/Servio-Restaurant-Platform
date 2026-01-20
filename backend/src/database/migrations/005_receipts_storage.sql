@@ -3,8 +3,8 @@
 -- Date: 2026-01-20
 
 -- Add storage fields to receipts (storage_key already exists)
-ALTER TABLE receipts ADD COLUMN IF NOT EXISTS content_type TEXT;
-ALTER TABLE receipts ADD COLUMN IF NOT EXISTS file_size INTEGER;
+ALTER TABLE receipts ADD COLUMN content_type TEXT;
+ALTER TABLE receipts ADD COLUMN file_size INTEGER;
 -- Note: SQLite doesn't support ALTER COLUMN operations like PostgreSQL
 -- receipt_date and processing_status modifications skipped for SQLite compatibility
 
