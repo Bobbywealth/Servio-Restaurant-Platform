@@ -15,6 +15,23 @@ export default function LoginPage() {
   const router = useRouter();
   const { login } = useUser();
 
+  const handleDemoLogin = async (demoEmail: string, demoPassword: string) => {
+    setEmail(demoEmail);
+    setPassword(demoPassword);
+    setError('');
+    setLoading(true);
+
+    try {
+      await login(demoEmail, demoPassword);
+      router.push('/dashboard');
+    } catch (err: any) {
+      const message = err.response?.data?.error?.message || err.message || 'Failed to login with demo credentials.';
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -168,18 +185,36 @@ export default function LoginPage() {
 
             <div className="grid grid-cols-2 gap-3">
               <button 
-                onClick={() => { setEmail('manager@demo.servio'); setPassword('password'); }}
+                type="button"
+                onClick={() => handleDemoLogin('admin@servio.com', 'password')}
+                className="bg-surface-50 hover:bg-white p-3 rounded-xl text-left transition-all group border border-surface-200 hover:shadow-[0_10px_24px_-18px_rgba(15,23,42,0.5)]"
+              >
+                <p className="text-[10px] font-bold text-gray-400 uppercase mb-1 group-hover:text-primary-600 transition-colors">Admin</p>
+                <p className="text-xs font-bold text-gray-700 italic">One-tap login</p>
+              </button>
+              <button 
+                type="button"
+                onClick={() => handleDemoLogin('owner@demo.servio', 'password')}
+                className="bg-surface-50 hover:bg-white p-3 rounded-xl text-left transition-all group border border-surface-200 hover:shadow-[0_10px_24px_-18px_rgba(15,23,42,0.5)]"
+              >
+                <p className="text-[10px] font-bold text-gray-400 uppercase mb-1 group-hover:text-primary-600 transition-colors">Owner</p>
+                <p className="text-xs font-bold text-gray-700 italic">One-tap login</p>
+              </button>
+              <button 
+                type="button"
+                onClick={() => handleDemoLogin('manager@demo.servio', 'password')}
                 className="bg-surface-50 hover:bg-white p-3 rounded-xl text-left transition-all group border border-surface-200 hover:shadow-[0_10px_24px_-18px_rgba(15,23,42,0.5)]"
               >
                 <p className="text-[10px] font-bold text-gray-400 uppercase mb-1 group-hover:text-primary-600 transition-colors">Manager</p>
-                <p className="text-xs font-bold text-gray-700 italic">One-tap fill</p>
+                <p className="text-xs font-bold text-gray-700 italic">One-tap login</p>
               </button>
               <button 
-                onClick={() => { setEmail('staff@demo.servio'); setPassword('password'); }}
+                type="button"
+                onClick={() => handleDemoLogin('staff@demo.servio', 'password')}
                 className="bg-surface-50 hover:bg-white p-3 rounded-xl text-left transition-all group border border-surface-200 hover:shadow-[0_10px_24px_-18px_rgba(15,23,42,0.5)]"
               >
                 <p className="text-[10px] font-bold text-gray-400 uppercase mb-1 group-hover:text-primary-600 transition-colors">Staff</p>
-                <p className="text-xs font-bold text-gray-700 italic">One-tap fill</p>
+                <p className="text-xs font-bold text-gray-700 italic">One-tap login</p>
               </button>
             </div>
           </div>

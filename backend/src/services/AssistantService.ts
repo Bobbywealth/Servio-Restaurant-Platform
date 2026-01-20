@@ -214,7 +214,7 @@ export class AssistantService {
 
     // Get current restaurant context
     const orders = await this.db.all('SELECT * FROM orders WHERE restaurant_id = ? AND status != "completed" ORDER BY created_at DESC LIMIT 10', [restaurantId]);
-    const unavailableItems = await this.db.all('SELECT * FROM menu_items WHERE restaurant_id = ? AND is_available = 0', [restaurantId]);
+    const unavailableItems = await this.db.all('SELECT * FROM menu_items WHERE restaurant_id = ? AND is_available = FALSE', [restaurantId]);
     const lowStockItems = await this.db.all('SELECT * FROM inventory_items WHERE restaurant_id = ? AND on_hand_qty <= low_stock_threshold', [restaurantId]);
     const pendingTasks = await this.db.all('SELECT * FROM tasks WHERE restaurant_id = ? AND status = "pending" LIMIT 5', [restaurantId]);
 
@@ -539,7 +539,7 @@ Use the available tools to perform actions. Always be helpful and professional.`
     // Update availability
     await this.db.run(
       'UPDATE menu_items SET is_available = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND restaurant_id = ?',
-      [available ? 1 : 0, item.id, restaurantId]
+      [available ? true : false, item.id, restaurantId]
     );
 
     const action = available ? 'restored' : '86\'d';

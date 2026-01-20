@@ -538,8 +538,8 @@ router.get('/analytics', asyncHandler(async (req: Request, res: Response) => {
     db.get(`
       SELECT 
         COUNT(*) as total_customers,
-        COUNT(CASE WHEN opt_in_sms = 1 THEN 1 END) as sms_subscribers,
-        COUNT(CASE WHEN opt_in_email = 1 THEN 1 END) as email_subscribers,
+        COUNT(CASE WHEN opt_in_sms = TRUE THEN 1 END) as sms_subscribers,
+        COUNT(CASE WHEN opt_in_email = TRUE THEN 1 END) as email_subscribers,
         COUNT(CASE WHEN created_at >= ? THEN 1 END) as new_customers
       FROM customers 
       WHERE restaurant_id = ?
@@ -615,9 +615,9 @@ async function sendCampaign(campaignId: string) {
     const queryParams = [campaign.restaurant_id];
 
     if (campaign.type === 'sms') {
-      customerQuery += ' AND opt_in_sms = 1 AND phone IS NOT NULL';
+      customerQuery += ' AND opt_in_sms = TRUE AND phone IS NOT NULL';
     } else if (campaign.type === 'email') {
-      customerQuery += ' AND opt_in_email = 1 AND email IS NOT NULL';
+      customerQuery += ' AND opt_in_email = TRUE AND email IS NOT NULL';
     }
 
     if (targetCriteria.tags && targetCriteria.tags.length > 0) {

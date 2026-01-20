@@ -25,7 +25,7 @@ async function seedDemoUsers() {
       restaurant_id: 'platform-admin-org',
       permissions: JSON.stringify(['*']), // All permissions
       password_hash: passwordHash,
-      is_active: 1
+      is_active: true
     },
     {
       id: 'admin-2', 
@@ -35,7 +35,7 @@ async function seedDemoUsers() {
       restaurant_id: 'platform-admin-org',
       permissions: JSON.stringify(['*']),
       password_hash: passwordHash,
-      is_active: 1
+      is_active: true
     },
     {
       id: 'owner-1',
@@ -45,7 +45,7 @@ async function seedDemoUsers() {
       restaurant_id: 'demo-restaurant-1',
       permissions: JSON.stringify(['orders.*', 'inventory.*', 'menu.*', 'staff.*', 'analytics.*']),
       password_hash: passwordHash,
-      is_active: 1
+      is_active: true
     },
     {
       id: 'manager-1',
@@ -55,7 +55,7 @@ async function seedDemoUsers() {
       restaurant_id: 'demo-restaurant-1',
       permissions: JSON.stringify(['orders.*', 'inventory.*', 'menu.read', 'staff.read']),
       password_hash: passwordHash,
-      is_active: 1
+      is_active: true
     },
     {
       id: 'staff-1',
@@ -65,7 +65,7 @@ async function seedDemoUsers() {
       restaurant_id: 'demo-restaurant-1',
       permissions: JSON.stringify(['orders.read', 'orders.update', 'inventory.read']),
       password_hash: passwordHash,
-      is_active: 1
+      is_active: true
     }
   ];
   
@@ -137,7 +137,7 @@ async function seedDemoUsers() {
     }
     
     // Show all users
-    const allUsers = await db.all('SELECT id, email, name, role FROM users WHERE is_active = 1');
+    const allUsers = await db.all('SELECT id, email, name, role FROM users WHERE is_active = TRUE');
     console.log('\n📋 All active users:');
     allUsers.forEach(user => {
       console.log(`  • ${user.name} (${user.email}) - ${user.role}`);

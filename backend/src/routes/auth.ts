@@ -76,7 +76,7 @@ router.post(
     let user;
     try {
       user = await db.get<any>(
-        'SELECT * FROM users WHERE LOWER(email) = ? AND (is_active = TRUE OR is_active = 1)', 
+        'SELECT * FROM users WHERE LOWER(email) = ? AND is_active = TRUE', 
         [normalizedEmail]
       );
     } catch (err: any) {
