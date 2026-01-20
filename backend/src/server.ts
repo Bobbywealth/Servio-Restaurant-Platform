@@ -170,6 +170,16 @@ app.use(express.urlencoded({
   parameterLimit: 1000
 }));
 
+// Handle trailing slashes in URLs
+app.use((req, res, next) => {
+  if (req.path.length > 1 && req.path.endsWith('/') && !req.path.includes('/_next/')) {
+    const query = req.url.slice(req.path.length);
+    const safepath = req.path.slice(0, -1);
+    req.url = safepath + query;
+  }
+  next();
+});
+
 // IN-MEMORY CACHE FOR API RESPONSES
 const cache = new Map();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
