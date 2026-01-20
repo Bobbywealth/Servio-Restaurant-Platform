@@ -162,7 +162,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const closeSidebar = () => setSidebarOpen(false);
 
   return (
-    <div className="min-h-screen bg-[#F9FAFB] dark:bg-surface-950 text-gray-900 dark:text-surface-100">
+    <div className="min-h-screen bg-[#F9FAFB] dark:bg-[#0A0A0B] text-gray-900 dark:text-white">
       <AnimatePresence>
         {sidebarOpen && (
           <motion.div
@@ -268,7 +268,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       </motion.div>
 
       <div className="pl-0 lg:pl-72 transition-all duration-300">
-        <div className="bg-white/95 dark:bg-surface-900 sticky top-0 z-30 border-b border-surface-200 dark:border-surface-800 pt-safe-top">
+        <div className="bg-white/95 dark:bg-[#0A0A0B]/95 sticky top-0 z-30 border-b border-surface-200 dark:border-white/10 pt-safe-top">
           <div className="px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between items-center h-16">
               <div className="flex items-center space-x-3">
@@ -296,7 +296,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       </div>
 
       {/* Mobile bottom navigation */}
-      <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-surface-900/95 border-t border-surface-200 dark:border-surface-800 backdrop-blur-md lg:hidden pb-safe-bottom">
+      <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-[#0A0A0B]/95 border-t border-surface-200 dark:border-white/10 backdrop-blur-md lg:hidden pb-safe-bottom">
         <div className="grid grid-cols-5 px-2 py-2">
           {mobileNav.map((item) => {
             const isActive = currentPath === normalizePath(item.href);

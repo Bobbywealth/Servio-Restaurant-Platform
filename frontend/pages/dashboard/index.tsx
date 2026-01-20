@@ -29,11 +29,11 @@ const StatCard = memo(({ stat, index }: { stat: any; index: number }) => (
         <stat.icon className="h-6 w-6 text-white" />
       </motion.div>
       <div className="ml-4 flex-1">
-        <p className="text-sm font-medium text-surface-600 dark:text-surface-400">
+        <p className="text-sm font-medium text-gray-600">
           {stat.name}
         </p>
         <motion.p
-          className="text-2xl font-bold text-surface-900 dark:text-surface-100"
+          className="text-2xl font-bold text-gray-900"
           initial={{ scale: 0 }}
           animate={{ scale: 1 }}
           transition={{ delay: 0.2 * (index + 2), type: "spring", bounce: 0.4 }}
@@ -46,13 +46,13 @@ const StatCard = memo(({ stat, index }: { stat: any; index: number }) => (
       <div className="flex items-center">
         <span className={`text-sm font-medium inline-flex items-center px-2 py-1 rounded-full ${
           stat.changeType === 'increase'
-            ? 'text-servio-green-700 dark:text-servio-green-300 bg-servio-green-100 dark:bg-servio-green-900/30'
-            : 'text-servio-red-700 dark:text-servio-red-300 bg-servio-red-100 dark:bg-servio-red-900/30'
+            ? 'text-servio-green-700 bg-servio-green-100'
+            : 'text-servio-red-700 bg-servio-red-100'
         }`}>
           {stat.change}
         </span>
       </div>
-      <span className="text-xs text-surface-500 dark:text-surface-400">
+      <span className="text-xs text-gray-500">
         from yesterday
       </span>
     </div>
@@ -196,10 +196,10 @@ const DashboardIndex = memo(() => {
         <div className="space-y-6">
           {/* Welcome Section */}
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-surface-100">
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
               Welcome back, {user?.name || 'Team'}!
             </h1>
-            <p className="mt-2 text-gray-600 dark:text-surface-400">
+            <p className="mt-2 text-gray-600 dark:text-white/70">
               Here&apos;s what&apos;s happening with your restaurant today.
             </p>
           </div>
@@ -284,26 +284,26 @@ const DashboardIndex = memo(() => {
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.6 }}
             >
-              <h3 className="text-lg font-semibold text-surface-900 dark:text-surface-100 mb-4 flex items-center">
+              <h3 className="text-lg font-semibold text-surface-900 dark:text-gray-900 mb-4 flex items-center">
                 <ShoppingCart className="w-5 h-5 mr-2 text-primary-500" />
                 Recent Orders
               </h3>
               <div className="space-y-3">
                 {recentOrders.length === 0 ? (
-                  <p className="text-surface-500 py-4 text-center">No recent orders</p>
+                  <p className="text-gray-500 py-4 text-center">No recent orders</p>
                 ) : (
                   recentOrders.map((order, index) => (
                     <motion.div
                       key={order.id}
-                      className="flex items-center justify-between py-3 px-4 rounded-xl bg-surface-50 dark:bg-surface-800/50 hover:bg-surface-100 dark:hover:bg-surface-800 transition-colors cursor-pointer"
+                      className="flex items-center justify-between py-3 px-4 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer"
                       initial={{ opacity: 0, x: -20 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: 0.7 + index * 0.1 }}
                       whileHover={{ x: 4 }}
                     >
                       <div>
-                        <p className="font-medium text-surface-900 dark:text-surface-100">Order #{order.external_id || order.id.substring(0, 8)}</p>
-                        <p className="text-sm text-surface-600 dark:text-surface-400">Total: ${order.total_amount?.toFixed(2)}</p>
+                        <p className="font-medium text-gray-900">Order #{order.external_id || order.id.substring(0, 8)}</p>
+                        <p className="text-sm text-gray-600">Total: ${order.total_amount?.toFixed(2)}</p>
                       </div>
                       <div className="text-right">
                         <span className={`status-badge ${
@@ -311,7 +311,7 @@ const DashboardIndex = memo(() => {
                         }`}>
                           {order.status}
                         </span>
-                        <p className="text-xs text-surface-500 dark:text-surface-400 mt-1">{new Date(order.created_at).toLocaleTimeString()}</p>
+                        <p className="text-xs text-gray-500 mt-1">{new Date(order.created_at).toLocaleTimeString()}</p>
                       </div>
                     </motion.div>
                   ))
@@ -325,7 +325,7 @@ const DashboardIndex = memo(() => {
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.6 }}
             >
-              <h3 className="text-lg font-semibold text-surface-900 dark:text-surface-100 mb-4 flex items-center">
+              <h3 className="text-lg font-semibold text-surface-900 dark:text-gray-900 mb-4 flex items-center">
                 <Sparkles className="w-5 h-5 mr-2 text-servio-orange-500" />
                 Quick Actions
               </h3>
@@ -341,15 +341,15 @@ const DashboardIndex = memo(() => {
                       href={action.href}
                       className={`block w-full text-left p-4 rounded-xl border transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] ${
                         action.highlight
-                          ? 'border-servio-orange-200 dark:border-servio-orange-800 bg-servio-orange-50 dark:bg-servio-orange-900/20 hover:bg-servio-orange-100 dark:hover:bg-servio-orange-900/30'
-                          : 'border-surface-200 dark:border-surface-700 hover:bg-surface-50 dark:hover:bg-surface-800/50'
+                          ? 'border-servio-orange-200 bg-servio-orange-50 hover:bg-servio-orange-100'
+                          : 'border-gray-200 hover:bg-gray-50'
                       }`}
                     >
                       <div className="flex items-center space-x-3">
                         <div className={`p-2 rounded-lg ${
                           action.highlight
-                            ? 'bg-servio-orange-100 dark:bg-servio-orange-800/50'
-                            : 'bg-surface-100 dark:bg-surface-800'
+                            ? 'bg-servio-orange-100'
+                            : 'bg-gray-100'
                         }`}>
                           <action.icon className={`h-5 w-5 ${action.iconColor}`} />
                         </div>
@@ -367,11 +367,11 @@ const DashboardIndex = memo(() => {
                               </motion.div>
                             )}
                           </div>
-                          <p className="text-sm text-surface-600 dark:text-surface-400 mt-1">
+                          <p className="text-sm text-gray-600 mt-1">
                             {action.description}
                           </p>
                         </div>
-                        <ArrowRight className="w-4 h-4 text-surface-400 dark:text-surface-500 group-hover:text-surface-600 dark:group-hover:text-surface-300" />
+                        <ArrowRight className="w-4 h-4 text-gray-400 group-hover:text-gray-600" />
                       </div>
                     </Link>
                   </motion.div>
