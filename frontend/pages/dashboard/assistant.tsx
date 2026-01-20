@@ -35,7 +35,7 @@ export default function AssistantPage() {
   })
 
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null)
-  const [audioChunks, setAudioChunks] = useState<Blob[]>([])
+  const audioChunksRef = useRef<Blob[]>([])
   const [talkIntensity, setTalkIntensity] = useState(0)
 
   const audioRef = useRef<HTMLAudioElement | null>(null)
@@ -44,6 +44,18 @@ export default function AssistantPage() {
   const mediaSourceRef = useRef<MediaElementAudioSourceNode | null>(null)
   const rafRef = useRef<number | null>(null)
   const wakeWordServiceRef = useRef<WakeWordService | null>(null)
+  const isInitializingMediaRecorderRef = useRef(false)
+  const isInitializingWakeWordRef = useRef(false)
+  
+  // Create refs for callbacks to avoid re-initializing services when they change
+  const handleQuickCommandRef = useRef<((command: string) => Promise<void>) | null>(null)
+  const startRecordingRef = useRef<(() => void) | null>(null)
+  const addMessageRef = useRef<((message: Omit<TranscriptMessage, 'id' | 'timestamp'>) => void) | null>(null)
+  
+  const stateRef = useRef(state)
+  useEffect(() => {
+    stateRef.current = state
+  }, [state])
 
   const resolveAudioUrl = useCallback((audioUrl: string) => {
     // Backend returns /uploads/...; make it absolute for the browser.
@@ -174,14 +186,19 @@ export default function AssistantPage() {
     }))
   }, [])
 
+  // Update addMessageRef
+  useEffect(() => {
+    addMessageRef.current = addMessage
+  }, [addMessage])
+
   const processRecording = useCallback(async () => {
-    if (audioChunks.length === 0) {
+    if (audioChunksRef.current.length === 0) {
       setState(prev => ({ ...prev, isProcessing: false }))
       return
     }
 
     try {
-      const audioBlob = new Blob(audioChunks, { type: 'audio/webm;codecs=opus' })
+      const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm;codecs=opus' })
       const formData = new FormData()
       formData.append('audio', audioBlob, 'recording.webm')
       formData.append('userId', user?.id || 'anonymous')
@@ -257,15 +274,20 @@ export default function AssistantPage() {
         ...prev,
         isProcessing: false
       }))
-      setAudioChunks([])
+      audioChunksRef.current = []
     }
-  }, [audioChunks, user?.id, addMessage, playAudio])
+  }, [user?.id, addMessage, playAudio])
 
   // Initialize media recorder
   useEffect(() => {
+    let stream: MediaStream | null = null;
+    
     const initializeMediaRecorder = async () => {
+      if (mediaRecorder || isInitializingMediaRecorderRef.current) return;
+
+      isInitializingMediaRecorderRef.current = true;
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
+        stream = await navigator.mediaDevices.getUserMedia({
           audio: {
             echoCancellation: true,
             noiseSuppression: true,
@@ -279,12 +301,12 @@ export default function AssistantPage() {
 
         recorder.ondataavailable = (event) => {
           if (event.data.size > 0) {
-            setAudioChunks(prev => [...prev, event.data])
+            audioChunksRef.current.push(event.data)
           }
         }
 
         recorder.onstop = async () => {
-          // Process the recorded audio
+          // Process the recorded audio using current processRecording callback
           await processRecording()
         }
 
@@ -296,6 +318,8 @@ export default function AssistantPage() {
           content: 'Failed to access microphone. Please check permissions.',
           metadata: { action: { type: 'error', status: 'error' } }
         })
+      } finally {
+        isInitializingMediaRecorderRef.current = false;
       }
     }
 
@@ -303,12 +327,11 @@ export default function AssistantPage() {
 
     return () => {
       // Cleanup media stream
-      if (mediaRecorder?.stream) {
-        mediaRecorder.stream.getTracks().forEach(track => track.stop())
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop())
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [processRecording, mediaRecorder])
+  }, [processRecording, mediaRecorder]) // Added mediaRecorder back so it can check if it's already set
 
   useEffect(() => {
     return () => {
@@ -328,7 +351,7 @@ export default function AssistantPage() {
   const startRecording = useCallback(() => {
     if (!mediaRecorder || state.isProcessing) return
 
-    setAudioChunks([])
+    audioChunksRef.current = []
     mediaRecorder.start(100) // Collect data every 100ms
 
     setState(prev => ({
@@ -336,6 +359,11 @@ export default function AssistantPage() {
       isRecording: true
     }))
   }, [mediaRecorder, state.isProcessing])
+
+  // Update startRecordingRef
+  useEffect(() => {
+    startRecordingRef.current = startRecording
+  }, [startRecording])
 
   const stopRecording = useCallback(() => {
     if (!mediaRecorder || !state.isRecording) return
@@ -418,6 +446,11 @@ export default function AssistantPage() {
     }
   }, [user?.id, addMessage, playAudio])
 
+  // Update handleQuickCommandRef
+  useEffect(() => {
+    handleQuickCommandRef.current = handleQuickCommand
+  }, [handleQuickCommand])
+
   // Wake word handling functions
   const initializeWakeWordService = useCallback(async () => {
     if (!state.wakeWordSupported) {
@@ -425,51 +458,61 @@ export default function AssistantPage() {
       return false;
     }
 
+    // Don't re-initialize if already initialized or initializing
+    if (wakeWordServiceRef.current?.getState().isInitialized || isInitializingWakeWordRef.current) {
+      return true;
+    }
+
+    isInitializingWakeWordRef.current = true;
     try {
       const config = getDefaultWakeWordConfig();
       
       wakeWordServiceRef.current = new WakeWordService({
         ...config,
         onWakeWordDetected: (detectedPhrase: string) => {
-          console.log(`Wake word detected: "${detectedPhrase}"`);
+          console.log(`Wake word detected callback: "${detectedPhrase}"`);
           
-          // Add wake word detection message
-          addMessage({
-            type: 'system',
-            content: `👂 Wake word detected: "${detectedPhrase}"`,
-            metadata: {
-              action: {
-                type: 'wake_word',
-                status: 'completed'
+          // Use refs to get latest callbacks
+          if (addMessageRef.current) {
+            addMessageRef.current({
+              type: 'system',
+              content: `👂 Wake word detected: "${detectedPhrase}"`,
+              metadata: {
+                action: {
+                  type: 'wake_word',
+                  status: 'completed'
+                }
               }
-            }
-          });
+            });
+          }
 
           // Check if there's a command after the wake word
           const colonIndex = detectedPhrase.indexOf(':');
           if (colonIndex > -1) {
             const command = detectedPhrase.substring(colonIndex + 1).trim();
-            if (command) {
+            if (command && handleQuickCommandRef.current) {
               // Process the command automatically
-              handleQuickCommand(command);
+              handleQuickCommandRef.current(command);
             }
-          } else {
+          } else if (startRecordingRef.current) {
             // Just wake word detected, start listening for command
-            startRecording();
+            startRecordingRef.current();
           }
         },
         onError: (error: Error) => {
-          console.error('Wake word error:', error);
-          addMessage({
-            type: 'system',
-            content: `Wake word error: ${error.message}`,
-            metadata: {
-              action: {
-                type: 'error',
-                status: 'error'
+          console.error('Wake word error callback:', error);
+          if (addMessageRef.current) {
+            addMessageRef.current({
+              type: 'system',
+              content: `Wake word error: ${error.message}`,
+              metadata: {
+                action: {
+                  type: 'error',
+                  status: 'error'
+                }
               }
-            }
-          });
+            });
+          }
         },
         onListeningStateChange: (isListening: boolean) => {
           setState(prev => ({
@@ -496,18 +539,20 @@ export default function AssistantPage() {
     } catch (error) {
       console.error('Error initializing wake word service:', error);
       return false;
+    } finally {
+      isInitializingWakeWordRef.current = false;
     }
-  }, [state.wakeWordSupported, addMessage, handleQuickCommand, startRecording]);
+  }, [state.wakeWordSupported]); // Removed dependencies that change frequently
 
   const toggleWakeWordListening = useCallback(async () => {
-    if (!wakeWordServiceRef.current) {
+    if (!wakeWordServiceRef.current || !wakeWordServiceRef.current.getState().isInitialized) {
       const initialized = await initializeWakeWordService();
       if (!initialized) {
         return;
       }
     }
 
-    if (state.isListeningForWakeWord) {
+    if (stateRef.current.isListeningForWakeWord) {
       await wakeWordServiceRef.current?.stopListening();
       setState(prev => ({ ...prev, wakeWordEnabled: false }));
     } else {
@@ -527,13 +572,19 @@ export default function AssistantPage() {
         });
       }
     }
-  }, [state.isListeningForWakeWord, initializeWakeWordService, addMessage]);
+  }, [initializeWakeWordService, addMessage]);
 
   // Auto-initialize wake word service on component mount
   useEffect(() => {
+    let mounted = true;
+    
     if (state.wakeWordSupported) {
       initializeWakeWordService();
     }
+    
+    return () => {
+      mounted = false;
+    };
   }, [state.wakeWordSupported, initializeWakeWordService]);
 
   return (

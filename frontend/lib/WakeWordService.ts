@@ -187,18 +187,31 @@ export class WakeWordService {
 
       // Check for wake words in both final and interim results
       for (const wakeWord of this.config.wakeWords) {
-        if (currentTranscript.includes(wakeWord.toLowerCase())) {
+        const lowerWakeWord = wakeWord.toLowerCase();
+        if (currentTranscript.includes(lowerWakeWord)) {
           console.log(`Wake word detected: "${wakeWord}" in "${currentTranscript}"`);
-          this.config.onWakeWordDetected(wakeWord);
           
           // Extract the command after the wake word
-          const wakeWordIndex = currentTranscript.indexOf(wakeWord.toLowerCase());
-          const commandStart = wakeWordIndex + wakeWord.length;
+          const wakeWordIndex = currentTranscript.indexOf(lowerWakeWord);
+          const commandStart = wakeWordIndex + lowerWakeWord.length;
           const command = currentTranscript.substring(commandStart).trim();
           
           if (command) {
-            // Pass the command along with wake word detection
+            // Pass the command along with wake word detection in one go
             this.config.onWakeWordDetected(`${wakeWord}: ${command}`);
+          } else {
+            // Just wake word detected
+            this.config.onWakeWordDetected(wakeWord);
+          }
+          
+          // Clear recognition to prevent multiple detections of the same phrase
+          if (this.recognition) {
+            try {
+              this.recognition.abort();
+              // onend will handle restarting if needed
+            } catch (e) {
+              console.error('Error aborting recognition:', e);
+            }
           }
           
           break; // Stop after first match

@@ -58,12 +58,16 @@ async function initializeServer() {
     const { default: restaurantRoutes } = await import('./routes/restaurant');
     const { default: integrationsRoutes } = await import('./routes/integrations');
     const { default: vapiRoutes } = await import('./routes/vapi');
+    const { default: adminRoutes } = await import('./routes/admin');
 
     // API Routes
     app.use('/api/auth', authRoutes);
     
     // Vapi webhook routes (no auth required for external webhooks)
     app.use('/api/vapi', vapiRoutes);
+    
+    // Admin routes (platform-admin role required)
+    app.use('/api/admin', adminRoutes);
     
     // Debug: Add a test auth route to verify mounting
     app.get('/api/auth/test', (req, res) => {
