@@ -12,9 +12,9 @@ ALTER TABLE customers ADD COLUMN tags TEXT DEFAULT '[]';
 ALTER TABLE customers ADD COLUMN total_orders INTEGER DEFAULT 0;
 ALTER TABLE customers ADD COLUMN total_spent DECIMAL(10,2) DEFAULT 0;
 ALTER TABLE customers ADD COLUMN last_order_date DATE;
-ALTER TABLE customers ADD COLUMN opt_in_sms BOOLEAN DEFAULT 0;
-ALTER TABLE customers ADD COLUMN opt_in_email BOOLEAN DEFAULT 0;
-ALTER TABLE customers ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE customers ADD COLUMN opt_in_sms BOOLEAN DEFAULT FALSE;
+ALTER TABLE customers ADD COLUMN opt_in_email BOOLEAN DEFAULT FALSE;
+ALTER TABLE customers ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
 
 CREATE INDEX IF NOT EXISTS idx_customers_restaurant ON customers(restaurant_id);
 CREATE INDEX IF NOT EXISTS idx_customers_email ON customers(email);
@@ -84,9 +84,9 @@ ALTER TABLE restaurants ADD COLUMN cuisine_type VARCHAR(100);
 ALTER TABLE restaurants ADD COLUMN price_range VARCHAR(20);
 ALTER TABLE restaurants ADD COLUMN social_links TEXT DEFAULT '{}'; -- JSON for social media links
 ALTER TABLE restaurants ADD COLUMN menu_pdf_url VARCHAR(500);
-ALTER TABLE restaurants ADD COLUMN online_ordering_enabled BOOLEAN DEFAULT 0;
-ALTER TABLE restaurants ADD COLUMN delivery_enabled BOOLEAN DEFAULT 0;
-ALTER TABLE restaurants ADD COLUMN pickup_enabled BOOLEAN DEFAULT 1;
+ALTER TABLE restaurants ADD COLUMN online_ordering_enabled BOOLEAN DEFAULT FALSE;
+ALTER TABLE restaurants ADD COLUMN delivery_enabled BOOLEAN DEFAULT FALSE;
+ALTER TABLE restaurants ADD COLUMN pickup_enabled BOOLEAN DEFAULT TRUE;
 ALTER TABLE restaurants ADD COLUMN delivery_radius INTEGER DEFAULT 0; -- in miles
 ALTER TABLE restaurants ADD COLUMN delivery_fee DECIMAL(10,2) DEFAULT 0;
 ALTER TABLE restaurants ADD COLUMN minimum_order DECIMAL(10,2) DEFAULT 0;
@@ -106,7 +106,7 @@ CREATE TABLE IF NOT EXISTS restaurant_themes (
     custom_css TEXT,
     font_family VARCHAR(100) DEFAULT 'Inter',
     layout_style VARCHAR(50) DEFAULT 'modern', -- 'modern', 'classic', 'minimal'
-    is_active BOOLEAN DEFAULT 1,
+    is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -125,7 +125,7 @@ CREATE TABLE IF NOT EXISTS restaurant_links (
     url_path VARCHAR(255) NOT NULL, -- e.g., 'menu', 'order', 'specials'
     target_url VARCHAR(500), -- External URL if redirecting
     link_type VARCHAR(50) DEFAULT 'menu', -- 'menu', 'order', 'contact', 'custom'
-    is_active BOOLEAN DEFAULT 1,
+    is_active BOOLEAN DEFAULT TRUE,
     click_count INTEGER DEFAULT 0,
     qr_code_url VARCHAR(500), -- Generated QR code image URL
     custom_styling TEXT DEFAULT '{}', -- JSON for custom link styling
@@ -162,7 +162,7 @@ CREATE TABLE IF NOT EXISTS menu_categories (
     name VARCHAR(255) NOT NULL,
     description TEXT,
     sort_order INTEGER DEFAULT 0,
-    is_active BOOLEAN DEFAULT 1,
+    is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
