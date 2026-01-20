@@ -18,7 +18,9 @@ import {
   Calendar,
   Phone,
   Mail,
-  MapPin
+  MapPin,
+  Megaphone,
+  Settings
 } from 'lucide-react'
 import AdminLayout from '../../../components/Layout/AdminLayout'
 import { api } from '../../../lib/api'
@@ -102,7 +104,7 @@ interface AuditLog {
   created_at: string
 }
 
-type TabName = 'overview' | 'orders' | 'voice' | 'inventory' | 'timeclock' | 'audit'
+type TabName = 'overview' | 'orders' | 'campaigns' | 'inventory' | 'timeclock' | 'audit' | 'integrations'
 
 export default function RestaurantDetail() {
   const router = useRouter()
@@ -118,10 +120,11 @@ export default function RestaurantDetail() {
   const tabs = [
     { id: 'overview', name: 'Overview', icon: Building2 },
     { id: 'orders', name: 'Orders', icon: ShoppingCart },
-    { id: 'voice', name: 'Voice Activity', icon: Mic },
+    { id: 'campaigns', name: 'Campaigns', icon: Megaphone },
     { id: 'inventory', name: 'Inventory', icon: Package },
     { id: 'timeclock', name: 'Time Clock', icon: Clock },
     { id: 'audit', name: 'Audit Logs', icon: FileText },
+    { id: 'integrations', name: 'Integrations', icon: Settings },
   ]
 
   const fetchRestaurantData = React.useCallback(async () => {
@@ -150,8 +153,8 @@ export default function RestaurantDetail() {
         case 'orders':
           endpoint = `/api/admin/restaurants/${id}/orders`
           break
-        case 'voice':
-          endpoint = `/api/admin/restaurants/${id}/voice-activity`
+        case 'campaigns':
+          endpoint = `/api/admin/restaurants/${id}/campaigns`
           break
         case 'inventory':
           endpoint = `/api/admin/restaurants/${id}/inventory-transactions`
@@ -162,6 +165,9 @@ export default function RestaurantDetail() {
         case 'audit':
           endpoint = `/api/admin/restaurants/${id}/audit-logs`
           break
+        case 'integrations':
+          // Read-only view, no endpoint needed
+          return
       }
 
       const response = await api.get(endpoint, {
@@ -399,14 +405,16 @@ const TabContent: React.FC<TabContentProps> = ({ tab, restaurant, userBreakdown,
       return <OverviewTab restaurant={restaurant} userBreakdown={userBreakdown} />
     case 'orders':
       return <OrdersTab orders={data?.orders || []} pagination={data?.pagination} />
-    case 'voice':
-      return <VoiceTab activity={data?.voiceActivity || []} pagination={data?.pagination} />
+    case 'campaigns':
+      return <CampaignsTab campaigns={data?.campaigns || []} pagination={data?.pagination} />
     case 'inventory':
       return <InventoryTab transactions={data?.transactions || []} pagination={data?.pagination} />
     case 'timeclock':
       return <TimeclockTab entries={data?.timeEntries || []} pagination={data?.pagination} />
     case 'audit':
       return <AuditTab logs={data?.auditLogs || []} pagination={data?.pagination} />
+    case 'integrations':
+      return <IntegrationsTab restaurant={restaurant} />
     default:
       return <div>Tab not implemented</div>
   }
@@ -536,36 +544,102 @@ const OrdersTab: React.FC<{ orders: Order[]; pagination: any }> = ({ orders, pag
   </div>
 )
 
-// Voice Tab Component
-const VoiceTab: React.FC<{ activity: VoiceActivity[]; pagination: any }> = ({ activity, pagination }) => (
+// Campaigns Tab Component
+interface Campaign {
+  id: string
+  name: string
+  type: 'sms' | 'email'
+  status: string
+  message: string
+  scheduled_at?: string
+  sent_at?: string
+  total_recipients: number
+  successful_sends: number
+  failed_sends: number
+  created_at: string
+}
+
+const CampaignsTab: React.FC<{ campaigns: Campaign[]; pagination: any }> = ({ campaigns, pagination }) => (
   <div className="space-y-4">
-    {activity.length > 0 ? (
+    {campaigns.length > 0 ? (
       <div className="space-y-4">
-        {activity.map((item) => (
-          <div key={item.id} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+        {campaigns.map((campaign) => (
+          <div key={campaign.id} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
             <div className="flex justify-between items-start">
-              <div>
-                <div className="font-medium text-gray-900 dark:text-white">{item.action}</div>
-                <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                  {new Date(item.created_at).toLocaleString()}
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="font-medium text-gray-900 dark:text-white">{campaign.name}</span>
+                  <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                    campaign.status === 'sent' ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300' :
+                    campaign.status === 'failed' ? 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-300' :
+                    'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-300'
+                  }`}>
+                    {campaign.status}
+                  </span>
+                  <span className="px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-300">
+                    {campaign.type.toUpperCase()}
+                  </span>
                 </div>
-                {item.details && (
-                  <pre className="text-xs text-gray-600 dark:text-gray-400 mt-2 bg-gray-50 dark:bg-gray-700 p-2 rounded overflow-x-auto">
-                    {JSON.stringify(item.details, null, 2)}
-                  </pre>
-                )}
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-2 line-clamp-2">{campaign.message}</p>
+                <div className="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
+                  <span>Recipients: {campaign.total_recipients}</span>
+                  <span>Success: {campaign.successful_sends}</span>
+                  {campaign.failed_sends > 0 && <span className="text-red-600">Failed: {campaign.failed_sends}</span>}
+                  <span>Created: {new Date(campaign.created_at).toLocaleDateString()}</span>
+                </div>
               </div>
-              <Mic className="h-5 w-5 text-gray-400" />
+              <Megaphone className="h-5 w-5 text-gray-400" />
             </div>
           </div>
         ))}
       </div>
     ) : (
       <div className="text-center py-8">
-        <Mic className="mx-auto h-8 w-8 text-gray-400" />
-        <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">No voice activity found</p>
+        <Megaphone className="mx-auto h-8 w-8 text-gray-400" />
+        <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">No campaigns found</p>
       </div>
     )}
+  </div>
+)
+
+// Integrations Tab Component
+const IntegrationsTab: React.FC<{ restaurant: Restaurant }> = ({ restaurant }) => (
+  <div className="space-y-6">
+    <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-6">
+      <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Integration Status</h3>
+      <div className="space-y-4">
+        <div className="flex items-center justify-between p-4 bg-white dark:bg-gray-800 rounded-lg">
+          <div>
+            <div className="font-medium text-gray-900 dark:text-white">VAPI (Voice)</div>
+            <div className="text-sm text-gray-500 dark:text-gray-400">Voice ordering integration</div>
+          </div>
+          <span className="px-3 py-1 text-sm font-medium rounded-full bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300">
+            Active
+          </span>
+        </div>
+        <div className="flex items-center justify-between p-4 bg-white dark:bg-gray-800 rounded-lg">
+          <div>
+            <div className="font-medium text-gray-900 dark:text-white">Twilio</div>
+            <div className="text-sm text-gray-500 dark:text-gray-400">SMS and phone services</div>
+          </div>
+          <span className="px-3 py-1 text-sm font-medium rounded-full bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300">
+            Active
+          </span>
+        </div>
+        <div className="flex items-center justify-between p-4 bg-white dark:bg-gray-800 rounded-lg">
+          <div>
+            <div className="font-medium text-gray-900 dark:text-white">Storage</div>
+            <div className="text-sm text-gray-500 dark:text-gray-400">File and image storage</div>
+          </div>
+          <span className="px-3 py-1 text-sm font-medium rounded-full bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300">
+            Active
+          </span>
+        </div>
+      </div>
+      <p className="text-xs text-gray-500 dark:text-gray-400 mt-4">
+        Note: Integration status is read-only in admin view. Restaurant owners manage integrations from their dashboard.
+      </p>
+    </div>
   </div>
 )
 

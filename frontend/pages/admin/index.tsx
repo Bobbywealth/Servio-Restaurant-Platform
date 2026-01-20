@@ -3,51 +3,87 @@ import { motion } from 'framer-motion'
 import { 
   Building2, 
   ShoppingCart, 
-  Users, 
-  TrendingUp,
+  Phone,
+  Megaphone,
   Activity,
-  Clock,
+  AlertTriangle,
   RefreshCw,
-  AlertCircle
+  AlertCircle,
+  Clock
 } from 'lucide-react'
 import AdminLayout from '../../components/Layout/AdminLayout'
 import { api } from '../../lib/api'
 
-interface PlatformStats {
-  total_restaurants: number
-  active_restaurants_7d: number
-  total_orders: number
-  orders_30d: number
-  timeclock_entries_30d: number
-  inventory_transactions_30d: number
-  audit_events_24h: number
+interface AdminStats {
+  activeRestaurants: number
+  ordersToday: number
+  voiceCallsToday: number
+  pendingCampaignApprovals: number
+  openShifts: number
+  failedJobs: number
 }
 
-interface RecentActivity {
-  restaurant_name: string
+interface ActivityItem {
+  id: string
   restaurant_id: string
-  orders_today: number
-}
-
-interface PlatformData {
-  stats: PlatformStats
-  recentActivity: RecentActivity[]
+  restaurant_name?: string
+  action: string
+  entity_type?: string
+  entity_id?: string
+  user_name?: string
+  user_role?: string
+  created_at: string
+  source: string
 }
 
 export default function AdminDashboard() {
-  const [data, setData] = useState<PlatformData | null>(null)
+  const [stats, setStats] = useState<AdminStats | null>(null)
+  const [activity, setActivity] = useState<ActivityItem[]>([])
+  const [pendingCampaigns, setPendingCampaigns] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  const fetchAdminStats = async () => {
+    try {
+      const response = await api.get('/api/admin/stats/summary')
+      setStats(response.data)
+    } catch (err: any) {
+      console.error('Failed to fetch admin stats:', err)
+      throw err
+    }
+  }
+
+  const fetchActivity = async () => {
+    try {
+      const response = await api.get('/api/admin/activity?limit=25')
+      setActivity(response.data)
+    } catch (err: any) {
+      console.error('Failed to fetch activity:', err)
+      throw err
+    }
+  }
+
+  const fetchPendingCampaigns = async () => {
+    try {
+      const response = await api.get('/api/admin/campaigns?status=pending_owner_approval&limit=10')
+      setPendingCampaigns(response.data.campaigns || [])
+    } catch (err: any) {
+      console.error('Failed to fetch campaigns:', err)
+      // Don't throw, campaigns are optional
+    }
+  }
 
   const fetchData = async () => {
     setIsLoading(true)
     setError(null)
     try {
-      const response = await api.get('/api/admin/platform-stats')
-      setData(response.data)
+      await Promise.all([
+        fetchAdminStats(),
+        fetchActivity(),
+        fetchPendingCampaigns()
+      ])
     } catch (err: any) {
-      console.error('Failed to fetch platform stats:', err)
-      setError(err.response?.data?.message || 'Failed to load platform statistics')
+      setError(err.response?.data?.error || 'Failed to load dashboard data')
     } finally {
       setIsLoading(false)
     }
@@ -57,33 +93,33 @@ export default function AdminDashboard() {
     fetchData()
   }, [])
 
-  const statsCards = data ? [
+  const statsCards = stats ? [
     {
-      title: 'Total Restaurants',
-      value: data.stats.total_restaurants,
-      subtitle: `${data.stats.active_restaurants_7d} active this week`,
+      title: 'Active Restaurants',
+      value: stats.activeRestaurants,
+      subtitle: 'Currently active',
       icon: Building2,
       color: 'blue'
     },
     {
-      title: 'Total Orders',
-      value: data.stats.total_orders.toLocaleString(),
-      subtitle: `${data.stats.orders_30d} in last 30 days`,
+      title: 'Orders Today',
+      value: stats.ordersToday.toLocaleString(),
+      subtitle: 'Across all restaurants',
       icon: ShoppingCart,
       color: 'green'
     },
     {
-      title: 'Time Clock Entries',
-      value: data.stats.timeclock_entries_30d.toLocaleString(),
-      subtitle: 'Last 30 days',
-      icon: Clock,
+      title: 'Voice Calls Today',
+      value: stats.voiceCallsToday.toLocaleString(),
+      subtitle: 'VAPI interactions',
+      icon: Phone,
       color: 'purple'
     },
     {
-      title: 'Recent Activity',
-      value: data.stats.audit_events_24h.toLocaleString(),
-      subtitle: 'Audit events (24h)',
-      icon: Activity,
+      title: 'Pending Approvals',
+      value: stats.pendingCampaignApprovals,
+      subtitle: 'Campaigns awaiting approval',
+      icon: Megaphone,
       color: 'orange'
     }
   ] : []
@@ -160,11 +196,64 @@ export default function AdminDashboard() {
           )}
         </div>
 
-        {/* Recent Activity */}
+        {/* System Warnings */}
+        {stats && (stats.failedJobs > 0 || stats.openShifts > 0) && (
+          <div className="mb-8 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
+            <div className="flex items-start">
+              <AlertTriangle className="h-5 w-5 text-yellow-600 dark:text-yellow-400 mt-0.5" />
+              <div className="ml-3 flex-1">
+                <h3 className="text-sm font-medium text-yellow-800 dark:text-yellow-200">System Warnings</h3>
+                <div className="mt-2 text-sm text-yellow-700 dark:text-yellow-300">
+                  {stats.failedJobs > 0 && (
+                    <p>• {stats.failedJobs} failed job{stats.failedJobs !== 1 ? 's' : ''} detected</p>
+                  )}
+                  {stats.openShifts > 0 && (
+                    <p>• {stats.openShifts} open shift{stats.openShifts !== 1 ? 's' : ''} (no clock out)</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Pending Campaigns */}
+        {pendingCampaigns.length > 0 && (
+          <div className="mb-8 bg-white dark:bg-gray-800 rounded-lg shadow">
+            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+              <h2 className="text-lg font-medium text-gray-900 dark:text-white">Campaigns Pending Approval</h2>
+              <p className="text-sm text-gray-600 dark:text-gray-400">Campaigns awaiting owner approval</p>
+            </div>
+            <div className="divide-y divide-gray-200 dark:divide-gray-700">
+              {pendingCampaigns.map((campaign, index) => (
+                <motion.div
+                  key={campaign.id}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: index * 0.05 }}
+                  className="px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-900 dark:text-white">{campaign.name}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        {campaign.restaurant_name} • {campaign.type}
+                      </p>
+                    </div>
+                    <span className="px-2 py-1 text-xs font-medium rounded-full bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-300">
+                      {campaign.status}
+                    </span>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Global Activity Feed */}
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow">
           <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-            <h2 className="text-lg font-medium text-gray-900 dark:text-white">Restaurant Activity Today</h2>
-            <p className="text-sm text-gray-600 dark:text-gray-400">Orders processed by each restaurant today</p>
+            <h2 className="text-lg font-medium text-gray-900 dark:text-white">Global Activity Feed</h2>
+            <p className="text-sm text-gray-600 dark:text-gray-400">Recent platform activity across all restaurants</p>
           </div>
           
           {isLoading ? (
@@ -176,39 +265,32 @@ export default function AdminDashboard() {
                     <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-32"></div>
                     <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-24"></div>
                   </div>
-                  <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded w-12"></div>
                 </div>
               ))}
             </div>
-          ) : data?.recentActivity.length ? (
+          ) : activity.length ? (
             <div className="divide-y divide-gray-200 dark:divide-gray-700">
-              {data.recentActivity.slice(0, 10).map((restaurant, index) => (
+              {activity.map((item, index) => (
                 <motion.div
-                  key={restaurant.restaurant_id}
+                  key={item.id}
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: index * 0.05 }}
                   className="px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-4">
-                      <div className="h-10 w-10 rounded-full bg-red-100 dark:bg-red-900/20 flex items-center justify-center">
-                        <Building2 className="h-5 w-5 text-red-600" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-gray-900 dark:text-white">
-                          {restaurant.restaurant_name}
-                        </p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400">
-                          ID: {restaurant.restaurant_id}
-                        </p>
-                      </div>
+                  <div className="flex items-start space-x-4">
+                    <div className="h-10 w-10 rounded-full bg-blue-100 dark:bg-blue-900/20 flex items-center justify-center flex-shrink-0">
+                      <Activity className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                     </div>
-                    <div className="text-right">
-                      <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                        {restaurant.orders_today} orders
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900 dark:text-white">
+                        {item.action}
                       </p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">today</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        {item.restaurant_name && `${item.restaurant_name} • `}
+                        {item.user_name && `${item.user_name} (${item.user_role}) • `}
+                        {new Date(item.created_at).toLocaleString()}
+                      </p>
                     </div>
                   </div>
                 </motion.div>
@@ -216,10 +298,10 @@ export default function AdminDashboard() {
             </div>
           ) : (
             <div className="px-6 py-8 text-center">
-              <TrendingUp className="mx-auto h-12 w-12 text-gray-400" />
+              <Activity className="mx-auto h-12 w-12 text-gray-400" />
               <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-white">No activity yet</h3>
               <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                Restaurant activity will appear here as orders are processed.
+                Platform activity will appear here as events occur.
               </p>
             </div>
           )}

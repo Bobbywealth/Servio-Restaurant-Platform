@@ -9,14 +9,77 @@ const router = express.Router();
 router.use(requirePlatformAdmin);
 
 /**
- * GET /api/admin/platform-stats
- * Get high-level platform KPIs for admin dashboard
+ * GET /api/admin/stats/summary
+ * Get platform-wide KPI summary for admin dashboard
+ */
+router.get('/stats/summary', async (req, res) => {
+  try {
+    const db = await DatabaseService.getInstance().getDatabase();
+    
+    // Get active restaurants count
+    const activeRestaurants = await db.get(`
+      SELECT COUNT(*) as count FROM restaurants WHERE is_active = true
+    `);
+
+    // Get orders today
+    const ordersToday = await db.get(`
+      SELECT COUNT(*) as count FROM orders WHERE date(created_at) = date('now')
+    `);
+
+    // Get voice calls today (from audit_logs or call_logs if exists)
+    const voiceCallsToday = await db.get(`
+      SELECT COUNT(*) as count 
+      FROM audit_logs 
+      WHERE (action LIKE '%voice%' OR action LIKE '%vapi%' OR action LIKE '%call%')
+        AND date(created_at) = date('now')
+    `);
+
+    // Get pending campaign approvals
+    const pendingCampaigns = await db.get(`
+      SELECT COUNT(*) as count 
+      FROM marketing_campaigns 
+      WHERE status = 'draft' OR status = 'scheduled'
+    `);
+
+    // Get open shifts (time entries without clock out)
+    const openShifts = await db.get(`
+      SELECT COUNT(*) as count 
+      FROM time_entries 
+      WHERE clock_out IS NULL
+    `);
+
+    // Get failed jobs
+    const failedJobs = await db.get(`
+      SELECT COUNT(*) as count 
+      FROM sync_jobs 
+      WHERE status = 'failed'
+    `);
+
+    res.json({
+      activeRestaurants: activeRestaurants?.count || 0,
+      ordersToday: ordersToday?.count || 0,
+      voiceCallsToday: voiceCallsToday?.count || 0,
+      pendingCampaignApprovals: pendingCampaigns?.count || 0,
+      openShifts: openShifts?.count || 0,
+      failedJobs: failedJobs?.count || 0
+    });
+
+  } catch (error) {
+    logger.error('Failed to get admin stats summary:', error);
+    res.status(500).json({ 
+      error: 'Failed to load platform statistics',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
+ * GET /api/admin/platform-stats (legacy endpoint, kept for backward compatibility)
  */
 router.get('/platform-stats', async (req, res) => {
   try {
     const db = await DatabaseService.getInstance().getDatabase();
     
-    // Get platform-wide statistics
     const stats = await db.all(`
       SELECT 
         (SELECT COUNT(*) FROM restaurants WHERE is_active = true) as total_restaurants,
@@ -28,7 +91,6 @@ router.get('/platform-stats', async (req, res) => {
         (SELECT COUNT(*) FROM audit_logs WHERE created_at > datetime('now', '-24 hours')) as audit_events_24h
     `);
 
-    // Get recent activity
     const recentActivity = await db.all(`
       SELECT 
         r.name as restaurant_name,
@@ -461,6 +523,376 @@ router.get('/restaurants/:id/audit-logs', async (req, res) => {
       details: error instanceof Error ? error.message : 'Unknown error'
     });
   }
+});
+
+/**
+ * GET /api/admin/activity
+ * Unified activity feed from audit_logs, sync_jobs, and notifications
+ */
+router.get('/activity', async (req, res) => {
+  try {
+    const { limit = 25 } = req.query;
+    const db = await DatabaseService.getInstance().getDatabase();
+
+    // Get unified activity from audit_logs
+    const activity = await db.all(`
+      SELECT 
+        al.id,
+        al.restaurant_id,
+        al.action,
+        al.entity_type,
+        al.entity_id,
+        al.metadata,
+        al.created_at,
+        r.name as restaurant_name,
+        u.name as user_name,
+        u.role as user_role,
+        'audit' as source
+      FROM audit_logs al
+      LEFT JOIN restaurants r ON al.restaurant_id = r.id
+      LEFT JOIN users u ON al.user_id = u.id
+      ORDER BY al.created_at DESC
+      LIMIT ?
+    `, [Number(limit)]);
+
+    res.json(activity);
+
+  } catch (error) {
+    logger.error('Failed to get activity feed:', error);
+    res.status(500).json({ 
+      error: 'Failed to load activity feed',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
+ * GET /api/admin/campaigns
+ * Get global campaign list with filters
+ */
+router.get('/campaigns', async (req, res) => {
+  try {
+    const { status, limit = 50, page = 1 } = req.query;
+    const offset = (Number(page) - 1) * Number(limit);
+    const db = await DatabaseService.getInstance().getDatabase();
+
+    let whereClause = '1=1';
+    const params: any[] = [];
+
+    if (status) {
+      if (status === 'pending_owner_approval') {
+        whereClause += ` AND (status = 'draft' OR status = 'scheduled')`;
+      } else {
+        whereClause += ` AND status = ?`;
+        params.push(status);
+      }
+    }
+
+    const campaigns = await db.all(`
+      SELECT 
+        mc.*,
+        r.name as restaurant_name,
+        r.id as restaurant_id
+      FROM marketing_campaigns mc
+      LEFT JOIN restaurants r ON mc.restaurant_id = r.id
+      WHERE ${whereClause}
+      ORDER BY mc.created_at DESC
+      LIMIT ? OFFSET ?
+    `, [...params, Number(limit), offset]);
+
+    const totalResult = await db.get(`
+      SELECT COUNT(*) as total 
+      FROM marketing_campaigns 
+      WHERE ${whereClause}
+    `, params);
+
+    res.json({
+      campaigns,
+      pagination: {
+        page: Number(page),
+        limit: Number(limit),
+        total: totalResult?.total || 0,
+        pages: Math.ceil((totalResult?.total || 0) / Number(limit))
+      }
+    });
+
+  } catch (error) {
+    logger.error('Failed to get campaigns:', error);
+    res.status(500).json({ 
+      error: 'Failed to load campaigns',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
+ * GET /api/admin/campaigns/:id
+ * Get campaign details
+ */
+router.get('/campaigns/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const db = await DatabaseService.getInstance().getDatabase();
+
+    const campaign = await db.get(`
+      SELECT 
+        mc.*,
+        r.name as restaurant_name,
+        r.id as restaurant_id
+      FROM marketing_campaigns mc
+      LEFT JOIN restaurants r ON mc.restaurant_id = r.id
+      WHERE mc.id = ?
+    `, [id]);
+
+    if (!campaign) {
+      return res.status(404).json({ error: 'Campaign not found' });
+    }
+
+    // Get send statistics
+    const sendStats = await db.get(`
+      SELECT 
+        COUNT(*) as total,
+        COUNT(CASE WHEN status = 'sent' THEN 1 END) as successful,
+        COUNT(CASE WHEN status = 'failed' THEN 1 END) as failed
+      FROM marketing_sends
+      WHERE campaign_id = ?
+    `, [id]);
+
+    res.json({
+      campaign,
+      sendStats
+    });
+
+  } catch (error) {
+    logger.error('Failed to get campaign details:', error);
+    res.status(500).json({ 
+      error: 'Failed to load campaign details',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
+ * GET /api/admin/orders
+ * Global orders feed across all restaurants
+ */
+router.get('/orders', async (req, res) => {
+  try {
+    const { status, source, restaurant_id, limit = 50, page = 1 } = req.query;
+    const offset = (Number(page) - 1) * Number(limit);
+    const db = await DatabaseService.getInstance().getDatabase();
+
+    let whereClause = '1=1';
+    const params: any[] = [];
+
+    if (status && status !== 'all') {
+      whereClause += ` AND o.status = ?`;
+      params.push(status);
+    }
+
+    if (source) {
+      whereClause += ` AND o.source = ?`;
+      params.push(source);
+    }
+
+    if (restaurant_id) {
+      whereClause += ` AND o.restaurant_id = ?`;
+      params.push(restaurant_id);
+    }
+
+    const orders = await db.all(`
+      SELECT 
+        o.*,
+        r.name as restaurant_name,
+        json_group_array(
+          json_object(
+            'name', oi.name,
+            'quantity', oi.quantity,
+            'price', oi.price
+          )
+        ) as items
+      FROM orders o
+      LEFT JOIN restaurants r ON o.restaurant_id = r.id
+      LEFT JOIN order_items oi ON o.id = oi.order_id
+      WHERE ${whereClause}
+      GROUP BY o.id
+      ORDER BY o.created_at DESC
+      LIMIT ? OFFSET ?
+    `, [...params, Number(limit), offset]);
+
+    const totalResult = await db.get(`
+      SELECT COUNT(*) as total 
+      FROM orders o
+      WHERE ${whereClause}
+    `, params);
+
+    res.json({
+      orders,
+      pagination: {
+        page: Number(page),
+        limit: Number(limit),
+        total: totalResult?.total || 0,
+        pages: Math.ceil((totalResult?.total || 0) / Number(limit))
+      }
+    });
+
+  } catch (error) {
+    logger.error('Failed to get orders:', error);
+    res.status(500).json({ 
+      error: 'Failed to load orders',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
+ * GET /api/admin/system/health
+ * System health summary
+ */
+router.get('/system/health', async (req, res) => {
+  try {
+    const db = await DatabaseService.getInstance().getDatabase();
+
+    // Get failed jobs count
+    const failedJobs = await db.get(`
+      SELECT COUNT(*) as count FROM sync_jobs WHERE status = 'failed'
+    `);
+
+    // Get recent errors from audit logs
+    const recentErrors = await db.all(`
+      SELECT 
+        action,
+        entity_type,
+        restaurant_id,
+        created_at
+      FROM audit_logs
+      WHERE action LIKE '%error%' OR action LIKE '%fail%'
+      ORDER BY created_at DESC
+      LIMIT 10
+    `);
+
+    // Get storage errors (if any)
+    const storageErrors = await db.all(`
+      SELECT * FROM audit_logs 
+      WHERE action LIKE '%storage%' AND (action LIKE '%error%' OR action LIKE '%fail%')
+      ORDER BY created_at DESC
+      LIMIT 5
+    `).catch(() => []);
+
+    res.json({
+      status: 'operational',
+      failedJobs: failedJobs?.count || 0,
+      recentErrors: recentErrors || [],
+      storageErrors: storageErrors || [],
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    logger.error('Failed to get system health:', error);
+    res.status(500).json({ 
+      error: 'Failed to load system health',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
+ * GET /api/admin/jobs
+ * Get sync jobs with status filter
+ */
+router.get('/jobs', async (req, res) => {
+  try {
+    const { status = 'failed', limit = 50, page = 1 } = req.query;
+    const offset = (Number(page) - 1) * Number(limit);
+    const db = await DatabaseService.getInstance().getDatabase();
+
+    const jobs = await db.all(`
+      SELECT 
+        sj.*,
+        r.name as restaurant_name
+      FROM sync_jobs sj
+      LEFT JOIN restaurants r ON sj.restaurant_id = r.id
+      WHERE sj.status = ?
+      ORDER BY sj.created_at DESC
+      LIMIT ? OFFSET ?
+    `, [status, Number(limit), offset]);
+
+    const totalResult = await db.get(`
+      SELECT COUNT(*) as total 
+      FROM sync_jobs 
+      WHERE status = ?
+    `, [status]);
+
+    res.json({
+      jobs,
+      pagination: {
+        page: Number(page),
+        limit: Number(limit),
+        total: totalResult?.total || 0,
+        pages: Math.ceil((totalResult?.total || 0) / Number(limit))
+      }
+    });
+
+  } catch (error) {
+    logger.error('Failed to get jobs:', error);
+    res.status(500).json({ 
+      error: 'Failed to load jobs',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
+ * GET /api/admin/restaurants/:id/campaigns
+ * Get campaigns for a specific restaurant
+ */
+router.get('/restaurants/:id/campaigns', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { page = 1, limit = 50 } = req.query;
+    const offset = (Number(page) - 1) * Number(limit);
+    const db = await DatabaseService.getInstance().getDatabase();
+
+    const campaigns = await db.all(`
+      SELECT * FROM marketing_campaigns
+      WHERE restaurant_id = ?
+      ORDER BY created_at DESC
+      LIMIT ? OFFSET ?
+    `, [id, Number(limit), offset]);
+
+    const totalResult = await db.get(`
+      SELECT COUNT(*) as total 
+      FROM marketing_campaigns 
+      WHERE restaurant_id = ?
+    `, [id]);
+
+    res.json({
+      campaigns,
+      pagination: {
+        page: Number(page),
+        limit: Number(limit),
+        total: totalResult?.total || 0,
+        pages: Math.ceil((totalResult?.total || 0) / Number(limit))
+      }
+    });
+
+  } catch (error) {
+    logger.error('Failed to get restaurant campaigns:', error);
+    res.status(500).json({ 
+      error: 'Failed to load campaigns',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
+ * GET /api/admin/restaurants/:id/audit
+ * Get audit logs for a restaurant (alias for audit-logs)
+ */
+router.get('/restaurants/:id/audit', async (req, res) => {
+  // Redirect to audit-logs endpoint
+  req.url = req.url.replace('/audit', '/audit-logs');
+  return router.handle(req, res);
 });
 
 export default router;
