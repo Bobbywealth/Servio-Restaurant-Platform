@@ -14,6 +14,7 @@ const REFRESH_TOKEN_TTL_DAYS = Number(process.env.REFRESH_TOKEN_TTL_DAYS ?? 30);
 function safeUser(row) {
     return {
         id: row.id,
+        restaurantId: row.restaurant_id,
         name: row.name,
         email: row.email ?? null,
         role: row.role,
@@ -27,6 +28,28 @@ function safeUser(row) {
         })()
     };
 }
+router.post('/signup', (0, errorHandler_1.asyncHandler)(async (req, res) => {
+    const { name, email, password, restaurantName } = req.body ?? {};
+    if (!name || !email || !password || !restaurantName) {
+        throw new Error('All fields are required');
+    }
+    const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
+    // 1. Create Restaurant
+    const restaurantId = (0, uuid_1.v4)();
+    const slug = restaurantName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+    await db.run('INSERT INTO restaurants (id, name, slug) VALUES (?, ?, ?)', [restaurantId, restaurantName, slug]);
+    // 2. Create Owner User
+    const userId = (0, uuid_1.v4)();
+    const passwordHash = await bcryptjs_1.default.hash(String(password), 10);
+    await db.run('INSERT INTO users (id, restaurant_id, name, email, password_hash, role, permissions) VALUES (?, ?, ?, ?, ?, ?, ?)', [userId, restaurantId, name, email, passwordHash, 'owner', JSON.stringify(['*'])]);
+    res.status(201).json({
+        success: true,
+        data: {
+            restaurant: { id: restaurantId, name: restaurantName, slug },
+            user: { id: userId, name, email, role: 'owner' }
+        }
+    });
+}));
 router.post('/login', (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const { email, password } = req.body ?? {};
     if (!email || !password) {
@@ -45,7 +68,11 @@ router.post('/login', (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const refreshTokenHash = await bcryptjs_1.default.hash(refreshToken, 10);
     const expiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000).toISOString();
     await db.run('INSERT INTO auth_sessions (id, user_id, refresh_token_hash, expires_at) VALUES (?, ?, ?, ?)', [sessionId, user.id, refreshTokenHash, expiresAt]);
-    const accessToken = (0, auth_1.issueAccessToken)({ sub: user.id, sid: sessionId });
+    const accessToken = (0, auth_1.issueAccessToken)({
+        sub: user.id,
+        restaurantId: user.restaurant_id,
+        sid: sessionId
+    });
     res.json({
         success: true,
         data: {
@@ -72,7 +99,11 @@ router.post('/refresh', (0, errorHandler_1.asyncHandler)(async (req, res) => {
         const user = await db.get('SELECT * FROM users WHERE id = ? AND is_active = TRUE', [s.user_id]);
         if (!user)
             throw new errorHandler_1.UnauthorizedError('User not found or inactive');
-        const accessToken = (0, auth_1.issueAccessToken)({ sub: user.id, sid: s.id });
+        const accessToken = (0, auth_1.issueAccessToken)({
+            sub: user.id,
+            restaurantId: user.restaurant_id,
+            sid: s.id
+        });
         return res.json({
             success: true,
             data: {
@@ -121,7 +152,11 @@ router.post('/switch-account', (0, errorHandler_1.asyncHandler)(async (req, res)
     const refreshTokenHash = await bcryptjs_1.default.hash(refreshToken, 10);
     const expiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000).toISOString();
     await db.run('INSERT INTO auth_sessions (id, user_id, refresh_token_hash, expires_at) VALUES (?, ?, ?, ?)', [sessionId, targetUser.id, refreshTokenHash, expiresAt]);
-    const accessToken = (0, auth_1.issueAccessToken)({ sub: targetUser.id, sid: sessionId });
+    const accessToken = (0, auth_1.issueAccessToken)({
+        sub: targetUser.id,
+        restaurantId: targetUser.restaurant_id,
+        sid: sessionId
+    });
     res.json({
         success: true,
         data: {

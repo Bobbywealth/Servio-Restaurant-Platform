@@ -3,9 +3,9 @@
 -- Date: 2026-01-20
 
 -- Add storage fields to receipts
-ALTER TABLE receipts ADD COLUMN IF NOT EXISTS storage_key TEXT;
-ALTER TABLE receipts ADD COLUMN IF NOT EXISTS content_type TEXT;
-ALTER TABLE receipts ADD COLUMN IF NOT EXISTS file_size BIGINT;
+ALTER TABLE receipts ADD COLUMN storage_key TEXT;
+ALTER TABLE receipts ADD COLUMN content_type TEXT;
+ALTER TABLE receipts ADD COLUMN file_size BIGINT;
 ALTER TABLE receipts ALTER COLUMN receipt_date DROP NOT NULL;
 
 -- Standardize status

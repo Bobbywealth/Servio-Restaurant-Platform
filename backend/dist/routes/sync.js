@@ -110,7 +110,7 @@ router.post('/manual', (0, errorHandler_1.asyncHandler)(async (req, res) => {
         }, Math.random() * 2000 + 1000); // Complete after 1-3 seconds
         jobs.push({ jobId, channel, status: 'pending' });
     }
-    await DatabaseService_1.DatabaseService.getInstance().logAudit(userId || 'system', 'trigger_manual_sync', 'sync', 'multiple', { channels: targetChannels, type });
+    await DatabaseService_1.DatabaseService.getInstance().logAudit(req.user?.restaurantId || 'system', userId || null, 'trigger_manual_sync', 'sync', 'multiple', { channels: targetChannels, type });
     res.json({
         success: true,
         data: {

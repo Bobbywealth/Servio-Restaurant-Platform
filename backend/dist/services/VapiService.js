@@ -4,6 +4,7 @@ exports.VapiService = void 0;
 const AssistantService_1 = require("./AssistantService");
 const DatabaseService_1 = require("./DatabaseService");
 const logger_1 = require("../utils/logger");
+const uuid_1 = require("uuid");
 class VapiService {
     constructor() {
         this.assistantService = new AssistantService_1.AssistantService();
@@ -112,8 +113,9 @@ class VapiService {
         const customerNumber = message.call?.customer?.number;
         const duration = message.call?.duration;
         const endedReason = message.endedReason;
+        const restaurantId = 'demo-restaurant-1'; // Default for v1
         // Log the call for analytics
-        await DatabaseService_1.DatabaseService.getInstance().logAudit(this.getPhoneUserId(customerNumber), 'phone_call_ended', 'call', callId, { duration, endedReason, customerNumber });
+        await DatabaseService_1.DatabaseService.getInstance().logAudit(restaurantId, null, 'phone_call_ended', 'call', callId, { duration, endedReason, customerNumber });
         logger_1.logger.info(`Call ${callId} ended: ${endedReason}, duration: ${duration}s`);
         return { result: 'call logged' };
     }
@@ -192,11 +194,13 @@ class VapiService {
         try {
             const { items, customerInfo, deliveryAddress, orderType } = parameters;
             const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
+            // Default to demo restaurant for v1 vapi calls if not specified
+            const restaurantId = 'demo-restaurant-1';
             // Validate items against menu
             const validItems = [];
             let totalAmount = 0;
             for (const item of items) {
-                const menuItem = await db.get('SELECT * FROM menu_items WHERE name LIKE ? AND is_available = 1', [`%${item.name}%`]);
+                const menuItem = await db.get('SELECT * FROM menu_items WHERE name LIKE ? AND is_available = 1 AND restaurant_id = ?', [`%${item.name}%`, restaurantId]);
                 if (!menuItem) {
                     return {
                         type: 'place_order',
@@ -217,25 +221,23 @@ class VapiService {
             // Create the order
             const orderIdValue = `order_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
             await db.run(`INSERT INTO orders (
-          id, customer_name, customer_phone, customer_email, 
-          items, total_amount, order_type, status, 
-          delivery_address, special_instructions, 
-          source, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`, [
+          id, restaurant_id, status, total_amount, channel, 
+          created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`, [
                 orderIdValue,
-                customerInfo.name,
-                customerInfo.phone,
-                customerInfo.email || null,
-                JSON.stringify(validItems),
+                restaurantId,
+                'NEW',
                 totalAmount,
-                orderType,
-                'received',
-                deliveryAddress ? JSON.stringify(deliveryAddress) : null,
-                validItems.map(i => i.specialInstructions).filter(Boolean).join('; ') || null,
-                'phone_vapi'
+                'phone'
             ]);
+            // Create order items (multi-table support)
+            for (const item of validItems) {
+                await db.run(`INSERT INTO order_items (id, order_id, menu_item_id, name, quantity, unit_price)
+           VALUES (?, ?, ?, ?, ?, ?)`, [(0, uuid_1.v4)(), orderIdValue, item.id, item.name, item.quantity, item.price]);
+            }
             // Log the audit
-            await DatabaseService_1.DatabaseService.getInstance().logAudit(userId, 'place_order', 'order', orderIdValue, { customerInfo, items: validItems, orderType, totalAmount });
+            await DatabaseService_1.DatabaseService.getInstance().logAudit(restaurantId, null, // No system user for vapi call
+            'order_created_via_vapi', 'order', orderIdValue, { customerInfo, totalAmount });
             const itemSummary = validItems.map(item => `${item.quantity} ${item.name}${item.specialInstructions ? ' (' + item.specialInstructions + ')' : ''}`).join(', ');
             return {
                 type: 'place_order',
@@ -259,8 +261,9 @@ class VapiService {
         try {
             const { category, itemName } = parameters;
             const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
-            let query = 'SELECT * FROM menu_items WHERE is_available = 1';
-            const params = [];
+            const restaurantId = 'demo-restaurant-1'; // Default for v1
+            let query = 'SELECT * FROM menu_items WHERE is_available = 1 AND restaurant_id = ?';
+            const params = [restaurantId];
             if (itemName) {
                 query += ' AND name LIKE ?';
                 params.push(`%${itemName}%`);
@@ -271,7 +274,7 @@ class VapiService {
             }
             query += ' ORDER BY name LIMIT 10';
             const items = await db.all(query, params);
-            await DatabaseService_1.DatabaseService.getInstance().logAudit(userId, 'get_menu_info', 'menu', 'multiple', { category, itemName, resultCount: items.length });
+            await DatabaseService_1.DatabaseService.getInstance().logAudit(restaurantId, null, 'get_menu_info', 'menu', 'multiple', { category, itemName, resultCount: items.length });
             if (items.length === 0) {
                 return {
                     type: 'get_menu_info',
@@ -312,15 +315,16 @@ class VapiService {
         try {
             const { orderId, phoneNumber } = parameters;
             const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
+            const restaurantId = 'demo-restaurant-1'; // Default for v1
             let query;
             let params;
             if (orderId) {
-                query = 'SELECT * FROM orders WHERE id = ?';
-                params = [orderId];
+                query = 'SELECT * FROM orders WHERE id = ? AND restaurant_id = ?';
+                params = [orderId, restaurantId];
             }
             else if (phoneNumber) {
-                query = 'SELECT * FROM orders WHERE customer_phone = ? ORDER BY created_at DESC LIMIT 3';
-                params = [phoneNumber];
+                query = 'SELECT * FROM orders WHERE customer_phone = ? AND restaurant_id = ? ORDER BY created_at DESC LIMIT 3';
+                params = [phoneNumber, restaurantId];
             }
             else {
                 return {
@@ -332,7 +336,7 @@ class VapiService {
             }
             const orders = orderId ? [await db.get(query, params)] : await db.all(query, params);
             const validOrders = orders.filter(order => order !== undefined);
-            await DatabaseService_1.DatabaseService.getInstance().logAudit(userId, 'check_order_status', 'order', orderId || 'by_phone', { orderId, phoneNumber, foundOrders: validOrders.length });
+            await DatabaseService_1.DatabaseService.getInstance().logAudit(restaurantId, null, 'check_order_status', 'order', orderId || 'by_phone', { orderId, phoneNumber, foundOrders: validOrders.length });
             if (validOrders.length === 0) {
                 return {
                     type: 'check_order_status',

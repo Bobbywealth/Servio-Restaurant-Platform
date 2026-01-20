@@ -1,6 +1,7 @@
 import { AssistantService } from './AssistantService';
 import { DatabaseService } from './DatabaseService';
 import { logger } from '../utils/logger';
+import { v4 as uuidv4 } from 'uuid';
 
 export interface VapiWebhookPayload {
   message: {

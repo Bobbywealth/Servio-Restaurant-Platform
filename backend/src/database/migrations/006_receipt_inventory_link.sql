@@ -4,8 +4,8 @@
 
 -- Refine receipt_items for manual matching and v1 workflow
 -- We use item_name as raw_description
-ALTER TABLE receipt_items ADD COLUMN IF NOT EXISTS unit_cost DECIMAL(10,4);
-ALTER TABLE receipt_items ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}';
+ALTER TABLE receipt_items ADD COLUMN unit_cost DECIMAL(10,4);
+ALTER TABLE receipt_items ADD COLUMN metadata TEXT DEFAULT '{}';
 
 -- Ensure inventory_transactions has the correct types
 -- Already has transaction_type: receive, adjust, waste, etc.

@@ -2,27 +2,24 @@
 -- Version: 1.1.0
 -- Date: 2026-01-19
 
--- Enable UUID extension
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-
--- Drop existing tables if they exist
-DROP TABLE IF EXISTS audit_logs CASCADE;
-DROP TABLE IF EXISTS auth_sessions CASCADE;
-DROP TABLE IF EXISTS receipt_line_items CASCADE;
-DROP TABLE IF EXISTS receipts CASCADE;
-DROP TABLE IF EXISTS time_entries CASCADE;
-DROP TABLE IF EXISTS inventory_transactions CASCADE;
-DROP TABLE IF EXISTS inventory_items CASCADE;
-DROP TABLE IF EXISTS tasks CASCADE;
-DROP TABLE IF EXISTS order_items CASCADE;
-DROP TABLE IF EXISTS orders CASCADE;
-DROP TABLE IF EXISTS customers CASCADE;
-DROP TABLE IF EXISTS modifier_options CASCADE;
-DROP TABLE IF EXISTS modifier_groups CASCADE;
-DROP TABLE IF EXISTS menu_items CASCADE;
-DROP TABLE IF EXISTS menu_categories CASCADE;
-DROP TABLE IF EXISTS users CASCADE;
-DROP TABLE IF EXISTS restaurants CASCADE;
+-- Drop existing tables if they exist (SQLite compatible)
+DROP TABLE IF EXISTS audit_logs;
+DROP TABLE IF EXISTS auth_sessions;
+DROP TABLE IF EXISTS receipt_line_items;
+DROP TABLE IF EXISTS receipts;
+DROP TABLE IF EXISTS time_entries;
+DROP TABLE IF EXISTS inventory_transactions;
+DROP TABLE IF EXISTS inventory_items;
+DROP TABLE IF EXISTS tasks;
+DROP TABLE IF EXISTS order_items;
+DROP TABLE IF EXISTS orders;
+DROP TABLE IF EXISTS customers;
+DROP TABLE IF EXISTS modifier_options;
+DROP TABLE IF EXISTS modifier_groups;
+DROP TABLE IF EXISTS menu_items;
+DROP TABLE IF EXISTS menu_categories;
+DROP TABLE IF EXISTS users;
+DROP TABLE IF EXISTS restaurants;
 
 -- ============================================================================
 -- RESTAURANT & LOCATION MANAGEMENT
@@ -36,9 +33,9 @@ CREATE TABLE restaurants (
     phone TEXT,
     email TEXT,
     settings TEXT NOT NULL DEFAULT '{}',
-    is_active BOOLEAN NOT NULL DEFAULT TRUE,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    is_active BOOLEAN NOT NULL DEFAULT 1,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- ============================================================================
@@ -54,17 +51,17 @@ CREATE TABLE users (
     pin TEXT,
     role TEXT NOT NULL CHECK (role IN ('staff', 'manager', 'owner', 'admin')),
     permissions TEXT NOT NULL DEFAULT '[]',
-    is_active BOOLEAN NOT NULL DEFAULT TRUE,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    is_active BOOLEAN NOT NULL DEFAULT 1,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE auth_sessions (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL REFERENCES users(id),
     refresh_token_hash TEXT NOT NULL,
-    expires_at TIMESTAMPTZ NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    expires_at DATETIME NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- ============================================================================
@@ -77,9 +74,9 @@ CREATE TABLE menu_categories (
     name TEXT NOT NULL,
     description TEXT,
     sort_order INTEGER DEFAULT 0,
-    is_active BOOLEAN NOT NULL DEFAULT TRUE,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    is_active BOOLEAN NOT NULL DEFAULT 1,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE menu_items (
@@ -89,9 +86,9 @@ CREATE TABLE menu_items (
     name TEXT NOT NULL,
     description TEXT,
     price DOUBLE PRECISION NOT NULL,
-    is_available BOOLEAN NOT NULL DEFAULT TRUE,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    is_available BOOLEAN NOT NULL DEFAULT 1,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE modifier_groups (
@@ -100,8 +97,8 @@ CREATE TABLE modifier_groups (
     name TEXT NOT NULL,
     min_selection INTEGER DEFAULT 0,
     max_selection INTEGER,
-    is_required BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    is_required BOOLEAN DEFAULT 0,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE modifier_options (
@@ -109,8 +106,8 @@ CREATE TABLE modifier_options (
     modifier_group_id TEXT NOT NULL REFERENCES modifier_groups(id),
     name TEXT NOT NULL,
     price_modifier DOUBLE PRECISION DEFAULT 0,
-    is_available BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    is_available BOOLEAN DEFAULT 1,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- ============================================================================
@@ -123,7 +120,7 @@ CREATE TABLE customers (
     name TEXT NOT NULL,
     email TEXT,
     phone TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE orders (
@@ -135,8 +132,8 @@ CREATE TABLE orders (
     status TEXT NOT NULL DEFAULT 'NEW',
     total_amount DOUBLE PRECISION NOT NULL DEFAULT 0,
     payment_status TEXT NOT NULL DEFAULT 'unpaid',
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE order_items (
@@ -147,7 +144,7 @@ CREATE TABLE order_items (
     quantity INTEGER NOT NULL,
     unit_price DOUBLE PRECISION NOT NULL,
     notes TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- ============================================================================
@@ -162,8 +159,8 @@ CREATE TABLE inventory_items (
     unit TEXT NOT NULL,
     on_hand_qty DOUBLE PRECISION NOT NULL DEFAULT 0,
     low_stock_threshold DOUBLE PRECISION NOT NULL DEFAULT 5,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE inventory_transactions (
@@ -174,7 +171,7 @@ CREATE TABLE inventory_transactions (
     quantity DOUBLE PRECISION NOT NULL,
     reason TEXT,
     created_by TEXT REFERENCES users(id),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- ============================================================================
@@ -188,22 +185,22 @@ CREATE TABLE tasks (
     description TEXT,
     status TEXT NOT NULL DEFAULT 'pending',
     assigned_to TEXT REFERENCES users(id),
-    due_date TIMESTAMPTZ,
-    completed_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    due_date DATETIME,
+    completed_at DATETIME,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE time_entries (
     id TEXT PRIMARY KEY,
     restaurant_id TEXT NOT NULL REFERENCES restaurants(id),
     user_id TEXT NOT NULL REFERENCES users(id),
-    clock_in_time TIMESTAMPTZ NOT NULL,
-    clock_out_time TIMESTAMPTZ,
+    clock_in_time DATETIME NOT NULL,
+    clock_out_time DATETIME,
     break_minutes INTEGER NOT NULL DEFAULT 0,
     total_hours DOUBLE PRECISION,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- ============================================================================
@@ -219,8 +216,8 @@ CREATE TABLE receipts (
     file_url TEXT,
     storage_key TEXT,
     uploaded_by TEXT REFERENCES users(id),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE receipt_line_items (
@@ -231,7 +228,7 @@ CREATE TABLE receipt_line_items (
     quantity DOUBLE PRECISION,
     unit_cost DOUBLE PRECISION,
     total_price DOUBLE PRECISION,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE audit_logs (
@@ -242,7 +239,7 @@ CREATE TABLE audit_logs (
     entity_type TEXT NOT NULL,
     entity_id TEXT,
     details TEXT NOT NULL DEFAULT '{}',
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- ============================================================================

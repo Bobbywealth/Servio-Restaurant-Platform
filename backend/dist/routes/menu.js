@@ -39,23 +39,46 @@ const ensureUploadsDir = async () => {
     return uploadsPath;
 };
 // ============================================================================
-// MENU CATEGORIES MANAGEMENT
+// PUBLIC ORDERING ENDPOINTS
 // ============================================================================
+/**
+ * GET /api/menu/public/:slug
+ * Get menu for a restaurant by its slug (public)
+ */
+router.get('/public/:slug', (0, errorHandler_1.asyncHandler)(async (req, res) => {
+    const { slug } = req.params;
+    const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
+    const restaurant = await db.get('SELECT id, name, settings FROM restaurants WHERE slug = ? AND is_active = TRUE', [slug]);
+    if (!restaurant) {
+        return res.status(404).json({ success: false, error: { message: 'Restaurant not found' } });
+    }
+    const items = await db.all(`
+    SELECT mi.*, mc.name as category_name
+    FROM menu_items mi
+    LEFT JOIN menu_categories mc ON mi.category_id = mc.id
+    WHERE mi.restaurant_id = ? AND mi.is_available = TRUE AND mc.is_active = TRUE
+    ORDER BY mc.sort_order ASC, mi.name ASC
+  `, [restaurant.id]);
+    res.json({
+        success: true,
+        data: {
+            restaurant: { name: restaurant.name, settings: JSON.parse(restaurant.settings || '{}') },
+            items
+        }
+    });
+}));
 /**
  * GET /api/menu/categories/all
  * Get all menu categories for a restaurant
  */
 router.get('/categories/all', (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
-    // For now, use a default restaurant ID (in production, get from auth)
-    const restaurantId = '00000000-0000-0000-0000-000000000001';
+    const restaurantId = req.user?.restaurantId;
     const categories = await db.all(`
     SELECT 
       id,
       name,
       description,
-      image,
-      image_alt_text,
       sort_order,
       is_active,
       created_at,
@@ -69,64 +92,30 @@ router.get('/categories/all', (0, errorHandler_1.asyncHandler)(async (req, res) 
         data: categories
     });
 }));
-/**
- * POST /api/menu/categories
- * Create a new menu category with optional image
- */
-router.post('/categories', upload.single('image'), (0, errorHandler_1.asyncHandler)(async (req, res) => {
-    const { name, description, imageAltText, sortOrder = 0 } = req.body;
+router.post('/categories', (0, errorHandler_1.asyncHandler)(async (req, res) => {
+    const { name, description, sortOrder = 0 } = req.body;
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
+    const restaurantId = req.user?.restaurantId;
+    if (!restaurantId)
+        throw new errorHandler_1.UnauthorizedError('Restaurant ID missing');
     if (!name?.trim()) {
-        return res.status(400).json({
-            success: false,
-            error: { message: 'Category name is required' }
-        });
+        return res.status(400).json({ success: false, error: { message: 'Category name is required' } });
     }
-    const restaurantId = '00000000-0000-0000-0000-000000000001';
     const categoryId = (0, uuid_1.v4)();
-    const uploadsPath = await ensureUploadsDir();
-    // Process uploaded image
-    let imagePath = null;
-    if (req.file) {
-        const fileName = `category-${categoryId}-${(0, uuid_1.v4)()}.webp`;
-        const filePath = path_1.default.join(uploadsPath, fileName);
-        // Resize and optimize image
-        await (0, sharp_1.default)(req.file.buffer)
-            .resize(400, 300, { fit: 'cover', withoutEnlargement: true })
-            .webp({ quality: 80 })
-            .toFile(filePath);
-        imagePath = `/uploads/menu/${fileName}`;
-    }
     await db.run(`
-    INSERT INTO menu_categories (id, restaurant_id, name, description, image, image_alt_text, sort_order, is_active)
-    VALUES (?, ?, ?, ?, ?, ?, ?, 1)
-  `, [categoryId, restaurantId, name.trim(), description?.trim() || null, imagePath, imageAltText?.trim() || null, sortOrder]);
-    const newCategory = await db.get(`
-    SELECT * FROM menu_categories WHERE id = ?
-  `, [categoryId]);
-    await DatabaseService_1.DatabaseService.getInstance().logAudit('system', // TODO: get from auth
-    'create_category', 'menu_category', categoryId, { name, description, imagePath, imageAltText, sortOrder });
-    logger_1.logger.info(`Menu category created: ${name}${imagePath ? ' with image' : ''}`);
-    res.status(201).json({
-        success: true,
-        data: newCategory
-    });
+    INSERT INTO menu_categories (id, restaurant_id, name, description, sort_order, is_active)
+    VALUES (?, ?, ?, ?, ?, TRUE)
+  `, [categoryId, restaurantId, name.trim(), description?.trim() || null, sortOrder]);
+    await DatabaseService_1.DatabaseService.getInstance().logAudit(restaurantId, req.user?.id || 'system', 'create_category', 'menu_category', categoryId, { name });
+    res.status(201).json({ success: true, data: { id: categoryId, name, description, sortOrder } });
 }));
-/**
- * PUT /api/menu/categories/:id
- * Update a menu category with optional image
- */
-router.put('/categories/:id', upload.single('image'), (0, errorHandler_1.asyncHandler)(async (req, res) => {
+router.put('/categories/:id', (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const { id } = req.params;
-    const { name, description, imageAltText, sortOrder, isActive, removeImage } = req.body;
+    const { name, description, sortOrder, isActive } = req.body;
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
-    const existingCategory = await db.get('SELECT * FROM menu_categories WHERE id = ?', [id]);
-    if (!existingCategory) {
-        return res.status(404).json({
-            success: false,
-            error: { message: 'Category not found' }
-        });
-    }
+    const restaurantId = req.user?.restaurantId;
+    if (!restaurantId)
+        throw new errorHandler_1.UnauthorizedError();
     const updateFields = [];
     const updateValues = [];
     if (name !== undefined) {
@@ -135,11 +124,7 @@ router.put('/categories/:id', upload.single('image'), (0, errorHandler_1.asyncHa
     }
     if (description !== undefined) {
         updateFields.push('description = ?');
-        updateValues.push(description?.trim() || null);
-    }
-    if (imageAltText !== undefined) {
-        updateFields.push('image_alt_text = ?');
-        updateValues.push(imageAltText?.trim() || null);
+        updateValues.push(description.trim());
     }
     if (sortOrder !== undefined) {
         updateFields.push('sort_order = ?');
@@ -149,68 +134,24 @@ router.put('/categories/:id', upload.single('image'), (0, errorHandler_1.asyncHa
         updateFields.push('is_active = ?');
         updateValues.push(isActive ? 1 : 0);
     }
-    // Handle image updates
-    if (removeImage === 'true') {
-        updateFields.push('image = ?');
-        updateValues.push(null);
-    }
-    else if (req.file) {
-        const uploadsPath = await ensureUploadsDir();
-        const fileName = `category-${id}-${(0, uuid_1.v4)()}.webp`;
-        const filePath = path_1.default.join(uploadsPath, fileName);
-        // Resize and optimize image
-        await (0, sharp_1.default)(req.file.buffer)
-            .resize(400, 300, { fit: 'cover', withoutEnlargement: true })
-            .webp({ quality: 80 })
-            .toFile(filePath);
-        const imagePath = `/uploads/menu/${fileName}`;
-        updateFields.push('image = ?');
-        updateValues.push(imagePath);
-    }
     if (updateFields.length > 0) {
-        updateFields.push('updated_at = CURRENT_TIMESTAMP');
-        updateValues.push(id);
-        await db.run(`
-      UPDATE menu_categories 
-      SET ${updateFields.join(', ')}
-      WHERE id = ?
-    `, updateValues);
+        updateValues.push(id, restaurantId);
+        await db.run(`UPDATE menu_categories SET ${updateFields.join(', ')} WHERE id = ? AND restaurant_id = ?`, updateValues);
     }
-    const updatedCategory = await db.get('SELECT * FROM menu_categories WHERE id = ?', [id]);
-    await DatabaseService_1.DatabaseService.getInstance().logAudit('system', 'update_category', 'menu_category', id, { name, description, imageAltText, sortOrder, isActive, hasNewImage: !!req.file, removeImage });
-    res.json({
-        success: true,
-        data: updatedCategory
-    });
+    await DatabaseService_1.DatabaseService.getInstance().logAudit(restaurantId, req.user?.id || 'system', 'update_category', 'menu_category', id, { name });
+    res.json({ success: true });
 }));
-/**
- * DELETE /api/menu/categories/:id
- * Delete a menu category (soft delete)
- */
 router.delete('/categories/:id', (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const { id } = req.params;
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
-    const category = await db.get('SELECT * FROM menu_categories WHERE id = ?', [id]);
-    if (!category) {
-        return res.status(404).json({
-            success: false,
-            error: { message: 'Category not found' }
-        });
-    }
-    // Check if category has items
-    const itemCount = await db.get('SELECT COUNT(*) as count FROM menu_items WHERE category_id = ?', [id]);
-    if (itemCount.count > 0) {
-        return res.status(400).json({
-            success: false,
-            error: { message: 'Cannot delete category with existing menu items' }
-        });
-    }
-    await db.run('UPDATE menu_categories SET is_active = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [id]);
-    await DatabaseService_1.DatabaseService.getInstance().logAudit('system', 'delete_category', 'menu_category', id, { categoryName: category.name });
-    res.json({
-        success: true,
-        message: 'Category deleted successfully'
-    });
+    const restaurantId = req.user?.restaurantId;
+    if (!restaurantId)
+        throw new errorHandler_1.UnauthorizedError();
+    // Get category details before deleting for audit log
+    const category = await db.get('SELECT name FROM menu_categories WHERE id = ? AND restaurant_id = ?', [id, restaurantId]);
+    await db.run('DELETE FROM menu_categories WHERE id = ? AND restaurant_id = ?', [id, restaurantId]);
+    await DatabaseService_1.DatabaseService.getInstance().logAudit(restaurantId, req.user?.id || 'system', 'delete_category', 'menu_category', id, { categoryName: category?.name || 'Unknown' });
+    res.json({ success: true });
 }));
 // ============================================================================
 // ENHANCED MENU ITEMS MANAGEMENT
@@ -228,7 +169,7 @@ router.post('/items', upload.array('images', 5), (0, errorHandler_1.asyncHandler
             error: { message: 'Name, price, and category are required' }
         });
     }
-    const restaurantId = '00000000-0000-0000-0000-000000000001';
+    const restaurantId = req.user?.restaurantId;
     const itemId = (0, uuid_1.v4)();
     const uploadsPath = await ensureUploadsDir();
     // Process uploaded images
@@ -278,7 +219,7 @@ router.post('/items', upload.array('images', 5), (0, errorHandler_1.asyncHandler
         nutritional_info: newItem.nutritional_info ? JSON.parse(newItem.nutritional_info) : null,
         is_available: Boolean(newItem.is_available)
     };
-    await DatabaseService_1.DatabaseService.getInstance().logAudit('system', 'create_menu_item', 'menu_item', itemId, { name, price, categoryId });
+    await DatabaseService_1.DatabaseService.getInstance().logAudit(restaurantId, req.user?.id || 'system', 'create_menu_item', 'menu_item', itemId, { name, price, categoryId });
     logger_1.logger.info(`Menu item created: ${name} ($${price})`);
     res.status(201).json({
         success: true,
@@ -376,7 +317,7 @@ router.put('/items/:id', upload.array('images', 5), (0, errorHandler_1.asyncHand
         nutritional_info: updatedItem.nutritional_info ? JSON.parse(updatedItem.nutritional_info) : null,
         is_available: Boolean(updatedItem.is_available)
     };
-    await DatabaseService_1.DatabaseService.getInstance().logAudit('system', 'update_menu_item', 'menu_item', id, { name, price, categoryId });
+    await DatabaseService_1.DatabaseService.getInstance().logAudit(req.user?.restaurantId, req.user?.id || 'system', 'update_menu_item', 'menu_item', id, { name, price, categoryId });
     res.json({
         success: true,
         data: formattedItem
@@ -388,7 +329,7 @@ router.put('/items/:id', upload.array('images', 5), (0, errorHandler_1.asyncHand
  */
 router.get('/items/full', (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
-    const restaurantId = '00000000-0000-0000-0000-000000000001';
+    const restaurantId = req.user?.restaurantId;
     const items = await db.all(`
     SELECT 
       mi.*,
@@ -506,7 +447,7 @@ router.post('/items/set-unavailable', (0, errorHandler_1.asyncHandler)(async (re
         ]);
         syncJobs.push({ channel, jobId, status: 'completed' });
     }
-    await DatabaseService_1.DatabaseService.getInstance().logAudit(userId || 'system', 'set_item_unavailable', 'menu_item', itemId, { itemName: item.name, channels: syncResults });
+    await DatabaseService_1.DatabaseService.getInstance().logAudit(req.user?.restaurantId, req.user?.id || 'system', 'set_item_unavailable', 'menu_item', itemId, { itemName: item.name, channels: syncResults });
     logger_1.logger.info(`Item 86'd: ${item.name} on channels: ${syncResults.join(', ')}`);
     res.json({
         success: true,
@@ -560,7 +501,7 @@ router.post('/items/set-available', (0, errorHandler_1.asyncHandler)(async (req,
         ]);
         syncJobs.push({ channel, jobId, status: 'completed' });
     }
-    await DatabaseService_1.DatabaseService.getInstance().logAudit(userId || 'system', 'set_item_available', 'menu_item', itemId, { itemName: item.name, channels: syncResults });
+    await DatabaseService_1.DatabaseService.getInstance().logAudit(req.user?.restaurantId, req.user?.id || 'system', 'set_item_available', 'menu_item', itemId, { itemName: item.name, channels: syncResults });
     logger_1.logger.info(`Item restored: ${item.name} on channels: ${syncResults.join(', ')}`);
     res.json({
         success: true,
@@ -625,7 +566,7 @@ router.get('/categories', (0, errorHandler_1.asyncHandler)(async (req, res) => {
  */
 router.get('/modifier-groups', (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
-    const restaurantId = '00000000-0000-0000-0000-000000000001';
+    const restaurantId = req.user?.restaurantId;
     const groups = await db.all(`
     SELECT 
       mg.*,
@@ -654,7 +595,7 @@ router.post('/modifier-groups', (0, errorHandler_1.asyncHandler)(async (req, res
             error: { message: 'Modifier group name is required' }
         });
     }
-    const restaurantId = '00000000-0000-0000-0000-000000000001';
+    const restaurantId = req.user?.restaurantId;
     const groupId = (0, uuid_1.v4)();
     await db.run(`
     INSERT INTO modifier_groups (id, restaurant_id, name, description, min_selections, max_selections, is_required)
@@ -663,7 +604,7 @@ router.post('/modifier-groups', (0, errorHandler_1.asyncHandler)(async (req, res
     const newGroup = await db.get(`
     SELECT * FROM modifier_groups WHERE id = ?
   `, [groupId]);
-    await DatabaseService_1.DatabaseService.getInstance().logAudit('system', 'create_modifier_group', 'modifier_group', groupId, { name, description, minSelections, maxSelections, isRequired });
+    await DatabaseService_1.DatabaseService.getInstance().logAudit(restaurantId, req.user?.id || 'system', 'create_modifier_group', 'modifier_group', groupId, { name, description, minSelections, maxSelections, isRequired });
     logger_1.logger.info(`Modifier group created: ${name}`);
     res.status(201).json({
         success: true,
@@ -709,7 +650,7 @@ router.post('/modifier-groups/:id/options', (0, errorHandler_1.asyncHandler)(asy
     const newOption = await db.get(`
     SELECT * FROM modifier_options WHERE id = ?
   `, [optionId]);
-    await DatabaseService_1.DatabaseService.getInstance().logAudit('system', 'create_modifier_option', 'modifier_option', optionId, { modifierGroupId: id, name, description, priceModifier });
+    await DatabaseService_1.DatabaseService.getInstance().logAudit(req.user?.restaurantId, req.user?.id || 'system', 'create_modifier_option', 'modifier_option', optionId, { modifierGroupId: id, name, description, priceModifier });
     res.status(201).json({
         success: true,
         data: newOption
@@ -782,7 +723,7 @@ router.post('/items/:id/modifiers', (0, errorHandler_1.asyncHandler)(async (req,
       `, [(0, uuid_1.v4)(), id, modifierGroupIds[i], i]);
         }
         await db.run('COMMIT');
-        await DatabaseService_1.DatabaseService.getInstance().logAudit('system', 'update_item_modifiers', 'menu_item', id, { modifierGroupIds });
+        await DatabaseService_1.DatabaseService.getInstance().logAudit(req.user?.restaurantId, req.user?.id || 'system', 'update_item_modifiers', 'menu_item', id, { modifierGroupIds });
         res.json({
             success: true,
             message: 'Menu item modifiers updated successfully'
@@ -808,7 +749,7 @@ router.post('/import', upload.single('file'), (0, errorHandler_1.asyncHandler)(a
         });
     }
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
-    const restaurantId = '00000000-0000-0000-0000-000000000001';
+    const restaurantId = req.user?.restaurantId;
     const importId = (0, uuid_1.v4)();
     const fileType = req.file.mimetype.includes('excel') || req.file.originalname.endsWith('.xlsx') ? 'excel' : 'csv';
     // Create import record
@@ -896,7 +837,7 @@ router.post('/import', upload.single('file'), (0, errorHandler_1.asyncHandler)(a
           success_count = ?, error_count = ?, errors = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `, [data.length, data.length, successCount, errorCount, JSON.stringify(errors), importId]);
-        await DatabaseService_1.DatabaseService.getInstance().logAudit('system', 'import_menu', 'menu_import', importId, { filename: req.file.originalname, totalRows: data.length, successCount, errorCount });
+        await DatabaseService_1.DatabaseService.getInstance().logAudit(restaurantId, req.user?.id || 'system', 'import_menu', 'menu_import', importId, { filename: req.file.originalname, totalRows: data.length, successCount, errorCount });
         logger_1.logger.info(`Menu import completed: ${successCount} success, ${errorCount} errors`);
         res.json({
             success: true,
@@ -929,7 +870,7 @@ router.post('/import', upload.single('file'), (0, errorHandler_1.asyncHandler)(a
  */
 router.get('/imports', (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
-    const restaurantId = '00000000-0000-0000-0000-000000000001';
+    const restaurantId = req.user?.restaurantId;
     const imports = await db.all(`
     SELECT 
       id, filename, file_type, status, total_rows, processed_rows,

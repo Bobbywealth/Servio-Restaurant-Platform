@@ -128,12 +128,12 @@ export class JobRunnerService {
       );
       
       await dbService.logAudit(
-        'system',
+        job.restaurant_id || 'system',
+        null,
         'job_started',
         'sync_job',
         job.id,
-        { type: job.job_type, attempt: job.retry_count + 1 },
-        'worker'
+        { type: job.job_type, attempt: (job.retry_count || 0) + 1 }
       );
 
       // 2. Find handler
@@ -152,12 +152,12 @@ export class JobRunnerService {
       );
 
       await dbService.logAudit(
-        'system',
+        job.restaurant_id || 'system',
+        null,
         'job_completed',
         'sync_job',
         job.id,
-        { type: job.job_type, result },
-        'worker'
+        { type: job.job_type, result }
       );
 
       logger.info(`Job ${job.id} (${job.job_type}) completed successfully`);
@@ -191,7 +191,8 @@ export class JobRunnerService {
       );
 
       await dbService.logAudit(
-        'system',
+        job.restaurant_id || 'system',
+        null,
         'job_failed',
         'sync_job',
         job.id,
@@ -201,8 +202,7 @@ export class JobRunnerService {
           attempt: nextRetryCount,
           next_run_at: nextRunAt,
           is_final: isFinalFailure
-        },
-        'worker'
+        }
       );
     }
   }

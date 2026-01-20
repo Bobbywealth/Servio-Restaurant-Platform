@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { DatabaseService } from '../services/DatabaseService';
-import { asyncHandler } from '../middleware/errorHandler';
+import { asyncHandler, NotFoundError, UnauthorizedError } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
 import multer from 'multer';
 import sharp from 'sharp';
@@ -162,14 +162,17 @@ router.delete('/categories/:id', asyncHandler(async (req: Request, res: Response
   const restaurantId = req.user?.restaurantId;
   if (!restaurantId) throw new UnauthorizedError();
 
+  // Get category details before deleting for audit log
+  const category = await db.get('SELECT name FROM menu_categories WHERE id = ? AND restaurant_id = ?', [id, restaurantId]);
+  
   await db.run('DELETE FROM menu_categories WHERE id = ? AND restaurant_id = ?', [id, restaurantId]);
   await DatabaseService.getInstance().logAudit(
-    restaurantId!,
+    restaurantId,
     req.user?.id || 'system',
     'delete_category',
     'menu_category',
     id,
-    { categoryName: category.name }
+    { categoryName: category?.name || 'Unknown' }
   );
   res.json({ success: true });
 }));
@@ -396,7 +399,7 @@ router.put('/items/:id', upload.array('images', 5), asyncHandler(async (req: Req
   };
 
   await DatabaseService.getInstance().logAudit(
-    restaurantId!,
+    req.user?.restaurantId!,
     req.user?.id || 'system',
     'update_menu_item',
     'menu_item',

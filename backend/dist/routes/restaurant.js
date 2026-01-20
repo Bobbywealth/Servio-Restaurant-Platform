@@ -48,7 +48,7 @@ const ensureUploadsDir = async (subdir = '') => {
  */
 router.get('/profile', (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
-    const restaurantId = '00000000-0000-0000-0000-000000000001'; // Default restaurant
+    const restaurantId = req.user?.restaurantId;
     const restaurant = await db.get(`
     SELECT 
       id, name, slug, address, phone, email, website, description,
@@ -92,7 +92,7 @@ router.put('/profile', upload.fields([
 ]), (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const { name, description, cuisineType, priceRange, phone, email, website, address, socialLinks, operatingHours, onlineOrderingEnabled, deliveryEnabled, pickupEnabled, deliveryRadius, deliveryFee, minimumOrder, customDomain } = req.body;
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
-    const restaurantId = '00000000-0000-0000-0000-000000000001';
+    const restaurantId = req.user?.restaurantId;
     const existingRestaurant = await db.get('SELECT * FROM restaurants WHERE id = ?', [restaurantId]);
     if (!existingRestaurant) {
         return res.status(404).json({
@@ -212,7 +212,7 @@ router.put('/profile', upload.fields([
     const updatedRestaurant = await db.get(`
     SELECT * FROM restaurants WHERE id = ?
   `, [restaurantId]);
-    await DatabaseService_1.DatabaseService.getInstance().logAudit('system', 'update_restaurant_profile', 'restaurant', restaurantId, { name, description, cuisineType });
+    await DatabaseService_1.DatabaseService.getInstance().logAudit(restaurantId, req.user?.id || 'system', 'update_restaurant_profile', 'restaurant', restaurantId, { name, description, cuisineType });
     logger_1.logger.info(`Restaurant profile updated: ${name || existingRestaurant.name}`);
     res.json({
         success: true,
@@ -234,7 +234,7 @@ router.put('/profile', upload.fields([
  */
 router.get('/theme', (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
-    const restaurantId = '00000000-0000-0000-0000-000000000001';
+    const restaurantId = req.user?.restaurantId;
     const theme = await db.get(`
     SELECT * FROM restaurant_themes 
     WHERE restaurant_id = ? AND is_active = TRUE
@@ -275,7 +275,7 @@ router.get('/theme', (0, errorHandler_1.asyncHandler)(async (req, res) => {
 router.put('/theme', (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const { name = 'Custom Theme', primaryColor, secondaryColor, textColor, backgroundColor, fontFamily, layoutStyle, customCss } = req.body;
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
-    const restaurantId = '00000000-0000-0000-0000-000000000001';
+    const restaurantId = req.user?.restaurantId;
     // Check if theme exists
     const existingTheme = await db.get(`
     SELECT * FROM restaurant_themes 
@@ -362,7 +362,7 @@ router.put('/theme', (0, errorHandler_1.asyncHandler)(async (req, res) => {
             }
         });
     }
-    await DatabaseService_1.DatabaseService.getInstance().logAudit('system', 'update_restaurant_theme', 'restaurant_theme', existingTheme?.id || 'new', { name, primaryColor, secondaryColor });
+    await DatabaseService_1.DatabaseService.getInstance().logAudit(restaurantId, req.user?.id || 'system', 'update_restaurant_theme', 'restaurant_theme', existingTheme?.id || 'new', { name, primaryColor, secondaryColor });
 }));
 // ============================================================================
 // RESTAURANT LINKS
@@ -373,7 +373,7 @@ router.put('/theme', (0, errorHandler_1.asyncHandler)(async (req, res) => {
  */
 router.get('/links', (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
-    const restaurantId = '00000000-0000-0000-0000-000000000001';
+    const restaurantId = req.user?.restaurantId;
     const links = await db.all(`
     SELECT 
       id, name, description, url_path, target_url, link_type,
@@ -399,7 +399,7 @@ router.get('/links', (0, errorHandler_1.asyncHandler)(async (req, res) => {
 router.post('/links', (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const { name, description, urlPath, targetUrl, linkType = 'custom', customStyling = {} } = req.body;
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
-    const restaurantId = '00000000-0000-0000-0000-000000000001';
+    const restaurantId = req.user?.restaurantId;
     if (!name || !urlPath) {
         return res.status(400).json({
             success: false,
@@ -447,7 +447,7 @@ router.post('/links', (0, errorHandler_1.asyncHandler)(async (req, res) => {
         JSON.stringify(customStyling)
     ]);
     const newLink = await db.get('SELECT * FROM restaurant_links WHERE id = ?', [linkId]);
-    await DatabaseService_1.DatabaseService.getInstance().logAudit('system', 'create_restaurant_link', 'restaurant_link', linkId, { name, urlPath, linkType });
+    await DatabaseService_1.DatabaseService.getInstance().logAudit(restaurantId, req.user?.id || 'system', 'create_restaurant_link', 'restaurant_link', linkId, { name, urlPath, linkType });
     logger_1.logger.info(`Restaurant link created: ${name} (${urlPath})`);
     res.status(201).json({
         success: true,
@@ -523,7 +523,7 @@ router.put('/links/:id', (0, errorHandler_1.asyncHandler)(async (req, res) => {
     `, updateValues);
     }
     const updatedLink = await db.get('SELECT * FROM restaurant_links WHERE id = ?', [id]);
-    await DatabaseService_1.DatabaseService.getInstance().logAudit('system', 'update_restaurant_link', 'restaurant_link', id, { name, urlPath, linkType });
+    await DatabaseService_1.DatabaseService.getInstance().logAudit(existingLink.restaurant_id, req.user?.id || 'system', 'update_restaurant_link', 'restaurant_link', id, { name, urlPath, linkType });
     res.json({
         success: true,
         data: {
@@ -558,7 +558,7 @@ router.delete('/links/:id', (0, errorHandler_1.asyncHandler)(async (req, res) =>
             logger_1.logger.warn(`Failed to delete QR code file: ${qrFilePath}`);
         }
     }
-    await DatabaseService_1.DatabaseService.getInstance().logAudit('system', 'delete_restaurant_link', 'restaurant_link', id, { linkName: link.name, urlPath: link.url_path });
+    await DatabaseService_1.DatabaseService.getInstance().logAudit(link.restaurant_id, req.user?.id || 'system', 'delete_restaurant_link', 'restaurant_link', id, { linkName: link.name, urlPath: link.url_path });
     res.json({
         success: true,
         message: 'Link deleted successfully'

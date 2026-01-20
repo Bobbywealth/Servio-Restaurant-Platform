@@ -14,25 +14,28 @@ router.get('/today', (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const { status } = req.query;
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
     const dialect = DatabaseService_1.DatabaseService.getInstance().getDialect();
+    const restaurantId = req.user?.restaurantId;
     let query = dialect === 'postgres'
         ? `
           SELECT * FROM tasks
-          WHERE type = 'daily'
+          WHERE (type = 'daily'
           OR (due_date IS NOT NULL AND due_date::date = CURRENT_DATE)
-          OR (type = 'one_time' AND status != 'completed')
+          OR (type = 'one_time' AND status != 'completed'))
+          AND restaurant_id = ?
         `
         : `
           SELECT * FROM tasks
-          WHERE type = 'daily'
+          WHERE (type = 'daily'
           OR (due_date IS NOT NULL AND DATE(due_date) = DATE('now'))
-          OR (type = 'one_time' AND status != 'completed')
+          OR (type = 'one_time' AND status != 'completed'))
+          AND restaurant_id = ?
         `;
-    const params = [];
+    const params = [restaurantId];
     if (status) {
         query += ' AND status = ?';
         params.push(status);
     }
-    query += ' ORDER BY CASE WHEN status = "pending" THEN 1 WHEN status = "in_progress" THEN 2 ELSE 3 END, created_at';
+    query += ' ORDER BY CASE WHEN status = \'pending\' THEN 1 WHEN status = \'in_progress\' THEN 2 ELSE 3 END, created_at';
     const tasks = await db.all(query, params);
     res.json({
         success: true,
@@ -93,7 +96,7 @@ router.post('/:id/complete', (0, errorHandler_1.asyncHandler)(async (req, res) =
         });
     }
     await db.run('UPDATE tasks SET status = ?, completed_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', ['completed', new Date().toISOString(), id]);
-    await DatabaseService_1.DatabaseService.getInstance().logAudit(userId || 'system', 'complete_task', 'task', id, { taskTitle: task.title, taskType: task.type });
+    await DatabaseService_1.DatabaseService.getInstance().logAudit(req.user?.restaurantId, req.user?.id || 'system', 'complete_task', 'task', id, { taskTitle: task.title, taskType: task.type });
     logger_1.logger.info(`Task completed: ${task.title}`);
     res.json({
         success: true,
@@ -128,7 +131,7 @@ router.post('/:id/start', (0, errorHandler_1.asyncHandler)(async (req, res) => {
         });
     }
     await db.run('UPDATE tasks SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', ['in_progress', id]);
-    await DatabaseService_1.DatabaseService.getInstance().logAudit(userId || 'system', 'start_task', 'task', id, { taskTitle: task.title });
+    await DatabaseService_1.DatabaseService.getInstance().logAudit(req.user?.restaurantId, req.user?.id || 'system', 'start_task', 'task', id, { taskTitle: task.title });
     logger_1.logger.info(`Task started: ${task.title}`);
     res.json({
         success: true,
@@ -147,15 +150,16 @@ router.post('/:id/start', (0, errorHandler_1.asyncHandler)(async (req, res) => {
 router.get('/stats', (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
     const dialect = DatabaseService_1.DatabaseService.getInstance().getDialect();
+    const restaurantId = req.user?.restaurantId;
     const completedTodayCondition = dialect === 'postgres'
         ? "status = 'completed' AND completed_at::date = CURRENT_DATE"
-        : 'status = "completed" AND DATE(completed_at) = DATE("now")';
+        : 'status = \'completed\' AND DATE(completed_at) = DATE(\'now\')';
     const [totalTasks, pendingTasks, completedToday, tasksByType, tasksByStatus] = await Promise.all([
-        db.get('SELECT COUNT(*) as count FROM tasks'),
-        db.get('SELECT COUNT(*) as count FROM tasks WHERE status = "pending"'),
-        db.get(`SELECT COUNT(*) as count FROM tasks WHERE ${completedTodayCondition}`),
-        db.all('SELECT type, COUNT(*) as count FROM tasks GROUP BY type'),
-        db.all('SELECT status, COUNT(*) as count FROM tasks GROUP BY status')
+        db.get('SELECT COUNT(*) as count FROM tasks WHERE restaurant_id = ?', [restaurantId]),
+        db.get('SELECT COUNT(*) as count FROM tasks WHERE status = \'pending\' AND restaurant_id = ?', [restaurantId]),
+        db.get(`SELECT COUNT(*) as count FROM tasks WHERE ${completedTodayCondition} AND restaurant_id = ?`, [restaurantId]),
+        db.all('SELECT type, COUNT(*) as count FROM tasks WHERE restaurant_id = ? GROUP BY type', [restaurantId]),
+        db.all('SELECT status, COUNT(*) as count FROM tasks WHERE restaurant_id = ? GROUP BY status', [restaurantId])
     ]);
     const stats = {
         total: num(totalTasks.count),
@@ -209,7 +213,7 @@ router.post('/', (0, errorHandler_1.asyncHandler)(async (req, res) => {
         dueDate || null,
         'pending'
     ]);
-    await DatabaseService_1.DatabaseService.getInstance().logAudit(userId || 'system', 'create_task', 'task', taskId, { title, type, assignedTo });
+    await DatabaseService_1.DatabaseService.getInstance().logAudit(req.user?.restaurantId, req.user?.id || 'system', 'create_task', 'task', taskId, { title, type, assignedTo });
     logger_1.logger.info(`New task created: ${title}`);
     res.status(201).json({
         success: true,

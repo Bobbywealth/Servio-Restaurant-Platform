@@ -254,7 +254,7 @@ router.put('/profile', upload.fields([
     req.user?.id || 'system',
     'update_restaurant_profile',
     'restaurant',
-    restaurantId,
+    restaurantId!,
     { name, description, cuisineType }
   );
 

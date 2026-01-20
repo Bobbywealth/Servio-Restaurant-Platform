@@ -14,7 +14,7 @@ router.use(requirePlatformAdmin);
  */
 router.get('/platform-stats', async (req, res) => {
   try {
-    const db = await DatabaseService.getDatabase();
+    const db = await DatabaseService.getInstance().getDatabase();
     
     // Get platform-wide statistics
     const stats = await db.all(`
@@ -62,7 +62,7 @@ router.get('/platform-stats', async (req, res) => {
  */
 router.get('/restaurants', async (req, res) => {
   try {
-    const db = await DatabaseService.getDatabase();
+    const db = await DatabaseService.getInstance().getDatabase();
     const { page = 1, limit = 50, search = '', status = 'all' } = req.query;
     
     const offset = (Number(page) - 1) * Number(limit);
@@ -131,7 +131,7 @@ router.get('/restaurants', async (req, res) => {
 router.get('/restaurants/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const db = await DatabaseService.getDatabase();
+    const db = await DatabaseService.getInstance().getDatabase();
 
     // Get restaurant overview
     const restaurant = await db.get(`
@@ -190,7 +190,7 @@ router.get('/restaurants/:id/orders', async (req, res) => {
     const { page = 1, limit = 50, status = 'all', days = 30 } = req.query;
     
     const offset = (Number(page) - 1) * Number(limit);
-    const db = await DatabaseService.getDatabase();
+    const db = await DatabaseService.getInstance().getDatabase();
 
     let statusClause = '';
     const params: any[] = [id];
@@ -258,7 +258,7 @@ router.get('/restaurants/:id/voice-activity', async (req, res) => {
     const { page = 1, limit = 50, days = 30 } = req.query;
     
     const offset = (Number(page) - 1) * Number(limit);
-    const db = await DatabaseService.getDatabase();
+    const db = await DatabaseService.getInstance().getDatabase();
 
     // Get voice-related audit logs
     const voiceActivity = await db.all(`
@@ -309,7 +309,7 @@ router.get('/restaurants/:id/inventory-transactions', async (req, res) => {
     const { page = 1, limit = 50, days = 30 } = req.query;
     
     const offset = (Number(page) - 1) * Number(limit);
-    const db = await DatabaseService.getDatabase();
+    const db = await DatabaseService.getInstance().getDatabase();
 
     const transactions = await db.all(`
       SELECT 
@@ -361,7 +361,7 @@ router.get('/restaurants/:id/timeclock', async (req, res) => {
     const { page = 1, limit = 50, days = 30 } = req.query;
     
     const offset = (Number(page) - 1) * Number(limit);
-    const db = await DatabaseService.getDatabase();
+    const db = await DatabaseService.getInstance().getDatabase();
 
     const timeEntries = await db.all(`
       SELECT 
@@ -412,7 +412,7 @@ router.get('/restaurants/:id/audit-logs', async (req, res) => {
     const { page = 1, limit = 50, days = 30, action = 'all' } = req.query;
     
     const offset = (Number(page) - 1) * Number(limit);
-    const db = await DatabaseService.getDatabase();
+    const db = await DatabaseService.getInstance().getDatabase();
 
     let actionClause = '';
     const params: any[] = [id];

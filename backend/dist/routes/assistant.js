@@ -31,7 +31,7 @@ const assistantService = new AssistantService_1.AssistantService();
  * Process audio input from microphone
  */
 router.post('/process-audio', upload.single('audio'), (0, errorHandler_1.asyncHandler)(async (req, res) => {
-    const { userId } = req.body;
+    const userId = req.user?.id;
     const audioFile = req.file;
     if (!audioFile) {
         return res.status(400).json({
@@ -40,10 +40,7 @@ router.post('/process-audio', upload.single('audio'), (0, errorHandler_1.asyncHa
         });
     }
     if (!userId) {
-        return res.status(400).json({
-            success: false,
-            error: { message: 'User ID is required' }
-        });
+        throw new errorHandler_1.UnauthorizedError();
     }
     logger_1.logger.info(`Processing audio for user ${userId}, file size: ${audioFile.size} bytes`);
     try {
@@ -69,7 +66,8 @@ router.post('/process-audio', upload.single('audio'), (0, errorHandler_1.asyncHa
  * Process text input (from quick commands or typed input)
  */
 router.post('/process-text', (0, errorHandler_1.asyncHandler)(async (req, res) => {
-    const { text, userId } = req.body;
+    const { text } = req.body;
+    const userId = req.user?.id;
     if (!text || typeof text !== 'string') {
         return res.status(400).json({
             success: false,
@@ -77,10 +75,7 @@ router.post('/process-text', (0, errorHandler_1.asyncHandler)(async (req, res) =
         });
     }
     if (!userId) {
-        return res.status(400).json({
-            success: false,
-            error: { message: 'User ID is required' }
-        });
+        throw new errorHandler_1.UnauthorizedError();
     }
     logger_1.logger.info(`Processing text for user ${userId}: "${text.substring(0, 100)}${text.length > 100 ? '...' : ''}"`);
     try {

@@ -489,7 +489,7 @@ Use the available tools to perform actions. Always be helpful and professional.`
     }));
 
     await DatabaseService.getInstance().logAudit(
-      userId, 'get_orders', 'orders', 'multiple', { status, count: orders.length }
+      restaurantId, userId, 'get_orders', 'orders', 'multiple', { status, count: orders.length }
     );
 
     return {
@@ -515,7 +515,7 @@ Use the available tools to perform actions. Always be helpful and professional.`
     }
 
     await DatabaseService.getInstance().logAudit(
-      userId, 'update_order_status', 'order', orderId, { newStatus: status }
+      restaurantId, userId, 'update_order_status', 'order', orderId, { newStatus: status }
     );
 
     return {
@@ -672,7 +672,7 @@ Use the available tools to perform actions. Always be helpful and professional.`
     const tasks = await this.db.all(query, params);
 
     await DatabaseService.getInstance().logAudit(
-      userId, 'get_tasks', 'tasks', 'multiple', { status, type, count: tasks.length }
+      restaurantId, userId, 'get_tasks', 'tasks', 'multiple', { status, type, count: tasks.length }
     );
 
     return {

@@ -128,7 +128,8 @@ router.post('/manual', asyncHandler(async (req: Request, res: Response) => {
   }
 
   await DatabaseService.getInstance().logAudit(
-    userId || 'system',
+    req.user?.restaurantId || 'system',
+    userId || null,
     'trigger_manual_sync',
     'sync',
     'multiple',

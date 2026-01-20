@@ -37,6 +37,16 @@ export class UnauthorizedError extends Error {
   }
 }
 
+export class BadRequestError extends Error {
+  statusCode = 400;
+  isOperational = true;
+
+  constructor(message: string = 'Bad Request') {
+    super(message);
+    this.name = 'BadRequestError';
+  }
+}
+
 export class ForbiddenError extends Error {
   statusCode = 403;
   isOperational = true;

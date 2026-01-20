@@ -6,22 +6,15 @@
 -- CUSTOMER MANAGEMENT FOR MARKETING
 -- ============================================================================
 
-CREATE TABLE IF NOT EXISTS customers (
-    id UUID PRIMARY KEY DEFAULT (lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))),2) || '-' || substr('89ab',abs(random()) % 4 + 1, 1) || substr(lower(hex(randomblob(2))),2) || '-' || lower(hex(randomblob(6)))),
-    restaurant_id UUID NOT NULL REFERENCES restaurants(id) ON DELETE CASCADE,
-    name VARCHAR(255),
-    email VARCHAR(255),
-    phone VARCHAR(20),
-    preferences TEXT DEFAULT '{}', -- JSON string for customer preferences
-    tags TEXT DEFAULT '[]', -- JSON string for customer tags
-    total_orders INTEGER DEFAULT 0,
-    total_spent DECIMAL(10,2) DEFAULT 0,
-    last_order_date DATE,
-    opt_in_sms BOOLEAN DEFAULT 0,
-    opt_in_email BOOLEAN DEFAULT 0,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+-- Add new columns to existing customers table (SQLite compatible)
+ALTER TABLE customers ADD COLUMN preferences TEXT DEFAULT '{}';
+ALTER TABLE customers ADD COLUMN tags TEXT DEFAULT '[]';
+ALTER TABLE customers ADD COLUMN total_orders INTEGER DEFAULT 0;
+ALTER TABLE customers ADD COLUMN total_spent DECIMAL(10,2) DEFAULT 0;
+ALTER TABLE customers ADD COLUMN last_order_date DATE;
+ALTER TABLE customers ADD COLUMN opt_in_sms BOOLEAN DEFAULT 0;
+ALTER TABLE customers ADD COLUMN opt_in_email BOOLEAN DEFAULT 0;
+ALTER TABLE customers ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP;
 
 CREATE INDEX IF NOT EXISTS idx_customers_restaurant ON customers(restaurant_id);
 CREATE INDEX IF NOT EXISTS idx_customers_email ON customers(email);
@@ -33,8 +26,8 @@ CREATE INDEX IF NOT EXISTS idx_customers_opt_in ON customers(opt_in_sms, opt_in_
 -- ============================================================================
 
 CREATE TABLE IF NOT EXISTS marketing_campaigns (
-    id UUID PRIMARY KEY DEFAULT (lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))),2) || '-' || substr('89ab',abs(random()) % 4 + 1, 1) || substr(lower(hex(randomblob(2))),2) || '-' || lower(hex(randomblob(6)))),
-    restaurant_id UUID NOT NULL REFERENCES restaurants(id) ON DELETE CASCADE,
+    id TEXT PRIMARY KEY,
+    restaurant_id TEXT NOT NULL REFERENCES restaurants(id),
     name VARCHAR(255) NOT NULL,
     type VARCHAR(20) NOT NULL CHECK (type IN ('sms', 'email')), -- 'sms' or 'email'
     status VARCHAR(20) DEFAULT 'draft' CHECK (status IN ('draft', 'scheduled', 'sending', 'sent', 'failed')),
@@ -59,9 +52,9 @@ CREATE INDEX IF NOT EXISTS idx_marketing_campaigns_scheduled ON marketing_campai
 -- ============================================================================
 
 CREATE TABLE IF NOT EXISTS marketing_sends (
-    id UUID PRIMARY KEY DEFAULT (lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))),2) || '-' || substr('89ab',abs(random()) % 4 + 1, 1) || substr(lower(hex(randomblob(2))),2) || '-' || lower(hex(randomblob(6)))),
-    campaign_id UUID REFERENCES marketing_campaigns(id) ON DELETE CASCADE,
-    customer_id UUID REFERENCES customers(id) ON DELETE SET NULL,
+    id TEXT PRIMARY KEY,
+    campaign_id TEXT REFERENCES marketing_campaigns(id),
+    customer_id TEXT REFERENCES customers(id),
     type VARCHAR(20) NOT NULL CHECK (type IN ('sms', 'email')),
     recipient VARCHAR(255) NOT NULL, -- Phone number or email address
     subject VARCHAR(255), -- For emails
@@ -83,28 +76,28 @@ CREATE INDEX IF NOT EXISTS idx_marketing_sends_type ON marketing_sends(type);
 -- ============================================================================
 
 -- Add new columns to existing restaurants table
-ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS logo_url VARCHAR(500);
-ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS cover_image_url VARCHAR(500);
-ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS custom_domain VARCHAR(255);
-ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS description TEXT;
-ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS cuisine_type VARCHAR(100);
-ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS price_range VARCHAR(20);
-ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS social_links TEXT DEFAULT '{}'; -- JSON for social media links
-ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS menu_pdf_url VARCHAR(500);
-ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS online_ordering_enabled BOOLEAN DEFAULT 0;
-ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS delivery_enabled BOOLEAN DEFAULT 0;
-ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS pickup_enabled BOOLEAN DEFAULT 1;
-ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS delivery_radius INTEGER DEFAULT 0; -- in miles
-ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS delivery_fee DECIMAL(10,2) DEFAULT 0;
-ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS minimum_order DECIMAL(10,2) DEFAULT 0;
+ALTER TABLE restaurants ADD COLUMN logo_url VARCHAR(500);
+ALTER TABLE restaurants ADD COLUMN cover_image_url VARCHAR(500);
+ALTER TABLE restaurants ADD COLUMN custom_domain VARCHAR(255);
+ALTER TABLE restaurants ADD COLUMN description TEXT;
+ALTER TABLE restaurants ADD COLUMN cuisine_type VARCHAR(100);
+ALTER TABLE restaurants ADD COLUMN price_range VARCHAR(20);
+ALTER TABLE restaurants ADD COLUMN social_links TEXT DEFAULT '{}'; -- JSON for social media links
+ALTER TABLE restaurants ADD COLUMN menu_pdf_url VARCHAR(500);
+ALTER TABLE restaurants ADD COLUMN online_ordering_enabled BOOLEAN DEFAULT 0;
+ALTER TABLE restaurants ADD COLUMN delivery_enabled BOOLEAN DEFAULT 0;
+ALTER TABLE restaurants ADD COLUMN pickup_enabled BOOLEAN DEFAULT 1;
+ALTER TABLE restaurants ADD COLUMN delivery_radius INTEGER DEFAULT 0; -- in miles
+ALTER TABLE restaurants ADD COLUMN delivery_fee DECIMAL(10,2) DEFAULT 0;
+ALTER TABLE restaurants ADD COLUMN minimum_order DECIMAL(10,2) DEFAULT 0;
 
 -- ============================================================================
 -- RESTAURANT THEMES AND CUSTOMIZATION
 -- ============================================================================
 
 CREATE TABLE IF NOT EXISTS restaurant_themes (
-    id UUID PRIMARY KEY DEFAULT (lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))),2) || '-' || substr('89ab',abs(random()) % 4 + 1, 1) || substr(lower(hex(randomblob(2))),2) || '-' || lower(hex(randomblob(6)))),
-    restaurant_id UUID NOT NULL REFERENCES restaurants(id) ON DELETE CASCADE,
+    id TEXT PRIMARY KEY,
+    restaurant_id TEXT NOT NULL REFERENCES restaurants(id),
     name VARCHAR(255) NOT NULL DEFAULT 'Default',
     primary_color VARCHAR(7) DEFAULT '#ff6b35', -- Hex color
     secondary_color VARCHAR(7) DEFAULT '#f7931e',
@@ -125,8 +118,8 @@ CREATE INDEX IF NOT EXISTS idx_restaurant_themes_restaurant ON restaurant_themes
 -- ============================================================================
 
 CREATE TABLE IF NOT EXISTS restaurant_links (
-    id UUID PRIMARY KEY DEFAULT (lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))),2) || '-' || substr('89ab',abs(random()) % 4 + 1, 1) || substr(lower(hex(randomblob(2))),2) || '-' || lower(hex(randomblob(6)))),
-    restaurant_id UUID NOT NULL REFERENCES restaurants(id) ON DELETE CASCADE,
+    id TEXT PRIMARY KEY,
+    restaurant_id TEXT NOT NULL REFERENCES restaurants(id),
     name VARCHAR(255) NOT NULL,
     description TEXT,
     url_path VARCHAR(255) NOT NULL, -- e.g., 'menu', 'order', 'specials'
@@ -150,21 +143,22 @@ CREATE INDEX IF NOT EXISTS idx_restaurant_links_active ON restaurant_links(is_ac
 -- ============================================================================
 
 -- Add additional fields to menu_items if they don't exist
-ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS sku VARCHAR(100);
-ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS images TEXT DEFAULT '[]'; -- JSON array of image URLs
-ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS allergens TEXT DEFAULT '[]'; -- JSON array of allergens
-ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS nutritional_info TEXT; -- JSON object with nutrition facts
-ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS preparation_time INTEGER DEFAULT 0; -- minutes
-ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS sort_order INTEGER DEFAULT 0;
-ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS channel_availability TEXT DEFAULT '{}'; -- JSON for platform availability
+ALTER TABLE menu_items ADD COLUMN sku VARCHAR(100);
+ALTER TABLE menu_items ADD COLUMN cost DECIMAL(10,2) DEFAULT 0; -- Cost of the item
+ALTER TABLE menu_items ADD COLUMN images TEXT DEFAULT '[]'; -- JSON array of image URLs
+ALTER TABLE menu_items ADD COLUMN allergens TEXT DEFAULT '[]'; -- JSON array of allergens
+ALTER TABLE menu_items ADD COLUMN nutritional_info TEXT; -- JSON object with nutrition facts
+ALTER TABLE menu_items ADD COLUMN preparation_time INTEGER DEFAULT 0; -- minutes
+ALTER TABLE menu_items ADD COLUMN sort_order INTEGER DEFAULT 0;
+ALTER TABLE menu_items ADD COLUMN channel_availability TEXT DEFAULT '{}'; -- JSON for platform availability
 
 -- Add category field directly to menu_items for backward compatibility
-ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS category VARCHAR(255);
+ALTER TABLE menu_items ADD COLUMN category VARCHAR(255);
 
 -- Create menu_categories table if it doesn't exist (SQLite compatible)
 CREATE TABLE IF NOT EXISTS menu_categories (
-    id UUID PRIMARY KEY DEFAULT (lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))),2) || '-' || substr('89ab',abs(random()) % 4 + 1, 1) || substr(lower(hex(randomblob(2))),2) || '-' || lower(hex(randomblob(6)))),
-    restaurant_id UUID NOT NULL REFERENCES restaurants(id) ON DELETE CASCADE,
+    id TEXT PRIMARY KEY,
+    restaurant_id TEXT NOT NULL REFERENCES restaurants(id),
     name VARCHAR(255) NOT NULL,
     description TEXT,
     sort_order INTEGER DEFAULT 0,
@@ -177,8 +171,7 @@ CREATE INDEX IF NOT EXISTS idx_menu_categories_restaurant ON menu_categories(res
 CREATE INDEX IF NOT EXISTS idx_menu_categories_active ON menu_categories(is_active);
 CREATE INDEX IF NOT EXISTS idx_menu_categories_sort ON menu_categories(sort_order);
 
--- Add category_id to menu_items if it doesn't exist
-ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS category_id UUID REFERENCES menu_categories(id);
+-- category_id already exists in menu_items from migration 001
 
 -- ============================================================================
 -- SAMPLE DATA FOR TESTING

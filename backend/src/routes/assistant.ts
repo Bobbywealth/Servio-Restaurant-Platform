@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import multer from 'multer';
 import { AssistantService } from '../services/AssistantService';
 import { logger } from '../utils/logger';
-import { asyncHandler } from '../middleware/errorHandler';
+import { asyncHandler, UnauthorizedError } from '../middleware/errorHandler';
 
 const router = Router();
 
