@@ -57,7 +57,7 @@ CREATE TABLE menu_imports (
     error_count INTEGER DEFAULT 0,
     errors TEXT DEFAULT '[]',
     processed_data TEXT,
-    uploaded_by UUID REFERENCES users(id),
+    uploaded_by TEXT REFERENCES users(id),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
