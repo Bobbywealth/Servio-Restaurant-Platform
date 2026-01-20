@@ -842,129 +842,30 @@ export default function AssistantPage() {
               </div>
             </div>
             
-            {/* Real-time Stats Dashboard */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
-              <div className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 p-3 rounded-lg border border-blue-200 dark:border-blue-700">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs text-blue-600 dark:text-blue-400 font-medium">Messages</p>
-                    <p className="text-2xl font-bold text-blue-900 dark:text-blue-100">{state.messages.length}</p>
-                  </div>
-                  <span className="text-2xl">💬</span>
-                </div>
+            {/* Compact Stats Bar */}
+            <div className="flex items-center gap-3 mt-3 text-sm">
+              <div className="flex items-center gap-1.5">
+                <span className="text-lg">💬</span>
+                <span className="font-semibold">{state.messages.length}</span>
               </div>
-              
-              <div className={`p-3 rounded-lg border ${
-                state.alwaysListening
-                  ? state.inConversationWindow
-                    ? 'bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20 border-green-300 dark:border-green-700'
-                    : 'bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-800/20 border-purple-300 dark:border-purple-700'
-                  : 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700'
-              }`}>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs text-gray-600 dark:text-gray-400 font-medium">
-                      {state.alwaysListening 
-                        ? state.inConversationWindow ? 'In Conversation' : 'Always Listening'
-                        : 'Voice Mode'}
-                    </p>
-                    <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                      {state.alwaysListening 
-                        ? state.inConversationWindow ? 'Talking Freely' : 'Say "Servio"'
-                        : 'Inactive'}
-                    </p>
-                  </div>
-                  <span className="text-2xl">
-                    {state.alwaysListening 
-                      ? state.inConversationWindow ? '💬' : '🎯'
-                      : '🔇'}
-                  </span>
-                </div>
+              <div className="h-4 w-px bg-gray-300 dark:bg-gray-600"></div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-lg">{state.alwaysListening ? state.inConversationWindow ? '💬' : '🎯' : '🔇'}</span>
+                <span className="text-sm font-medium">{state.alwaysListening ? state.inConversationWindow ? 'In Conversation' : 'Say "Servio"' : 'Inactive'}</span>
               </div>
-              
-              <div className="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-800/20 p-3 rounded-lg border border-purple-200 dark:border-purple-700">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs text-purple-600 dark:text-purple-400 font-medium">Status</p>
-                    <p className="text-sm font-semibold text-purple-900 dark:text-purple-100">
-                      {state.isProcessing ? 'Thinking' : state.isSpeaking ? 'Speaking' : state.isRecording ? 'Listening' : 'Ready'}
-                    </p>
-                  </div>
-                  <span className="text-2xl">
-                    {state.isProcessing ? '🧠' : state.isSpeaking ? '🗣️' : state.isRecording ? '🎤' : '✅'}
-                  </span>
-                </div>
-              </div>
-              
-              <div className="bg-gradient-to-br from-orange-50 to-orange-100 dark:from-orange-900/20 dark:to-orange-800/20 p-3 rounded-lg border border-orange-200 dark:border-orange-700">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs text-orange-600 dark:text-orange-400 font-medium">Audio Level</p>
-                    <div className="flex items-center gap-1 mt-1">
-                      {[...Array(5)].map((_, i) => (
-                        <div 
-                          key={i} 
-                          className={`h-2 w-2 rounded-full ${
-                            (talkIntensity * 100) > (i * 20) 
-                              ? 'bg-orange-500 dark:bg-orange-400' 
-                              : 'bg-gray-300 dark:bg-gray-600'
-                          }`}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                  <span className="text-2xl">🎵</span>
-                </div>
+              <div className="h-4 w-px bg-gray-300 dark:bg-gray-600"></div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-lg">{state.isProcessing ? '🧠' : state.isSpeaking ? '🗣️' : state.isRecording ? '🎤' : '✅'}</span>
+                <span className="text-sm font-medium">{state.isProcessing ? 'Thinking' : state.isSpeaking ? 'Speaking' : state.isRecording ? 'Listening' : 'Ready'}</span>
               </div>
             </div>
           </div>
 
-          {/* Quick Commands - Moved to top and made horizontal */}
-          <div className="mb-6 card-mobile">
-            <QuickCommands
-              onCommand={handleQuickCommand}
-              disabled={state.isProcessing || state.isRecording}
-            />
-          </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
-            {/* Left Panel - Avatar & Controls */}
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+            {/* Left Panel - Compact Controls */}
             <div className="lg:col-span-1">
-              <div className="card-mobile space-y-4 sm:space-y-6 bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900">
-                {/* AI Status Banner */}
-                <div className={`p-3 rounded-lg border-2 transition-all ${
-                  state.isProcessing 
-                    ? 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-300 dark:border-yellow-700' 
-                    : state.isSpeaking 
-                    ? 'bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-700'
-                    : state.isRecording
-                    ? 'bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-700'
-                    : 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-700'
-                }`}>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-bold text-gray-900 dark:text-gray-100">
-                        {state.isProcessing ? '🧠 Analyzing...' : 
-                         state.isSpeaking ? '🗣️ Speaking to you' : 
-                         state.isRecording ? '🎤 Listening...' : 
-                         '✨ Ready to help'}
-                      </p>
-                      <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
-                        {state.isProcessing ? 'Processing your request with AI' : 
-                         state.isSpeaking ? 'Playing voice response' : 
-                         state.isRecording ? 'Say your command now' : 
-                         'Ask me anything about your restaurant'}
-                      </p>
-                    </div>
-                    {(state.isProcessing || state.isSpeaking || state.isRecording) && (
-                      <div className="flex gap-1">
-                        <div className="w-2 h-2 bg-current rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                        <div className="w-2 h-2 bg-current rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                        <div className="w-2 h-2 bg-current rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
-                      </div>
-                    )}
-                  </div>
-                </div>
+              <div className="card-mobile space-y-3 bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900">
                 
                 <RealisticAvatar
                   isTalking={state.isSpeaking}
@@ -975,26 +876,6 @@ export default function AssistantPage() {
                   name="Servio Assistant"
                   audioLevel={talkIntensity * 100}
                 />
-                
-                {/* Audio Visualization */}
-                {state.isSpeaking && (
-                  <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
-                    <p className="text-xs font-medium text-green-800 dark:text-green-300 mb-2">🎵 Audio Playing</p>
-                    <div className="flex items-center justify-center gap-1 h-12">
-                      {[...Array(20)].map((_, i) => (
-                        <div
-                          key={i}
-                          className="w-1 bg-green-500 dark:bg-green-400 rounded-full transition-all"
-                          style={{
-                            height: `${Math.max(10, Math.sin((i + Date.now() / 100) * 0.5) * 30 + 30)}px`,
-                            animation: 'pulse 0.5s ease-in-out infinite',
-                            animationDelay: `${i * 0.05}s`
-                          }}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )}
 
                 <MicrophoneButton
                   isRecording={state.isRecording}
@@ -1005,46 +886,9 @@ export default function AssistantPage() {
                   toggleMode={state.micToggleMode}
                 />
                 
-                {/* Microphone Mode Toggle */}
-                <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                        Microphone Mode
-                      </p>
-                      <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
-                        {state.micToggleMode ? 'Click to toggle on/off' : 'Hold button to talk'}
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => setState(prev => ({ ...prev, micToggleMode: !prev.micToggleMode }))}
-                      disabled={state.isRecording || state.isProcessing}
-                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                        state.micToggleMode 
-                          ? 'bg-blue-600' 
-                          : 'bg-gray-300 dark:bg-gray-600'
-                      } disabled:opacity-50 disabled:cursor-not-allowed`}
-                    >
-                      <span
-                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                          state.micToggleMode ? 'translate-x-6' : 'translate-x-1'
-                        }`}
-                      />
-                    </button>
-                  </div>
-                  <div className="mt-2 flex items-center gap-2 text-xs">
-                    <span className={state.micToggleMode ? 'text-gray-400 dark:text-gray-600' : 'text-blue-600 dark:text-blue-400 font-semibold'}>
-                      Hold to Talk
-                    </span>
-                    <span className="text-gray-400">|</span>
-                    <span className={state.micToggleMode ? 'text-blue-600 dark:text-blue-400 font-semibold' : 'text-gray-400 dark:text-gray-600'}>
-                      Click to Toggle
-                    </span>
-                  </div>
-                </div>
 
-                {/* Always Listening Mode - Premium Feature */}
-                <div className="mt-4 p-4 bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 rounded-lg border-2 border-purple-300 dark:border-purple-700">
+                {/* Always Listening Mode - Compact */}
+                <div className="p-3 bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 rounded-lg border-2 border-purple-300 dark:border-purple-700">
                   <div className="flex items-center justify-between mb-2">
                     <div>
                       <h3 className="text-sm font-bold text-purple-900 dark:text-purple-100 flex items-center gap-2">
@@ -1114,32 +958,10 @@ export default function AssistantPage() {
                     {state.alwaysListening ? '⏸️ Stop Always Listening' : '🎯 Start Always Listening'}
                   </button>
 
-                  {state.alwaysListening && (
-                    <div className="mt-3 p-2 bg-purple-100 dark:bg-purple-900/30 rounded text-xs text-purple-800 dark:text-purple-200">
-                      <p className="font-medium flex items-center gap-2">
-                        ⚡ Hands-free mode active:
-                        {state.inConversationWindow && (
-                          <span className="px-2 py-0.5 bg-green-500 text-white rounded-full text-xs font-bold animate-pulse">
-                            IN CONVERSATION
-                          </span>
-                        )}
-                      </p>
-                      <ul className="mt-1 space-y-0.5 ml-3">
-                        {state.inConversationWindow ? (
-                          <>
-                            <li>• <strong className="text-green-700 dark:text-green-300">Conversation active!</strong> Talk freely for 30s</li>
-                            <li>• No need to say "Servio" again</li>
-                            <li>• Speaks every ~5 seconds</li>
-                          </>
-                        ) : (
-                          <>
-                            <li>• Say <strong>"Servio"</strong> to start</li>
-                            <li>• System listens for ~5 seconds</li>
-                            <li>• Then auto-processes your command</li>
-                            <li>• Ignores talk without "Servio"</li>
-                          </>
-                        )}
-                      </ul>
+                  {state.alwaysListening && state.inConversationWindow && (
+                    <div className="mt-2 p-2 bg-green-100 dark:bg-green-900/30 rounded text-xs">
+                      <span className="font-bold text-green-700 dark:text-green-300">💬 IN CONVERSATION</span>
+                      <span className="text-green-600 dark:text-green-400 ml-2">- Talk freely for 30s</span>
                     </div>
                   )}
                 </div>
@@ -1148,9 +970,9 @@ export default function AssistantPage() {
             </div>
 
             {/* Right Panel - Transcript & Actions */}
-            <div className="lg:col-span-2 space-y-4">
+            <div className="lg:col-span-3 space-y-3">
               {/* Conversation History */}
-              <div className="card-mobile h-[50vh] sm:h-[55vh] lg:h-[500px]">
+              <div className="card-mobile h-[45vh] lg:h-[400px]">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100">
                     Conversation
@@ -1198,56 +1020,14 @@ export default function AssistantPage() {
                   />
                 </div>
 
-                {/* Smart Quick Suggestions with Categories */}
-                <div className="mt-4 space-y-3">
-                  <div>
-                    <p className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">🍽️ Menu & 86 Operations</p>
-                    <QuickSuggestions
-                      suggestions={[
-                        'no more jerk chicken',
-                        'what items are 86\'d',
-                        'restore chicken availability'
-                      ]}
-                      onSuggestionClick={handleQuickCommand}
-                      disabled={state.isProcessing || state.isRecording}
-                    />
+                {/* Compact Suggestions */}
+                <div className="mt-3">
+                  <p className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">💡 Quick Examples:</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    <button onClick={() => handleQuickCommand('check current orders')} disabled={state.isProcessing || state.isRecording} className="px-2 py-1 text-xs bg-gray-100 dark:bg-gray-700 rounded hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50">Check orders</button>
+                    <button onClick={() => handleQuickCommand('what items are 86\'d')} disabled={state.isProcessing || state.isRecording} className="px-2 py-1 text-xs bg-gray-100 dark:bg-gray-700 rounded hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50">What's 86'd?</button>
+                    <button onClick={() => handleQuickCommand('show inventory levels')} disabled={state.isProcessing || state.isRecording} className="px-2 py-1 text-xs bg-gray-100 dark:bg-gray-700 rounded hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50">Inventory</button>
                   </div>
-                  
-                  <div>
-                    <p className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">📦 Orders</p>
-                    <QuickSuggestions
-                      suggestions={[
-                        'check current orders',
-                        'any urgent orders?',
-                        'mark order ready'
-                      ]}
-                      onSuggestionClick={handleQuickCommand}
-                      disabled={state.isProcessing || state.isRecording}
-                    />
-                  </div>
-                  
-                  <div>
-                    <p className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">📊 Inventory</p>
-                    <QuickSuggestions
-                      suggestions={[
-                        'show inventory levels',
-                        'what\'s low in stock?',
-                        'add 5 cases of chicken'
-                      ]}
-                      onSuggestionClick={handleQuickCommand}
-                      disabled={state.isProcessing || state.isRecording}
-                    />
-                  </div>
-                </div>
-                
-                <div className="mt-4 p-3 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 rounded-lg border border-blue-200 dark:border-blue-700">
-                  <p className="text-xs font-medium text-blue-900 dark:text-blue-100 mb-1">💡 Pro Tips:</p>
-                  <ul className="text-xs text-blue-700 dark:text-blue-300 space-y-1">
-                    <li>• Use natural language: "We're out of chicken" works!</li>
-                    <li>• Ask questions: "What's taking longest?" or "What should I prioritize?"</li>
-                    <li>• Be specific: "86 all chicken items on DoorDash only"</li>
-                    {state.wakeWordSupported && <li>• Voice commands: Say "Hey Servio" then your command</li>}
-                  </ul>
                 </div>
               </div>
             </div>
