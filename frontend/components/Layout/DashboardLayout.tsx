@@ -36,18 +36,24 @@ interface DashboardLayoutProps {
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const { user, logout, isLoading } = useUser();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [mounted, setMounted] = React.useState(false);
   const router = useRouter();
 
   React.useEffect(() => {
-    if (!isLoading && !user) {
+    setMounted(true);
+  }, []);
+
+  React.useEffect(() => {
+    if (mounted && !isLoading && !user) {
       router.push('/login');
     }
-  }, [user, isLoading, router]);
+  }, [user, isLoading, router, mounted]);
 
   const normalizePath = (p: string) => (p || '/').split('?')[0].replace(/\/+$/, '') || '/';
   const currentPath = normalizePath(router.asPath);
 
-  if (isLoading || !user) {
+  // Show loading state only after mount to prevent hydration mismatch
+  if (!mounted || isLoading) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col items-center justify-center">
         <motion.div 
@@ -66,6 +72,10 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         </motion.p>
       </div>
     );
+  }
+
+  if (!user) {
+    return null;
   }
 
   const navigation = [

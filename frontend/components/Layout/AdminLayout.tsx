@@ -34,6 +34,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
   const router = useRouter()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [currentUser, setCurrentUser] = useState<any | null>(null)
+  const [mounted, setMounted] = useState(false)
 
   const navigation = [
     { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
@@ -46,12 +47,20 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
   ]
 
   const handleLogout = () => {
-    localStorage.removeItem('servio_token')
-    localStorage.removeItem('servio_user')
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('servio_token')
+      localStorage.removeItem('servio_user')
+    }
     router.push('/login')
   }
 
   useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  useEffect(() => {
+    if (!mounted || typeof window === 'undefined') return
+    
     const readUser = () => {
       try {
         const raw = localStorage.getItem('servio_user')
@@ -65,7 +74,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
     readUser()
     window.addEventListener('storage', readUser)
     return () => window.removeEventListener('storage', readUser)
-  }, [])
+  }, [mounted])
 
   const displayName = useMemo(() => {
     const name = typeof currentUser?.name === 'string' ? currentUser.name.trim() : ''

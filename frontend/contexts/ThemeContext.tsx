@@ -19,8 +19,10 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
   // Light theme is always the default
   const [theme, setThemeState] = useState<Theme>('light')
   const [actualTheme, setActualTheme] = useState<'light' | 'dark'>('light')
+  const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
+    setMounted(true)
     // Always default to light theme - don't load from localStorage
     // Light theme should be the default at all times
     setThemeState('light')
@@ -28,6 +30,8 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
   }, [])
 
   useEffect(() => {
+    if (!mounted || typeof window === 'undefined') return
+    
     const root = window.document.documentElement
 
     // Remove previous theme classes
@@ -52,11 +56,11 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
     } else {
       localStorage.removeItem('servio_theme')
     }
-  }, [theme])
+  }, [theme, mounted])
 
   // Listen for system theme changes
   useEffect(() => {
-    if (theme !== 'system') return
+    if (!mounted || theme !== 'system' || typeof window === 'undefined') return
 
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
 
@@ -71,7 +75,7 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
 
     mediaQuery.addEventListener('change', handleChange)
     return () => mediaQuery.removeEventListener('change', handleChange)
-  }, [theme])
+  }, [theme, mounted])
 
   const setTheme = (newTheme: Theme) => {
     setThemeState(newTheme)
