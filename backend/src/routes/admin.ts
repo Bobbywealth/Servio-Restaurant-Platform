@@ -890,9 +890,60 @@ router.get('/restaurants/:id/campaigns', async (req, res) => {
  * Get audit logs for a restaurant (alias for audit-logs)
  */
 router.get('/restaurants/:id/audit', async (req, res) => {
-  // Redirect to audit-logs endpoint
-  req.url = req.url.replace('/audit', '/audit-logs');
-  return router.handle(req, res);
+  try {
+    const { id } = req.params;
+    const { page = 1, limit = 50, days = 30, action = 'all' } = req.query;
+    
+    const offset = (Number(page) - 1) * Number(limit);
+    const db = await DatabaseService.getInstance().getDatabase();
+
+    let actionClause = '';
+    const params: any[] = [id];
+    
+    if (action !== 'all') {
+      actionClause = ` AND action LIKE ?`;
+      params.push(`%${action}%`);
+    }
+
+    const auditLogs = await db.all(`
+      SELECT 
+        al.*,
+        u.name as user_name,
+        u.role as user_role
+      FROM audit_logs al
+      LEFT JOIN users u ON al.user_id = u.id
+      WHERE al.restaurant_id = ?
+        AND al.created_at >= date('now', '-${Number(days)} days')
+        ${actionClause}
+      ORDER BY al.created_at DESC
+      LIMIT ? OFFSET ?
+    `, [...params, Number(limit), offset]);
+
+    const totalResult = await db.get(`
+      SELECT COUNT(*) as total 
+      FROM audit_logs
+      WHERE restaurant_id = ?
+        AND created_at >= date('now', '-${Number(days)} days')
+        ${actionClause}
+    `, params);
+
+    res.json({
+      auditLogs,
+      pagination: {
+        page: Number(page),
+        limit: Number(limit),
+        total: totalResult?.total || 0,
+        pages: Math.ceil((totalResult?.total || 0) / Number(limit))
+      }
+    });
+
+  } catch (error) {
+    logger.error('Failed to get audit logs:', error);
+    res.status(500).json({ 
+      error: 'Failed to load audit logs',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
 });
 
 export default router;
