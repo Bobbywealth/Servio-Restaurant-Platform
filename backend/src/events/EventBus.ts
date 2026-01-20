@@ -1,6 +1,3 @@
-import { EventBus } from './EventBus';
-
-export const eventBus = new EventBus();
 export type EventHandler<TEvent = any> = (event: TEvent) => Promise<void> | void;
 
 export class EventBus {
@@ -20,3 +17,5 @@ export class EventBus {
     }
   }
 }
+
+export const eventBus = new EventBus();

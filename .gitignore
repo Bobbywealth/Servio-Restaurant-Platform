@@ -6,8 +6,16 @@ yarn-error.log*
 
 # Production builds
 /build
-/dist
-/.next
+dist/
+build/
+.next/
+out/
+backend/dist/
+frontend/.next/
+frontend/out/
+backend/data/*.db-wal
+backend/data/*.db-shm
+.env.backup*
 
 # Environment variables
 .env
