@@ -51,7 +51,7 @@ export default function RestaurantsList() {
   const [statusFilter, setStatusFilter] = useState('all')
   const [page, setPage] = useState(1)
 
-  const fetchData = async () => {
+  const fetchData = React.useCallback(async () => {
     setIsLoading(true)
     setError(null)
     try {
@@ -70,11 +70,11 @@ export default function RestaurantsList() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [page, searchTerm, statusFilter])
 
   useEffect(() => {
     fetchData()
-  }, [page, searchTerm, statusFilter])
+  }, [fetchData])
 
   const handleSearch = (value: string) => {
     setSearchTerm(value)

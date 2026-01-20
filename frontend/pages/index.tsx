@@ -198,7 +198,8 @@ export default function HomePage() {
               </div>
             </div>
           </div>
-        </section>
+        </div>
+      </section>
 
         {/* Services */}
         <section id="services" className="py-24 border-t border-white/5">

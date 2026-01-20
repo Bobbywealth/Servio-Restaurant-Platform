@@ -350,7 +350,7 @@ export default function AssistantPage() {
         stream.getTracks().forEach(track => track.stop())
       }
     }
-  }, [processRecording, mediaRecorder, getSupportedMimeType]) // Added mediaRecorder back so it can check if it's already set
+  }, [processRecording, mediaRecorder, getSupportedMimeType, addMessage]) // Added mediaRecorder back so it can check if it's already set
 
   useEffect(() => {
     return () => {
@@ -567,7 +567,7 @@ export default function AssistantPage() {
     } finally {
       isInitializingWakeWordRef.current = false;
     }
-  }, []); // Truly stable callback
+  }, [state.wakeWordSupported]); // Truly stable callback
 
   const toggleWakeWordListening = useCallback(async () => {
     if (!wakeWordServiceRef.current || !wakeWordServiceRef.current.getState().isInitialized) {

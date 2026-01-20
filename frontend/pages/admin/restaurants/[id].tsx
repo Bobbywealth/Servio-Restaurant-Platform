@@ -124,7 +124,7 @@ export default function RestaurantDetail() {
     { id: 'audit', name: 'Audit Logs', icon: FileText },
   ]
 
-  const fetchRestaurantData = async () => {
+  const fetchRestaurantData = React.useCallback(async () => {
     if (!id) return
     
     setIsLoading(true)
@@ -138,9 +138,9 @@ export default function RestaurantDetail() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [id])
 
-  const fetchTabData = async (tab: TabName) => {
+  const fetchTabData = React.useCallback(async (tab: TabName) => {
     if (!id || tab === 'overview') return
 
     setIsTabLoading(true)
@@ -174,18 +174,18 @@ export default function RestaurantDetail() {
     } finally {
       setIsTabLoading(false)
     }
-  }
+  }, [id])
 
   useEffect(() => {
     if (id) {
       fetchRestaurantData()
     }
-  }, [id])
+  }, [id, fetchRestaurantData])
 
   useEffect(() => {
     setTabData(null)
     fetchTabData(activeTab)
-  }, [activeTab, id])
+  }, [activeTab, id, fetchTabData])
 
   if (isLoading) {
     return (

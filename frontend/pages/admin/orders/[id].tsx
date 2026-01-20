@@ -49,7 +49,7 @@ export default function AdminOrderDetailsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
 
-  const fetchOrder = async () => {
+  const fetchOrder = React.useCallback(async () => {
     if (!id) return
     try {
       const res = await api.get(`/api/orders/${id}`)
@@ -59,11 +59,11 @@ export default function AdminOrderDetailsPage() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [id])
 
   useEffect(() => {
     fetchOrder()
-  }, [id])
+  }, [fetchOrder])
 
   const handleAccept = async () => {
     setIsSubmitting(true)

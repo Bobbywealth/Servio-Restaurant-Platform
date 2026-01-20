@@ -43,9 +43,6 @@ export default function App({ Component, pageProps }: AppProps) {
 
         {/* PERFORMANCE HINTS */}
         <meta httpEquiv="x-dns-prefetch-control" content="on" />
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" />
 
         {/* CRITICAL CSS */}
       </Head>
@@ -60,7 +57,7 @@ export default function App({ Component, pageProps }: AppProps) {
         </UserProvider>
       </ThemeProvider>
     </>
-  ), [Component, pageProps])
+  ), [Component, pageProps, routeLoading])
 
   useEffect(() => {
     // LIGHTNING FAST MOUNT WITH PERFORMANCE MONITORING

@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { DatabaseService } from '../services/DatabaseService';
 import { asyncHandler, UnauthorizedError } from '../middleware/errorHandler';
 import { issueAccessToken, requireAuth } from '../middleware/auth';
+import { logger } from '../utils/logger';
 
 const router = Router();
 
