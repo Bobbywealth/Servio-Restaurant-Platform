@@ -35,6 +35,7 @@ export interface SocketEvents {
   'voice:action_completed': (data: { action: string; result: any }) => void
 
   // System events
+  'notifications.new': (data: { notification: any }) => void
   'system:notification': (data: { type: string; message: string; priority: 'low' | 'medium' | 'high' }) => void
   'system:alert': (data: { type: string; message: string; data?: any }) => void
 
