@@ -27,6 +27,7 @@ interface Order {
   status: string
   customer_name?: string
   customer_phone?: string
+  last_initial?: string
   total_amount?: number
   subtotal?: number
   tax?: number

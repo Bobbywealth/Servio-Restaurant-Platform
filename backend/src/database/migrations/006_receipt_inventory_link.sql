@@ -4,7 +4,7 @@
 
 -- Refine receipt_line_items for manual matching and v1 workflow
 -- We use description as raw_description (unit_cost already exists)
-ALTER TABLE receipt_line_items ADD COLUMN metadata TEXT DEFAULT '{}';
+ALTER TABLE receipt_line_items ADD COLUMN IF NOT EXISTS metadata TEXT DEFAULT '{}';
 
 -- Ensure inventory_transactions has the correct types
 -- Already has transaction_type: receive, adjust, waste, etc.

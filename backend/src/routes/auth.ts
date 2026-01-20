@@ -73,7 +73,7 @@ router.post(
     const normalizedEmail = String(email).trim().toLowerCase();
     const db = DatabaseService.getInstance().getDatabase();
     const user = await db.get<any>(
-      'SELECT * FROM users WHERE LOWER(email) = ? AND (is_active = 1 OR is_active = TRUE)', 
+      'SELECT * FROM users WHERE LOWER(email) = ? AND is_active = TRUE', 
       [normalizedEmail]
     );
     if (!user || !user.password_hash) {

@@ -132,8 +132,8 @@ router.post('/customers', asyncHandler(async (req: Request, res: Response) => {
       phone,
       JSON.stringify(preferences),
       JSON.stringify(tags),
-      optInSms ? 1 : 0,
-      optInEmail ? 1 : 0,
+      optInSms ? true : false,
+      optInEmail ? true : false,
       existingCustomer.id
     ]);
 
@@ -166,8 +166,8 @@ router.post('/customers', asyncHandler(async (req: Request, res: Response) => {
       phone,
       JSON.stringify(preferences),
       JSON.stringify(tags),
-      optInSms ? 1 : 0,
-      optInEmail ? 1 : 0
+      optInSms ? true : false,
+      optInEmail ? true : false
     ]);
 
     const newCustomer = await db.get('SELECT * FROM customers WHERE id = ?', [customerId]);

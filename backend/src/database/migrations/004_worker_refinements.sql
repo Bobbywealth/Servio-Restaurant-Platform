@@ -35,4 +35,4 @@ CREATE INDEX IF NOT EXISTS idx_sync_jobs_worker ON sync_jobs (status, next_run_a
 CREATE INDEX IF NOT EXISTS idx_sync_jobs_entity ON sync_jobs (entity_type, entity_id);
 
 -- Update audit_logs to include metadata if not present
-ALTER TABLE audit_logs ADD COLUMN metadata TEXT DEFAULT '{}';
+ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS metadata TEXT DEFAULT '{}';

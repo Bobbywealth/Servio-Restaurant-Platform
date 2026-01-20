@@ -138,7 +138,7 @@ router.put('/categories/:id', asyncHandler(async (req: Request, res: Response) =
   if (name !== undefined) { updateFields.push('name = ?'); updateValues.push(name.trim()); }
   if (description !== undefined) { updateFields.push('description = ?'); updateValues.push(description.trim()); }
   if (sortOrder !== undefined) { updateFields.push('sort_order = ?'); updateValues.push(sortOrder); }
-  if (isActive !== undefined) { updateFields.push('is_active = ?'); updateValues.push(isActive ? 1 : 0); }
+  if (isActive !== undefined) { updateFields.push('is_active = ?'); updateValues.push(isActive ? true : false); }
 
   if (updateFields.length > 0) {
     updateValues.push(id, restaurantId);
@@ -247,7 +247,7 @@ router.post('/items', upload.array('images', 5), asyncHandler(async (req: Reques
     preparationTime || 0,
     nutritionalInfo ? JSON.stringify(nutritionalInfo) : null,
     sortOrder,
-    isAvailable ? 1 : 0
+    isAvailable ? true : false
   ]);
 
   const newItem = await db.get(`
@@ -373,7 +373,7 @@ router.put('/items/:id', upload.array('images', 5), asyncHandler(async (req: Req
   }
   if (isAvailable !== undefined) {
     updateFields.push('is_available = ?');
-    updateValues.push(isAvailable ? 1 : 0);
+    updateValues.push(isAvailable ? true : false);
   }
 
   updateFields.push('images = ?', 'updated_at = CURRENT_TIMESTAMP');
@@ -501,7 +501,7 @@ router.get('/items/search', asyncHandler(async (req: Request, res: Response) => 
 
   if (available !== undefined) {
     conditions.push('mi.is_available = ?');
-    params.push(available === 'true' ? 1 : 0);
+    params.push(available === 'true' ? true : false);
   }
 
   if (conditions.length > 0) {
@@ -551,7 +551,7 @@ router.post('/items/set-unavailable', asyncHandler(async (req: Request, res: Res
 
   // Update availability
   await db.run(
-    'UPDATE menu_items SET is_available = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+    'UPDATE menu_items SET is_available = FALSE, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
     [itemId]
   );
 
@@ -627,7 +627,7 @@ router.post('/items/set-available', asyncHandler(async (req: Request, res: Respo
 
   // Update availability
   await db.run(
-    'UPDATE menu_items SET is_available = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+    'UPDATE menu_items SET is_available = TRUE, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
     [itemId]
   );
 
@@ -687,7 +687,7 @@ router.get('/unavailable', asyncHandler(async (req: Request, res: Response) => {
   const unavailableItems = await db.all(`
     SELECT *, updated_at as unavailable_since
     FROM menu_items
-    WHERE is_available = 0
+    WHERE is_available = FALSE
     ORDER BY updated_at DESC
   `);
 
@@ -719,8 +719,8 @@ router.get('/categories', asyncHandler(async (req: Request, res: Response) => {
       mc.sort_order,
       mc.is_active,
       COUNT(mi.id) as total_items,
-      COUNT(CASE WHEN mi.is_available = 1 THEN 1 END) as available_items,
-      COUNT(CASE WHEN mi.is_available = 0 THEN 1 END) as unavailable_items
+      COUNT(CASE WHEN mi.is_available = TRUE THEN 1 END) as available_items,
+      COUNT(CASE WHEN mi.is_available = FALSE THEN 1 END) as unavailable_items
     FROM menu_categories mc
     LEFT JOIN menu_items mi ON mc.id = mi.category_id
     WHERE mc.restaurant_id = ?
@@ -751,7 +751,7 @@ router.get('/modifier-groups', asyncHandler(async (req: Request, res: Response) 
       mg.*,
       COUNT(mo.id) as option_count
     FROM modifier_groups mg
-    LEFT JOIN modifier_options mo ON mg.id = mo.modifier_group_id AND mo.is_available = 1
+    LEFT JOIN modifier_options mo ON mg.id = mo.modifier_group_id AND mo.is_available = TRUE
     WHERE mg.restaurant_id = ? AND mg.is_active = TRUE
     GROUP BY mg.id
     ORDER BY mg.sort_order ASC, mg.name ASC
@@ -817,7 +817,7 @@ router.get('/modifier-groups/:id/options', asyncHandler(async (req: Request, res
 
   const options = await db.all(`
     SELECT * FROM modifier_options 
-    WHERE modifier_group_id = ? AND is_available = 1
+    WHERE modifier_group_id = ? AND is_available = TRUE
     ORDER BY sort_order ASC, name ASC
   `, [id]);
 
@@ -892,7 +892,7 @@ router.get('/items/:id/modifiers', asyncHandler(async (req: Request, res: Respon
           )
         )
         FROM modifier_options mo 
-        WHERE mo.modifier_group_id = mg.id AND mo.is_available = 1
+        WHERE mo.modifier_group_id = mg.id AND mo.is_available = TRUE
         ORDER BY mo.sort_order ASC, mo.name ASC
       ) as options
     FROM modifier_groups mg
@@ -1041,7 +1041,7 @@ router.post('/import', upload.single('file'), asyncHandler(async (req: Request, 
           const categoryId = uuidv4();
           await db.run(`
             INSERT INTO menu_categories (id, restaurant_id, name, is_active)
-            VALUES (?, ?, ?, 1)
+            VALUES (?, ?, ?, TRUE)
           `, [categoryId, restaurantId, row.category]);
           category = { id: categoryId };
         }
@@ -1052,7 +1052,7 @@ router.post('/import', upload.single('file'), asyncHandler(async (req: Request, 
           INSERT INTO menu_items (
             id, restaurant_id, category_id, name, description, price, cost,
             preparation_time, is_available, sort_order
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, TRUE, ?)
         `, [
           itemId,
           restaurantId,
