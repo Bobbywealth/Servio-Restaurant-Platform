@@ -68,13 +68,17 @@ export default function HomePage() {
       <section className="pt-28 pb-16 lg:pt-40 lg:pb-24">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <motion.div initial="hidden" whileInView="visible" viewport={{ once: true }} variants={fadeIn}>
-            <div className="flex justify-center mb-6">
-              <img
-                src="https://iili.io/fg6DIQS.th.png"
-                alt="Servio hero preview"
-                className="w-full max-w-xl rounded-3xl border border-surface-200 shadow-[0_30px_80px_-50px_rgba(15,23,42,0.55)]"
-                loading="lazy"
-              />
+            <div className="flex justify-center mb-12">
+              <div className="relative">
+                <div className="absolute -inset-1 bg-gradient-to-r from-primary-500 to-emerald-500 rounded-[2rem] blur-2xl opacity-20"></div>
+                <div className="relative bg-white border border-surface-200 rounded-[2rem] p-12 shadow-[0_30px_80px_-50px_rgba(15,23,42,0.55)] flex items-center justify-center">
+                  <img
+                    src="/images/servio_logo_transparent_tight.png"
+                    alt="Servio Logo"
+                    className="h-24 lg:h-32 w-auto"
+                  />
+                </div>
+              </div>
             </div>
             <span className="inline-flex items-center gap-2 text-xs font-medium text-primary-700 bg-primary-50 px-3 py-1 rounded-full border border-primary-100">
               Restaurant Operating System

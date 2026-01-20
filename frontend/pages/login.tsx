@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bot, Lock, Mail, AlertCircle, Loader2, ArrowRight, Sparkles } from 'lucide-react';
+import { Lock, Mail, AlertCircle, Loader2, ArrowRight } from 'lucide-react';
 import { useUser } from '../contexts/UserContext';
 
 export default function LoginPage() {
@@ -58,31 +58,30 @@ export default function LoginPage() {
         <div className="bg-white/95 rounded-2xl shadow-[0_25px_60px_-35px_rgba(15,23,42,0.55)] border border-surface-200 p-8 md:p-10 backdrop-blur">
           <div className="flex flex-col items-center mb-10">
             <motion.div
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              className="mb-6 relative"
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ duration: 0.5, delay: 0.2 }}
+              className="mb-8"
             >
-              <div className="bg-gradient-to-br from-primary-500 to-emerald-500 p-4 rounded-2xl shadow-[0_10px_30px_-12px_rgba(20,184,166,0.7)]">
-                <Bot className="w-10 h-10 text-white" />
+              <div className="relative group">
+                <div className="absolute -inset-4 bg-gradient-to-r from-primary-500/20 to-emerald-500/20 rounded-full blur-2xl group-hover:opacity-100 opacity-0 transition-opacity duration-500" />
+                <img 
+                  src="/images/servio_logo_transparent_tight.png" 
+                  alt="Servio Logo" 
+                  className="h-16 w-auto relative z-10" 
+                />
               </div>
-              <motion.div
-                animate={{ scale: [1, 1.2, 1], opacity: [1, 0.5, 1] }}
-                transition={{ duration: 2, repeat: Infinity }}
-                className="absolute -top-1 -right-1"
-              >
-                <Sparkles className="w-5 h-5 text-primary-500" />
-              </motion.div>
             </motion.div>
             
-            <h1 className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">
+            <h1 className="text-3xl font-extrabold tracking-tight text-gray-900">
               Welcome back
             </h1>
             <p className="mt-2 text-gray-500 font-medium">
-              Restaurant OS v2.0
+              Enterprise Restaurant OS
             </p>
             <div className="mt-5 flex items-center gap-2 text-[11px] text-gray-500 bg-surface-50 border border-surface-200 px-3 py-1.5 rounded-full">
               <span className="inline-flex w-2 h-2 rounded-full bg-emerald-500" />
-              Live dashboards, voice ops, inventory insights
+              Intelligence, Voice, Operations
             </div>
           </div>
 

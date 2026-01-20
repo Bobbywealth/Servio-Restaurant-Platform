@@ -26,8 +26,8 @@ export default function SplashScreen() {
             }}
           >
             <img
-              src="https://iili.io/fgPdyyF.th.webp"
-              alt="Servio PWA Loading"
+              src="/images/servio_logo_transparent_tight.png"
+              alt="Servio Logo"
               className="h-20 w-auto"
             />
           </motion.div>

@@ -55,6 +55,11 @@ export default function OfflinePage() {
             transition={{ duration: 0.5 }}
             className="card"
           >
+            {/* Logo */}
+            <div className="mb-6 flex justify-center">
+              <img src="/images/servio_logo_transparent_tight.png" alt="Servio Logo" className="h-10 w-auto" />
+            </div>
+
             {/* Offline Icon */}
             <motion.div
               className="mx-auto mb-6"
