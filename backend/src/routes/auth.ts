@@ -72,10 +72,18 @@ router.post(
 
     const normalizedEmail = String(email).trim().toLowerCase();
     const db = DatabaseService.getInstance().getDatabase();
-    const user = await db.get<any>(
-      'SELECT * FROM users WHERE LOWER(email) = ? AND is_active = TRUE', 
-      [normalizedEmail]
-    );
+    
+    let user;
+    try {
+      user = await db.get<any>(
+        'SELECT * FROM users WHERE LOWER(email) = ? AND (is_active = TRUE OR is_active = 1)', 
+        [normalizedEmail]
+      );
+    } catch (err: any) {
+      logger.error('Login database query failed:', err.message);
+      throw new Error(`Database error during login: ${err.message}`);
+    }
+
     if (!user || !user.password_hash) {
       throw new UnauthorizedError('Invalid email or password');
     }
