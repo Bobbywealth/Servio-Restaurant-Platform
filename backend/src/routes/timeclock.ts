@@ -465,7 +465,7 @@ router.get('/current-staff', asyncHandler(async (req: Request, res: Response) =>
         ELSE 0
       END as is_on_break,
       teb.break_start as current_break_start,
-      ROUND((julianday('now') - julianday(te.clock_in_time)) * 24, 2) as hours_worked
+      ROUND(EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - te.clock_in_time)) / 3600, 2) as hours_worked
     FROM time_entries te
     JOIN users u ON te.user_id = u.id
     LEFT JOIN time_entry_breaks teb ON te.id = teb.time_entry_id AND teb.break_end IS NULL
