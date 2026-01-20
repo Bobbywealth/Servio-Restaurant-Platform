@@ -179,7 +179,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
   } catch (error: any) {
     logger.error('Failed to create integration:', error);
     
-    if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+    if (error.code === '23505') {
       return res.status(400).json({ error: 'Integration with this name already exists' });
     }
     
@@ -248,7 +248,7 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
   } catch (error: any) {
     logger.error('Failed to update integration:', error);
     
-    if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+    if (error.code === '23505') {
       return res.status(400).json({ error: 'Integration with this name already exists' });
     }
     

@@ -1,12 +1,11 @@
 import '../styles/globals.css'
 import type { AppProps } from 'next/app'
 import Head from 'next/head'
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import Router from 'next/router'
 import dynamic from 'next/dynamic'
 import { UserProvider } from '../contexts/UserContext'
 import { ThemeProvider } from '../contexts/ThemeContext'
-import SplashScreen from '../components/ui/SplashScreen'
 
 // LAZY LOAD TOAST PROVIDER FOR PERFORMANCE
 const ToastProvider = dynamic(() => import('../components/ui/Toast'), {
@@ -15,13 +14,25 @@ const ToastProvider = dynamic(() => import('../components/ui/Toast'), {
 })
 
 export default function App({ Component, pageProps }: AppProps) {
-  const [mounted, setMounted] = useState(false)
   const [routeLoading, setRouteLoading] = useState(false)
 
-  // PERFORMANCE: Memoize the component tree
-  const AppContent = useMemo(() => (
+  useEffect(() => {
+    // Route loading indicator
+    const handleRouteStart = () => setRouteLoading(true)
+    const handleRouteDone = () => setRouteLoading(false)
+    Router.events.on('routeChangeStart', handleRouteStart)
+    Router.events.on('routeChangeComplete', handleRouteDone)
+    Router.events.on('routeChangeError', handleRouteDone)
+
+    return () => {
+      Router.events.off('routeChangeStart', handleRouteStart)
+      Router.events.off('routeChangeComplete', handleRouteDone)
+      Router.events.off('routeChangeError', handleRouteDone)
+    }
+  }, [])
+
+  return (
     <>
-      {/* CRITICAL PERFORMANCE OPTIMIZATIONS */}
       <Head>
         {/* DNS PREFETCH FOR EXTERNAL RESOURCES */}
         <link rel="dns-prefetch" href="//fonts.googleapis.com" />
@@ -43,8 +54,6 @@ export default function App({ Component, pageProps }: AppProps) {
 
         {/* PERFORMANCE HINTS */}
         <meta httpEquiv="x-dns-prefetch-control" content="on" />
-
-        {/* CRITICAL CSS */}
       </Head>
 
       <ThemeProvider>
@@ -57,56 +66,5 @@ export default function App({ Component, pageProps }: AppProps) {
         </UserProvider>
       </ThemeProvider>
     </>
-  ), [Component, pageProps, routeLoading])
-
-  useEffect(() => {
-    // LIGHTNING FAST MOUNT WITH PERFORMANCE MONITORING
-    const startTime = performance.now()
-    setMounted(true)
-
-    // Register service worker for turbo caching
-    if (process.env.NODE_ENV === 'production' && 'serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js', { scope: '/' })
-        .then(registration => {
-          console.log('⚡ SW registered successfully:', registration)
-
-          // Listen for updates
-          registration.addEventListener('updatefound', () => {
-            console.log('🔄 SW update found')
-          })
-        })
-        .catch(error => {
-          console.error('❌ SW registration failed:', error)
-        })
-    }
-
-    // Route loading indicator
-    const handleRouteStart = () => setRouteLoading(true)
-    const handleRouteDone = () => setRouteLoading(false)
-    Router.events.on('routeChangeStart', handleRouteStart)
-    Router.events.on('routeChangeComplete', handleRouteDone)
-    Router.events.on('routeChangeError', handleRouteDone)
-
-    // Performance monitoring
-    const mountTime = performance.now() - startTime
-    console.log(`⚡ App mounted in ${mountTime.toFixed(2)}ms`)
-
-    // Report Core Web Vitals
-    if ('web-vital' in window) {
-      // This would be implemented with web-vitals library
-      console.log('📊 Core Web Vitals monitoring active')
-    }
-    return () => {
-      Router.events.off('routeChangeStart', handleRouteStart)
-      Router.events.off('routeChangeComplete', handleRouteDone)
-      Router.events.off('routeChangeError', handleRouteDone)
-    }
-  }, [])
-
-  // PERFORMANCE: Return loading state immediately
-  if (!mounted) {
-    return <SplashScreen />
-  }
-
-  return AppContent
+  )
 }

@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { ShoppingCart, Filter, Search, AlertCircle, Building2 } from 'lucide-react'
 import AdminLayout from '../../components/Layout/AdminLayout'
 import { api } from '../../lib/api'
+import { getErrorMessage } from '../../lib/utils'
 import Link from 'next/link'
 
 interface Order {
@@ -37,7 +38,7 @@ export default function AdminOrders() {
       setOrders(response.data.orders || [])
     } catch (err: any) {
       console.error('Failed to fetch orders:', err)
-      setError(err.response?.data?.error || 'Failed to load orders')
+      setError(getErrorMessage(err, 'Failed to load orders'))
     } finally {
       setIsLoading(false)
     }

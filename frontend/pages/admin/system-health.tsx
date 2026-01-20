@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { Activity, AlertTriangle, CheckCircle2, XCircle, RefreshCw, Server, Database, Zap } from 'lucide-react'
 import AdminLayout from '../../components/Layout/AdminLayout'
 import { api } from '../../lib/api'
+import { getErrorMessage } from '../../lib/utils'
 
 interface SystemHealth {
   status: string
@@ -46,7 +47,7 @@ export default function SystemHealth() {
       setFailedJobs(jobsResponse.data.jobs || [])
     } catch (err: any) {
       console.error('Failed to fetch system health:', err)
-      setError(err.response?.data?.error || 'Failed to load system health')
+      setError(getErrorMessage(err, 'Failed to load system health'))
     } finally {
       setIsLoading(false)
     }

@@ -49,7 +49,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
   if (isLoading || !user) {
     return (
-      <div className="min-h-screen bg-[#F9FAFB] dark:bg-surface-950 flex flex-col items-center justify-center">
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col items-center justify-center">
         <motion.div 
           animate={{ scale: [1, 1.1, 1] }}
           transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
@@ -162,7 +162,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const closeSidebar = () => setSidebarOpen(false);
 
   return (
-    <div className="min-h-screen bg-[#F9FAFB] dark:bg-[#0A0A0B] text-gray-900 dark:text-white">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white">
       <AnimatePresence>
         {sidebarOpen && (
           <motion.div
@@ -176,15 +176,15 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       </AnimatePresence>
 
       <motion.div
-        className={`fixed inset-y-0 left-0 z-50 w-72 bg-gray-100 dark:bg-[#0A0A0B] transform transition-transform duration-300 ease-out lg:translate-x-0 border-r border-gray-200 dark:border-white/10 ${
+        className={`fixed inset-y-0 left-0 z-50 w-72 bg-white dark:bg-gray-800 transform transition-transform duration-300 ease-out lg:translate-x-0 border-r border-gray-200 dark:border-gray-700 ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
         initial={false}
       >
-        <div className="flex items-center justify-between h-16 px-6 border-b border-gray-200 dark:border-white/10">
+        <div className="flex items-center justify-between h-16 px-6 border-b border-gray-200 dark:border-gray-700">
           <motion.div className="flex items-center" whileHover={{ scale: 1.02 }}>
             <Link href="/dashboard" className="flex items-center">
-              <div className="w-8 h-8 rounded-lg bg-[#14b8a6] flex items-center justify-center">
+              <div className="w-8 h-8 rounded-lg bg-teal-600 flex items-center justify-center">
                 <span className="text-white font-bold text-xl">S</span>
               </div>
               <span className="ml-2 text-xl font-semibold tracking-tight text-gray-900 dark:text-white">servio</span>
@@ -259,7 +259,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       </motion.div>
 
       <div className="pl-0 lg:pl-72 transition-all duration-300">
-        <div className="bg-white/95 dark:bg-[#0A0A0B]/95 sticky top-0 z-30 border-b border-surface-200 dark:border-white/10 pt-safe-top">
+        <div className="bg-white/95 dark:bg-gray-900/95 sticky top-0 z-30 border-b border-gray-200 dark:border-gray-700 backdrop-blur-md pt-safe-top">
           <div className="px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between items-center h-16">
               <div className="flex items-center space-x-3">
@@ -287,7 +287,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       </div>
 
       {/* Mobile bottom navigation */}
-      <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-[#0A0A0B]/95 dark:bg-[#0A0A0B]/95 border-t border-gray-200 dark:border-white/10 backdrop-blur-md lg:hidden pb-safe-bottom">
+      <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-gray-900/95 border-t border-gray-200 dark:border-gray-700 backdrop-blur-md lg:hidden pb-safe-bottom">
         <div className="grid grid-cols-5 px-2 py-2">
           {mobileNav.map((item) => {
             const isActive = currentPath === normalizePath(item.href);

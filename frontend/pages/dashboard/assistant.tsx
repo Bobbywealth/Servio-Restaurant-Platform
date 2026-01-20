@@ -31,7 +31,7 @@ export default function AssistantPage() {
     currentAudioUrl: null,
     wakeWordEnabled: false,
     isListeningForWakeWord: false,
-    wakeWordSupported: isWakeWordSupported()
+    wakeWordSupported: false // Will be updated on client-side
   })
 
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null)
@@ -100,6 +100,17 @@ export default function AssistantPage() {
     const audio = new Audio(url)
     audio.crossOrigin = 'anonymous'
     audioRef.current = audio
+
+    // Check if we're in the browser before accessing window
+    if (typeof window === 'undefined') {
+      // Server-side rendering, just play audio without visualization
+      audio.onended = () => {
+        setState(prev => ({ ...prev, isSpeaking: false, currentAudioUrl: null }))
+        setTalkIntensity(0)
+      }
+      await audio.play()
+      return
+    }
 
     const AudioContextImpl =
       (window as any).AudioContext || (window as any).webkitAudioContext
@@ -599,12 +610,17 @@ export default function AssistantPage() {
     }
   }, [initializeWakeWordService, addMessage]);
 
+  // Update wake word support status on client-side mount
+  useEffect(() => {
+    setState(prev => ({ ...prev, wakeWordSupported: isWakeWordSupported() }));
+  }, []);
+
   // Auto-initialize wake word service on component mount
   useEffect(() => {
-    if (isWakeWordSupported()) {
+    if (state.wakeWordSupported) {
       initializeWakeWordService();
     }
-  }, [initializeWakeWordService]);
+  }, [state.wakeWordSupported, initializeWakeWordService]);
 
   return (
     <>

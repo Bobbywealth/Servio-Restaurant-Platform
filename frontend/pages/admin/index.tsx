@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import AdminLayout from '../../components/Layout/AdminLayout'
 import { api } from '../../lib/api'
+import { getErrorMessage } from '../../lib/utils'
 
 interface AdminStats {
   activeRestaurants: number
@@ -83,7 +84,7 @@ export default function AdminDashboard() {
         fetchPendingCampaigns()
       ])
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Failed to load dashboard data')
+      setError(getErrorMessage(err, 'Failed to load dashboard data'))
     } finally {
       setIsLoading(false)
     }

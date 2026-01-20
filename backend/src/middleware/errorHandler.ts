@@ -102,9 +102,15 @@ export const errorHandler = (
   } else if (error.name === 'TokenExpiredError') {
     statusCode = 401;
     message = 'Token expired';
-  } else if (error.code === 'SQLITE_CONSTRAINT' || (error.message && error.message.includes('duplicate key'))) {
+  } else if (error.code === '23505' || (error.message && /duplicate key/i.test(error.message))) {
     statusCode = 400;
-    message = 'Database constraint violation';
+    message = 'Database unique constraint violation';
+  } else if (error.code === '23503') {
+    statusCode = 400;
+    message = 'Database foreign key constraint violation';
+  } else if (error.code === '23514') {
+    statusCode = 400;
+    message = 'Database check constraint violation';
   }
 
   // Prepare error response

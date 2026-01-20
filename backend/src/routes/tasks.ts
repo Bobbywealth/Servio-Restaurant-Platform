@@ -14,25 +14,15 @@ const num = (v: any) => (typeof v === 'number' ? v : Number(v ?? 0));
 router.get('/today', asyncHandler(async (req: Request, res: Response) => {
   const { status } = req.query;
   const db = DatabaseService.getInstance().getDatabase();
-  const dialect = DatabaseService.getInstance().getDialect();
   const restaurantId = req.user?.restaurantId;
 
-  let query =
-    dialect === 'postgres'
-      ? `
-          SELECT * FROM tasks
-          WHERE (type = 'daily'
-          OR (due_date IS NOT NULL AND due_date::date = CURRENT_DATE)
-          OR (type = 'one_time' AND status != 'completed'))
-          AND restaurant_id = ?
-        `
-      : `
-          SELECT * FROM tasks
-          WHERE (type = 'daily'
-          OR (due_date IS NOT NULL AND DATE(due_date) = DATE('now'))
-          OR (type = 'one_time' AND status != 'completed'))
-          AND restaurant_id = ?
-        `;
+  let query = `
+    SELECT * FROM tasks
+    WHERE (type = 'daily'
+    OR (due_date IS NOT NULL AND due_date::date = CURRENT_DATE)
+    OR (type = 'one_time' AND status != 'completed'))
+    AND restaurant_id = ?
+  `;
   const params: any[] = [restaurantId];
 
   if (status) {
@@ -210,14 +200,10 @@ router.post('/:id/start', asyncHandler(async (req: Request, res: Response) => {
  */
 router.get('/stats', asyncHandler(async (req: Request, res: Response) => {
   const db = DatabaseService.getInstance().getDatabase();
-  const dialect = DatabaseService.getInstance().getDialect();
 
   const restaurantId = req.user?.restaurantId;
 
-  const completedTodayCondition =
-    dialect === 'postgres'
-      ? "status = 'completed' AND completed_at::date = CURRENT_DATE"
-      : 'status = \'completed\' AND DATE(completed_at) = DATE(\'now\')';
+  const completedTodayCondition = "status = 'completed' AND completed_at::date = CURRENT_DATE";
 
   const [
     totalTasks,

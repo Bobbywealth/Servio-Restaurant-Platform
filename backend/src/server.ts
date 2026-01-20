@@ -20,13 +20,59 @@ import { initializeNotifications } from './notifications/initNotifications';
 
 const app = express();
 const server = createServer(app);
+
+// CORS
+// - In production, keep this strict (set FRONTEND_URL / CORS_ORIGINS).
+// - In local dev, allow common localhost ports (e.g. Next dev servers on 3000/3005).
+const LOCALHOST_ORIGINS = new Set([
+  'http://localhost:3000',
+  'http://localhost:3005',
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1:3005',
+]);
+
+function parseCorsOrigins(envValue?: string) {
+  return (envValue || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+const envCorsOrigins = [
+  ...parseCorsOrigins(process.env.CORS_ORIGINS),
+  ...(process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : []),
+].filter(Boolean);
+
+const STATIC_ORIGINS = [
+  ...new Set([
+    ...envCorsOrigins,
+    ...Array.from(LOCALHOST_ORIGINS),
+    'https://serviorestaurantplatform.netlify.app',
+    'https://servio-app.onrender.com',
+  ]),
+];
+
+const corsOrigin: cors.CorsOptions['origin'] = (origin, callback) => {
+  // Allow non-browser tools (no Origin header)
+  if (!origin) return callback(null, true);
+
+  // Always allow configured/static origins
+  if (STATIC_ORIGINS.includes(origin)) return callback(null, true);
+
+  // In development, allow any localhost port (useful when Next chooses a new port)
+  if (
+    process.env.NODE_ENV !== 'production' &&
+    /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin)
+  ) {
+    return callback(null, true);
+  }
+
+  return callback(new Error(`CORS blocked origin: ${origin}`));
+};
+
 const io = new SocketIOServer(server, {
   cors: {
-    origin: [
-      process.env.FRONTEND_URL || "http://localhost:3000",
-      "https://serviorestaurantplatform.netlify.app",
-      "https://servio-app.onrender.com"
-    ],
+    origin: corsOrigin,
     methods: ["GET", "POST"],
     credentials: true
   },
@@ -63,6 +109,7 @@ async function initializeServer() {
     const { default: vapiRoutes } = await import('./routes/vapi');
     const { default: voiceRoutes } = await import('./routes/voice');
     const { default: adminRoutes } = await import('./routes/admin');
+    const { default: bookingsRoutes } = await import('./routes/bookings');
     const { default: notificationsRoutes } = await import('./routes/notifications');
 
     // API Routes
@@ -71,9 +118,12 @@ async function initializeServer() {
     // Vapi webhook routes (no auth required for external webhooks)
     app.use('/api/vapi', vapiRoutes);
     app.use('/api', voiceRoutes); // Mount voice ordering APIs under /api
+
+    // Public booking routes (demo booking / calendar)
+    app.use('/api/bookings', bookingsRoutes);
     
     // Admin routes (platform-admin role required)
-    app.use('/api/admin', adminRoutes);
+    app.use('/api/admin', requireAuth, adminRoutes);
     
     // Debug: Add a test auth route to verify mounting
     app.get('/api/auth/test', (req, res) => {
@@ -137,11 +187,7 @@ app.use(helmet({
 }));
 
 app.use(cors({
-  origin: [
-    process.env.FRONTEND_URL || "http://localhost:3000",
-    "https://serviorestaurantplatform.netlify.app",
-    "https://servio-app.onrender.com"
-  ],
+  origin: corsOrigin,
   credentials: true,
   optionsSuccessStatus: 200,
   preflightContinue: false,
@@ -195,37 +241,48 @@ const cache = new Map();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 const MAX_CACHE_SIZE = 1000;
 
-// Cache middleware disabled temporarily for debugging
-// app.use((req, res, next) => {
-//   if (req.method === 'GET' && !req.url.includes('/auth') && !req.url.includes('/timeclock')) {
-//     const cacheKey = req.url;
-//     const cached = cache.get(cacheKey);
-//
-//     if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-//       res.set(cached.headers);
-//       res.set('X-Cache', 'HIT');
-//       return res.json(cached.data);
-//     }
-//
-//     // Cache the response
-//     const originalSend = res.json;
-//     res.json = function(data) {
-//       if (res.statusCode === 200 && cache.size < MAX_CACHE_SIZE) {
-//         cache.set(cacheKey, {
-//           data,
-//           timestamp: Date.now(),
-//           headers: {
-//             'Cache-Control': 'public, max-age=300',
-//             'ETag': Buffer.from(JSON.stringify(data)).toString('base64').slice(0, 20)
-//           }
-//         });
-//       }
-//       res.set('X-Cache', 'MISS');
-//       return originalSend.call(this, data);
-//     };
-//   }
-//   next();
-// });
+// OPTIMIZED CACHE MIDDLEWARE
+app.use((req, res, next) => {
+  // Only cache safe GET requests for non-auth endpoints
+  if (req.method === 'GET' && 
+      !req.url.includes('/auth') && 
+      !req.url.includes('/timeclock') &&
+      !req.url.includes('/notifications') &&
+      !req.url.includes('/socket.io')) {
+    
+    const cacheKey = req.url;
+    const cached = cache.get(cacheKey);
+
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+      res.set(cached.headers);
+      res.set('X-Cache', 'HIT');
+      return res.json(cached.data);
+    }
+
+    // Cache the response only for successful requests
+    const originalSend = res.json;
+    res.json = function(data) {
+      if (res.statusCode === 200 && cache.size < MAX_CACHE_SIZE && data && typeof data === 'object') {
+        try {
+          cache.set(cacheKey, {
+            data,
+            timestamp: Date.now(),
+            headers: {
+              'Cache-Control': 'public, max-age=300',
+              'ETag': Buffer.from(JSON.stringify(data)).toString('base64').slice(0, 20)
+            }
+          });
+        } catch (error) {
+          // Skip caching if serialization fails
+          console.warn('Failed to cache response for', cacheKey);
+        }
+      }
+      res.set('X-Cache', 'MISS');
+      return originalSend.call(this, data);
+    };
+  }
+  next();
+});
 
 // PERFORMANCE HEADERS FOR ALL RESPONSES
 app.use((req, res, next) => {

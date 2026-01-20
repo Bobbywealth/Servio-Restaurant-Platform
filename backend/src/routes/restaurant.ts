@@ -41,6 +41,57 @@ const ensureUploadsDir = async (subdir: string = '') => {
 // ============================================================================
 
 /**
+ * GET /api/restaurant/staff
+ * List staff members for the authenticated restaurant
+ */
+router.get('/staff', asyncHandler(async (req: Request, res: Response) => {
+  const db = DatabaseService.getInstance().getDatabase();
+  const restaurantId = req.user?.restaurantId;
+
+  if (!restaurantId) {
+    return res.status(401).json({
+      success: false,
+      error: { message: 'Unauthorized' }
+    });
+  }
+
+  const staff = await db.all(
+    `
+    SELECT
+      id,
+      name,
+      email,
+      role,
+      is_active,
+      created_at,
+      updated_at
+    FROM users
+    WHERE restaurant_id = ?
+    ORDER BY
+      CASE role
+        WHEN 'owner' THEN 1
+        WHEN 'admin' THEN 2
+        WHEN 'manager' THEN 3
+        WHEN 'staff' THEN 4
+        ELSE 5
+      END,
+      name ASC
+    `,
+    [restaurantId]
+  );
+
+  res.json({
+    success: true,
+    data: {
+      staff: staff.map((u: any) => ({
+        ...u,
+        is_active: Boolean(u.is_active)
+      }))
+    }
+  });
+}));
+
+/**
  * GET /api/restaurant/profile
  * Get restaurant profile information
  */

@@ -2,6 +2,45 @@
 @tailwind components;
 @tailwind utilities;
 
+/* CRITICAL PERFORMANCE CSS - LOADED FIRST */
+* {
+  box-sizing: border-box;
+}
+
+/* OPTIMIZE FONTS */
+@font-face {
+  font-family: 'Inter';
+  src: url('/fonts/inter-var.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap; /* Critical for performance */
+}
+
+/* REDUCE LAYOUT SHIFTS */
+img, video {
+  max-width: 100%;
+  height: auto;
+}
+
+/* HARDWARE ACCELERATION */
+.gpu-accelerated {
+  transform: translateZ(0);
+  will-change: transform;
+  backface-visibility: hidden;
+  perspective: 1000px;
+}
+
+/* OPTIMIZE ANIMATIONS */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 @layer base {
   :root {
     /* Light mode surface colors */
@@ -116,8 +155,8 @@
   }
   
   .card {
-    @apply bg-white dark:bg-white rounded-xl shadow-sm 
-           border border-gray-200 dark:border-gray-200 p-6 
+    @apply bg-white dark:bg-surface-800 rounded-xl shadow-sm 
+           border border-surface-200 dark:border-surface-700 p-6 
            transition-all duration-200 hover:shadow-md 
            backdrop-blur-sm;
   }
@@ -306,6 +345,10 @@
 }
 
 @layer utilities {
+  .bg-gray-850 {
+    background-color: rgb(26 32 44);
+  }
+
   .line-clamp-2 {
     display: -webkit-box;
     -webkit-line-clamp: 2;

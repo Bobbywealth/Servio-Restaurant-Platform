@@ -16,9 +16,6 @@ COPY . .
 # Build the application
 RUN npm run build
 
-# Create data directory for SQLite
-RUN mkdir -p /app/data
-
 # Expose port
 EXPOSE 3002
 

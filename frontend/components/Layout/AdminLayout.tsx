@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import Head from 'next/head'
 import Link from 'next/link'
 import { useRouter } from 'next/router'
@@ -16,7 +16,8 @@ import {
   Shield,
   Search,
   Bell,
-  User
+  User,
+  CalendarDays
 } from 'lucide-react'
 
 interface AdminLayoutProps {
@@ -32,12 +33,14 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
 }) => {
   const router = useRouter()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [currentUser, setCurrentUser] = useState<any | null>(null)
 
   const navigation = [
     { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
     { name: 'Restaurants', href: '/admin/restaurants', icon: Building2 },
     { name: 'Campaigns', href: '/admin/campaigns', icon: Megaphone },
     { name: 'Orders', href: '/admin/orders', icon: ClipboardList },
+    { name: 'Demo Bookings', href: '/admin/demo-bookings', icon: CalendarDays },
     { name: 'System Health', href: '/admin/system-health', icon: Activity },
     { name: 'Audit Logs', href: '/admin/audit', icon: Shield },
   ]
@@ -47,6 +50,46 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
     localStorage.removeItem('servio_user')
     router.push('/login')
   }
+
+  useEffect(() => {
+    const readUser = () => {
+      try {
+        const raw = localStorage.getItem('servio_user')
+        const parsed = raw ? JSON.parse(raw) : null
+        setCurrentUser(parsed)
+      } catch {
+        setCurrentUser(null)
+      }
+    }
+
+    readUser()
+    window.addEventListener('storage', readUser)
+    return () => window.removeEventListener('storage', readUser)
+  }, [])
+
+  const displayName = useMemo(() => {
+    const name = typeof currentUser?.name === 'string' ? currentUser.name.trim() : ''
+    if (name) return name
+    const email = typeof currentUser?.email === 'string' ? currentUser.email.trim() : ''
+    return email || 'Platform Admin'
+  }, [currentUser])
+
+  const displayEmail = useMemo(() => {
+    const email = typeof currentUser?.email === 'string' ? currentUser.email.trim() : ''
+    return email || 'admin@servio.com'
+  }, [currentUser])
+
+  const initials = useMemo(() => {
+    const base = displayName || displayEmail || 'PA'
+    const parts = base
+      .replace(/[@._-]+/g, ' ')
+      .split(' ')
+      .map((p: string) => p.trim())
+      .filter(Boolean)
+    const first = (parts[0]?.[0] || 'P').toUpperCase()
+    const second = (parts[1]?.[0] || parts[0]?.[1] || 'A').toUpperCase()
+    return `${first}${second}`
+  }, [displayName, displayEmail])
 
   return (
     <>
@@ -68,7 +111,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
         {/* Sidebar */}
         <div className={`fixed inset-y-0 left-0 z-50 w-64 transform bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 transition-transform duration-300 ease-in-out lg:translate-x-0 ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-        } lg:static lg:inset-0`}>
+        }`}>
           <div className="flex h-full flex-col">
             {/* Logo */}
             <div className="flex h-16 items-center justify-between px-6 border-b border-gray-200 dark:border-gray-700">
@@ -122,17 +165,13 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-3">
                   <div className="flex-shrink-0">
-                  <div className="h-8 w-8 rounded-full bg-red-100 dark:bg-red-900/20 flex items-center justify-center">
-                    <img
-                      src="/images/servio_logo_transparent_tight.png"
-                      alt="Servio Logo"
-                      className="h-4 w-auto"
-                    />
-                  </div>
+                    <div className="h-8 w-8 rounded-full bg-red-100 dark:bg-red-900/20 flex items-center justify-center text-xs font-semibold text-red-700 dark:text-red-200">
+                      {initials}
+                    </div>
                   </div>
                   <div className="min-w-0">
-                    <p className="text-sm font-medium text-gray-900 dark:text-white">Platform Admin</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">admin@servio.com</p>
+                    <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{displayName}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{displayEmail}</p>
                   </div>
                 </div>
                 <button
@@ -184,8 +223,17 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
                   <span className="absolute top-1 right-1 h-2 w-2 bg-red-500 rounded-full"></span>
                 </button>
                 {/* Profile */}
-                <button className="flex items-center gap-2 p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300">
-                  <User className="h-5 w-5" />
+                <button
+                  className="flex items-center gap-2 p-2 rounded-lg text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-700/50"
+                  title={displayEmail}
+                >
+                  <div className="h-8 w-8 rounded-full bg-red-100 dark:bg-red-900/20 flex items-center justify-center text-xs font-semibold text-red-700 dark:text-red-200">
+                    {initials}
+                  </div>
+                  <div className="hidden sm:block text-left leading-tight">
+                    <div className="text-sm font-semibold truncate max-w-[180px]">{displayName}</div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400 truncate max-w-[180px]">{displayEmail}</div>
+                  </div>
                 </button>
               </div>
             </div>

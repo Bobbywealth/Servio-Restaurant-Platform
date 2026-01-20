@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import AdminLayout from '../../../components/Layout/AdminLayout'
 import { api } from '../../../lib/api'
+import { getErrorMessage } from '../../../lib/utils'
 
 interface Restaurant {
   id: string
@@ -66,7 +67,7 @@ export default function RestaurantsList() {
       setData(response.data)
     } catch (err: any) {
       console.error('Failed to fetch restaurants:', err)
-      setError(err.response?.data?.message || 'Failed to load restaurants')
+      setError(getErrorMessage(err, 'Failed to load restaurants'))
     } finally {
       setIsLoading(false)
     }

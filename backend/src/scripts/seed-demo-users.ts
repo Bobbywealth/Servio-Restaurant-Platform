@@ -70,45 +70,6 @@ async function seedDemoUsers() {
   ];
   
   try {
-    // Check if admin role exists in the schema constraint
-    const userSchema = await db.get("SELECT sql FROM sqlite_master WHERE type='table' AND name='users'");
-    console.log('Current users table schema:', userSchema?.sql);
-    
-    // First, let's update the schema to include 'admin' role
-    try {
-      await db.exec(`
-        -- Create a new temporary table with updated role constraint
-        CREATE TABLE users_temp (
-          id TEXT PRIMARY KEY,
-          name TEXT NOT NULL,
-          role TEXT NOT NULL CHECK (role IN ('staff', 'manager', 'owner', 'admin')),
-          permissions TEXT NOT NULL DEFAULT '[]',
-          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          email TEXT,
-          password_hash TEXT,
-          pin TEXT,
-          is_active BOOLEAN
-        );
-        
-        -- Copy existing data
-        INSERT INTO users_temp SELECT * FROM users;
-        
-        -- Drop old table and rename new one
-        DROP TABLE users;
-        ALTER TABLE users_temp RENAME TO users;
-        
-        -- Recreate indexes
-        CREATE INDEX idx_users_email ON users(email);
-        CREATE INDEX idx_users_role ON users(role);
-        CREATE INDEX idx_users_active ON users(is_active);
-        CREATE INDEX idx_users_pin ON users(pin);
-      `);
-      console.log('✅ Updated users table schema to include admin role');
-    } catch (err) {
-      console.log('ℹ️  Schema update not needed or failed:', err);
-    }
-    
     // Insert demo users
     for (const user of demoUsers) {
       try {

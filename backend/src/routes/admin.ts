@@ -74,6 +74,54 @@ router.get('/stats/summary', async (req, res) => {
 });
 
 /**
+ * GET /api/admin/demo-bookings?start=YYYY-MM-DD&end=YYYY-MM-DD
+ * Admin: returns bookings (full details) for a date range
+ */
+router.get('/demo-bookings', async (req, res) => {
+  try {
+    const start = String(req.query.start || '');
+    const end = String(req.query.end || '');
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(end)) {
+      return res.status(400).json({
+        error: 'Invalid date range',
+        message: 'Provide start and end in YYYY-MM-DD format'
+      });
+    }
+
+    const db = await DatabaseService.getInstance().getDatabase();
+    const bookings = await db.all(
+      `
+      SELECT
+        id,
+        name,
+        email,
+        phone,
+        restaurant_name,
+        booking_date,
+        booking_time,
+        timezone,
+        notes,
+        status,
+        created_at
+      FROM demo_bookings
+      WHERE booking_date >= ? AND booking_date <= ?
+      ORDER BY booking_date ASC, booking_time ASC
+      `,
+      [start, end]
+    );
+
+    res.json({ bookings });
+  } catch (error) {
+    logger.error('Failed to get demo bookings:', error);
+    res.status(500).json({
+      error: 'Failed to load demo bookings',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
  * GET /api/admin/platform-stats (legacy endpoint, kept for backward compatibility)
  */
 router.get('/platform-stats', async (req, res) => {

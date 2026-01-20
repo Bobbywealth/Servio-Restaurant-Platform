@@ -316,6 +316,11 @@ export class WakeWordService {
 
 // Utility function to check if wake word detection is supported
 export function isWakeWordSupported(): boolean {
+  // Check if we're in the browser environment
+  if (typeof window === 'undefined' || typeof navigator === 'undefined') {
+    return false;
+  }
+  
   const SpeechRecognition = window.SpeechRecognition || (window as any).webkitSpeechRecognition;
   return !!(
     SpeechRecognition &&

@@ -15,6 +15,18 @@ export default function LoginPage() {
   const router = useRouter();
   const { login } = useUser();
 
+  const routeAfterLogin = () => {
+    try {
+      const raw = localStorage.getItem('servio_user')
+      const parsed = raw ? JSON.parse(raw) : null
+      const role = parsed?.role
+      if (role === 'admin' || role === 'platform-admin') return '/admin/demo-bookings'
+    } catch {
+      // ignore
+    }
+    return '/dashboard'
+  }
+
   const handleDemoLogin = async (demoEmail: string, demoPassword: string) => {
     setEmail(demoEmail);
     setPassword(demoPassword);
@@ -23,7 +35,7 @@ export default function LoginPage() {
 
     try {
       await login(demoEmail, demoPassword);
-      router.push('/dashboard');
+      router.push(routeAfterLogin());
     } catch (err: any) {
       const message = err.response?.data?.error?.message || err.message || 'Failed to login with demo credentials.';
       setError(message);
@@ -39,7 +51,7 @@ export default function LoginPage() {
 
     try {
       await login(email, password);
-      router.push('/dashboard');
+      router.push(routeAfterLogin());
     } catch (err: any) {
       const message = err.response?.data?.error?.message || err.message || 'Failed to login. Please check your credentials.';
       setError(message);
@@ -186,7 +198,7 @@ export default function LoginPage() {
             <div className="grid grid-cols-2 gap-3">
               <button 
                 type="button"
-                onClick={() => handleDemoLogin('admin@servio.com', 'password')}
+                onClick={() => handleDemoLogin('admin@servio.com', 'admin123')}
                 className="bg-surface-50 hover:bg-white p-3 rounded-xl text-left transition-all group border border-surface-200 hover:shadow-[0_10px_24px_-18px_rgba(15,23,42,0.5)]"
               >
                 <p className="text-[10px] font-bold text-gray-400 uppercase mb-1 group-hover:text-primary-600 transition-colors">Admin</p>

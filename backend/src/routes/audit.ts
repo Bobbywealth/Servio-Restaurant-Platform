@@ -153,27 +153,20 @@ router.get('/users', asyncHandler(async (req: Request, res: Response) => {
 router.get('/stats', asyncHandler(async (req: Request, res: Response) => {
   const { period = 'today' } = req.query;
   const db = DatabaseService.getInstance().getDatabase();
-  const dialect = DatabaseService.getInstance().getDialect();
 
   let dateCondition = '';
   switch (period) {
     case 'today':
-      dateCondition = dialect === 'postgres' ? 'created_at::date = CURRENT_DATE' : "DATE(created_at) = DATE('now')";
+      dateCondition = 'created_at::date = CURRENT_DATE';
       break;
     case 'week':
-      dateCondition =
-        dialect === 'postgres'
-          ? "created_at >= (NOW() - INTERVAL '7 days')"
-          : "created_at >= datetime('now', '-7 days')";
+      dateCondition = "created_at >= (NOW() - INTERVAL '7 days')";
       break;
     case 'month':
-      dateCondition =
-        dialect === 'postgres'
-          ? "created_at >= (NOW() - INTERVAL '30 days')"
-          : "created_at >= datetime('now', '-30 days')";
+      dateCondition = "created_at >= (NOW() - INTERVAL '30 days')";
       break;
     default:
-      dateCondition = dialect === 'postgres' ? 'created_at::date = CURRENT_DATE' : "DATE(created_at) = DATE('now')";
+      dateCondition = 'created_at::date = CURRENT_DATE';
   }
 
   const [

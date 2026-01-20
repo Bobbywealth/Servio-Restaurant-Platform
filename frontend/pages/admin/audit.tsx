@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { Shield, Filter, Search, Building2, User, Calendar } from 'lucide-react'
 import AdminLayout from '../../components/Layout/AdminLayout'
 import { api } from '../../lib/api'
+import { getErrorMessage } from '../../lib/utils'
 import Link from 'next/link'
 
 interface AuditLog {
@@ -37,7 +38,7 @@ export default function AdminAudit() {
       setLogs(response.data || [])
     } catch (err: any) {
       console.error('Failed to fetch audit logs:', err)
-      setError(err.response?.data?.error || 'Failed to load audit logs')
+      setError(getErrorMessage(err, 'Failed to load audit logs'))
     } finally {
       setIsLoading(false)
     }

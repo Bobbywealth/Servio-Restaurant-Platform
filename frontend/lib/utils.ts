@@ -175,6 +175,22 @@ export const storage = {
   }
 }
 
+// Normalize API errors to a readable string
+export function getErrorMessage(error: any, fallback: string = 'An unexpected error occurred'): string {
+  const message =
+    error?.response?.data?.message ??
+    error?.response?.data?.error ??
+    error?.message ??
+    fallback
+
+  if (typeof message === 'string') return message
+  try {
+    return JSON.stringify(message)
+  } catch {
+    return fallback
+  }
+}
+
 // API error handling
 export interface ApiError {
   message: string

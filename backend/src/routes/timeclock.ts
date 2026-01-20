@@ -8,6 +8,14 @@ import { eventBus } from '../events/bus';
 const router = Router();
 const num = (v: any) => (typeof v === 'number' ? v : Number(v ?? 0));
 
+function requireRestaurantId(req: Request): string {
+  const restaurantId = req.user?.restaurantId;
+  if (!restaurantId) {
+    // requireAuth should guarantee this, but keep runtime-safe
+    throw new Error('Missing restaurant context');
+  }
+  return restaurantId;
+}
 
 /**
  * POST /api/timeclock/clock-in
@@ -15,6 +23,7 @@ const num = (v: any) => (typeof v === 'number' ? v : Number(v ?? 0));
  */
 router.post('/clock-in', asyncHandler(async (req: Request, res: Response) => {
   const { userId, pin, position } = req.body;
+  const requesterRestaurantId = requireRestaurantId(req);
 
   if (!userId && !pin) {
     return res.status(400).json({
@@ -37,6 +46,13 @@ router.post('/clock-in', asyncHandler(async (req: Request, res: Response) => {
     return res.status(404).json({
       success: false,
       error: { message: 'User not found or inactive' }
+    });
+  }
+
+  if (user.restaurant_id !== requesterRestaurantId) {
+    return res.status(403).json({
+      success: false,
+      error: { message: 'Forbidden' }
     });
   }
 
@@ -64,9 +80,9 @@ router.post('/clock-in', asyncHandler(async (req: Request, res: Response) => {
 
   await db.run(`
     INSERT INTO time_entries (
-      id, user_id, clock_in_time, position, break_minutes
-    ) VALUES (?, ?, ?, ?, ?)
-  `, [entryId, user.id, clockInTime, position || null, 0]);
+      id, restaurant_id, user_id, clock_in_time, position, break_minutes
+    ) VALUES (?, ?, ?, ?, ?, ?)
+  `, [entryId, requesterRestaurantId, user.id, clockInTime, position || null, 0]);
 
   // Log the action
   await DatabaseService.getInstance().logAudit(
@@ -111,6 +127,7 @@ router.post('/clock-in', asyncHandler(async (req: Request, res: Response) => {
  */
 router.post('/clock-out', asyncHandler(async (req: Request, res: Response) => {
   const { userId, pin, notes } = req.body;
+  const requesterRestaurantId = requireRestaurantId(req);
 
   if (!userId && !pin) {
     return res.status(400).json({
@@ -136,13 +153,20 @@ router.post('/clock-out', asyncHandler(async (req: Request, res: Response) => {
     });
   }
 
+  if (user.restaurant_id !== requesterRestaurantId) {
+    return res.status(403).json({
+      success: false,
+      error: { message: 'Forbidden' }
+    });
+  }
+
   // Find active time entry
   const timeEntry = await db.get(`
     SELECT * FROM time_entries
-    WHERE user_id = ? AND clock_out_time IS NULL
+    WHERE user_id = ? AND clock_out_time IS NULL AND restaurant_id = ?
     ORDER BY clock_in_time DESC
     LIMIT 1
-  `, [user.id]);
+  `, [user.id, requesterRestaurantId]);
 
   if (!timeEntry) {
     return res.status(400).json({
@@ -217,6 +241,7 @@ router.post('/clock-out', asyncHandler(async (req: Request, res: Response) => {
  */
 router.post('/start-break', asyncHandler(async (req: Request, res: Response) => {
   const { userId } = req.body;
+  const requesterRestaurantId = requireRestaurantId(req);
 
   if (!userId) {
     return res.status(400).json({
@@ -230,10 +255,10 @@ router.post('/start-break', asyncHandler(async (req: Request, res: Response) => 
   // Find active time entry
   const timeEntry = await db.get(`
     SELECT * FROM time_entries
-    WHERE user_id = ? AND clock_out_time IS NULL
+    WHERE user_id = ? AND clock_out_time IS NULL AND restaurant_id = ?
     ORDER BY clock_in_time DESC
     LIMIT 1
-  `, [userId]);
+  `, [userId, requesterRestaurantId]);
 
   if (!timeEntry) {
     return res.status(400).json({
@@ -309,6 +334,7 @@ router.post('/start-break', asyncHandler(async (req: Request, res: Response) => 
  */
 router.post('/end-break', asyncHandler(async (req: Request, res: Response) => {
   const { userId } = req.body;
+  const requesterRestaurantId = requireRestaurantId(req);
 
   if (!userId) {
     return res.status(400).json({
@@ -322,10 +348,10 @@ router.post('/end-break', asyncHandler(async (req: Request, res: Response) => {
   // Find active time entry
   const timeEntry = await db.get(`
     SELECT * FROM time_entries
-    WHERE user_id = ? AND clock_out_time IS NULL
+    WHERE user_id = ? AND clock_out_time IS NULL AND restaurant_id = ?
     ORDER BY clock_in_time DESC
     LIMIT 1
-  `, [userId]);
+  `, [userId, requesterRestaurantId]);
 
   if (!timeEntry) {
     return res.status(400).json({
@@ -423,54 +449,31 @@ router.post('/end-break', asyncHandler(async (req: Request, res: Response) => {
  */
 router.get('/current-staff', asyncHandler(async (req: Request, res: Response) => {
   const db = DatabaseService.getInstance().getDatabase();
-  const dialect = DatabaseService.getInstance().getDialect();
+  const restaurantId = requireRestaurantId(req);
 
-  const currentStaff =
-    dialect === 'postgres'
-      ? await db.all(`
-          SELECT
-            u.id as user_id,
-            u.name,
-            u.role,
-            te.id as time_entry_id,
-            te.clock_in_time,
-            te.position,
-            te.break_minutes,
-            CASE
-              WHEN teb.break_end IS NULL THEN TRUE
-              ELSE FALSE
-            END as is_on_break,
-            teb.break_start as current_break_start,
-            ROUND(EXTRACT(EPOCH FROM (NOW() - te.clock_in_time)) / 3600, 2) as hours_worked
-          FROM time_entries te
-          JOIN users u ON te.user_id = u.id
-          LEFT JOIN time_entry_breaks teb ON te.id = teb.time_entry_id AND teb.break_end IS NULL
-          WHERE te.clock_out_time IS NULL
-          AND u.is_active = TRUE
-          ORDER BY te.clock_in_time ASC
-        `)
-      : await db.all(`
-          SELECT
-            u.id as user_id,
-            u.name,
-            u.role,
-            te.id as time_entry_id,
-            te.clock_in_time,
-            te.position,
-            te.break_minutes,
-            CASE
-              WHEN teb.break_end IS NULL THEN TRUE
-              ELSE FALSE
-            END as is_on_break,
-            teb.break_start as current_break_start,
-            ROUND((julianday('now') - julianday(te.clock_in_time)) * 24, 2) as hours_worked
-          FROM time_entries te
-          JOIN users u ON te.user_id = u.id
-          LEFT JOIN time_entry_breaks teb ON te.id = teb.time_entry_id AND teb.break_end IS NULL
-          WHERE te.clock_out_time IS NULL
-          AND u.is_active = TRUE
-          ORDER BY te.clock_in_time ASC
-        `);
+  const currentStaff = await db.all(`
+    SELECT
+      u.id as user_id,
+      u.name,
+      u.role,
+      te.id as time_entry_id,
+      te.clock_in_time,
+      te.position,
+      te.break_minutes,
+      CASE
+        WHEN teb.break_end IS NULL THEN TRUE
+        ELSE FALSE
+      END as is_on_break,
+      teb.break_start as current_break_start,
+      ROUND(EXTRACT(EPOCH FROM (NOW() - te.clock_in_time)) / 3600, 2) as hours_worked
+    FROM time_entries te
+    JOIN users u ON te.user_id = u.id
+    LEFT JOIN time_entry_breaks teb ON te.id = teb.time_entry_id AND teb.break_end IS NULL
+    WHERE te.clock_out_time IS NULL
+    AND te.restaurant_id = ?
+    AND u.is_active = TRUE
+    ORDER BY te.clock_in_time ASC
+  `, [restaurantId]);
 
   res.json({
     success: true,
@@ -497,7 +500,7 @@ router.get('/entries', asyncHandler(async (req: Request, res: Response) => {
   } = req.query;
 
   const db = DatabaseService.getInstance().getDatabase();
-  const dialect = DatabaseService.getInstance().getDialect();
+  const restaurantId = requireRestaurantId(req);
 
   let query = `
     SELECT
@@ -512,18 +515,21 @@ router.get('/entries', asyncHandler(async (req: Request, res: Response) => {
   const params: any[] = [];
   const conditions: string[] = [];
 
+  conditions.push('te.restaurant_id = ?');
+  params.push(restaurantId);
+
   if (userId) {
     conditions.push('te.user_id = ?');
     params.push(userId);
   }
 
   if (startDate) {
-    conditions.push(dialect === 'postgres' ? 'te.clock_in_time::date >= ?' : 'DATE(te.clock_in_time) >= ?');
+    conditions.push('te.clock_in_time::date >= ?');
     params.push(startDate);
   }
 
   if (endDate) {
-    conditions.push(dialect === 'postgres' ? 'te.clock_in_time::date <= ?' : 'DATE(te.clock_in_time) <= ?');
+    conditions.push('te.clock_in_time::date <= ?');
     params.push(endDate);
   }
 
@@ -676,17 +682,18 @@ router.get('/stats', asyncHandler(async (req: Request, res: Response) => {
   } = req.query;
 
   const db = DatabaseService.getInstance().getDatabase();
-  const dialect = DatabaseService.getInstance().getDialect();
+  const restaurantId = requireRestaurantId(req);
 
   let baseQuery = `
     FROM time_entries te
     JOIN users u ON te.user_id = u.id
-    WHERE ${dialect === 'postgres' ? 'te.clock_in_time::date' : 'DATE(te.clock_in_time)'} >= ?
-    AND ${dialect === 'postgres' ? 'te.clock_in_time::date' : 'DATE(te.clock_in_time)'} <= ?
+    WHERE te.restaurant_id = ?
+    AND te.clock_in_time::date >= ?
+    AND te.clock_in_time::date <= ?
     AND te.clock_out_time IS NOT NULL
   `;
 
-  const params = [startDate, endDate];
+  const params = [restaurantId, startDate, endDate];
 
   if (userId) {
     baseQuery += ' AND te.user_id = ?';
@@ -711,13 +718,13 @@ router.get('/stats', asyncHandler(async (req: Request, res: Response) => {
     // Daily breakdown
     db.all(`
       SELECT
-        ${dialect === 'postgres' ? 'te.clock_in_time::date' : 'DATE(te.clock_in_time)'} as date,
+        te.clock_in_time::date as date,
         COUNT(*) as entries_count,
         ROUND(SUM(te.total_hours), 2) as total_hours,
         COUNT(DISTINCT te.user_id) as unique_staff
       ${baseQuery}
-      GROUP BY ${dialect === 'postgres' ? 'te.clock_in_time::date' : 'DATE(te.clock_in_time)'}
-      ORDER BY ${dialect === 'postgres' ? 'te.clock_in_time::date' : 'DATE(te.clock_in_time)'}
+      GROUP BY te.clock_in_time::date
+      ORDER BY te.clock_in_time::date
     `, params),
 
     // Per-user statistics (if not filtering by specific user)

@@ -3,6 +3,7 @@ import Head from 'next/head'
 import DashboardLayout from '../../components/Layout/DashboardLayout'
 import { Clock, Users, Play, Pause, Coffee, CheckCircle } from 'lucide-react'
 import { motion } from 'framer-motion'
+import { api } from '../../lib/api'
 
 interface Staff {
   user_id: string
@@ -58,8 +59,8 @@ export default function TimeClockPage() {
 
   const fetchCurrentStaff = async () => {
     try {
-      const response = await fetch('/api/timeclock/current-staff')
-      const data = await response.json()
+      const response = await api.get('/api/timeclock/current-staff')
+      const data = response.data
 
       if (data.success) {
         setCurrentStaff(data.data.currentStaff)
@@ -77,8 +78,8 @@ export default function TimeClockPage() {
   const fetchRecentEntries = async () => {
     try {
       const today = new Date().toISOString().split('T')[0]
-      const response = await fetch(`/api/timeclock/entries?startDate=${today}&limit=10`)
-      const data = await response.json()
+      const response = await api.get('/api/timeclock/entries', { params: { startDate: today, limit: 10 } })
+      const data = response.data
 
       if (data.success) {
         setRecentEntries(data.data.entries)
@@ -91,8 +92,8 @@ export default function TimeClockPage() {
   const fetchStats = async () => {
     try {
       const today = new Date().toISOString().split('T')[0]
-      const response = await fetch(`/api/timeclock/stats?startDate=${today}&endDate=${today}`)
-      const data = await response.json()
+      const response = await api.get('/api/timeclock/stats', { params: { startDate: today, endDate: today } })
+      const data = response.data
 
       if (data.success) {
         setStats(prev => ({
@@ -111,13 +112,8 @@ export default function TimeClockPage() {
 
     setIsLoading(true)
     try {
-      const response = await fetch('/api/timeclock/clock-in', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pin: selectedPin })
-      })
-
-      const data = await response.json()
+      const response = await api.post('/api/timeclock/clock-in', { pin: selectedPin })
+      const data = response.data
 
       if (data.success) {
         setSelectedPin('')
@@ -138,13 +134,8 @@ export default function TimeClockPage() {
   const handleClockOut = async (userId: string) => {
     setIsLoading(true)
     try {
-      const response = await fetch('/api/timeclock/clock-out', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId })
-      })
-
-      const data = await response.json()
+      const response = await api.post('/api/timeclock/clock-out', { userId })
+      const data = response.data
 
       if (data.success) {
         fetchCurrentStaff()
@@ -166,13 +157,8 @@ export default function TimeClockPage() {
     const endpoint = isOnBreak ? 'end-break' : 'start-break'
 
     try {
-      const response = await fetch(`/api/timeclock/${endpoint}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId })
-      })
-
-      const data = await response.json()
+      const response = await api.post(`/api/timeclock/${endpoint}`, { userId })
+      const data = response.data
 
       if (data.success) {
         fetchCurrentStaff()

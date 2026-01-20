@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { Megaphone, Filter, Search, AlertCircle, CheckCircle2, Clock, XCircle } from 'lucide-react'
 import AdminLayout from '../../components/Layout/AdminLayout'
 import { api } from '../../lib/api'
+import { getErrorMessage } from '../../lib/utils'
 import Link from 'next/link'
 
 interface Campaign {
@@ -37,7 +38,7 @@ export default function AdminCampaigns() {
       setCampaigns(response.data.campaigns || [])
     } catch (err: any) {
       console.error('Failed to fetch campaigns:', err)
-      setError(err.response?.data?.error || 'Failed to load campaigns')
+      setError(getErrorMessage(err, 'Failed to load campaigns'))
     } finally {
       setIsLoading(false)
     }
