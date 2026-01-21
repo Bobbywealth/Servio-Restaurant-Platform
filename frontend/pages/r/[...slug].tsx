@@ -225,13 +225,22 @@ export default function PublicProfile() {
                   </div>
                 </div>
 
-                <button 
-                  disabled={isSubmitting}
-                  onClick={handleCheckout}
-                  className="w-full btn-primary py-4 text-lg flex items-center justify-center gap-2"
-                >
-                  {isSubmitting ? <Loader2 className="animate-spin" /> : 'Confirm Order & Pay at Pickup'}
-                </button>
+                <div className="space-y-3">
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                    <div className="flex items-center gap-2 text-green-800 text-sm font-medium">
+                      <CheckCircle2 className="w-4 h-4" />
+                      Pay when you arrive - Cash or Card accepted
+                    </div>
+                  </div>
+                  
+                  <button 
+                    disabled={isSubmitting}
+                    onClick={handleCheckout}
+                    className="w-full btn-primary py-4 text-lg flex items-center justify-center gap-2"
+                  >
+                    {isSubmitting ? <Loader2 className="animate-spin" /> : 'Confirm Order'}
+                  </button>
+                </div>
               </div>
             </motion.div>
           </>

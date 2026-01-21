@@ -25,6 +25,7 @@ type Order = {
   customerName?: string | null
   customerPhone?: string | null
   totalAmount?: number | null
+  paymentStatus?: string | null
   createdAt?: string | null
   prepTimeMinutes?: number | null
   acceptedAt?: string | null
@@ -148,6 +149,7 @@ function printableTicketHtml(order: Order, config: { receipt: ReceiptSettings; r
           ${receipt.showCustomerName && order.customerName ? `<div>Customer: ${escapeHtml(order.customerName)}</div>` : ''}
           ${receipt.showCustomerPhone && order.customerPhone ? `<div>Phone: ${escapeHtml(order.customerPhone)}</div>` : ''}
           ${receipt.showChannel && order.channel ? `<div>Channel: ${escapeHtml(order.channel)}</div>` : ''}
+          ${order.paymentStatus === 'pay_on_arrival' ? `<div><strong>💳 PAYMENT: On arrival</strong></div>` : ''}
         </div>
       </div>
 
@@ -195,6 +197,7 @@ function textTicket(order: Order, config: { receipt: ReceiptSettings; restaurant
   if (r.showCustomerPhone && order.customerPhone) lines.push(`Phone: ${order.customerPhone}`)
   if (r.showChannel && order.channel) lines.push(`Channel: ${order.channel}`)
   if (order.prepTimeMinutes != null) lines.push(`Ready in: ${Number(order.prepTimeMinutes)} min`)
+  if (order.paymentStatus === 'pay_on_arrival') lines.push('PAYMENT: On arrival')
   lines.push('')
   lines.push('ITEMS')
   lines.push('------------------------------')
@@ -658,6 +661,9 @@ export default function TabletOrdersPage() {
                     <div className="bg-black/20 rounded-xl p-3">
                       <div className="text-xs text-white/60">Total</div>
                       <div className="text-2xl font-extrabold">{formatMoney(o.totalAmount ?? 0)}</div>
+                      {o.paymentStatus === 'pay_on_arrival' && (
+                        <div className="text-xs text-green-300 font-medium">💳 Pay on arrival</div>
+                      )}
                       <div className="text-sm text-white/60 inline-flex items-center gap-2">
                         <ShoppingBag className="w-4 h-4" />
                         {itemCount} items

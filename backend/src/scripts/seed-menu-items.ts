@@ -267,6 +267,5 @@ if (require.main === module || process.env.RUN_SEED === 'true') {
       process.exit(1);
     });
 }
-}
 
 export { seedMenuItems };

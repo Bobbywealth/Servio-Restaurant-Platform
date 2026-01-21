@@ -614,6 +614,12 @@ You: "1 active order right now. All looking good."
 User: "what's low?"
 You: "Chicken is running low - 5 pieces left."
 
+User: "tell me about jerk chicken"
+You: "Jerk Chicken Plate is $15.99 with rice and beans. What spice level - mild, medium, hot, or extra hot (+$0.50)? And rice type - white, brown rice (+$1), or rice & peas (+$1.50)?"
+
+User: "what can I order?"
+You: "Our popular items are Jerk Chicken Plate ($15.99) and Curry Goat ($18.99). Both come with choice of rice and spice level. What sounds good?"
+
 User: "thanks"
 You: "No problem! Anything else?"
 
@@ -883,6 +889,164 @@ Remember: You're not just executing commands - you're a smart restaurant assista
       status: 'success',
       description: `Found ${orders.length} orders${status ? ` with status ${status}` : ''}`,
       details: formattedOrders
+    };
+  }
+
+  private async handleGetMenuItemDetails(args: any, userId: string): Promise<AssistantResponse['actions'][0]> {
+    const { itemName } = args;
+    const user = await this.db.get('SELECT restaurant_id FROM users WHERE id = ?', [userId]);
+    const restaurantId = user?.restaurant_id || 'demo-restaurant-1';
+
+    // Find menu item with fuzzy matching
+    const allMenuItems = await this.db.all(
+      'SELECT * FROM menu_items WHERE restaurant_id = ? AND is_available = TRUE',
+      [restaurantId]
+    );
+
+    const matchResults = this.findBestMatches(itemName, allMenuItems);
+    if (matchResults.length === 0) {
+      return {
+        type: 'get_menu_item_details',
+        status: 'error',
+        description: `I couldn't find "${itemName}" on the menu. Try asking about our popular items instead.`,
+        details: {}
+      };
+    }
+
+    const item = matchResults[0].item;
+    
+    // Get modifiers for this item
+    const modifierGroups = await this.db.all(`
+      SELECT 
+        mg.id,
+        mg.name,
+        mg.min_selection,
+        mg.max_selection,
+        mg.is_required,
+        GROUP_CONCAT(mo.name || ' (+$' || COALESCE(mo.price_modifier, 0) || ')') as options
+      FROM modifier_groups mg
+      LEFT JOIN menu_item_modifiers mim ON mg.id = mim.modifier_group_id
+      LEFT JOIN modifier_options mo ON mg.id = mo.modifier_group_id AND mo.is_available = TRUE
+      WHERE mim.menu_item_id = ? AND mg.restaurant_id = ?
+      GROUP BY mg.id, mg.name, mg.min_selection, mg.max_selection, mg.is_required
+      ORDER BY mg.sort_order ASC, mg.name ASC
+    `, [item.id, restaurantId]);
+
+    const modifierText = modifierGroups.length > 0 
+      ? modifierGroups.map((mg: any) => `${mg.name}: ${mg.options || 'No options available'}`).join('; ')
+      : 'No modifiers available';
+
+    return {
+      type: 'get_menu_item_details',
+      status: 'success',
+      description: `${item.name} - $${parseFloat(item.price).toFixed(2)}. ${item.description || ''}. Available modifiers: ${modifierText}`,
+      details: {
+        item: {
+          id: item.id,
+          name: item.name,
+          price: parseFloat(item.price),
+          description: item.description
+        },
+        modifiers: modifierGroups.map((mg: any) => ({
+          group: mg.name,
+          required: !!mg.is_required,
+          options: (mg.options || '').split(',').filter(Boolean)
+        }))
+      }
+    };
+  }
+
+  private async handleSearchMenuWithModifiers(args: any, userId: string): Promise<AssistantResponse['actions'][0]> {
+    const { query, includeModifiers = true } = args;
+    const user = await this.db.get('SELECT restaurant_id FROM users WHERE id = ?', [userId]);
+    const restaurantId = user?.restaurant_id || 'demo-restaurant-1';
+
+    // Search menu items
+    const q = `%${query.toLowerCase().trim()}%`;
+    const items = await this.db.all(`
+      SELECT 
+        mi.id,
+        mi.name,
+        mi.description,
+        mi.price,
+        mc.name as category
+      FROM menu_items mi
+      LEFT JOIN menu_categories mc ON mi.category_id = mc.id
+      WHERE mi.restaurant_id = ?
+        AND mi.is_available = TRUE
+        AND (LOWER(mi.name) LIKE ? OR LOWER(mi.description) LIKE ?)
+      ORDER BY 
+        CASE 
+          WHEN LOWER(mi.name) LIKE ? THEN 1
+          ELSE 2
+        END,
+        mi.sort_order ASC,
+        mi.name ASC
+      LIMIT 5
+    `, [restaurantId, q, q, q]);
+
+    if (items.length === 0) {
+      return {
+        type: 'search_menu_with_modifiers',
+        status: 'error',
+        description: `I couldn't find any items matching "${query}". Try asking about our popular dishes!`,
+        details: {}
+      };
+    }
+
+    const itemsWithModifiers = await Promise.all(items.map(async (item: any) => {
+      if (!includeModifiers) {
+        return {
+          id: item.id,
+          name: item.name,
+          price: parseFloat(item.price),
+          description: item.description,
+          category: item.category
+        };
+      }
+
+      // Get modifier groups for this item
+      const modifiers = await this.db.all(`
+        SELECT 
+          mg.name as groupName,
+          mg.is_required,
+          GROUP_CONCAT(mo.name || ' (+$' || COALESCE(mo.price_modifier, 0) || ')') as options
+        FROM modifier_groups mg
+        LEFT JOIN menu_item_modifiers mim ON mg.id = mim.modifier_group_id
+        LEFT JOIN modifier_options mo ON mg.id = mo.modifier_group_id AND mo.is_available = TRUE
+        WHERE mim.menu_item_id = ? AND mg.restaurant_id = ?
+        GROUP BY mg.id, mg.name, mg.is_required
+      `, [item.id, restaurantId]);
+
+      return {
+        id: item.id,
+        name: item.name,
+        price: parseFloat(item.price),
+        description: item.description,
+        category: item.category,
+        modifiers: modifiers.map((m: any) => ({
+          group: m.groupName,
+          required: !!m.is_required,
+          options: (m.options || '').split(',').filter(Boolean)
+        }))
+      };
+    }));
+
+    const itemsList = itemsWithModifiers.map(item => {
+      let desc = `${item.name} ($${item.price.toFixed(2)})`;
+      if (item.description) desc += ` - ${item.description}`;
+      if (includeModifiers && item.modifiers && item.modifiers.length > 0) {
+        const modText = item.modifiers.map((m: any) => `${m.group}: ${m.options.slice(0, 3).join(', ')}${m.options.length > 3 ? '...' : ''}`).join('; ');
+        desc += `. Options: ${modText}`;
+      }
+      return desc;
+    }).join('\n\n');
+
+    return {
+      type: 'search_menu_with_modifiers',
+      status: 'success',
+      description: `Found ${items.length} items matching "${query}":\n\n${itemsList}`,
+      details: { items: itemsWithModifiers, query }
     };
   }
 

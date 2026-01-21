@@ -1,0 +1,121 @@
+-- Additional Production Performance Indexes (SQLite Compatible)
+-- Date: 2026-01-20
+-- Purpose: Critical indexes for production launch as per Day 6-8 requirements
+-- Refactored to match actual schema columns and tables
+
+-- ============================================================================
+-- ORDERS PERFORMANCE (High Priority)
+-- ============================================================================
+
+-- Index for orders by restaurant and status
+CREATE INDEX idx_orders_restaurant_status
+  ON orders(restaurant_id, status);
+
+-- Index for recent orders (most common query)
+CREATE INDEX idx_orders_created_desc
+  ON orders(created_at DESC);
+
+-- Index for order channel analytics
+CREATE INDEX idx_orders_restaurant_channel_created
+  ON orders(restaurant_id, channel, created_at DESC);
+
+-- ============================================================================
+-- MENU ITEMS PERFORMANCE
+-- ============================================================================
+
+-- Index for active menu items by restaurant
+CREATE INDEX idx_menu_items_restaurant_active
+  ON menu_items(restaurant_id, is_available);
+
+-- Index for menu items by category (for quick filtering)
+CREATE INDEX idx_menu_items_restaurant_category
+  ON menu_items(restaurant_id, category_id);
+
+-- ============================================================================
+-- INVENTORY PERFORMANCE
+-- ============================================================================
+
+-- Index for low stock items (critical for alerts)
+CREATE INDEX idx_inventory_low_stock
+  ON inventory_items(restaurant_id, on_hand_qty);
+
+-- Index for inventory by name (for quick search)
+CREATE INDEX idx_inventory_restaurant_name
+  ON inventory_items(restaurant_id, name);
+
+-- ============================================================================
+-- TASKS PERFORMANCE
+-- ============================================================================
+
+-- Index for assigned tasks with status and due date
+CREATE INDEX idx_tasks_assigned_status_due
+  ON tasks(assigned_to, status, due_date);
+
+-- Index for restaurant tasks by status
+CREATE INDEX idx_tasks_restaurant_status
+  ON tasks(restaurant_id, status);
+
+-- ============================================================================
+-- TIME ENTRIES PERFORMANCE
+-- ============================================================================
+
+-- Index for user time entries by date
+CREATE INDEX idx_time_entries_user_date_desc
+  ON time_entries(user_id, clock_in_time DESC);
+
+-- Index for active clock-ins (users currently working)
+CREATE INDEX idx_time_entries_active_shifts
+  ON time_entries(restaurant_id, user_id, clock_out_time);
+
+-- ============================================================================
+-- AUDIT LOGS PERFORMANCE
+-- ============================================================================
+
+-- Index for audit logs by entity type and ID
+CREATE INDEX idx_audit_logs_entity_created
+  ON audit_logs(entity_type, entity_id, created_at DESC);
+
+-- Index for audit logs by user
+CREATE INDEX idx_audit_logs_user_created
+  ON audit_logs(user_id, created_at DESC);
+
+-- Index for audit logs by action type
+CREATE INDEX idx_audit_logs_action_created
+  ON audit_logs(action, created_at DESC);
+
+-- ============================================================================
+-- USERS & AUTHENTICATION
+-- ============================================================================
+
+-- Index for user lookup by email (login) - skip LOWER() for SQLite simplicity
+CREATE INDEX idx_users_email_active
+  ON users(email, is_active);
+
+-- Index for active users by restaurant
+CREATE INDEX idx_users_restaurant_active_role
+  ON users(restaurant_id, is_active, role);
+
+-- Index for PIN lookup (tablet login)
+CREATE INDEX idx_users_restaurant_pin
+  ON users(restaurant_id, pin);
+
+-- ============================================================================
+-- COMPOSITE INDEXES FOR COMPLEX QUERIES
+-- ============================================================================
+
+-- Composite index for order analytics (revenue, count by date range)
+CREATE INDEX idx_orders_analytics
+  ON orders(restaurant_id, status, created_at DESC, total_amount);
+
+-- Composite index for menu item popularity tracking
+CREATE INDEX idx_order_items_analytics
+  ON order_items(menu_item_id, created_at DESC, quantity);
+
+-- Composite index for inventory transaction tracking
+CREATE INDEX idx_inventory_transactions_analytics
+  ON inventory_transactions(
+    restaurant_id, 
+    inventory_item_id, 
+    type, 
+    created_at DESC
+  );

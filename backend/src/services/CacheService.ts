@@ -9,7 +9,8 @@ import { getMetricsService } from './MetricsService';
 
 export class CacheService {
   private l1Cache: NodeCache;
-  private redis: Redis;
+  private redis: Redis | null = null;
+  private redisAvailable: boolean = true;
   private readonly prefix: string = 'servio:cache:';
   private readonly defaultTTL: number = 300; // 5 minutes
 
@@ -21,32 +22,52 @@ export class CacheService {
       useClones: false
     });
 
-    this.redis = new Redis({
-      host: process.env.REDIS_HOST || 'localhost',
-      port: parseInt(process.env.REDIS_PORT || '6379'),
-      password: process.env.REDIS_PASSWORD || undefined,
-      db: parseInt(process.env.REDIS_DB || '1'), // Use DB 1 for cache (DB 0 for rate limiting)
-      maxRetriesPerRequest: 3,
-      enableReadyCheck: true,
-      enableOfflineQueue: true,
-      retryStrategy: (times) => {
-        const delay = Math.min(times * 50, 2000);
-        return delay;
-      },
-      lazyConnect: true
-    });
+    // Only initialize Redis if REDIS_URL is provided or we're in development
+    if (process.env.REDIS_URL || (process.env.NODE_ENV !== 'production' && process.env.REDIS_HOST)) {
+      try {
+        this.redis = new Redis({
+          host: process.env.REDIS_HOST || 'localhost',
+          port: parseInt(process.env.REDIS_PORT || '6379'),
+          password: process.env.REDIS_PASSWORD || undefined,
+          db: parseInt(process.env.REDIS_DB || '1'), // Use DB 1 for cache (DB 0 for rate limiting)
+          maxRetriesPerRequest: 3,
+          enableReadyCheck: true,
+          enableOfflineQueue: true,
+          retryStrategy: (times) => {
+            // Stop retrying after 5 attempts to avoid constant errors
+            if (times > 5) {
+              this.redisAvailable = false;
+              logger.warn('Redis unavailable - falling back to L1 cache only');
+              return null; // Stop retrying
+            }
+            const delay = Math.min(times * 50, 2000);
+            return delay;
+          },
+          lazyConnect: true
+        });
 
-    this.redis.on('error', (err) => {
-      logger.error('Redis cache client error:', err);
-    });
+        this.redis.on('error', (err) => {
+          this.redisAvailable = false;
+          logger.warn('Redis cache client error - falling back to L1 only:', (err as any).code || err.message);
+        });
 
-    this.redis.on('connect', () => {
-      logger.info('Redis cache client connected');
-    });
+        this.redis.on('connect', () => {
+          this.redisAvailable = true;
+          logger.info('Redis cache client connected');
+        });
 
-    this.redis.on('ready', () => {
-      logger.info('Redis cache client ready');
-    });
+        this.redis.on('ready', () => {
+          this.redisAvailable = true;
+          logger.info('Redis cache client ready');
+        });
+      } catch (error) {
+        logger.warn('Failed to initialize Redis - using L1 cache only:', (error as any).message);
+        this.redisAvailable = false;
+      }
+    } else {
+      logger.info('Redis not configured - using L1 cache only');
+      this.redisAvailable = false;
+    }
   }
 
   /**
@@ -68,7 +89,12 @@ export class CacheService {
         return l1;
       }
 
-      // L2
+      // L2 (only if Redis is available)
+      if (!this.redis || !this.redisAvailable) {
+        getMetricsService().increment('cache.misses', 1, { layer: 'l1_only' });
+        return null;
+      }
+
       const value = await this.redis.get(this.getKey(key));
       if (!value) {
         getMetricsService().increment('cache.misses', 1, { layer: 'l2' });
@@ -82,7 +108,8 @@ export class CacheService {
       this.l1Cache.set(key, parsed);
       return parsed;
     } catch (error: any) {
-      logger.error('Cache get error', { key, error: error.message });
+      this.redisAvailable = false;
+      logger.warn('Cache get error - falling back to L1 only', { key, error: error.message });
       return null;
     }
   }
@@ -93,21 +120,27 @@ export class CacheService {
   async set<T>(key: string, value: T, ttl: number = this.defaultTTL): Promise<boolean> {
     try {
       const start = Date.now();
-      const serialized = JSON.stringify(value);
       // write L1 (cap at 60s unless caller explicitly wants less)
       this.l1Cache.set(key, value, Math.min(ttl, 60));
+
+      // L2 (only if Redis is available)
+      if (!this.redis || !this.redisAvailable) {
+        return true; // L1 write succeeded
+      }
 
       // ensure L2 is connected lazily
       if (this.redis.status === 'wait') {
         await this.redis.connect();
       }
 
+      const serialized = JSON.stringify(value);
       await this.redis.setex(this.getKey(key), ttl, serialized);
       getMetricsService().timing('cache.set_time', Date.now() - start, { layer: 'l2' });
       return true;
     } catch (error: any) {
-      logger.error('Cache set error', { key, ttl, error: error.message });
-      return false;
+      this.redisAvailable = false;
+      logger.warn('Cache set error - L1 cached, L2 failed', { key, ttl, error: error.message });
+      return true; // L1 write succeeded even if L2 failed
     }
   }
 
@@ -144,11 +177,17 @@ export class CacheService {
   async delete(key: string): Promise<boolean> {
     try {
       this.l1Cache.del(key);
+      
+      if (!this.redis || !this.redisAvailable) {
+        return true; // L1 delete succeeded
+      }
+      
       const result = await this.redis.del(this.getKey(key));
       return result > 0;
     } catch (error: any) {
-      logger.error('Cache delete error', { key, error: error.message });
-      return false;
+      this.redisAvailable = false;
+      logger.warn('Cache delete error - L1 cleared, L2 failed', { key, error: error.message });
+      return true; // L1 delete succeeded
     }
   }
 
@@ -173,33 +212,53 @@ export class CacheService {
   }
 
   private async invalidateSinglePattern(pattern: string): Promise<number> {
+    let l1Deleted = 0;
+    
     // best-effort L1 invalidation by prefix if possible
     if (pattern.endsWith('*')) {
       const prefix = pattern.slice(0, -1);
       const keys = this.l1Cache.keys();
       for (const k of keys) {
-        if (k.startsWith(prefix)) this.l1Cache.del(k);
+        if (k.startsWith(prefix)) {
+          this.l1Cache.del(k);
+          l1Deleted++;
+        }
       }
     } else {
-      this.l1Cache.del(pattern);
+      if (this.l1Cache.get(pattern) !== undefined) {
+        this.l1Cache.del(pattern);
+        l1Deleted = 1;
+      }
     }
 
-    // Use SCAN instead of KEYS to avoid blocking Redis
-    const match = this.getKey(pattern);
-    let cursor = '0';
-    const toDelete: string[] = [];
+    // Skip Redis operations if not available
+    if (!this.redis || !this.redisAvailable) {
+      logger.info('Cache invalidated (L1 only)', { pattern, count: l1Deleted });
+      return l1Deleted;
+    }
 
-    do {
-      const [nextCursor, keys] = await this.redis.scan(cursor, 'MATCH', match, 'COUNT', 500);
-      cursor = nextCursor;
-      if (keys.length) toDelete.push(...keys);
-    } while (cursor !== '0');
+    try {
+      // Use SCAN instead of KEYS to avoid blocking Redis
+      const match = this.getKey(pattern);
+      let cursor = '0';
+      const toDelete: string[] = [];
 
-    if (!toDelete.length) return 0;
+      do {
+        const [nextCursor, keys] = await this.redis.scan(cursor, 'MATCH', match, 'COUNT', 500);
+        cursor = nextCursor;
+        if (keys.length) toDelete.push(...keys);
+      } while (cursor !== '0');
 
-    const deleted = await this.redis.del(...toDelete);
-    logger.info('Cache invalidated', { pattern, count: deleted });
-    return deleted;
+      if (!toDelete.length) return l1Deleted;
+
+      const deleted = await this.redis.del(...toDelete);
+      logger.info('Cache invalidated', { pattern, count: deleted + l1Deleted });
+      return deleted + l1Deleted;
+    } catch (error: any) {
+      this.redisAvailable = false;
+      logger.warn('Cache invalidation error on L2 - L1 cleared', { pattern, error: error.message });
+      return l1Deleted;
+    }
   }
 
   /**
@@ -215,10 +274,16 @@ export class CacheService {
   async exists(key: string): Promise<boolean> {
     try {
       if (this.l1Cache.get(key) !== undefined) return true;
+      
+      if (!this.redis || !this.redisAvailable) {
+        return false; // Only checked L1
+      }
+      
       const result = await this.redis.exists(this.getKey(key));
       return result === 1;
     } catch (error: any) {
-      logger.error('Cache exists error', { key, error: error.message });
+      this.redisAvailable = false;
+      logger.warn('Cache exists error - checked L1 only', { key, error: error.message });
       return false;
     }
   }
@@ -227,10 +292,15 @@ export class CacheService {
    * Get TTL for key
    */
   async ttl(key: string): Promise<number> {
+    if (!this.redis || !this.redisAvailable) {
+      return -1; // TTL not available in L1 only mode
+    }
+    
     try {
       return await this.redis.ttl(this.getKey(key));
     } catch (error: any) {
-      logger.error('Cache TTL error', { key, error: error.message });
+      this.redisAvailable = false;
+      logger.warn('Cache TTL error - Redis unavailable', { key, error: error.message });
       return -1;
     }
   }
@@ -239,10 +309,16 @@ export class CacheService {
    * Increment counter
    */
   async increment(key: string, amount: number = 1): Promise<number> {
+    if (!this.redis || !this.redisAvailable) {
+      logger.warn('Cache increment not available - Redis unavailable', { key });
+      return 0;
+    }
+    
     try {
       return await this.redis.incrby(this.getKey(key), amount);
     } catch (error: any) {
-      logger.error('Cache increment error', { key, error: error.message });
+      this.redisAvailable = false;
+      logger.warn('Cache increment error - Redis unavailable', { key, error: error.message });
       return 0;
     }
   }
@@ -251,10 +327,16 @@ export class CacheService {
    * Decrement counter
    */
   async decrement(key: string, amount: number = 1): Promise<number> {
+    if (!this.redis || !this.redisAvailable) {
+      logger.warn('Cache decrement not available - Redis unavailable', { key });
+      return 0;
+    }
+    
     try {
       return await this.redis.decrby(this.getKey(key), amount);
     } catch (error: any) {
-      logger.error('Cache decrement error', { key, error: error.message });
+      this.redisAvailable = false;
+      logger.warn('Cache decrement error - Redis unavailable', { key, error: error.message });
       return 0;
     }
   }
@@ -264,20 +346,30 @@ export class CacheService {
    */
   async setMany(items: Array<{ key: string; value: any; ttl?: number }>): Promise<boolean> {
     try {
+      // Always set in L1
+      for (const item of items) {
+        const ttl = item.ttl || this.defaultTTL;
+        this.l1Cache.set(item.key, item.value, Math.min(ttl, 60));
+      }
+
+      // Skip L2 if Redis unavailable
+      if (!this.redis || !this.redisAvailable) {
+        return true; // L1 succeeded
+      }
+
       const pipeline = this.redis.pipeline();
-      
       for (const item of items) {
         const ttl = item.ttl || this.defaultTTL;
         const serialized = JSON.stringify(item.value);
-        this.l1Cache.set(item.key, item.value, Math.min(ttl, 60));
         pipeline.setex(this.getKey(item.key), ttl, serialized);
       }
 
       await pipeline.exec();
       return true;
     } catch (error: any) {
-      logger.error('Cache setMany error', { count: items.length, error: error.message });
-      return false;
+      this.redisAvailable = false;
+      logger.warn('Cache setMany error on L2 - L1 succeeded', { count: items.length, error: error.message });
+      return true; // L1 succeeded
     }
   }
 
@@ -299,7 +391,9 @@ export class CacheService {
         }
       }
 
-      if (missed.length === 0) return map;
+      if (missed.length === 0 || !this.redis || !this.redisAvailable) {
+        return map; // Return L1 results only
+      }
 
       // L2 batch
       const prefixed = missed.map((k) => this.getKey(k));
@@ -319,8 +413,17 @@ export class CacheService {
 
       return map;
     } catch (error: any) {
-      logger.error('Cache getMany error', { count: keys.length, error: error.message });
-      return new Map();
+      this.redisAvailable = false;
+      logger.warn('Cache getMany error on L2 - returning L1 results', { count: keys.length, error: error.message });
+      // Return what we got from L1
+      const map = new Map<string, T>();
+      for (const key of keys) {
+        const v = this.l1Cache.get<T>(key);
+        if (v !== undefined) {
+          map.set(key, v);
+        }
+      }
+      return map;
     }
   }
 
@@ -335,12 +438,26 @@ export class CacheService {
    * mset helper (pipeline)
    */
   async mset<T>(entries: Map<string, T>, ttl: number = this.defaultTTL): Promise<void> {
-    const pipeline = this.redis.pipeline();
+    // Always set in L1
     for (const [key, value] of entries) {
       this.l1Cache.set(key, value, Math.min(ttl, 60));
-      pipeline.setex(this.getKey(key), ttl, JSON.stringify(value));
     }
-    await pipeline.exec();
+
+    // Skip L2 if Redis unavailable
+    if (!this.redis || !this.redisAvailable) {
+      return; // L1 succeeded
+    }
+
+    try {
+      const pipeline = this.redis.pipeline();
+      for (const [key, value] of entries) {
+        pipeline.setex(this.getKey(key), ttl, JSON.stringify(value));
+      }
+      await pipeline.exec();
+    } catch (error: any) {
+      this.redisAvailable = false;
+      logger.warn('Cache mset error on L2 - L1 succeeded', { count: entries.size, error: error.message });
+    }
   }
 
   /**
@@ -348,12 +465,20 @@ export class CacheService {
    */
   async flush(): Promise<boolean> {
     try {
+      this.l1Cache.flushAll();
+      
+      if (!this.redis || !this.redisAvailable) {
+        logger.warn('Cache flushed (L1 only) - all keys deleted');
+        return true;
+      }
+      
       await this.redis.flushdb();
       logger.warn('Cache flushed - all keys deleted');
       return true;
     } catch (error: any) {
-      logger.error('Cache flush error', { error: error.message });
-      return false;
+      this.redisAvailable = false;
+      logger.warn('Cache flush error on L2 - L1 cleared', { error: error.message });
+      return true; // L1 was cleared
     }
   }
 
@@ -365,7 +490,18 @@ export class CacheService {
     memory: string;
     hitRate: number;
     uptime: number;
+    mode: string;
   } | null> {
+    if (!this.redis || !this.redisAvailable) {
+      return {
+        keys: this.l1Cache.keys().length,
+        memory: 'L1-only',
+        hitRate: 0,
+        uptime: 0,
+        mode: 'L1-only'
+      };
+    }
+
     try {
       const info = await this.redis.info('stats');
       const keyspace = await this.redis.info('keyspace');
@@ -391,11 +527,19 @@ export class CacheService {
         keys,
         memory: memoryUsed,
         hitRate: Math.round(hitRate * 100) / 100,
-        uptime
+        uptime,
+        mode: 'L1+L2'
       };
     } catch (error: any) {
-      logger.error('Failed to get cache stats', { error: error.message });
-      return null;
+      this.redisAvailable = false;
+      logger.warn('Failed to get Redis cache stats - falling back to L1', { error: error.message });
+      return {
+        keys: this.l1Cache.keys().length,
+        memory: 'L1-only (L2-error)',
+        hitRate: 0,
+        uptime: 0,
+        mode: 'L1-only'
+      };
     }
   }
 
@@ -404,25 +548,45 @@ export class CacheService {
    */
   async close(): Promise<void> {
     this.l1Cache.flushAll();
-    await this.redis.quit();
-    logger.info('Redis cache client closed');
+    if (this.redis) {
+      try {
+        await this.redis.quit();
+        logger.info('Redis cache client closed');
+      } catch (error) {
+        logger.warn('Error closing Redis connection:', (error as any).message);
+      }
+    } else {
+      logger.info('Cache service closed (L1 only mode)');
+    }
   }
 
   /**
    * Health check
    */
-  async healthCheck(): Promise<{ healthy: boolean; latency: number }> {
+  async healthCheck(): Promise<{ healthy: boolean; latency: number; mode: string }> {
     const start = Date.now();
+    
+    if (!this.redis || !this.redisAvailable) {
+      return {
+        healthy: true,
+        latency: Date.now() - start,
+        mode: 'L1-only'
+      };
+    }
+    
     try {
       await this.redis.ping();
       return {
         healthy: true,
-        latency: Date.now() - start
+        latency: Date.now() - start,
+        mode: 'L1+L2'
       };
     } catch (error) {
+      this.redisAvailable = false;
       return {
-        healthy: false,
-        latency: Date.now() - start
+        healthy: true,
+        latency: Date.now() - start,
+        mode: 'L1-only (L2-degraded)'
       };
     }
   }

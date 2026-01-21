@@ -103,4 +103,10 @@ router.post('/seed-menu', asyncHandler(async (req: Request, res: Response) => {
   res.json({ success: true, message: 'Menu items seeded successfully for demo-restaurant-1' });
 }));
 
+router.post('/seed-foodbooking-modifiers', asyncHandler(async (req: Request, res: Response) => {
+  const { seedFoodbookingModifiers } = await import('../scripts/seed-foodbooking-modifiers');
+  await seedFoodbookingModifiers();
+  res.json({ success: true, message: 'Foodbooking modifiers seeded successfully for demo-restaurant-1' });
+}));
+
 export default router;
