@@ -387,10 +387,10 @@ export class VapiService {
 
   // Helper method to get enhanced system prompt for phone calls
   // Handle placing a new order via phone
-  private async handlePlaceOrder(parameters: any, userId: string): Promise<any> {
+  private async handlePlaceOrder(parameters: any, userId: string, restaurantId: string): Promise<any> {
     try {
       const voiceService = VoiceOrderingService.getInstance();
-      const result = await voiceService.createOrder(parameters);
+      const result = await voiceService.createOrder(parameters, restaurantId);
       
       if (!result.orderId) {
         return {
@@ -419,10 +419,10 @@ export class VapiService {
   }
 
   // Handle menu information requests
-  private async handleGetMenuInfo(parameters: any, userId: string): Promise<any> {
+  private async handleGetMenuInfo(parameters: any, userId: string, restaurantId: string): Promise<any> {
     try {
       const voiceService = VoiceOrderingService.getInstance();
-      const items = await voiceService.searchMenu(parameters.itemName || parameters.category || '');
+      const items = await voiceService.searchMenu(parameters.itemName || parameters.category || '', restaurantId);
 
       if (items.length === 0) {
         return {

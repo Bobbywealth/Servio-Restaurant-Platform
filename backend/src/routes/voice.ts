@@ -19,24 +19,29 @@ router.get('/menu', requireVapiAuth, asyncHandler(async (req: Request, res: Resp
 }));
 
 router.get('/menu/search', requireVapiAuth, asyncHandler(async (req: Request, res: Response) => {
-  const { q } = req.query;
-  res.json(service.searchMenu(String(q || '')));
+  const { q, restaurantId } = req.query;
+  const targetRestaurantId = String(restaurantId || process.env.VAPI_RESTAURANT_ID || 'demo-restaurant-1');
+  res.json(await service.searchMenu(String(q || ''), targetRestaurantId));
 }));
 
 router.get('/menu/items/:id', requireVapiAuth, asyncHandler(async (req: Request, res: Response) => {
-  const item = service.getMenuItem(req.params.id);
+  const { restaurantId } = req.query;
+  const targetRestaurantId = String(restaurantId || process.env.VAPI_RESTAURANT_ID || 'demo-restaurant-1');
+  const item = await service.getMenuItem(req.params.id, targetRestaurantId);
   if (!item) return res.status(404).json({ error: 'Item not found' });
   res.json(item);
 }));
 
 // 3) Quote
 router.post('/order/quote', requireVapiAuth, asyncHandler(async (req: Request, res: Response) => {
-  res.json(service.validateQuote(req.body));
+  const restaurantId = req.body.restaurantId || req.query.restaurantId || process.env.VAPI_RESTAURANT_ID || 'demo-restaurant-1';
+  res.json(await service.validateQuote(req.body, String(restaurantId)));
 }));
 
 // 4) Create Order (PENDING Only)
 router.post('/orders', requireVapiAuth, asyncHandler(async (req: Request, res: Response) => {
-  const result = await service.createOrder(req.body);
+  const restaurantId = req.body.restaurantId || req.query.restaurantId || process.env.VAPI_RESTAURANT_ID || 'demo-restaurant-1';
+  const result = await service.createOrder(req.body, String(restaurantId));
   if (result.orderId) {
     res.status(201).json(result);
   } else {
