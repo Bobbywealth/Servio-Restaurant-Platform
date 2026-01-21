@@ -91,11 +91,16 @@ export default function SettingsPage() {
     showCustomerPhone: boolean
     showChannel: boolean
     footerText: string
+    printMode?: 'browser' | 'agent' | 'bluetooth'
+    agentUrl?: string
+    agentPrinter?: null | { name?: string; host: string; port?: number; type?: string }
   }
 
   const [receiptMeta, setReceiptMeta] = useState<any>(null)
   const [isLoadingReceipt, setIsLoadingReceipt] = useState(false)
   const [isSavingReceipt, setIsSavingReceipt] = useState(false)
+  const [agentPrinters, setAgentPrinters] = useState<Array<any>>([])
+  const [isScanningAgent, setIsScanningAgent] = useState(false)
   const [receiptFormData, setReceiptFormData] = useState<ReceiptSettings>({
     paperSize: '80mm',
     headerTitle: '',
@@ -106,7 +111,10 @@ export default function SettingsPage() {
     showCustomerName: true,
     showCustomerPhone: true,
     showChannel: true,
-    footerText: 'Thank you!'
+    footerText: 'Thank you!',
+    printMode: 'browser',
+    agentUrl: 'http://localhost:8787',
+    agentPrinter: null
   })
 
   // Load Vapi settings when phone tab is active
@@ -188,6 +196,24 @@ export default function SettingsPage() {
       alert(getErrorMessage(err, 'Failed to save receipt settings'))
     } finally {
       setIsSavingReceipt(false)
+    }
+  }
+
+  const scanAgentPrinters = async () => {
+    const url = (receiptFormData.agentUrl || 'http://localhost:8787').replace(/\/+$/, '')
+    setIsScanningAgent(true)
+    try {
+      const resp = await fetch(`${url}/printers`)
+      const data = await resp.json()
+      const printers = data?.data?.printers || []
+      setAgentPrinters(printers)
+      if (printers.length === 0) {
+        alert('No printers discovered. Make sure the print agent is running on the tablet computer.')
+      }
+    } catch (err: any) {
+      alert(getErrorMessage(err, 'Failed to reach print agent. Is it running at the URL above?'))
+    } finally {
+      setIsScanningAgent(false)
     }
   }
 
@@ -732,6 +758,139 @@ export default function SettingsPage() {
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <div className="space-y-4">
+                <div className="bg-white dark:bg-surface-900 border border-surface-200 dark:border-surface-700 rounded-xl p-4">
+                  <h4 className="text-sm font-semibold text-surface-900 dark:text-surface-100 mb-2">Printer Connection</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <label className={`p-3 rounded-xl border cursor-pointer ${
+                      receiptFormData.printMode === 'browser'
+                        ? 'border-primary-300 bg-primary-50 dark:border-primary-700 dark:bg-primary-900/20'
+                        : 'border-surface-200 dark:border-surface-700 hover:bg-surface-50 dark:hover:bg-surface-800/50'
+                    }`}>
+                      <input
+                        type="radio"
+                        className="mr-2"
+                        name="printMode"
+                        checked={receiptFormData.printMode === 'browser'}
+                        onChange={() => setReceiptFormData({ ...receiptFormData, printMode: 'browser' })}
+                      />
+                      <span className="text-sm font-medium">Browser / AirPrint</span>
+                      <div className="text-xs text-surface-600 dark:text-surface-400 mt-1">
+                        Best for iPad (AirPrint).
+                      </div>
+                    </label>
+                    <label className={`p-3 rounded-xl border cursor-pointer ${
+                      receiptFormData.printMode === 'agent'
+                        ? 'border-primary-300 bg-primary-50 dark:border-primary-700 dark:bg-primary-900/20'
+                        : 'border-surface-200 dark:border-surface-700 hover:bg-surface-50 dark:hover:bg-surface-800/50'
+                    }`}>
+                      <input
+                        type="radio"
+                        className="mr-2"
+                        name="printMode"
+                        checked={receiptFormData.printMode === 'agent'}
+                        onChange={() => setReceiptFormData({ ...receiptFormData, printMode: 'agent' })}
+                      />
+                      <span className="text-sm font-medium">LAN (Print Agent)</span>
+                      <div className="text-xs text-surface-600 dark:text-surface-400 mt-1">
+                        Discovers nearby LAN printers.
+                      </div>
+                    </label>
+                    <label className={`p-3 rounded-xl border cursor-pointer ${
+                      receiptFormData.printMode === 'bluetooth'
+                        ? 'border-primary-300 bg-primary-50 dark:border-primary-700 dark:bg-primary-900/20'
+                        : 'border-surface-200 dark:border-surface-700 hover:bg-surface-50 dark:hover:bg-surface-800/50'
+                    }`}>
+                      <input
+                        type="radio"
+                        className="mr-2"
+                        name="printMode"
+                        checked={receiptFormData.printMode === 'bluetooth'}
+                        onChange={() => setReceiptFormData({ ...receiptFormData, printMode: 'bluetooth' })}
+                      />
+                      <span className="text-sm font-medium">Bluetooth</span>
+                      <div className="text-xs text-surface-600 dark:text-surface-400 mt-1">
+                        Android/Chrome only.
+                      </div>
+                    </label>
+                  </div>
+
+                  {receiptFormData.printMode === 'agent' && (
+                    <div className="mt-4 space-y-3">
+                      <div>
+                        <label className="block text-sm font-medium text-surface-900 dark:text-surface-100 mb-2">
+                          Print Agent URL
+                        </label>
+                        <input
+                          className="input-field"
+                          value={receiptFormData.agentUrl || ''}
+                          onChange={(e) => setReceiptFormData({ ...receiptFormData, agentUrl: e.target.value })}
+                          placeholder="http://localhost:8787"
+                        />
+                        <p className="text-xs text-surface-600 dark:text-surface-400 mt-1">
+                          Run the agent from `print-agent/` on the tablet computer.
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          onClick={scanAgentPrinters}
+                          disabled={isScanningAgent}
+                        >
+                          {isScanningAgent ? 'Scanning…' : 'Find Nearby Printers'}
+                        </button>
+                        {receiptFormData.agentPrinter ? (
+                          <div className="text-sm text-surface-700 dark:text-surface-300">
+                            Selected: <span className="font-semibold">{receiptFormData.agentPrinter.name || receiptFormData.agentPrinter.host}</span>
+                          </div>
+                        ) : (
+                          <div className="text-sm text-surface-500 dark:text-surface-400">
+                            No printer selected
+                          </div>
+                        )}
+                      </div>
+
+                      {agentPrinters.length > 0 && (
+                        <div className="border border-surface-200 dark:border-surface-700 rounded-xl overflow-hidden">
+                          <div className="px-4 py-2 bg-surface-50 dark:bg-surface-800 text-sm font-semibold text-surface-800 dark:text-surface-200">
+                            Discovered printers
+                          </div>
+                          <div className="max-h-56 overflow-auto">
+                            {agentPrinters.map((p: any, idx: number) => (
+                              <button
+                                key={`${p.host}:${p.port}:${idx}`}
+                                type="button"
+                                className="w-full text-left px-4 py-3 border-t border-surface-200 dark:border-surface-700 hover:bg-surface-50 dark:hover:bg-surface-800/50"
+                                onClick={() =>
+                                  setReceiptFormData({
+                                    ...receiptFormData,
+                                    agentPrinter: { name: p.name, host: p.host, port: p.port, type: p.type }
+                                  })
+                                }
+                              >
+                                <div className="font-medium text-surface-900 dark:text-surface-100">
+                                  {p.name || 'Printer'} <span className="text-xs text-surface-500">({p.type})</span>
+                                </div>
+                                <div className="text-xs text-surface-600 dark:text-surface-400">
+                                  {p.host}:{p.port}
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {receiptFormData.printMode === 'bluetooth' && (
+                    <div className="mt-4 text-xs text-surface-600 dark:text-surface-400">
+                      Bluetooth printer discovery/printing works only on supported browsers (usually Android Chrome).
+                      On iPad/iOS, use Browser/AirPrint or LAN Print Agent.
+                    </div>
+                  )}
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-surface-900 dark:text-surface-100 mb-2">

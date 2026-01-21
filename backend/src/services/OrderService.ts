@@ -101,7 +101,14 @@ export class OrderService {
 
   async createPublicOrder(params: {
     slug: string;
-    items: Array<{ id: string; name: string; quantity: number; price: number }>;
+    items: Array<{
+      id: string;
+      name: string;
+      quantity: number;
+      price: number;
+      modifiers?: any;
+      notes?: string;
+    }>;
     customerName?: string;
     customerPhone?: string;
     customerEmail?: string;
@@ -123,23 +130,73 @@ export class OrderService {
       totalAmount += Number(item.price) * Number(item.quantity);
     }
 
-    await db.run(
-      `
-        INSERT INTO orders (
-          id, restaurant_id, channel, status, total_amount, payment_status, customer_name, customer_phone, source, created_at, updated_at
-        ) VALUES (?, ?, 'website', 'received', ?, 'unpaid', ?, ?, 'website', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-      `,
-      [orderId, restaurantId, totalAmount, params.customerName || null, params.customerPhone || null]
-    );
-
-    for (const item of items) {
+    // Some environments may not have an 'items' column on orders. Try it first, then fall back.
+    try {
       await db.run(
         `
-          INSERT INTO order_items (id, order_id, menu_item_id, name, quantity, unit_price)
-          VALUES (?, ?, ?, ?, ?, ?)
+          INSERT INTO orders (
+            id, restaurant_id, channel, status, total_amount, payment_status,
+            customer_name, customer_phone, source, items, created_at, updated_at
+          ) VALUES (?, ?, 'website', 'received', ?, 'unpaid', ?, ?, 'website', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         `,
-        [uuidv4(), orderId, item.id, item.name, item.quantity, item.price]
+        [orderId, restaurantId, totalAmount, params.customerName || null, params.customerPhone || null, JSON.stringify(items)]
       );
+    } catch (err: any) {
+      const message = String(err?.message || err || '');
+      if (!/items/i.test(message)) throw err;
+      await db.run(
+        `
+          INSERT INTO orders (
+            id, restaurant_id, channel, status, total_amount, payment_status,
+            customer_name, customer_phone, source, created_at, updated_at
+          ) VALUES (?, ?, 'website', 'received', ?, 'unpaid', ?, ?, 'website', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        `,
+        [orderId, restaurantId, totalAmount, params.customerName || null, params.customerPhone || null]
+      );
+    }
+
+    for (const item of items) {
+      const qty = Number(item.quantity ?? 0);
+      const unitPrice = Number(item.price ?? 0);
+      const modifiersJson = item.modifiers != null ? JSON.stringify(item.modifiers) : '{}';
+      const notes = item.notes ? String(item.notes) : null;
+
+      // Prefer extended schema if present (voice ordering migration adds these fields)
+      try {
+        await db.run(
+          `
+            INSERT INTO order_items (
+              id, order_id, menu_item_id, name, quantity, unit_price, notes,
+              item_id, item_name_snapshot, qty, unit_price_snapshot, modifiers_json, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+          `,
+          [
+            uuidv4(),
+            orderId,
+            item.id,
+            item.name,
+            qty,
+            unitPrice,
+            notes,
+            item.id,
+            item.name,
+            qty,
+            unitPrice,
+            modifiersJson
+          ]
+        );
+      } catch (err: any) {
+        const message = String(err?.message || err || '');
+        // Fall back to minimal schema
+        if (!/(item_id|unit_price_snapshot|modifiers_json|created_at)/i.test(message)) throw err;
+        await db.run(
+          `
+            INSERT INTO order_items (id, order_id, menu_item_id, name, quantity, unit_price, notes)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+          `,
+          [uuidv4(), orderId, item.id, item.name, qty, unitPrice, notes]
+        );
+      }
     }
 
     await this.bus.emit('order.created_web', {
@@ -211,12 +268,14 @@ export class OrderService {
         for (const item of items) {
           const qty = Number(item.quantity ?? item.qty ?? 1);
           const unitPrice = Number(item.price ?? item.unitPrice ?? 0);
+          const modifiersJson = item.modifiers != null ? JSON.stringify(item.modifiers) : '{}';
+          const notes = item.notes != null ? String(item.notes) : null;
           await db.run(
             `
-              INSERT INTO order_items (id, order_id, name, quantity, unit_price, created_at)
-              VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+              INSERT INTO order_items (id, order_id, name, quantity, unit_price, notes, modifiers_json, created_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
             `,
-            [uuidv4(), orderId, String(item.name ?? item.title ?? 'Item'), qty, unitPrice]
+            [uuidv4(), orderId, String(item.name ?? item.title ?? 'Item'), qty, unitPrice, notes, modifiersJson]
           );
         }
       }

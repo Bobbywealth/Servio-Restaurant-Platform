@@ -166,6 +166,47 @@ router.post(
   })
 );
 
+// DEBUG: Test after login
+router.get('/after-login', (req: Request, res: Response) => {
+  res.json({ success: true, message: 'Route after login works!' });
+});
+
+// DEBUG: Duplicate login with different name
+router.post('/signin', asyncHandler(async (req: Request, res: Response) => {
+  const { email, password } = req.body ?? {};
+  if (!email || !password) {
+    throw new UnauthorizedError('Email and password are required');
+  }
+  const db = DatabaseService.getInstance().getDatabase();
+  const user = await db.get<any>(
+    'SELECT * FROM users WHERE LOWER(email) = ? AND is_active = TRUE', 
+    [String(email).trim().toLowerCase()]
+  );
+  if (!user || !user.password_hash) {
+    throw new UnauthorizedError('Invalid email or password');
+  }
+  const ok = await bcrypt.compare(String(password), String(user.password_hash));
+  if (!ok) throw new UnauthorizedError('Invalid email or password');
+  
+  const sessionId = uuidv4();
+  const refreshToken = uuidv4();
+  const refreshTokenHash = await bcrypt.hash(refreshToken, 10);
+  const expiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  await db.run(
+    'INSERT INTO auth_sessions (id, user_id, refresh_token_hash, expires_at) VALUES (?, ?, ?, ?)',
+    [sessionId, user.id, refreshTokenHash, expiresAt]
+  );
+  const accessToken = issueAccessToken({ 
+    sub: user.id, 
+    restaurantId: user.restaurant_id, 
+    sid: sessionId 
+  });
+  res.json({
+    success: true,
+    data: { user: safeUser(user), accessToken, refreshToken }
+  });
+}));
+
 /**
  * POST /api/auth/pin-login
  * Tablet-friendly login via restaurant slug + user PIN.

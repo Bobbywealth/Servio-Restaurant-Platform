@@ -43,6 +43,9 @@ type ReceiptSettings = {
   showCustomerPhone: boolean
   showChannel: boolean
   footerText: string
+  printMode?: 'browser' | 'agent' | 'bluetooth'
+  agentUrl?: string
+  agentPrinter?: null | { name?: string; host: string; port?: number; type?: string }
 }
 
 type ReceiptMeta = {
@@ -172,6 +175,60 @@ function escapeHtml(s: string) {
     .replace(/'/g, '&#039;')
 }
 
+function textTicket(order: Order, config: { receipt: ReceiptSettings; restaurant: ReceiptMeta }) {
+  const r = config.receipt
+  const rest = config.restaurant
+  const created = order.createdAt ? new Date(order.createdAt) : null
+  const lines: string[] = []
+
+  const title = (r.headerTitle || rest.name || '').trim()
+  if (title) lines.push(title)
+  if (r.headerSubtitle) lines.push(r.headerSubtitle)
+  lines.push('------------------------------')
+  if (r.showOrderId) lines.push(`Order: ${order.externalId || order.id}`)
+  lines.push(`Status: ${String(order.status || '')}`)
+  if (r.showPlacedAt && created) lines.push(`Placed: ${created.toLocaleString()}`)
+  if (r.showCustomerName && order.customerName) lines.push(`Customer: ${order.customerName}`)
+  if (r.showCustomerPhone && order.customerPhone) lines.push(`Phone: ${order.customerPhone}`)
+  if (r.showChannel && order.channel) lines.push(`Channel: ${order.channel}`)
+  if (order.prepTimeMinutes != null) lines.push(`Ready in: ${Number(order.prepTimeMinutes)} min`)
+  lines.push('')
+  lines.push('ITEMS')
+  lines.push('------------------------------')
+  const items = Array.isArray(order.orderItems) ? order.orderItems : []
+  for (const it of items) {
+    const qty = Number(it.quantity ?? 0)
+    const name = String(it.name ?? 'Item')
+    lines.push(`${qty}x ${name}`)
+    if (it.notes) lines.push(`  - ${String(it.notes)}`)
+  }
+  lines.push('')
+  lines.push(`Total: ${formatMoney(order.totalAmount ?? 0)}`)
+  if (r.footerText) {
+    lines.push('')
+    lines.push(r.footerText)
+  }
+  lines.push('\n')
+  return lines.join('\n')
+}
+
+async function printViaAgent(agentUrl: string, printer: { host: string; port?: number }, text: string) {
+  const url = String(agentUrl || 'http://localhost:8787').replace(/\/+$/, '')
+  const resp = await fetch(`${url}/print`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      printer: { host: printer.host, port: printer.port || 9100 },
+      text
+    })
+  })
+  const data = await resp.json().catch(() => ({}))
+  if (!resp.ok || data?.success === false) {
+    throw new Error(data?.error?.message || 'Print agent failed')
+  }
+  return true
+}
+
 export default function TabletOrdersPage() {
   const { user, hasPermission } = useUser()
   const socket = useSocket()
@@ -284,9 +341,6 @@ export default function TabletOrdersPage() {
     try {
       const detail = await api.get(`/api/orders/${orderId}`)
       const order = detail.data?.data as Order
-      const w = window.open('', '_blank', 'noopener,noreferrer,width=420,height=700')
-      if (!w) throw new Error('Popup blocked')
-      w.document.open()
       const fallbackCfg: { receipt: ReceiptSettings; restaurant: ReceiptMeta } = receiptCfg || {
         receipt: {
           paperSize: '80mm',
@@ -298,10 +352,25 @@ export default function TabletOrdersPage() {
           showCustomerName: true,
           showCustomerPhone: true,
           showChannel: true,
-          footerText: 'Thank you!'
+          footerText: 'Thank you!',
+          printMode: 'browser',
+          agentUrl: 'http://localhost:8787',
+          agentPrinter: null
         },
         restaurant: { name: '' }
       }
+      const mode = fallbackCfg.receipt.printMode || 'browser'
+
+      if (mode === 'agent' && fallbackCfg.receipt.agentUrl && fallbackCfg.receipt.agentPrinter?.host) {
+        const text = textTicket(order, fallbackCfg)
+        await printViaAgent(fallbackCfg.receipt.agentUrl, fallbackCfg.receipt.agentPrinter, text)
+        return
+      }
+
+      // bluetooth: handled by browser support; fallback to browser print if unsupported
+      const w = window.open('', '_blank', 'noopener,noreferrer,width=420,height=700')
+      if (!w) throw new Error('Popup blocked')
+      w.document.open()
       w.document.write(printableTicketHtml(order, fallbackCfg))
       w.document.close()
     } catch (e: any) {
