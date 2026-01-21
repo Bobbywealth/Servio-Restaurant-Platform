@@ -268,12 +268,14 @@ export const preventSQLInjection = (req: Request, res: Response, next: NextFunct
   // Allow external webhooks / voice payloads to pass through.
   // These endpoints accept natural language (often contains apostrophes/keywords like "union"),
   // and all DB access should be parameterized.
-  if (req.path.startsWith('/api/vapi') || req.path.startsWith('/api/voice')) {
+  if (req.path.startsWith('/api/vapi') || req.path.startsWith('/api/voice') || req.path.startsWith('/api/auth')) {
     return next();
   }
 
   const sqlInjectionPatterns = [
-    /(\b(SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|EXEC|EXECUTE|UNION|DECLARE)\b)/gi,
+    // More specific patterns - only match SQL keywords in dangerous contexts
+    /(\b(SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|EXEC|EXECUTE|DECLARE)\b\s+(FROM|INTO|TABLE|DATABASE))/gi,
+    /(\bUNION\b\s+(SELECT|ALL))/gi,  // Only match UNION when followed by SELECT or ALL
     /(;|--|\/\*|\*\/|xp_|sp_)/gi
   ];
 

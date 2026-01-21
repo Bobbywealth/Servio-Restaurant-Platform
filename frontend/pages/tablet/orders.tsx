@@ -5,7 +5,11 @@ import TabletLayout from '../../components/Layout/TabletLayout'
 import { api } from '../../lib/api'
 import { useUser } from '../../contexts/UserContext'
 import { useSocket } from '../../lib/socket'
-import { Printer, Clock, ShoppingBag, BadgeCheck, CheckCircle2, XCircle, Timer, Volume2, ExternalLink, Eye, X, User, Phone, CreditCard, Package } from 'lucide-react'
+import { ShoppingBag, Volume2 } from 'lucide-react'
+import SplitContainer from '../../components/TabletOrders/SplitContainer'
+import OrdersListPanel from '../../components/TabletOrders/OrdersListPanel'
+import OrderDetailsPanel from '../../components/TabletOrders/OrderDetailsPanel'
+import EmbeddedAssistant from '../../components/Assistant/EmbeddedAssistant'
 
 type OrderStatus = 'received' | 'preparing' | 'ready' | 'completed' | 'cancelled' | string
 
@@ -280,7 +284,7 @@ export default function TabletOrdersPage() {
   const [actingOrderId, setActingOrderId] = React.useState<string | null>(null)
   const [nowTick, setNowTick] = React.useState<number>(() => Date.now())
   const [restaurantSlug, setRestaurantSlug] = React.useState<string | null>(null)
-  const [selectedOrder, setSelectedOrder] = React.useState<Order | null>(null)
+  const [selectedOrderId, setSelectedOrderId] = React.useState<string | null>(null)
   const [orderDetails, setOrderDetails] = React.useState<any>(null)
   const [loadingDetails, setLoadingDetails] = React.useState(false)
 
@@ -638,23 +642,58 @@ export default function TabletOrdersPage() {
     return `${mm}:${ss}`
   }
 
-  const viewOrderDetails = async (order: Order) => {
-    setSelectedOrder(order)
-    setLoadingDetails(true)
-    setOrderDetails(null)
-    try {
-      const detail = await api.get(`/api/orders/${order.id}`)
-      setOrderDetails(detail.data?.data)
-    } catch (e: any) {
-      setError(e?.response?.data?.error?.message || e?.message || 'Failed to load order details')
-    } finally {
-      setLoadingDetails(false)
-    }
-  }
+  const fetchOrderDetails = React.useCallback(
+    async (orderId: string) => {
+      setLoadingDetails(true)
+      setOrderDetails(null)
+      try {
+        const detail = await api.get(`/api/orders/${orderId}`)
+        setOrderDetails(detail.data?.data)
+      } catch (e: any) {
+        setError(e?.response?.data?.error?.message || e?.message || 'Failed to load order details')
+      } finally {
+        setLoadingDetails(false)
+      }
+    },
+    []
+  )
 
-  const closeOrderDetails = () => {
-    setSelectedOrder(null)
-    setOrderDetails(null)
+  const selectedOrder = React.useMemo(() => {
+    if (!selectedOrderId) return null
+    return todaysOrders.find((o) => o.id === selectedOrderId) || null
+  }, [selectedOrderId, todaysOrders])
+
+  // Maintain a valid selection as orders update.
+  React.useEffect(() => {
+    if (!todaysOrders.length) {
+      if (selectedOrderId) setSelectedOrderId(null)
+      return
+    }
+    const stillExists = selectedOrderId && todaysOrders.some((o) => o.id === selectedOrderId)
+    if (stillExists) return
+    // Prefer actionable orders, otherwise newest.
+    const next = actionableOrders[0] || todaysOrders[0]
+    setSelectedOrderId(next.id)
+  }, [todaysOrders, actionableOrders, selectedOrderId])
+
+  // Load details whenever selection changes.
+  React.useEffect(() => {
+    if (!selectedOrderId) return
+    fetchOrderDetails(selectedOrderId)
+  }, [selectedOrderId, fetchOrderDetails])
+
+  const updateOrderStatus = async (orderId: string, status: string) => {
+    setError(null)
+    setActingOrderId(orderId)
+    try {
+      await api.post(`/api/orders/${orderId}/status`, { status })
+      await fetchOrders()
+      await fetchOrderDetails(orderId)
+    } catch (e: any) {
+      setError(e?.response?.data?.error?.message || e?.message || 'Failed to update order')
+    } finally {
+      setActingOrderId(null)
+    }
   }
 
   return (
@@ -676,7 +715,6 @@ export default function TabletOrdersPage() {
               >
                 <ShoppingBag className="w-5 h-5" />
                 Preview & Test Ordering
-                <ExternalLink className="w-4 h-4" />
               </a>
             </div>
           )}
@@ -712,156 +750,35 @@ export default function TabletOrdersPage() {
             </div>
           )}
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {todaysOrders.map((o) => {
-              const created = o.createdAt ? new Date(o.createdAt) : null
-              const itemCount = Array.isArray(o.orderItems)
-                ? o.orderItems.length
-                : Array.isArray(o.items)
-                  ? o.items.length
-                  : 0
-              const idLabel = o.externalId || o.id
-              const status = String(o.status || '')
-              const isNew = String(o.status || '').toLowerCase() === 'received'
-              const isMissed = isNew && missedOrderIds.has(o.id)
-              const isActing = actingOrderId === o.id
-              const itemLines = Array.isArray(o.orderItems) ? o.orderItems : []
-              return (
-                <div key={o.id} className="bg-white/5 border border-white/10 rounded-2xl p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="text-xl font-extrabold truncate">{idLabel}</div>
-                      <div className="mt-1 flex items-center gap-2 text-white/70">
-                        <Clock className="w-4 h-4" />
-                        <span className="text-sm">
-                          {created ? created.toLocaleString() : '—'}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="shrink-0 flex flex-col items-end gap-2">
-                      <div className={`px-3 py-1.5 rounded-full border text-sm font-bold ${statusPill(status)}`}>
-                        {status || '—'}
-                      </div>
-                      {isNew && (
-                        <div className={`px-3 py-1 rounded-full border text-xs font-extrabold ${
-                          isMissed ? 'bg-red-500/20 text-red-100 border-red-500/30' : 'bg-orange-500/20 text-orange-100 border-orange-500/30'
-                        }`}>
-                          {isMissed ? 'MISSED' : `TIME LEFT ${timeLeftText(o)}`}
-                        </div>
-                      )}
-                    </div>
+          <SplitContainer
+            left={
+              <OrdersListPanel
+                orders={todaysOrders as any}
+                selectedOrderId={selectedOrderId}
+                onSelectOrderId={setSelectedOrderId}
+                nowMs={nowTick}
+              />
+            }
+            right={
+              <OrderDetailsPanel
+                order={selectedOrder as any}
+                orderDetails={orderDetails as any}
+                loadingDetails={loadingDetails}
+                onPrint={handlePrint}
+                onConfirm={(orderId) => {
+                  const o = todaysOrders.find((x) => x.id === orderId)
+                  if (o) openAccept(o)
+                }}
+                onMarkReady={(orderId) => updateOrderStatus(orderId, 'ready')}
+                onComplete={(orderId) => updateOrderStatus(orderId, 'completed')}
+                assistant={
+                  <div className="bg-white/5 border border-white/10 rounded-xl p-3">
+                    <EmbeddedAssistant />
                   </div>
-
-                  <div className="mt-4 grid grid-cols-2 gap-3">
-                    <div className="bg-black/20 rounded-xl p-3">
-                      <div className="text-xs text-white/60">Customer</div>
-                      <div className="text-base font-semibold truncate">{o.customerName || '—'}</div>
-                      <div className="text-sm text-white/60 truncate">{o.customerPhone || ''}</div>
-                    </div>
-                    <div className="bg-black/20 rounded-xl p-3">
-                      <div className="text-xs text-white/60">Total</div>
-                      <div className="text-2xl font-extrabold">{formatMoney(o.totalAmount ?? 0)}</div>
-                      {o.paymentStatus === 'pay_on_arrival' && (
-                        <div className="text-xs text-green-300 font-medium">💳 Pay on arrival</div>
-                      )}
-                      <div className="text-sm text-white/60 inline-flex items-center gap-2">
-                        <ShoppingBag className="w-4 h-4" />
-                        {itemCount} items
-                      </div>
-                      {o.prepTimeMinutes != null && (
-                        <div className="text-sm text-white/70 mt-1 inline-flex items-center gap-2">
-                          <Timer className="w-4 h-4" />
-                          Ready in {Number(o.prepTimeMinutes)} min
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Item details */}
-                  {itemLines.length > 0 && (
-                    <div className="mt-4 bg-black/20 rounded-xl p-3">
-                      <div className="text-xs text-white/60 mb-2">Items</div>
-                      <div className="space-y-2">
-                        {itemLines.map((it, idx) => {
-                          const qty = Number(it.quantity ?? 0)
-                          const name = String(it.name ?? 'Item')
-                          const mods = formatModifiers((it as any).modifiers)
-                          const notes = it.notes ? String(it.notes) : ''
-                          return (
-                            <div key={idx} className="border-b border-white/10 last:border-b-0 pb-2 last:pb-0">
-                              <div className="flex items-start justify-between gap-3">
-                                <div className="text-white font-semibold">
-                                  {qty}× {name}
-                                </div>
-                              </div>
-                              {(mods || notes) && (
-                                <div className="text-sm text-white/70 mt-1 space-y-1">
-                                  {mods && <div>Modifiers: {mods}</div>}
-                                  {notes && <div>Notes: {notes}</div>}
-                                </div>
-                              )}
-                            </div>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="mt-4 flex gap-2">
-                    <button
-                      onClick={() => viewOrderDetails(o)}
-                      className="px-4 py-3 rounded-xl bg-blue-600 text-white font-extrabold hover:bg-blue-700 active:bg-blue-800 transition-colors inline-flex items-center justify-center gap-2"
-                    >
-                      <Eye className="w-5 h-5" />
-                      Details
-                    </button>
-                    <button
-                      onClick={() => handlePrint(o.id)}
-                      className="flex-1 px-4 py-3 rounded-xl bg-white text-gray-950 font-extrabold hover:bg-white/90 active:bg-white/80 transition-colors inline-flex items-center justify-center gap-2"
-                    >
-                      <Printer className="w-5 h-5" />
-                      Print
-                    </button>
-                  </div>
-
-                  {canWriteOrders && (
-                    <div className="mt-3 grid grid-cols-2 gap-2">
-                      <button
-                        disabled={!isNew || isActing}
-                        onClick={() => openAccept(o)}
-                        className={`px-4 py-3 rounded-xl font-extrabold inline-flex items-center justify-center gap-2 border transition-colors ${
-                          isNew
-                            ? 'bg-emerald-500/15 hover:bg-emerald-500/25 border-emerald-500/25 text-emerald-100'
-                            : 'bg-white/5 border-white/10 text-white/40'
-                        }`}
-                      >
-                        <CheckCircle2 className="w-5 h-5" />
-                        Accept
-                      </button>
-                      <button
-                        disabled={!isNew || isActing}
-                        onClick={() => declineOrder(o.id)}
-                        className={`px-4 py-3 rounded-xl font-extrabold inline-flex items-center justify-center gap-2 border transition-colors ${
-                          isNew
-                            ? 'bg-red-500/15 hover:bg-red-500/25 border-red-500/25 text-red-100'
-                            : 'bg-white/5 border-white/10 text-white/40'
-                        }`}
-                      >
-                        <XCircle className="w-5 h-5" />
-                        Decline
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-
-            {todaysOrders.length === 0 && (
-              <div className="bg-white/5 border border-white/10 rounded-2xl p-6 text-white/70">
-                {loading ? 'Loading orders…' : 'No online orders yet.'}
-              </div>
-            )}
-          </div>
+                }
+              />
+            }
+          />
 
           {/* Accept modal */}
           {activeModalOrder && (
@@ -921,191 +838,6 @@ export default function TabletOrdersPage() {
             </div>
           )}
         </>
-      )}
-
-      {/* Order Details Modal */}
-      {selectedOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-75">
-          <div className="bg-gray-900 border border-white/20 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-gray-900 border-b border-white/20 p-6 rounded-t-2xl">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-xl font-bold text-white">
-                    Order Details: {selectedOrder.externalId || selectedOrder.id}
-                  </h2>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className={`px-2 py-1 rounded-full border text-xs font-bold ${statusPill(selectedOrder.status)}`}>
-                      {selectedOrder.status}
-                    </span>
-                    <span className="text-sm text-white/60">
-                      via {selectedOrder.channel}
-                    </span>
-                  </div>
-                </div>
-                <button
-                  onClick={closeOrderDetails}
-                  className="p-2 text-white/60 hover:text-white rounded-lg hover:bg-white/10"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
-
-            <div className="p-6 space-y-6">
-              {loadingDetails ? (
-                <div className="text-center py-8">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white/20 mx-auto"></div>
-                  <p className="mt-4 text-white/60">Loading order details...</p>
-                </div>
-              ) : orderDetails ? (
-                <>
-                  {/* Customer Information */}
-                  <div className="bg-black/20 rounded-xl p-4 border border-white/10">
-                    <h3 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
-                      <User className="w-5 h-5" />
-                      Customer Information
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-white/60 mb-1">Name</label>
-                        <p className="text-white font-medium">
-                          {orderDetails.customerName || 'No name provided'}
-                        </p>
-                      </div>
-                      {orderDetails.customerPhone && (
-                        <div>
-                          <label className="block text-sm font-medium text-white/60 mb-1">Phone</label>
-                          <p className="text-white font-medium flex items-center gap-2">
-                            <Phone className="w-4 h-4" />
-                            {orderDetails.customerPhone}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Order Information */}
-                  <div className="bg-black/20 rounded-xl p-4 border border-white/10">
-                    <h3 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
-                      <Clock className="w-5 h-5" />
-                      Order Information
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-white/60 mb-1">Placed At</label>
-                        <p className="text-white font-medium">
-                          {orderDetails.createdAt ? new Date(orderDetails.createdAt).toLocaleString() : 'Unknown'}
-                        </p>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-white/60 mb-1">Payment</label>
-                        <p className="text-white font-medium flex items-center gap-1">
-                          <CreditCard className="w-4 h-4" />
-                          {orderDetails.paymentStatus === 'pay_on_arrival' ? '💳 Pay on arrival' : orderDetails.paymentStatus || 'Unknown'}
-                        </p>
-                      </div>
-                      {orderDetails.prepTimeMinutes && (
-                        <>
-                          <div>
-                            <label className="block text-sm font-medium text-white/60 mb-1">Prep Time</label>
-                            <p className="text-white font-medium">
-                              {orderDetails.prepTimeMinutes} minutes
-                            </p>
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-white/60 mb-1">Ready At</label>
-                            <p className="text-white font-medium">
-                              {new Date(new Date(orderDetails.acceptedAt || orderDetails.createdAt).getTime() + orderDetails.prepTimeMinutes * 60000).toLocaleTimeString()}
-                            </p>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Order Items */}
-                  {(orderDetails.orderItems && orderDetails.orderItems.length > 0) && (
-                    <div className="bg-black/20 rounded-xl p-4 border border-white/10">
-                      <h3 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
-                        <Package className="w-5 h-5" />
-                        Order Items
-                      </h3>
-                      <div className="space-y-3">
-                        {orderDetails.orderItems.map((item: any, index: number) => (
-                          <div key={index} className="border border-white/10 rounded-lg p-3 bg-white/5">
-                            <div className="flex items-start justify-between mb-2">
-                              <div className="flex-1">
-                                <h4 className="font-semibold text-white text-lg">
-                                  {item.quantity}x {item.name}
-                                </h4>
-                                {item.notes && (
-                                  <p className="text-sm text-white/70 mt-1">
-                                    <strong>Notes:</strong> {item.notes}
-                                  </p>
-                                )}
-                              </div>
-                              <div className="text-right">
-                                <p className="font-bold text-white text-lg">
-                                  ${((item.unitPrice || 0) * (item.quantity || 1)).toFixed(2)}
-                                </p>
-                                <p className="text-xs text-white/60">
-                                  ${(item.unitPrice || 0).toFixed(2)} each
-                                </p>
-                              </div>
-                            </div>
-                            
-                            {item.modifiers && Object.keys(item.modifiers).length > 0 && (
-                              <div className="mt-2 pt-2 border-t border-white/10">
-                                <p className="text-xs font-medium text-white/60 mb-2">Modifiers:</p>
-                                <div className="flex flex-wrap gap-1">
-                                  {Object.entries(item.modifiers).map(([key, value]) => (
-                                    <span key={key} className="px-2 py-1 bg-blue-500/20 text-blue-200 border border-blue-500/30 rounded-full text-xs font-medium">
-                                      {String(key).replace(/_/g, ' ')}: {String(value).replace(/_/g, ' ')}
-                                    </span>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                      
-                      <div className="mt-4 pt-4 border-t border-white/10">
-                        <div className="flex justify-between items-center">
-                          <span className="text-xl font-semibold text-white">Total</span>
-                          <span className="text-2xl font-extrabold text-white">
-                            ${(orderDetails.totalAmount || 0).toFixed(2)}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Action Buttons */}
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => handlePrint(orderDetails.id)}
-                      className="flex-1 px-4 py-3 rounded-xl bg-white text-gray-950 font-extrabold hover:bg-white/90 active:bg-white/80 transition-colors inline-flex items-center justify-center gap-2"
-                    >
-                      <Printer className="w-5 h-5" />
-                      Print Ticket
-                    </button>
-                    <button
-                      onClick={closeOrderDetails}
-                      className="px-4 py-3 rounded-xl bg-white/10 hover:bg-white/15 active:bg-white/20 transition-colors font-bold"
-                    >
-                      Close
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <div className="text-center py-8">
-                  <p className="text-white/60">Failed to load order details</p>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
       )}
       {debugEnabled && (
         <div className="fixed bottom-4 right-4 z-50 rounded-xl border border-white/15 bg-black/70 text-white text-xs p-3 space-y-1 shadow-lg">
