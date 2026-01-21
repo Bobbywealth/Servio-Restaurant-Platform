@@ -165,11 +165,10 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_menu_items_active_partial
   ON menu_items(restaurant_id, name, price)
   WHERE is_available = true;
 
--- Partial index for overdue tasks
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_tasks_overdue
+-- Partial index for incomplete tasks (for finding overdue tasks at query time)
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_tasks_incomplete
   ON tasks(restaurant_id, assigned_to, due_date)
-  WHERE status NOT IN ('completed', 'cancelled') 
-    AND due_date < NOW();
+  WHERE status NOT IN ('completed', 'cancelled');
 
 -- ============================================================================
 -- STATISTICS UPDATE
