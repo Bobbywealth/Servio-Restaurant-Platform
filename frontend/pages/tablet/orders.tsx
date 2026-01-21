@@ -5,7 +5,7 @@ import TabletLayout from '../../components/Layout/TabletLayout'
 import { api } from '../../lib/api'
 import { useUser } from '../../contexts/UserContext'
 import { useSocket } from '../../lib/socket'
-import { Printer, Clock, ShoppingBag, BadgeCheck, CheckCircle2, XCircle, Timer, Volume2 } from 'lucide-react'
+import { Printer, Clock, ShoppingBag, BadgeCheck, CheckCircle2, XCircle, Timer, Volume2, ExternalLink } from 'lucide-react'
 
 type OrderStatus = 'received' | 'preparing' | 'ready' | 'completed' | 'cancelled' | string
 
@@ -276,6 +276,7 @@ export default function TabletOrdersPage() {
   const [prepTimeMinutes, setPrepTimeMinutes] = React.useState<number>(15)
   const [actingOrderId, setActingOrderId] = React.useState<string | null>(null)
   const [nowTick, setNowTick] = React.useState<number>(() => Date.now())
+  const [restaurantSlug, setRestaurantSlug] = React.useState<string | null>(null)
 
   const canReadOrders = hasPermission('orders:read')
   const canWriteOrders = hasPermission('orders:write')
@@ -302,6 +303,19 @@ export default function TabletOrdersPage() {
     }
   }, [user?.restaurantId])
 
+  const fetchRestaurantSlug = React.useCallback(async () => {
+    if (!user?.restaurantId) return
+    try {
+      const response = await api.get(`/api/restaurants/${user.restaurantId}`)
+      const slug = response.data?.data?.slug
+      if (slug) {
+        setRestaurantSlug(slug)
+      }
+    } catch (e: any) {
+      console.warn('Failed to fetch restaurant slug:', e.message)
+    }
+  }, [user?.restaurantId])
+
   const fetchOrders = React.useCallback(async () => {
     if (!canReadOrders) return
     setLoading(true)
@@ -325,6 +339,10 @@ export default function TabletOrdersPage() {
   React.useEffect(() => {
     loadReceiptCfg()
   }, [loadReceiptCfg])
+
+  React.useEffect(() => {
+    fetchRestaurantSlug()
+  }, [fetchRestaurantSlug])
 
   // Enable sound only after a user gesture (mobile browser policy)
   React.useEffect(() => {
@@ -581,6 +599,22 @@ export default function TabletOrdersPage() {
         </div>
       ) : (
         <>
+          {restaurantSlug && (
+            <div className="mb-4 flex justify-end">
+              <a
+                href={`/r/${restaurantSlug}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-4 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold inline-flex items-center gap-2 transition-colors"
+                title="Open customer ordering page in new tab"
+              >
+                <ShoppingBag className="w-5 h-5" />
+                Preview & Test Ordering
+                <ExternalLink className="w-4 h-4" />
+              </a>
+            </div>
+          )}
+
           {!soundEnabled && (
             <div className="mb-4 bg-white/5 border border-white/10 rounded-2xl p-4 flex items-center justify-between">
               <div className="text-white/70 text-sm">

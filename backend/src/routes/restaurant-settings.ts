@@ -122,6 +122,141 @@ router.get('/:restaurantId/receipt', requireAuth, asyncHandler(async (req: Reque
 }));
 
 /**
+ * GET /api/restaurants/:restaurantId/alert-settings
+ * Get alert call settings
+ */
+router.get('/:restaurantId/alert-settings', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+  const { restaurantId } = req.params;
+  const db = DatabaseService.getInstance().getDatabase();
+
+  if (req.user?.restaurantId !== restaurantId && req.user?.role !== 'platform-admin') {
+    return res.status(403).json({ error: 'Unauthorized' });
+  }
+
+  const restaurant = await db.get(
+    'SELECT id, name, settings FROM restaurants WHERE id = ?',
+    [restaurantId]
+  );
+
+  if (!restaurant) {
+    return res.status(404).json({ error: 'Restaurant not found' });
+  }
+
+  const settings = safeJsonParse<Record<string, any>>(restaurant.settings, {});
+  const alertSettings = settings.alerts || {
+    enabled: false,
+    supervisorPhone: '',
+    failureThresholdMinutes: 5,
+    retryAttempts: 3,
+    enabledForOrderFailures: true,
+    enabledForSystemDown: true
+  };
+
+  res.json({
+    success: true,
+    data: alertSettings
+  });
+}));
+
+/**
+ * PUT /api/restaurants/:restaurantId/alert-settings  
+ * Update alert call settings
+ */
+router.put('/:restaurantId/alert-settings', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+  const { restaurantId } = req.params;
+  const db = DatabaseService.getInstance().getDatabase();
+
+  if (req.user?.restaurantId !== restaurantId && req.user?.role !== 'platform-admin') {
+    return res.status(403).json({ error: 'Unauthorized' });
+  }
+
+  const restaurant = await db.get(
+    'SELECT id, name, settings FROM restaurants WHERE id = ?',
+    [restaurantId]
+  );
+
+  if (!restaurant) {
+    return res.status(404).json({ error: 'Restaurant not found' });
+  }
+
+  const currentSettings = safeJsonParse<Record<string, any>>(restaurant.settings, {});
+  const updatedAlerts = {
+    enabled: req.body.enabled ?? false,
+    supervisorPhone: req.body.supervisorPhone ?? '',
+    failureThresholdMinutes: req.body.failureThresholdMinutes ?? 5,
+    retryAttempts: req.body.retryAttempts ?? 3,
+    enabledForOrderFailures: req.body.enabledForOrderFailures ?? true,
+    enabledForSystemDown: req.body.enabledForSystemDown ?? true
+  };
+
+  currentSettings.alerts = updatedAlerts;
+
+  await db.run(
+    'UPDATE restaurants SET settings = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+    [JSON.stringify(currentSettings), restaurantId]
+  );
+
+  res.json({
+    success: true,
+    data: updatedAlerts
+  });
+}));
+
+/**
+ * POST /api/restaurants/:restaurantId/test-alert-call
+ * Test the alert call functionality
+ */
+router.post('/:restaurantId/test-alert-call', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+  const { restaurantId } = req.params;
+  const db = DatabaseService.getInstance().getDatabase();
+
+  if (req.user?.restaurantId !== restaurantId && req.user?.role !== 'platform-admin') {
+    return res.status(403).json({ error: 'Unauthorized' });
+  }
+
+  const restaurant = await db.get(
+    'SELECT id, name, settings FROM restaurants WHERE id = ?',
+    [restaurantId]
+  );
+
+  if (!restaurant) {
+    return res.status(404).json({ error: 'Restaurant not found' });
+  }
+
+  const settings = safeJsonParse<Record<string, any>>(restaurant.settings, {});
+  const alertSettings = settings.alerts;
+
+  if (!alertSettings?.enabled || !alertSettings?.supervisorPhone) {
+    return res.status(400).json({ 
+      error: 'Alert calls not configured. Please set up supervisor phone number first.' 
+    });
+  }
+
+  try {
+    // Import AlertService dynamically to avoid startup dependencies
+    const { AlertService } = await import('../services/AlertService');
+    const alertService = new AlertService();
+    
+    await alertService.sendAlertCall(
+      alertSettings.supervisorPhone,
+      'This is a test alert call from Servio. Your restaurant alert system is working properly.',
+      { type: 'test', restaurantId }
+    );
+
+    res.json({
+      success: true,
+      message: 'Test alert call sent successfully'
+    });
+  } catch (error) {
+    logger.error('Alert call test failed', { error, restaurantId });
+    res.status(500).json({
+      error: 'Failed to send test alert call',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+}));
+
+/**
  * PUT /api/restaurants/:restaurantId/receipt
  * Update receipt / ticket printing settings
  */

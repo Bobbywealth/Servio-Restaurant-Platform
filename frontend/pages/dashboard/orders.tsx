@@ -4,7 +4,7 @@ import DashboardLayout from '../../components/Layout/DashboardLayout'
 import { useUser } from '../../contexts/UserContext'
 import { api } from '../../lib/api'
 import { useSocket } from '../../lib/socket'
-import { RefreshCw, Filter, ClipboardList } from 'lucide-react'
+import { RefreshCw, Filter, ClipboardList, ShoppingBag, ExternalLink } from 'lucide-react'
 
 type OrderStatus = 'received' | 'preparing' | 'ready' | 'completed' | 'cancelled'
 
@@ -67,6 +67,7 @@ export default function OrdersPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null)
+  const [restaurantSlug, setRestaurantSlug] = useState<string | null>(null)
 
   const canUpdateOrders = hasPermission('orders:write')
 
@@ -77,6 +78,19 @@ export default function OrdersPage() {
     })
     return Array.from(set).sort()
   }, [orders])
+
+  const fetchRestaurantSlug = async () => {
+    if (!user?.restaurantId) return
+    try {
+      const response = await api.get(`/api/restaurants/${user.restaurantId}`)
+      const slug = response.data?.data?.slug
+      if (slug) {
+        setRestaurantSlug(slug)
+      }
+    } catch (e: any) {
+      console.warn('Failed to fetch restaurant slug:', e.message)
+    }
+  }
 
   const fetchData = async () => {
     setIsLoading(true)
@@ -109,6 +123,10 @@ export default function OrdersPage() {
     fetchData()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter, channelFilter])
+
+  useEffect(() => {
+    fetchRestaurantSlug()
+  }, [user?.restaurantId])
 
   const updateOrderStatus = async (orderId: string, status: OrderStatus) => {
     if (!canUpdateOrders) return
@@ -153,15 +171,30 @@ export default function OrdersPage() {
               </p>
             </div>
 
-            <button
-              className="btn-secondary inline-flex items-center"
-              onClick={fetchData}
-              disabled={isLoading}
-              title="Refresh"
-            >
-              <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-              Refresh
-            </button>
+            <div className="flex gap-3">
+              {restaurantSlug && (
+                <a
+                  href={`/r/${restaurantSlug}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn-primary inline-flex items-center bg-emerald-600 hover:bg-emerald-700 text-white"
+                  title="Open customer ordering page in new tab"
+                >
+                  <ShoppingBag className="w-4 h-4 mr-2" />
+                  Preview & Test Ordering
+                  <ExternalLink className="w-4 h-4 ml-1" />
+                </a>
+              )}
+              <button
+                className="btn-secondary inline-flex items-center"
+                onClick={fetchData}
+                disabled={isLoading}
+                title="Refresh"
+              >
+                <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+                Refresh
+              </button>
+            </div>
           </div>
 
           {error && (
