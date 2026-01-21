@@ -86,7 +86,7 @@ const skipRateLimit = (req: Request): boolean => {
 // Create Redis stores with fail-safe mechanism
 const createRedisStore = (prefix: string) => {
   return new RedisStore({
-    sendCommand: async (...args: string[]) => {
+    sendCommand: async (...args: string[]): Promise<any> => {
       // Fail-safe: if Redis is not ready, return a "neutral" response 
       // to let the request proceed instead of hanging
       if (redis.status !== 'ready') {
