@@ -126,9 +126,11 @@ router.post('/webhook', async (req: Request, res: Response) => {
       call_id: payload.message.call?.id,
       event_type: payload.message.type,
       duration_ms: duration,
-      response_preview: typeof response.result === 'string' 
+      response_preview: typeof response?.result === 'string' 
         ? response.result.substring(0, 100) 
-        : JSON.stringify(response.result).substring(0, 100)
+        : response?.result 
+          ? JSON.stringify(response.result).substring(0, 100)
+          : 'no result'
     });
     
     res.json(response);

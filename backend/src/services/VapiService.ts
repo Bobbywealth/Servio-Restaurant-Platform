@@ -121,8 +121,9 @@ export class VapiService {
         `SELECT id, settings
          FROM restaurants
          WHERE is_active = TRUE
-           AND json_valid(COALESCE(settings, '{}'))
-           AND json_extract(COALESCE(settings, '{}'), '$.vapi.phoneNumberId') = ?`,
+           AND settings IS NOT NULL
+           AND settings != ''
+           AND settings #>> '{vapi,phoneNumberId}' = ?`,
         [phoneNumberId]
       );
       
