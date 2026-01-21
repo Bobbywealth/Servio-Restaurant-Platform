@@ -52,9 +52,9 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_inventory_restaurant_name
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_tasks_assigned_status_due
   ON tasks(assigned_to, status, due_date);
 
--- Index for restaurant tasks by priority
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_tasks_restaurant_priority_status
-  ON tasks(restaurant_id, priority, status);
+-- Index for restaurant tasks by status
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_tasks_restaurant_status
+  ON tasks(restaurant_id, status);
 
 -- ============================================================================
 -- TIME ENTRIES PERFORMANCE
