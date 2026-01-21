@@ -354,8 +354,11 @@ export default function SettingsPage() {
                   </h3>
                   <p className="text-surface-600 dark:text-surface-400 flex items-center space-x-2">
                     <Mail className="w-4 h-4" />
-                    <span>{user?.email || 'No email'}</span>
+                    <span className="font-mono text-sm">{user?.email || 'No email'}</span>
                   </p>
+                  <div className="text-sm text-surface-500 dark:text-surface-400 mt-1">
+                    Logged in as: <span className="font-semibold text-blue-600 dark:text-blue-400">{user?.email}</span>
+                  </div>
                   <div className="flex items-center space-x-2 mt-1">
                     <div className={`px-2 py-1 rounded-full text-xs font-medium ${
                       user?.role === 'admin' ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300' :

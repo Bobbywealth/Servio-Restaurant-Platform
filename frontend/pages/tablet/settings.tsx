@@ -13,7 +13,8 @@ import {
   Wifi,
   CheckCircle2,
   AlertTriangle,
-  Settings as SettingsIcon
+  Settings as SettingsIcon,
+  User
 } from 'lucide-react'
 
 type ReceiptSettings = {
@@ -194,6 +195,19 @@ export default function TabletSettingsPage() {
   return (
     <TabletLayout title="Tablet Settings">
       <div className="space-y-4">
+        {/* User Info Header */}
+        <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center">
+              <User className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <div className="text-white font-bold">{user?.name || 'User'}</div>
+              <div className="text-white/60 text-sm font-mono">{user?.email || 'No email'}</div>
+              <div className="text-white/50 text-xs capitalize">{user?.role} access</div>
+            </div>
+          </div>
+        </div>
         {error && (
           <div className="bg-red-500/15 border border-red-500/30 text-red-200 rounded-2xl p-4 flex items-center gap-2">
             <AlertTriangle className="w-5 h-5" />

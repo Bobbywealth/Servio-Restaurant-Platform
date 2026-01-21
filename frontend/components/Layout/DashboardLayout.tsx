@@ -324,6 +324,14 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                 <div className="text-sm font-semibold text-gray-900 dark:text-white">{pageTitle}</div>
               </div>
               <div className="flex items-center space-x-3">
+                <div className="hidden sm:flex flex-col items-end">
+                  <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                    {user?.name || 'User'}
+                  </div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400">
+                    {user?.email || 'No email'}
+                  </div>
+                </div>
                 <NotificationCenter />
                 <motion.button
                   onClick={resetTour}
