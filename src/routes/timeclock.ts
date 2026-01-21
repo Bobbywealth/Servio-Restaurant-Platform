@@ -64,9 +64,9 @@ router.post('/clock-in', asyncHandler(async (req: Request, res: Response) => {
 
   await db.run(`
     INSERT INTO time_entries (
-      id, user_id, clock_in_time, position, break_minutes
-    ) VALUES (?, ?, ?, ?, ?)
-  `, [entryId, user.id, clockInTime, position || null, 0]);
+      id, restaurant_id, user_id, clock_in_time, position, break_minutes
+    ) VALUES (?, ?, ?, ?, ?, ?)
+  `, [entryId, user.restaurant_id, user.id, clockInTime, position || null, 0]);
 
   // Log the action
   await DatabaseService.getInstance().logAudit(
