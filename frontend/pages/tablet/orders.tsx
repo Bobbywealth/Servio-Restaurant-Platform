@@ -1,7 +1,7 @@
 import Head from 'next/head';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import clsx from 'clsx';
-import { CheckCircle2, Clock, RefreshCcw, Soup, Truck, Utensils } from 'lucide-react';
+import { CheckCircle2, Clock, RefreshCcw, ArrowRight, X, ChevronDown, DollarSign, User, Phone } from 'lucide-react';
 import { useSocket } from '../../lib/socket';
 
 type OrderItem = {
@@ -84,19 +84,13 @@ function formatMoney(v: number | null | undefined) {
 }
 
 function formatTimeAgo(iso: string | null | undefined, now: number | null) {
-  // Avoid hydration mismatches: render a stable placeholder until mounted.
-  if (now === null) return '—';
-  if (!iso) return '—';
+  if (now === null || !iso) return '—';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '—';
   const diffMs = now - d.getTime();
   const mins = Math.round(diffMs / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.round(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.round(hours / 24);
-  return `${days}d ago`;
+  if (mins < 1) return 'NEW';
+  return `${mins}m`;
 }
 
 function normalizeStatus(s: string | null | undefined) {
@@ -107,87 +101,39 @@ function normalizeStatus(s: string | null | undefined) {
   return lower;
 }
 
-function StatusPill(props: { status: string }) {
-  const s = normalizeStatus(props.status);
-  const label =
-    s === 'received'
-      ? 'Received'
-      : s === 'preparing'
-        ? 'Preparing'
-        : s === 'ready'
-          ? 'Ready'
-          : s === 'completed'
-            ? 'Completed'
-            : s === 'cancelled'
-              ? 'Cancelled'
-              : s;
-
-  return (
-    <span
-      className={clsx(
-        'inline-flex items-center rounded-full px-3 py-1 text-xs font-extrabold tracking-wide ring-1',
-        s === 'received' && 'bg-blue-50 text-blue-800 ring-blue-100',
-        s === 'preparing' && 'bg-amber-50 text-amber-900 ring-amber-200',
-        s === 'ready' && 'bg-emerald-50 text-emerald-900 ring-emerald-200',
-        s === 'completed' && 'bg-slate-100 text-slate-700 ring-slate-200',
-        s === 'cancelled' && 'bg-rose-50 text-rose-800 ring-rose-200'
-      )}
-    >
-      {label.toUpperCase()}
-    </span>
-  );
-}
-
-function ChannelIcon(props: { channel?: string | null }) {
-  const c = (props.channel || '').toLowerCase();
-  if (c.includes('delivery')) return <Truck className="h-5 w-5" />;
-  if (c.includes('uber') || c.includes('doordash')) return <Truck className="h-5 w-5" />;
-  if (c.includes('website')) return <Utensils className="h-5 w-5" />;
-  return <Soup className="h-5 w-5" />;
-}
 
 export default function TabletOrdersPage() {
   const socket = useSocket();
   const [orders, setOrders] = useState<Order[]>([]);
-  const [filter, setFilter] = useState<'active' | 'received' | 'preparing' | 'ready' | 'completed'>('active');
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState<number | null>(null);
+  const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
   const lastRefreshAt = useRef<number>(0);
 
   async function refresh() {
-    setError(null);
-    setLoading(true);
     try {
-      const json = await apiGet<OrdersResponse>('/orders?limit=100&offset=0');
+      const json = await apiGet<OrdersResponse>('/orders?limit=50&offset=0');
       const list = Array.isArray(json?.data?.orders) ? json.data!.orders! : [];
       setOrders(list);
       lastRefreshAt.current = Date.now();
     } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : typeof e === 'string' ? e : 'Failed to load orders.';
-      setError(message);
+      console.error(e);
     } finally {
       setLoading(false);
     }
   }
 
-  async function setStatus(orderId: string, nextStatus: 'received' | 'preparing' | 'ready' | 'completed' | 'cancelled') {
-    setError(null);
+  async function setStatus(orderId: string, nextStatus: string) {
     setBusyId(orderId);
-    // Optimistic UI
     setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, status: nextStatus } : o)));
     try {
       await apiPost(`/orders/${encodeURIComponent(orderId)}/status`, { status: nextStatus });
-      // Notify other clients via socket
       if (socket) {
         socket.emit('order:status_changed', { orderId, status: nextStatus, timestamp: new Date() });
       }
-    } catch (e: unknown) {
-      const message =
-        e instanceof Error ? e.message : typeof e === 'string' ? e : 'Failed to update order status.';
-      setError(message);
-      // Re-sync from server
+    } catch (e) {
       await refresh();
     } finally {
       setBusyId(null);
@@ -197,10 +143,9 @@ export default function TabletOrdersPage() {
   useEffect(() => {
     refresh();
     const t = window.setInterval(() => {
-      // Avoid piling up refreshes if the tab is backgrounded / paused.
-      if (Date.now() - lastRefreshAt.current < 15000) return;
+      if (Date.now() - lastRefreshAt.current < 5000) return;
       refresh();
-    }, 20000); // Polling as fallback, but less frequent since we have sockets
+    }, 10000);
     return () => window.clearInterval(t);
   }, []);
 
@@ -223,235 +168,209 @@ export default function TabletOrdersPage() {
 
   useEffect(() => {
     setNow(Date.now());
-    const t = window.setInterval(() => setNow(Date.now()), 30_000);
+    const t = window.setInterval(() => setNow(Date.now()), 10000);
     return () => window.clearInterval(t);
   }, []);
 
-  const filtered = useMemo(() => {
-    const list = orders.slice();
+  const activeOrders = useMemo(() => {
     const activeStatuses = new Set(['received', 'preparing', 'ready']);
-    return list.filter((o) => {
-      const s = normalizeStatus(o.status);
-      if (filter === 'active') return activeStatuses.has(s);
-      return s === filter;
-    });
-  }, [filter, orders]);
-
-  const counts = useMemo(() => {
-    const c = { received: 0, preparing: 0, ready: 0, completed: 0, active: 0 };
-    for (const o of orders) {
-      const s = normalizeStatus(o.status);
-      if (s === 'received') c.received += 1;
-      if (s === 'preparing') c.preparing += 1;
-      if (s === 'ready') c.ready += 1;
-      if (s === 'completed') c.completed += 1;
-      if (s === 'received' || s === 'preparing' || s === 'ready') c.active += 1;
-    }
-    return c;
+    return orders.filter((o) => activeStatuses.has(normalizeStatus(o.status)));
   }, [orders]);
 
+  const filtered = activeOrders;
+
   return (
-    <>
+    <div className="min-h-screen bg-white text-black font-sans">
       <Head>
-        <title>Tablet Orders • Servio</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+        <title>Kitchen Display • Servio</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0" />
       </Head>
 
-      <div className="min-h-screen bg-slate-50 text-slate-900">
-        <div className="sticky top-0 z-10 border-b border-slate-200 bg-white/90 backdrop-blur">
-          <div className="mx-auto max-w-6xl px-6 py-4">
-            <div className="flex items-center justify-between gap-4">
-              <div className="min-w-0">
-                <div className="text-xs font-extrabold tracking-[0.18em] text-slate-500 uppercase">Servio • Tablet</div>
-                <div className="mt-1 flex items-center gap-3">
-                  <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Orders</h1>
-                  <span className="hidden sm:inline text-sm font-semibold text-slate-500">
-                    <Clock className="inline h-4 w-4 -mt-0.5 mr-1" />
-                    Auto-refresh
-                  </span>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={refresh}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-4 py-3 text-base font-semibold text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-              >
-                <RefreshCcw className="h-5 w-5" />
-                Refresh
-              </button>
-
-              <button
-                type="button"
-                onClick={() => window.location.href = '/tablet/light'}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white border border-slate-200 px-4 py-3 text-base font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition-colors"
-              >
-                Light View
-              </button>
-            </div>
-
-            <div className="mt-4 flex flex-wrap gap-2">
-              <FilterChip active={filter === 'active'} onClick={() => setFilter('active')} label={`Active (${counts.active})`} />
-              <FilterChip active={filter === 'received'} onClick={() => setFilter('received')} label={`Received (${counts.received})`} />
-              <FilterChip active={filter === 'preparing'} onClick={() => setFilter('preparing')} label={`Preparing (${counts.preparing})`} />
-              <FilterChip active={filter === 'ready'} onClick={() => setFilter('ready')} label={`Ready (${counts.ready})`} />
-              <FilterChip active={filter === 'completed'} onClick={() => setFilter('completed')} label={`Completed (${counts.completed})`} />
-            </div>
-
-            {error ? (
-              <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-900">
-                {error}
-                <div className="mt-1 text-xs font-medium text-rose-700">
-                  Tip: make sure your tablet is logged in (token in localStorage) and `NEXT_PUBLIC_API_BASE_URL` points to your backend.
-                </div>
-              </div>
-            ) : null}
-          </div>
+      {/* Header */}
+      <div className="sticky top-0 z-20 bg-black text-white px-6 py-4 flex items-center justify-between shadow-lg">
+        <div className="flex items-center gap-4">
+          <div className="bg-white text-black font-black px-3 py-1 rounded text-xl italic">SERVIO</div>
+          <div className="h-8 w-px bg-white/20 hidden sm:block" />
+          <div className="text-2xl font-bold tracking-tight">KITCHEN DISPLAY</div>
         </div>
-
-        <div className="mx-auto max-w-6xl px-6 py-6">
-          {loading ? (
-            <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-soft">
-              <div className="text-sm font-semibold text-slate-700">Loading orders…</div>
-              <div className="mt-2 text-sm text-slate-500">If this hangs, check API base URL + auth.</div>
+        <div className="flex items-center gap-6">
+          <div className="text-right hidden sm:block">
+            <div className="text-xs font-bold text-white/50 uppercase tracking-widest">Local Time</div>
+            <div className="text-xl font-mono font-bold">
+              {now ? new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}
             </div>
-          ) : filtered.length === 0 ? (
-            <div className="rounded-3xl border border-slate-200 bg-white p-10 text-center shadow-soft">
-              <div className="mx-auto inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-700 ring-1 ring-slate-200">
-                <CheckCircle2 className="h-6 w-6" />
-              </div>
-              <div className="mt-4 text-xl font-semibold text-slate-900">No orders in this view</div>
-              <div className="mt-2 text-sm font-medium text-slate-500">Try switching filters or tap Refresh.</div>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-              {filtered.map((o) => {
-                const status = normalizeStatus(o.status);
-                const isBusy = busyId === o.id;
-                const canToPreparing = status === 'received';
-                const canToReady = status === 'preparing' || status === 'received';
-                const canToCompleted = status === 'ready' || status === 'preparing';
+          </div>
+          <button 
+            onClick={refresh}
+            className="bg-white/10 hover:bg-white/20 p-3 rounded-full transition-colors"
+          >
+            <RefreshCcw className={clsx("h-6 w-6", loading && "animate-spin")} />
+          </button>
+        </div>
+      </div>
 
-                return (
-                  <div key={o.id} className="rounded-3xl border border-slate-200 bg-white shadow-soft">
-                    <div className="flex items-start justify-between gap-4 border-b border-slate-200 p-5">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-3">
-                          <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-100 text-slate-700 ring-1 ring-slate-200">
-                            <ChannelIcon channel={o.channel} />
-                          </span>
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2">
-                              <div className="text-lg font-semibold tracking-tight text-slate-900">
-                                Order {shortId(o.external_id || o.id)}
-                              </div>
-                              <StatusPill status={status} />
-                            </div>
-                            <div className="mt-1 text-sm font-medium text-slate-500">
-                              {o.customer_name ? <span className="text-slate-700">{o.customer_name}</span> : 'Guest'} •{' '}
-                              {(o.channel || 'unknown').toUpperCase()} • {formatTimeAgo(o.created_at, now)}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
+      <div className="p-4 sm:p-6">
+        {filtered.length === 0 && !loading ? (
+          <div className="flex flex-col items-center justify-center py-32 text-slate-400">
+            <CheckCircle2 className="h-24 w-24 mb-6 opacity-20" />
+            <h2 className="text-3xl font-bold">ALL CLEAR</h2>
+            <p className="text-xl mt-2 font-medium uppercase tracking-widest">No active orders</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
+            {filtered.map((o) => {
+              const status = normalizeStatus(o.status);
+              const isNew = status === 'received';
+              const isPreparing = status === 'preparing';
+              const isReady = status === 'ready';
+              const timeStr = formatTimeAgo(o.created_at, now);
+              const isExpanded = expandedOrderId === o.id;
 
-                      <div className="text-right">
-                        <div className="text-xs font-extrabold tracking-[0.18em] text-slate-500 uppercase">Total</div>
-                        <div className="mt-1 text-2xl font-semibold tracking-tight text-slate-900">
-                          {formatMoney(o.total_amount)}
-                        </div>
+              return (
+                <div 
+                  key={o.id} 
+                  className={clsx(
+                    "flex flex-col rounded-[2rem] border-[4px] bg-white overflow-hidden shadow-2xl transition-all",
+                    isNew ? "border-blue-600 ring-8 ring-blue-50" : "border-black",
+                    isReady && "opacity-50 grayscale"
+                  )}
+                >
+                  {/* Card Header */}
+                  <div 
+                    className={clsx(
+                      "px-6 py-4 flex items-center justify-between border-b-[4px] cursor-pointer",
+                      isNew ? "bg-blue-600 text-white border-blue-600" : "bg-black text-white border-black"
+                    )}
+                    onClick={() => setExpandedOrderId(isExpanded ? null : o.id)}
+                  >
+                    <div className="flex flex-col">
+                      <span className="text-xs font-black uppercase tracking-widest opacity-70">Order</span>
+                      <span className="text-4xl font-black font-mono leading-none tracking-tighter">
+                        #{o.external_id ? o.external_id.slice(-4).toUpperCase() : o.id.slice(-4).toUpperCase()}
+                      </span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-xs font-black uppercase tracking-widest opacity-70">Elapsed</span>
+                      <div className={clsx(
+                        "text-3xl font-black tabular-nums leading-none",
+                        timeStr.includes('m') && parseInt(timeStr) > 20 ? "text-red-400" : "text-white"
+                      )}>
+                        {timeStr}
                       </div>
                     </div>
+                    <ChevronDown className={clsx(
+                      "h-6 w-6 transition-transform ml-2",
+                      isExpanded && "rotate-180"
+                    )} />
+                  </div>
 
-                    <div className="p-5">
-                      <div className="space-y-2">
-                        {(Array.isArray(o.items) ? o.items : []).slice(0, 6).map((it, idx) => (
-                          <div key={`${o.id}-it-${idx}`} className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <div className="text-sm font-semibold text-slate-900 truncate">
-                                {it.name || 'Item'}
-                              </div>
-                            </div>
-                            <div className="text-sm font-extrabold text-slate-700 tabular-nums">
-                              ×{typeof it.quantity === 'number' ? it.quantity : 1}
-                            </div>
-                          </div>
-                        ))}
-                        {Array.isArray(o.items) && o.items.length > 6 ? (
-                          <div className="text-xs font-semibold text-slate-500">+{o.items.length - 6} more…</div>
-                        ) : null}
-                      </div>
-
-                      <div className="mt-5 grid grid-cols-3 gap-3">
-                        <ActionButton
-                          disabled={!canToPreparing || isBusy}
-                          onClick={() => setStatus(o.id, 'preparing')}
-                          tone="amber"
-                          label="Preparing"
-                        />
-                        <ActionButton
-                          disabled={!canToReady || isBusy}
-                          onClick={() => setStatus(o.id, 'ready')}
-                          tone="emerald"
-                          label="Ready"
-                        />
-                        <ActionButton
-                          disabled={!canToCompleted || isBusy}
-                          onClick={() => setStatus(o.id, 'completed')}
-                          tone="slate"
-                          label="Complete"
-                        />
+                  {/* Customer Info */}
+                  <div className="px-6 py-4 bg-slate-50 border-b-[2px] border-slate-200">
+                    <div className="flex items-center gap-2">
+                      <span className="text-2xl font-black text-black truncate uppercase">
+                        {o.customer_name || 'GUEST'}
+                      </span>
+                      <div className="flex-shrink-0 ml-auto bg-black text-white px-2 py-1 rounded-md text-[10px] font-black uppercase">
+                        {o.channel || 'POS'}
                       </div>
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
+
+                  {/* Items List */}
+                  <div className="flex-grow p-6 space-y-4">
+                    {(o.items || []).map((it, idx) => (
+                      <div key={idx} className="flex items-start gap-4">
+                        <div className="flex-shrink-0 bg-black text-white w-10 h-10 rounded-xl flex items-center justify-center text-xl font-black">
+                          {it.quantity || 1}
+                        </div>
+                        <div className="flex-grow">
+                          <div className="text-2xl font-bold leading-tight text-black break-words uppercase">
+                            {it.name}
+                          </div>
+                          {isExpanded && it.unit_price && (
+                            <div className="text-sm text-slate-600 mt-1">
+                              ${(it.unit_price || it.price || 0).toFixed(2)} each
+                            </div>
+                          )}
+                        </div>
+                        {isExpanded && (
+                          <div className="text-lg font-black text-black">
+                            ${((it.unit_price || it.price || 0) * (it.quantity || 1)).toFixed(2)}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Expanded Details */}
+                  {isExpanded && (
+                    <div className="px-6 py-4 bg-slate-50 border-t-[2px] border-slate-200 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-sm font-bold text-slate-700">
+                          <User className="h-4 w-4" />
+                          {o.customer_name || 'Guest'}
+                        </div>
+                        <div className="text-sm font-bold text-slate-700">
+                          Order ID: {o.external_id || shortId(o.id)}
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between pt-3 border-t border-slate-300">
+                        <div className="text-lg font-black text-black">TOTAL</div>
+                        <div className="text-2xl font-black text-black">
+                          ${(o.total_amount || 0).toFixed(2)}
+                        </div>
+                      </div>
+                      <div className="text-xs text-slate-500">
+                        Created: {o.created_at ? new Date(o.created_at).toLocaleString() : '--'}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Action Button */}
+                  <div className="p-4 bg-slate-100 mt-auto">
+                    {isNew && (
+                      <button
+                        disabled={busyId === o.id}
+                        onClick={() => setStatus(o.id, 'preparing')}
+                        className="w-full bg-blue-600 hover:bg-blue-700 active:scale-95 text-white py-8 rounded-[1.5rem] flex items-center justify-center gap-4 transition-all shadow-xl disabled:opacity-50"
+                      >
+                        <span className="text-4xl font-black uppercase tracking-tighter">START PREP</span>
+                        <ArrowRight className="h-10 w-10 stroke-[4px]" />
+                      </button>
+                    )}
+                    {isPreparing && (
+                      <button
+                        disabled={busyId === o.id}
+                        onClick={() => setStatus(o.id, 'ready')}
+                        className="w-full bg-black hover:bg-slate-900 active:scale-95 text-white py-8 rounded-[1.5rem] flex items-center justify-center gap-4 transition-all shadow-xl disabled:opacity-50"
+                      >
+                        <span className="text-4xl font-black uppercase tracking-tighter">MARK READY</span>
+                        <CheckCircle2 className="h-10 w-10 stroke-[4px]" />
+                      </button>
+                    )}
+                    {isReady && (
+                      <button
+                        disabled={busyId === o.id}
+                        onClick={() => setStatus(o.id, 'completed')}
+                        className="w-full bg-slate-400 hover:bg-slate-500 active:scale-95 text-white py-6 rounded-[1.5rem] flex items-center justify-center gap-4 transition-all disabled:opacity-50"
+                      >
+                        <span className="text-3xl font-black uppercase tracking-tighter">BUMP ORDER</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
-    </>
+
+      <style jsx global>{`
+        body {
+          overscroll-behavior-y: contain;
+          -webkit-tap-highlight-color: transparent;
+        }
+      `}</style>
+    </div>
   );
 }
-
-function FilterChip(props: { active: boolean; onClick: () => void; label: string }) {
-  return (
-    <button
-      type="button"
-      onClick={props.onClick}
-      className={clsx(
-        'inline-flex items-center rounded-2xl px-4 py-2 text-sm font-extrabold tracking-wide ring-1 transition',
-        props.active
-          ? 'bg-slate-900 text-white ring-slate-900'
-          : 'bg-white text-slate-700 ring-slate-200 hover:bg-slate-50'
-      )}
-    >
-      {props.label}
-    </button>
-  );
-}
-
-function ActionButton(props: {
-  disabled?: boolean;
-  onClick?: () => void;
-  label: string;
-  tone: 'amber' | 'emerald' | 'slate';
-}) {
-  return (
-    <button
-      type="button"
-      disabled={props.disabled}
-      onClick={props.onClick}
-      className={clsx(
-        'h-14 rounded-2xl text-base font-extrabold transition focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50',
-        props.tone === 'amber' && 'bg-amber-50 text-amber-900 ring-1 ring-amber-200 hover:bg-amber-100 focus:ring-amber-400',
-        props.tone === 'emerald' &&
-          'bg-emerald-50 text-emerald-900 ring-1 ring-emerald-200 hover:bg-emerald-100 focus:ring-emerald-400',
-        props.tone === 'slate' && 'bg-slate-100 text-slate-800 ring-1 ring-slate-200 hover:bg-slate-200 focus:ring-slate-400'
-      )}
-    >
-      {props.label}
-    </button>
-  );
-}
-
