@@ -6,6 +6,31 @@ import { logger } from '../utils/logger';
 
 const router = Router();
 
+function safeJsonParse<T>(value: any, fallback: T): T {
+  if (value == null) return fallback;
+  if (typeof value !== 'string') return fallback;
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+function defaultReceiptSettings() {
+  return {
+    paperSize: '80mm' as '80mm' | '58mm',
+    headerTitle: '', // if empty, frontend can fall back to restaurant name
+    headerSubtitle: 'Online Order',
+    showLogo: true,
+    showOrderId: true,
+    showPlacedAt: true,
+    showCustomerName: true,
+    showCustomerPhone: true,
+    showChannel: true,
+    footerText: 'Thank you!'
+  };
+}
+
 /**
  * Get restaurant Vapi settings
  */
@@ -27,7 +52,7 @@ router.get('/:restaurantId/vapi', requireAuth, asyncHandler(async (req: Request,
     return res.status(404).json({ error: 'Restaurant not found' });
   }
 
-  const settings = JSON.parse(restaurant.settings || '{}');
+  const settings = safeJsonParse<Record<string, any>>(restaurant.settings, {});
   const vapiSettings = settings.vapi || {
     enabled: false,
     apiKey: '',
@@ -46,6 +71,100 @@ router.get('/:restaurantId/vapi', requireAuth, asyncHandler(async (req: Request,
     phoneNumberId: vapiSettings.phoneNumberId || '',
     phoneNumber: vapiSettings.phoneNumber || '',
     systemPrompt: vapiSettings.systemPrompt || ''
+  });
+}));
+
+/**
+ * GET /api/restaurants/:restaurantId/receipt
+ * Get receipt / ticket printing settings (non-sensitive)
+ */
+router.get('/:restaurantId/receipt', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+  const { restaurantId } = req.params;
+  const db = DatabaseService.getInstance().getDatabase();
+
+  if (req.user?.restaurantId !== restaurantId && req.user?.role !== 'platform-admin') {
+    return res.status(403).json({ error: 'Unauthorized' });
+  }
+
+  const restaurant = await db.get(
+    'SELECT id, name, settings, logo_url, address, phone FROM restaurants WHERE id = ?',
+    [restaurantId]
+  );
+
+  if (!restaurant) {
+    return res.status(404).json({ error: 'Restaurant not found' });
+  }
+
+  const settings = safeJsonParse<Record<string, any>>(restaurant.settings, {});
+  const receipt = { ...defaultReceiptSettings(), ...(settings.receipt ?? {}) };
+
+  res.json({
+    success: true,
+    data: {
+      restaurant: {
+        id: restaurant.id,
+        name: restaurant.name,
+        logoUrl: restaurant.logo_url ?? null,
+        phone: restaurant.phone ?? null,
+        address: safeJsonParse<any>(restaurant.address, null)
+      },
+      receipt
+    }
+  });
+}));
+
+/**
+ * PUT /api/restaurants/:restaurantId/receipt
+ * Update receipt / ticket printing settings
+ */
+router.put('/:restaurantId/receipt', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+  const { restaurantId } = req.params;
+  const db = DatabaseService.getInstance().getDatabase();
+
+  if (req.user?.restaurantId !== restaurantId && req.user?.role !== 'platform-admin') {
+    return res.status(403).json({ error: 'Unauthorized' });
+  }
+
+  const restaurant = await db.get(
+    'SELECT id, name, settings FROM restaurants WHERE id = ?',
+    [restaurantId]
+  );
+
+  if (!restaurant) {
+    return res.status(404).json({ error: 'Restaurant not found' });
+  }
+
+  const currentSettings = safeJsonParse<Record<string, any>>(restaurant.settings, {});
+  const currentReceipt = { ...defaultReceiptSettings(), ...(currentSettings.receipt ?? {}) };
+
+  const nextReceipt = {
+    ...currentReceipt,
+    paperSize: req.body.paperSize ?? currentReceipt.paperSize,
+    headerTitle: req.body.headerTitle ?? currentReceipt.headerTitle,
+    headerSubtitle: req.body.headerSubtitle ?? currentReceipt.headerSubtitle,
+    showLogo: req.body.showLogo ?? currentReceipt.showLogo,
+    showOrderId: req.body.showOrderId ?? currentReceipt.showOrderId,
+    showPlacedAt: req.body.showPlacedAt ?? currentReceipt.showPlacedAt,
+    showCustomerName: req.body.showCustomerName ?? currentReceipt.showCustomerName,
+    showCustomerPhone: req.body.showCustomerPhone ?? currentReceipt.showCustomerPhone,
+    showChannel: req.body.showChannel ?? currentReceipt.showChannel,
+    footerText: req.body.footerText ?? currentReceipt.footerText
+  };
+
+  currentSettings.receipt = nextReceipt;
+
+  await db.run(
+    'UPDATE restaurants SET settings = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+    [JSON.stringify(currentSettings), restaurantId]
+  );
+
+  logger.info('Receipt settings updated', { restaurantId, userId: req.user?.id });
+
+  res.json({
+    success: true,
+    data: {
+      receipt: nextReceipt
+    }
   });
 }));
 
@@ -70,7 +189,7 @@ router.put('/:restaurantId/vapi', requireAuth, asyncHandler(async (req: Request,
     return res.status(404).json({ error: 'Restaurant not found' });
   }
 
-  const currentSettings = JSON.parse(restaurant.settings || '{}');
+  const currentSettings = safeJsonParse<Record<string, any>>(restaurant.settings, {});
   const currentVapi = currentSettings.vapi || {};
 
   // Update Vapi settings
@@ -129,7 +248,7 @@ router.post('/:restaurantId/vapi/test', requireAuth, asyncHandler(async (req: Re
     return res.status(404).json({ error: 'Restaurant not found' });
   }
 
-  const settings = JSON.parse(restaurant.settings || '{}');
+  const settings = safeJsonParse<Record<string, any>>(restaurant.settings, {});
   const vapiSettings = settings.vapi || {};
 
   if (!vapiSettings.enabled) {

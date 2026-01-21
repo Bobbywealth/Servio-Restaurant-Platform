@@ -116,20 +116,27 @@ export class VapiService {
     
     if (phoneNumberId) {
       // Look up restaurant by phone_number_id in settings
+      // Settings is stored as TEXT, so we query all active restaurants and parse in JS
       const db = DatabaseService.getInstance().getDatabase();
-      const restaurant = await db.get(
+      const restaurants = await db.all(
         `SELECT id, settings
          FROM restaurants
          WHERE is_active = TRUE
            AND settings IS NOT NULL
-           AND settings != ''
-           AND settings #>> '{vapi,phoneNumberId}' = ?`,
-        [phoneNumberId]
+           AND settings != ''`
       );
       
-      if (restaurant) {
-        logger.info('Restaurant found for phone number', { restaurantId: restaurant.id, phoneNumberId });
-        return restaurant.id;
+      for (const restaurant of restaurants) {
+        try {
+          const settings = JSON.parse(restaurant.settings || '{}');
+          if (settings?.vapi?.phoneNumberId === phoneNumberId) {
+            logger.info('Restaurant found for phone number', { restaurantId: restaurant.id, phoneNumberId });
+            return restaurant.id;
+          }
+        } catch (e) {
+          // Skip restaurants with invalid JSON settings
+          logger.warn('Invalid JSON in restaurant settings', { restaurantId: restaurant.id });
+        }
       }
     }
 
