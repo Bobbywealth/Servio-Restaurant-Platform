@@ -118,6 +118,21 @@ export default function SettingsPage() {
     agentPrinter: null
   })
 
+  // Alert Settings State
+  const [alertSettings, setAlertSettings] = useState<any>(null)
+  const [isLoadingAlerts, setIsLoadingAlerts] = useState(false)
+  const [isSavingAlerts, setIsSavingAlerts] = useState(false)
+  const [isTestingAlert, setIsTestingAlert] = useState(false)
+  const [alertTestResult, setAlertTestResult] = useState<any>(null)
+  const [alertFormData, setAlertFormData] = useState({
+    enabled: false,
+    supervisorPhone: '',
+    failureThresholdMinutes: 5,
+    retryAttempts: 3,
+    enabledForOrderFailures: true,
+    enabledForSystemDown: true
+  })
+
   // Load Vapi settings when phone tab is active
   useEffect(() => {
     if (activeTab === 'phone' && user?.restaurantId) {
@@ -129,6 +144,13 @@ export default function SettingsPage() {
   useEffect(() => {
     if (activeTab === 'printing' && user?.restaurantId) {
       loadReceiptSettings()
+    }
+  }, [activeTab, user?.restaurantId])
+
+  // Load alert settings when alerts tab is active
+  useEffect(() => {
+    if (activeTab === 'alerts' && user?.restaurantId) {
+      loadAlertSettings()
     }
   }, [activeTab, user?.restaurantId])
 
@@ -200,6 +222,51 @@ export default function SettingsPage() {
     }
   }
 
+  const loadAlertSettings = async () => {
+    if (!user?.restaurantId) return
+    setIsLoadingAlerts(true)
+    try {
+      const resp = await api.get(`/api/restaurants/${user.restaurantId}/alert-settings`)
+      const data = resp.data?.data
+      setAlertSettings(data)
+      if (data) {
+        setAlertFormData(prev => ({ ...prev, ...data }))
+      }
+    } catch (err: any) {
+      console.error('Failed to load alert settings:', err)
+    } finally {
+      setIsLoadingAlerts(false)
+    }
+  }
+
+  const saveAlertSettings = async () => {
+    if (!user?.restaurantId) return
+    setIsSavingAlerts(true)
+    try {
+      await api.put(`/api/restaurants/${user.restaurantId}/alert-settings`, alertFormData)
+      alert('Alert call settings saved successfully!')
+      await loadAlertSettings()
+    } catch (err: any) {
+      alert(getErrorMessage(err, 'Failed to save alert settings'))
+    } finally {
+      setIsSavingAlerts(false)
+    }
+  }
+
+  const testAlertCall = async () => {
+    if (!user?.restaurantId) return
+    setIsTestingAlert(true)
+    setAlertTestResult(null)
+    try {
+      const response = await api.post(`/api/restaurants/${user.restaurantId}/test-alert-call`)
+      setAlertTestResult({ success: true, data: response.data })
+    } catch (err: any) {
+      setAlertTestResult({ success: false, error: getErrorMessage(err, 'Test alert call failed') })
+    } finally {
+      setIsTestingAlert(false)
+    }
+  }
+
   const scanAgentPrinters = async () => {
     const url = (receiptFormData.agentUrl || 'http://localhost:8787').replace(/\/+$/, '')
     setIsScanningAgent(true)
@@ -238,6 +305,7 @@ export default function SettingsPage() {
     { id: 'general', name: 'General', icon: SettingsIcon },
     { id: 'phone', name: 'Phone System', icon: Phone },
     { id: 'printing', name: 'Receipt / Printing', icon: Printer },
+    { id: 'alerts', name: 'Alert Calls', icon: PhoneCall },
     { id: 'notifications', name: 'Notifications', icon: Bell },
     { id: 'security', name: 'Security', icon: Shield },
     { id: 'display', name: 'Display', icon: Palette },
@@ -1035,6 +1103,171 @@ export default function SettingsPage() {
                   </div>
                 </div>
               </div>
+            </div>
+          </div>
+        )
+
+      case 'alerts':
+        if (isLoadingAlerts) {
+          return <div className="text-center py-8">Loading alert call settings...</div>
+        }
+        
+        return (
+          <div className="space-y-6">
+            <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg p-4">
+              <div className="flex items-start">
+                <PhoneCall className="w-5 h-5 text-orange-600 dark:text-orange-400 mr-3 mt-0.5" />
+                <div>
+                  <h3 className="text-sm font-medium text-orange-900 dark:text-orange-300">
+                    Automatic Alert Calls - Order Failure Protection
+                  </h3>
+                  <p className="text-xs text-orange-700 dark:text-orange-400 mt-1">
+                    Get an alert call when orders can't be pushed to your system in real-time. Requires Twilio phone system configuration.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={alertFormData.enabled}
+                  onChange={(e) => setAlertFormData({ ...alertFormData, enabled: e.target.checked })}
+                  className="w-4 h-4 text-orange-600 rounded focus:ring-orange-500"
+                />
+                <label className="ml-2 text-sm font-medium text-surface-900 dark:text-surface-100">
+                  Enable Alert Calls
+                </label>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">
+                  Supervisor Phone Number *
+                </label>
+                <input
+                  type="tel"
+                  value={alertFormData.supervisorPhone}
+                  onChange={(e) => setAlertFormData({ ...alertFormData, supervisorPhone: e.target.value })}
+                  placeholder="+1 (555) 123-4567"
+                  className="input-field"
+                />
+                <p className="text-xs text-surface-500 mt-1">
+                  Phone number to call when critical issues occur (include country code)
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">
+                    Failure Threshold (minutes)
+                  </label>
+                  <select
+                    value={alertFormData.failureThresholdMinutes}
+                    onChange={(e) => setAlertFormData({ ...alertFormData, failureThresholdMinutes: Number(e.target.value) })}
+                    className="input-field"
+                  >
+                    <option value={3}>3 minutes</option>
+                    <option value={5}>5 minutes</option>
+                    <option value={10}>10 minutes</option>
+                    <option value={15}>15 minutes</option>
+                  </select>
+                  <p className="text-xs text-surface-500 mt-1">
+                    How long to wait before calling about order issues
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">
+                    Retry Attempts
+                  </label>
+                  <select
+                    value={alertFormData.retryAttempts}
+                    onChange={(e) => setAlertFormData({ ...alertFormData, retryAttempts: Number(e.target.value) })}
+                    className="input-field"
+                  >
+                    <option value={1}>1 attempt</option>
+                    <option value={2}>2 attempts</option>
+                    <option value={3}>3 attempts</option>
+                    <option value={5}>5 attempts</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <h4 className="text-sm font-medium text-surface-900 dark:text-surface-100">Alert Types</h4>
+                <div className="space-y-2">
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={alertFormData.enabledForOrderFailures}
+                      onChange={(e) => setAlertFormData({ ...alertFormData, enabledForOrderFailures: e.target.checked })}
+                      className="w-4 h-4 text-orange-600 rounded focus:ring-orange-500"
+                    />
+                    <span className="ml-2 text-sm text-surface-700 dark:text-surface-300">Order Processing Failures</span>
+                  </label>
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={alertFormData.enabledForSystemDown}
+                      onChange={(e) => setAlertFormData({ ...alertFormData, enabledForSystemDown: e.target.checked })}
+                      className="w-4 h-4 text-orange-600 rounded focus:ring-orange-500"
+                    />
+                    <span className="ml-2 text-sm text-surface-700 dark:text-surface-300">System Downtime</span>
+                  </label>
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <motion.button
+                  onClick={saveAlertSettings}
+                  disabled={isSavingAlerts}
+                  className="btn-primary inline-flex items-center space-x-2"
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                >
+                  {isSavingAlerts ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <Save className="w-4 h-4" />
+                  )}
+                  <span>{isSavingAlerts ? 'Saving...' : 'Save Alert Settings'}</span>
+                </motion.button>
+                
+                <motion.button
+                  onClick={testAlertCall}
+                  disabled={isTestingAlert || !alertFormData.enabled || !alertFormData.supervisorPhone}
+                  className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 inline-flex items-center space-x-2"
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                >
+                  {isTestingAlert ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <PhoneCall className="w-4 h-4" />
+                  )}
+                  <span>{isTestingAlert ? 'Calling...' : 'Test Alert Call'}</span>
+                </motion.button>
+              </div>
+
+              {alertTestResult && (
+                <div className={`p-4 rounded-lg ${alertTestResult.success ? 'bg-green-50 dark:bg-green-900/20' : 'bg-red-50 dark:bg-red-900/20'}`}>
+                  <div className={`text-sm ${alertTestResult.success ? 'text-green-800 dark:text-green-300' : 'text-red-800 dark:text-red-300'}`}>
+                    {alertTestResult.success ? '✓ Test alert call sent successfully!' : '✗ ' + alertTestResult.error}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="bg-surface-50 dark:bg-surface-800 rounded-lg p-4 border border-surface-200 dark:border-surface-700">
+              <h3 className="text-sm font-medium text-surface-900 dark:text-surface-100 mb-2">How Alert Calls Work</h3>
+              <ol className="list-decimal list-inside space-y-2 text-sm text-surface-600 dark:text-surface-400">
+                <li>When an order fails to reach your system, Servio detects it</li>
+                <li>After the failure threshold time, an automated call is made to the supervisor</li>
+                <li>The call explains what happened and asks them to check the system</li>
+                <li>Calls will retry based on your retry settings</li>
+                <li>All alert calls are logged for your records</li>
+              </ol>
             </div>
           </div>
         )

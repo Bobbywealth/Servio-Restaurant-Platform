@@ -204,18 +204,34 @@ export class OrderService {
       }
     }
 
-    await this.bus.emit('order.created_web', {
-      restaurantId,
-      type: 'order.created_web',
-      actor: { actorType: 'system' },
-      payload: {
-        orderId,
-        customerName: params.customerName,
-        totalAmount,
-        channel: 'website'
-      },
-      occurredAt: new Date().toISOString()
-    });
+    try {
+      await this.bus.emit('order.created_web', {
+        restaurantId,
+        type: 'order.created_web',
+        actor: { actorType: 'system' },
+        payload: {
+          orderId,
+          customerName: params.customerName,
+          totalAmount,
+          channel: 'website'
+        },
+        occurredAt: new Date().toISOString()
+      });
+    } catch (error) {
+      // If order creation succeeded but notification failed, send alert call
+      logger.error('Order notification failed, triggering alert call', { orderId, error });
+      try {
+        const { AlertService } = await import('./AlertService');
+        const alertService = new AlertService();
+        await alertService.sendOrderFailureAlert(
+          restaurantId,
+          orderId,
+          'Order created but failed to send real-time notification to dashboard'
+        );
+      } catch (alertError) {
+        logger.error('Failed to send alert call for order notification failure', { orderId, alertError });
+      }
+    }
 
     await this.databaseService.logAudit(restaurantId, null, 'create_public_order', 'order', orderId, { totalAmount });
 

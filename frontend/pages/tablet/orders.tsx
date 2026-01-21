@@ -5,7 +5,7 @@ import TabletLayout from '../../components/Layout/TabletLayout'
 import { api } from '../../lib/api'
 import { useUser } from '../../contexts/UserContext'
 import { useSocket } from '../../lib/socket'
-import { Printer, Clock, ShoppingBag, BadgeCheck, CheckCircle2, XCircle, Timer, Volume2, ExternalLink } from 'lucide-react'
+import { Printer, Clock, ShoppingBag, BadgeCheck, CheckCircle2, XCircle, Timer, Volume2, ExternalLink, Eye, X, User, Phone, CreditCard, Package } from 'lucide-react'
 
 type OrderStatus = 'received' | 'preparing' | 'ready' | 'completed' | 'cancelled' | string
 
@@ -277,6 +277,9 @@ export default function TabletOrdersPage() {
   const [actingOrderId, setActingOrderId] = React.useState<string | null>(null)
   const [nowTick, setNowTick] = React.useState<number>(() => Date.now())
   const [restaurantSlug, setRestaurantSlug] = React.useState<string | null>(null)
+  const [selectedOrder, setSelectedOrder] = React.useState<Order | null>(null)
+  const [orderDetails, setOrderDetails] = React.useState<any>(null)
+  const [loadingDetails, setLoadingDetails] = React.useState(false)
 
   const canReadOrders = hasPermission('orders:read')
   const canWriteOrders = hasPermission('orders:write')
@@ -591,6 +594,25 @@ export default function TabletOrdersPage() {
     return `${mm}:${ss}`
   }
 
+  const viewOrderDetails = async (order: Order) => {
+    setSelectedOrder(order)
+    setLoadingDetails(true)
+    setOrderDetails(null)
+    try {
+      const detail = await api.get(`/api/orders/${order.id}`)
+      setOrderDetails(detail.data?.data)
+    } catch (e: any) {
+      setError(e?.response?.data?.error?.message || e?.message || 'Failed to load order details')
+    } finally {
+      setLoadingDetails(false)
+    }
+  }
+
+  const closeOrderDetails = () => {
+    setSelectedOrder(null)
+    setOrderDetails(null)
+  }
+
   return (
     <TabletLayout title="Online Orders" onRefresh={fetchOrders}>
       {!canReadOrders ? (
@@ -743,19 +765,18 @@ export default function TabletOrdersPage() {
 
                   <div className="mt-4 flex gap-2">
                     <button
+                      onClick={() => viewOrderDetails(o)}
+                      className="px-4 py-3 rounded-xl bg-blue-600 text-white font-extrabold hover:bg-blue-700 active:bg-blue-800 transition-colors inline-flex items-center justify-center gap-2"
+                    >
+                      <Eye className="w-5 h-5" />
+                      Details
+                    </button>
+                    <button
                       onClick={() => handlePrint(o.id)}
                       className="flex-1 px-4 py-3 rounded-xl bg-white text-gray-950 font-extrabold hover:bg-white/90 active:bg-white/80 transition-colors inline-flex items-center justify-center gap-2"
                     >
                       <Printer className="w-5 h-5" />
                       Print
-                    </button>
-                    <button
-                      onClick={fetchOrders}
-                      className="px-4 py-3 rounded-xl bg-white/10 hover:bg-white/15 active:bg-white/20 transition-colors font-bold inline-flex items-center gap-2"
-                      title="Refresh"
-                    >
-                      <BadgeCheck className={`w-5 h-5 ${loading ? 'opacity-60' : ''}`} />
-                      <span className="hidden sm:inline">{loading ? 'Loading…' : 'Sync'}</span>
                     </button>
                   </div>
 
@@ -856,6 +877,191 @@ export default function TabletOrdersPage() {
             </div>
           )}
         </>
+      )}
+
+      {/* Order Details Modal */}
+      {selectedOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-75">
+          <div className="bg-gray-900 border border-white/20 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-gray-900 border-b border-white/20 p-6 rounded-t-2xl">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl font-bold text-white">
+                    Order Details: {selectedOrder.externalId || selectedOrder.id}
+                  </h2>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className={`px-2 py-1 rounded-full border text-xs font-bold ${statusPill(selectedOrder.status)}`}>
+                      {selectedOrder.status}
+                    </span>
+                    <span className="text-sm text-white/60">
+                      via {selectedOrder.channel}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  onClick={closeOrderDetails}
+                  className="p-2 text-white/60 hover:text-white rounded-lg hover:bg-white/10"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {loadingDetails ? (
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white/20 mx-auto"></div>
+                  <p className="mt-4 text-white/60">Loading order details...</p>
+                </div>
+              ) : orderDetails ? (
+                <>
+                  {/* Customer Information */}
+                  <div className="bg-black/20 rounded-xl p-4 border border-white/10">
+                    <h3 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
+                      <User className="w-5 h-5" />
+                      Customer Information
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-white/60 mb-1">Name</label>
+                        <p className="text-white font-medium">
+                          {orderDetails.customerName || 'No name provided'}
+                        </p>
+                      </div>
+                      {orderDetails.customerPhone && (
+                        <div>
+                          <label className="block text-sm font-medium text-white/60 mb-1">Phone</label>
+                          <p className="text-white font-medium flex items-center gap-2">
+                            <Phone className="w-4 h-4" />
+                            {orderDetails.customerPhone}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Order Information */}
+                  <div className="bg-black/20 rounded-xl p-4 border border-white/10">
+                    <h3 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
+                      <Clock className="w-5 h-5" />
+                      Order Information
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-white/60 mb-1">Placed At</label>
+                        <p className="text-white font-medium">
+                          {orderDetails.createdAt ? new Date(orderDetails.createdAt).toLocaleString() : 'Unknown'}
+                        </p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-white/60 mb-1">Payment</label>
+                        <p className="text-white font-medium flex items-center gap-1">
+                          <CreditCard className="w-4 h-4" />
+                          {orderDetails.paymentStatus === 'pay_on_arrival' ? '💳 Pay on arrival' : orderDetails.paymentStatus || 'Unknown'}
+                        </p>
+                      </div>
+                      {orderDetails.prepTimeMinutes && (
+                        <>
+                          <div>
+                            <label className="block text-sm font-medium text-white/60 mb-1">Prep Time</label>
+                            <p className="text-white font-medium">
+                              {orderDetails.prepTimeMinutes} minutes
+                            </p>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-white/60 mb-1">Ready At</label>
+                            <p className="text-white font-medium">
+                              {new Date(new Date(orderDetails.acceptedAt || orderDetails.createdAt).getTime() + orderDetails.prepTimeMinutes * 60000).toLocaleTimeString()}
+                            </p>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Order Items */}
+                  {(orderDetails.orderItems && orderDetails.orderItems.length > 0) && (
+                    <div className="bg-black/20 rounded-xl p-4 border border-white/10">
+                      <h3 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
+                        <Package className="w-5 h-5" />
+                        Order Items
+                      </h3>
+                      <div className="space-y-3">
+                        {orderDetails.orderItems.map((item: any, index: number) => (
+                          <div key={index} className="border border-white/10 rounded-lg p-3 bg-white/5">
+                            <div className="flex items-start justify-between mb-2">
+                              <div className="flex-1">
+                                <h4 className="font-semibold text-white text-lg">
+                                  {item.quantity}x {item.name}
+                                </h4>
+                                {item.notes && (
+                                  <p className="text-sm text-white/70 mt-1">
+                                    <strong>Notes:</strong> {item.notes}
+                                  </p>
+                                )}
+                              </div>
+                              <div className="text-right">
+                                <p className="font-bold text-white text-lg">
+                                  ${((item.unitPrice || 0) * (item.quantity || 1)).toFixed(2)}
+                                </p>
+                                <p className="text-xs text-white/60">
+                                  ${(item.unitPrice || 0).toFixed(2)} each
+                                </p>
+                              </div>
+                            </div>
+                            
+                            {item.modifiers && Object.keys(item.modifiers).length > 0 && (
+                              <div className="mt-2 pt-2 border-t border-white/10">
+                                <p className="text-xs font-medium text-white/60 mb-2">Modifiers:</p>
+                                <div className="flex flex-wrap gap-1">
+                                  {Object.entries(item.modifiers).map(([key, value]) => (
+                                    <span key={key} className="px-2 py-1 bg-blue-500/20 text-blue-200 border border-blue-500/30 rounded-full text-xs font-medium">
+                                      {String(key).replace(/_/g, ' ')}: {String(value).replace(/_/g, ' ')}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                      
+                      <div className="mt-4 pt-4 border-t border-white/10">
+                        <div className="flex justify-between items-center">
+                          <span className="text-xl font-semibold text-white">Total</span>
+                          <span className="text-2xl font-extrabold text-white">
+                            ${(orderDetails.totalAmount || 0).toFixed(2)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Action Buttons */}
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handlePrint(orderDetails.id)}
+                      className="flex-1 px-4 py-3 rounded-xl bg-white text-gray-950 font-extrabold hover:bg-white/90 active:bg-white/80 transition-colors inline-flex items-center justify-center gap-2"
+                    >
+                      <Printer className="w-5 h-5" />
+                      Print Ticket
+                    </button>
+                    <button
+                      onClick={closeOrderDetails}
+                      className="px-4 py-3 rounded-xl bg-white/10 hover:bg-white/15 active:bg-white/20 transition-colors font-bold"
+                    >
+                      Close
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div className="text-center py-8">
+                  <p className="text-white/60">Failed to load order details</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </TabletLayout>
   )
