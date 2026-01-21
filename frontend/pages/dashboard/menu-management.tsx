@@ -78,6 +78,9 @@ const MenuManagement: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [restaurantSlug, setRestaurantSlug] = useState<string | null>(null);
   const [publicOrderUrl, setPublicOrderUrl] = useState<string>('');
+  const [isEditingSlug, setIsEditingSlug] = useState(false);
+  const [slugDraft, setSlugDraft] = useState('');
+  const [savingSlug, setSavingSlug] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
@@ -194,16 +197,19 @@ const MenuManagement: React.FC = () => {
         if (cancelled) return;
         if (slug) {
           setRestaurantSlug(slug);
+          setSlugDraft(slug);
           if (typeof window !== 'undefined') {
             setPublicOrderUrl(`${window.location.origin}/r/${slug}`);
           }
         } else {
           setRestaurantSlug(null);
+          setSlugDraft('');
           setPublicOrderUrl('');
         }
       } catch {
         if (cancelled) return;
         setRestaurantSlug(null);
+        setSlugDraft('');
         setPublicOrderUrl('');
       }
     };
@@ -235,6 +241,33 @@ const MenuManagement: React.FC = () => {
       } catch {
         toast.error('Copy failed—select and copy manually');
       }
+    }
+  };
+
+  const saveSlug = async () => {
+    const next = slugDraft.trim();
+    if (!next) {
+      toast.error('Slug is required (e.g., sausage-kitchen)');
+      return;
+    }
+    setSavingSlug(true);
+    try {
+      const resp = await api.put('/api/restaurant/profile', { slug: next });
+      const saved = resp.data?.data?.slug || next;
+      setRestaurantSlug(saved);
+      setSlugDraft(saved);
+      if (typeof window !== 'undefined') {
+        setPublicOrderUrl(`${window.location.origin}/r/${saved}`);
+      }
+      setIsEditingSlug(false);
+      toast.success('Public ordering slug updated');
+    } catch (e: any) {
+      const status = e?.response?.status;
+      const msg = e?.response?.data?.error?.message || e?.message || 'Failed to update slug';
+      if (status === 409) toast.error(msg);
+      else toast.error(msg);
+    } finally {
+      setSavingSlug(false);
     }
   };
 
@@ -498,19 +531,59 @@ const MenuManagement: React.FC = () => {
                     Public ordering link
                   </div>
                   <div className="mt-2 flex items-center gap-2">
-                    <input
-                      id="public-order-url"
-                      readOnly
-                      value={publicOrderUrl || (restaurantSlug ? `/r/${restaurantSlug}` : '')}
-                      placeholder="No restaurant slug found"
-                      className="w-full lg:w-[520px] px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 font-mono text-sm"
-                    />
+                    {isEditingSlug ? (
+                      <input
+                        value={slugDraft}
+                        onChange={(e) => setSlugDraft(e.target.value)}
+                        placeholder="e.g., sausage-kitchen"
+                        className="w-full lg:w-[520px] px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 font-mono text-sm"
+                      />
+                    ) : (
+                      <input
+                        id="public-order-url"
+                        readOnly
+                        value={publicOrderUrl || (restaurantSlug ? `/r/${restaurantSlug}` : '')}
+                        placeholder="No restaurant slug found"
+                        className="w-full lg:w-[520px] px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 font-mono text-sm"
+                      />
+                    )}
                   </div>
                   <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
                     Share this link with customers to place orders for your menu.
                   </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
+                  {isEditingSlug ? (
+                    <>
+                      <button
+                        onClick={saveSlug}
+                        disabled={savingSlug}
+                        className="flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="Save slug"
+                      >
+                        {savingSlug ? 'Saving…' : 'Save'}
+                      </button>
+                      <button
+                        onClick={() => {
+                          setIsEditingSlug(false);
+                          setSlugDraft(restaurantSlug || '');
+                        }}
+                        disabled={savingSlug}
+                        className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="Cancel"
+                      >
+                        Cancel
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      onClick={() => setIsEditingSlug(true)}
+                      className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 transition-colors"
+                      title="Edit slug"
+                    >
+                      Edit slug
+                    </button>
+                  )}
                   <button
                     onClick={copyPublicLink}
                     disabled={!publicOrderUrl}
