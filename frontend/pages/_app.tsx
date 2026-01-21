@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import type { AppProps } from 'next/app';
 import Head from 'next/head';
 import { UserProvider } from '../contexts/UserContext';
@@ -6,12 +6,57 @@ import { ThemeProvider } from '../contexts/ThemeContext';
 import { TourProvider } from '../contexts/TourContext';
 import { Toaster } from 'react-hot-toast';
 import { getPerformanceMonitor } from '../lib/performance';
+import SplashScreen from '../components/ui/SplashScreen';
 import '../styles/globals.css';
 
 // Initialize performance monitoring
 let performanceMonitor: any = null;
 
 function MyApp({ Component, pageProps, router }: AppProps) {
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [isRouteLoading, setIsRouteLoading] = useState(false);
+  const initialLoadStartRef = useRef<number | null>(null);
+
+  // Show splash on first page load (briefly)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    initialLoadStartRef.current = window.performance?.now?.() ?? Date.now();
+
+    const finish = () => {
+      const start = initialLoadStartRef.current ?? (window.performance?.now?.() ?? Date.now());
+      const now = window.performance?.now?.() ?? Date.now();
+      const elapsed = now - start;
+      const minMs = 450; // ensure the spin is visible
+      const remaining = Math.max(0, minMs - elapsed);
+      window.setTimeout(() => setIsInitialLoading(false), remaining);
+    };
+
+    if (document.readyState === 'complete') {
+      finish();
+      return;
+    }
+
+    window.addEventListener('load', finish);
+    return () => window.removeEventListener('load', finish);
+  }, []);
+
+  // Show splash during route transitions
+  useEffect(() => {
+    const handleStart = () => setIsRouteLoading(true);
+    const handleDone = () => setIsRouteLoading(false);
+
+    router.events.on('routeChangeStart', handleStart);
+    router.events.on('routeChangeComplete', handleDone);
+    router.events.on('routeChangeError', handleDone);
+
+    return () => {
+      router.events.off('routeChangeStart', handleStart);
+      router.events.off('routeChangeComplete', handleDone);
+      router.events.off('routeChangeError', handleDone);
+    };
+  }, [router.events]);
+
   useEffect(() => {
     // Initialize performance monitoring
     if (typeof window !== 'undefined') {
@@ -129,6 +174,9 @@ function MyApp({ Component, pageProps, router }: AppProps) {
       <UserProvider>
         <ThemeProvider>
           <TourProvider>
+            {(isInitialLoading || isRouteLoading) && (
+              <SplashScreen message={isRouteLoading ? 'Loading…' : 'Starting Servio…'} />
+            )}
             <Component {...pageProps} />
             <Toaster 
               position="top-right"

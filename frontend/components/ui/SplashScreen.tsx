@@ -1,9 +1,15 @@
 import React from 'react';
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 
-export default function SplashScreen() {
+type SplashScreenProps = {
+  message?: string;
+};
+
+export default function SplashScreen({ message = 'Loading…' }: SplashScreenProps) {
+  const reduceMotion = useReducedMotion();
+
   return (
-    <div className="fixed inset-0 z-[9999] bg-white flex flex-col items-center justify-center overflow-hidden">
+    <div className="fixed inset-0 z-[9999] bg-white dark:bg-surface-950 flex flex-col items-center justify-center overflow-hidden">
       <motion.div
         initial={{ scale: 0.8, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
@@ -15,35 +21,45 @@ export default function SplashScreen() {
       >
         <div className="relative mb-8">
           <motion.div
-            animate={{
-              scale: [1, 1.1, 1],
-              rotate: [0, 5, -5, 0],
-            }}
-            transition={{
-              duration: 2,
-              repeat: Infinity,
-              ease: "easeInOut"
-            }}
+            className="gpu-accelerated"
+            animate={reduceMotion ? undefined : { rotate: 360 }}
+            transition={
+              reduceMotion
+                ? undefined
+                : {
+                    duration: 1.1,
+                    repeat: Infinity,
+                    ease: 'linear',
+                  }
+            }
           >
             <img
-              src="/images/servio_logo_transparent_tight.png"
-              alt="Servio Logo"
-              className="h-20 w-auto"
+              src="/icons/servio-icon-192.svg"
+              alt="Servio"
+              className="h-16 w-16"
             />
           </motion.div>
           
           {/* Pulsing ring around logo */}
           <motion.div
             className="absolute -inset-4 border-2 border-blue-500/20 rounded-full"
-            animate={{
-              scale: [1, 1.5],
-              opacity: [0.5, 0],
-            }}
-            transition={{
-              duration: 1.5,
-              repeat: Infinity,
-              ease: "easeOut"
-            }}
+            animate={
+              reduceMotion
+                ? undefined
+                : {
+                    scale: [1, 1.5],
+                    opacity: [0.5, 0],
+                  }
+            }
+            transition={
+              reduceMotion
+                ? undefined
+                : {
+                    duration: 1.5,
+                    repeat: Infinity,
+                    ease: 'easeOut',
+                  }
+            }
           />
         </div>
 
@@ -51,17 +67,19 @@ export default function SplashScreen() {
           initial={{ width: 0 }}
           animate={{ width: 200 }}
           transition={{ duration: 1.5, ease: "easeInOut" }}
-          className="h-1 bg-gray-100 rounded-full overflow-hidden relative"
+          className="h-1 bg-surface-100 dark:bg-surface-800 rounded-full overflow-hidden relative"
         >
           <motion.div
-            animate={{
-              x: [-200, 200]
-            }}
-            transition={{
-              duration: 1,
-              repeat: Infinity,
-              ease: "linear"
-            }}
+            animate={reduceMotion ? undefined : { x: [-200, 200] }}
+            transition={
+              reduceMotion
+                ? undefined
+                : {
+                    duration: 1,
+                    repeat: Infinity,
+                    ease: 'linear',
+                  }
+            }
             className="absolute top-0 left-0 h-full w-1/2 bg-gradient-to-r from-blue-400 via-blue-600 to-blue-400"
           />
         </motion.div>
@@ -70,9 +88,9 @@ export default function SplashScreen() {
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.5 }}
-          className="mt-4 text-sm font-medium text-gray-500 tracking-widest uppercase"
+          className="mt-4 text-sm font-medium text-surface-500 dark:text-surface-400 tracking-widest uppercase"
         >
-          Initializing OS
+          {message}
         </motion.p>
       </motion.div>
 

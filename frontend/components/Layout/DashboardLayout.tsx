@@ -3,7 +3,7 @@
 import React, { ReactNode, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { useUser } from '../../contexts/UserContext';
 import { useTour } from '../../contexts/TourContext';
 import ThemeToggle from '../ui/ThemeToggle';
@@ -41,6 +41,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [mounted, setMounted] = React.useState(false);
   const router = useRouter();
+  const reduceMotion = useReducedMotion();
 
   React.useEffect(() => {
     setMounted(true);
@@ -60,10 +61,15 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col items-center justify-center">
         <motion.div 
-          animate={{ scale: [1, 1.1, 1] }}
-          transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+          className="gpu-accelerated"
+          animate={reduceMotion ? undefined : { rotate: 360 }}
+          transition={
+            reduceMotion
+              ? undefined
+              : { duration: 1.1, repeat: Infinity, ease: 'linear' }
+          }
         >
-          <img src="/images/servio_logo_transparent_tight.png" alt="Servio Logo" className="h-16 w-auto" />
+          <img src="/icons/servio-icon-192.svg" alt="Servio" className="h-16 w-16" />
         </motion.div>
         <motion.p 
           className="mt-4 text-surface-500 font-medium"
