@@ -38,8 +38,26 @@ export default function TabletLayout({
     <>
       <Head>
         <title>{title}</title>
+        {/* Tablet PWA: use tablet-scoped manifest when installing from /tablet */}
+        <link rel="manifest" href="/manifest-tablet.json" key="manifest" />
+        <meta name="theme-color" content="#030712" key="theme-color" />
+
+        {/* Standalone / fullscreen hints */}
+        <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="apple-mobile-web-app-title" content="Servio Tablet" />
+        <meta name="application-name" content="Servio Tablet" />
+        <meta name="format-detection" content="telephone=no" />
+
+        {/* Viewport tuned for kiosk/tablet */}
+        <meta
+          name="viewport"
+          content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0, viewport-fit=cover"
+        />
+
+        {/* Icons (best-effort; SVG works on most modern platforms) */}
+        <link rel="apple-touch-icon" href="/icons/servio-icon-192.svg" />
       </Head>
 
       <div className="min-h-screen bg-gray-950 text-white relative overflow-hidden">

@@ -123,6 +123,50 @@ function MyApp({ Component, pageProps, router }: AppProps) {
     }
   }, []);
 
+  // Register Service Worker for PWA (tablet + dashboard)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!('serviceWorker' in navigator)) return;
+
+    // Register only on secure contexts (or localhost), as required by browsers.
+    const isLocalhost =
+      window.location.hostname === 'localhost' ||
+      window.location.hostname === '127.0.0.1' ||
+      window.location.hostname === '[::1]';
+    if (window.location.protocol !== 'https:' && !isLocalhost) return;
+
+    const register = async () => {
+      try {
+        const reg = await navigator.serviceWorker.register('/sw.js');
+
+        // If there's an updated SW waiting, activate it.
+        if (reg.waiting) {
+          reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+        }
+
+        reg.addEventListener('updatefound', () => {
+          const sw = reg.installing;
+          if (!sw) return;
+          sw.addEventListener('statechange', () => {
+            if (sw.state === 'installed' && navigator.serviceWorker.controller) {
+              sw.postMessage({ type: 'SKIP_WAITING' });
+            }
+          });
+        });
+
+        // Reload when a new SW takes control.
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          window.location.reload();
+        });
+      } catch (e) {
+        // Non-fatal: app works without SW.
+        console.warn('Service worker registration failed:', e);
+      }
+    };
+
+    register();
+  }, []);
+
   // Error boundary-like error handling
   useEffect(() => {
     const handleError = (error: ErrorEvent) => {
@@ -162,9 +206,9 @@ function MyApp({ Component, pageProps, router }: AppProps) {
     <>
       <Head>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <meta name="theme-color" content="#000000" />
+        <meta name="theme-color" content="#14B8A6" key="theme-color" />
         <link rel="icon" href="/favicon.ico" />
-        <link rel="manifest" href="/manifest.json" />
+        <link rel="manifest" href="/manifest.json" key="manifest" />
         <link rel="apple-touch-icon" href="/icons/servio-icon-192.svg" />
         
         {/* Advanced performance hints and resource optimization */}

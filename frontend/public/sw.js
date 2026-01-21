@@ -15,6 +15,7 @@ const CRITICAL_CACHE_URLS = [
   '/login',
   '/offline/',
   '/manifest.json',
+  '/manifest-tablet.json',
   
   // Critical pages (high priority)
   '/dashboard/',
@@ -530,7 +531,8 @@ function isStaticAsset(url) {
          url.pathname.endsWith('.css') ||
          url.pathname.endsWith('.woff2') ||
          url.pathname.endsWith('.woff') ||
-         url.pathname.includes('/manifest.json')
+         url.pathname.includes('/manifest.json') ||
+         url.pathname.includes('/manifest-tablet.json')
 }
 
 function isImageRequest(url) {
@@ -600,8 +602,8 @@ async function handleBackgroundSync() {
 self.addEventListener('push', (event) => {
   let options = {
     body: 'New notification from Servio',
-    icon: '/icons/icon-192x192.png',
-    badge: '/icons/badge-72x72.png',
+    icon: '/icons/servio-icon-192.svg',
+    badge: '/icons/servio-icon-maskable.svg',
     vibrate: [200, 100, 200],
     data: {
       dateOfArrival: Date.now(),
@@ -611,12 +613,12 @@ self.addEventListener('push', (event) => {
       {
         action: 'view',
         title: '👀 View',
-        icon: '/icons/view.png'
+        icon: '/icons/servio-icon-192.svg'
       },
       {
         action: 'dismiss',
         title: '❌ Dismiss',
-        icon: '/icons/dismiss.png'
+        icon: '/icons/servio-icon-192.svg'
       }
     ],
     requireInteraction: true,
