@@ -84,22 +84,30 @@ class VapiService {
                     result = VoiceOrderingService_1.VoiceOrderingService.getInstance().validateQuote(parameters);
                     break;
                 case 'createOrder':
+                    // Ensure the order is linked to the inbound call for matching later in Voice Hub
+                    parameters.callId = parameters.callId || message.call?.id;
+                    parameters.source = parameters.source || 'vapi';
+                    if (!parameters.customer)
+                        parameters.customer = {};
+                    parameters.customer.phone = parameters.customer.phone || message.call?.customer?.number;
                     result = await VoiceOrderingService_1.VoiceOrderingService.getInstance().createOrder(parameters);
                     break;
                 case 'check_order_status':
                     result = await this.handleCheckOrderStatus(parameters, userId);
                     break;
                 default:
-                    // Fall back to existing assistant service functions
-                    const mockToolCall = {
-                        id: 'phone_call',
-                        type: 'function',
-                        function: {
-                            name,
-                            arguments: JSON.stringify(parameters)
-                        }
-                    };
-                    result = await this.assistantService.executeTool(mockToolCall, userId);
+                    {
+                        // Fall back to existing assistant service functions
+                        const mockToolCall = {
+                            id: 'phone_call',
+                            type: 'function',
+                            function: {
+                                name,
+                                arguments: JSON.stringify(parameters)
+                            }
+                        };
+                        result = await this.assistantService.executeTool(mockToolCall, userId);
+                    }
             }
             if (result.status === 'error') {
                 return {
@@ -126,6 +134,19 @@ class VapiService {
         // Log the call for analytics
         await DatabaseService_1.DatabaseService.getInstance().logAudit(restaurantId, null, 'phone_call_ended', 'call', callId, { duration, endedReason, customerNumber });
         logger_1.logger.info(`Call ${callId} ended: ${endedReason}, duration: ${duration}s`);
+        // Persist a call log row (used by Voice Hub to match inbound calls to orders)
+        if (callId) {
+            await VoiceOrderingService_1.VoiceOrderingService.getInstance().logCall({
+                callId,
+                fromPhone: customerNumber,
+                transcript: message.transcript,
+                summary: {
+                    duration,
+                    endedReason,
+                    customerNumber
+                }
+            });
+        }
         return { result: 'call logged' };
     }
     async logTranscript(message) {
@@ -134,7 +155,14 @@ class VapiService {
         const transcript = message.transcript;
         // Log for training/improvement purposes
         logger_1.logger.info(`Call ${callId} transcript:`, transcript);
-        // Could store in database for analytics if needed
+        // Store transcript so Voice Hub can show it (and match to orders)
+        if (callId && transcript) {
+            await VoiceOrderingService_1.VoiceOrderingService.getInstance().logCall({
+                callId,
+                fromPhone: customerNumber,
+                transcript
+            });
+        }
     }
     getPhoneUserId(phoneNumber) {
         // Create a consistent user ID for phone orders
@@ -191,29 +219,35 @@ class VapiService {
         }
         switch (result.type) {
             case 'get_orders':
-                const orders = result.details;
-                if (!orders || orders.length === 0) {
-                    return "There are no orders matching that criteria right now.";
+                {
+                    const orders = result.details;
+                    if (!orders || orders.length === 0) {
+                        return "There are no orders matching that criteria right now.";
+                    }
+                    return `I found ${orders.length} order${orders.length === 1 ? '' : 's'}. ${result.description}`;
                 }
-                return `I found ${orders.length} order${orders.length === 1 ? '' : 's'}. ${result.description}`;
             case 'update_order_status':
                 return `Got it! ${result.description}. The order has been updated.`;
             case 'set_item_availability':
                 return `Done! ${result.description}. This change will sync to all delivery platforms within 30 seconds.`;
             case 'get_inventory':
-                const items = result.details;
-                if (!items || items.length === 0) {
-                    return "I didn't find any inventory items matching that search.";
+                {
+                    const items = result.details;
+                    if (!items || items.length === 0) {
+                        return "I didn't find any inventory items matching that search.";
+                    }
+                    return `I found ${items.length} inventory item${items.length === 1 ? '' : 's'} matching your search.`;
                 }
-                return `I found ${items.length} inventory item${items.length === 1 ? '' : 's'} matching your search.`;
             case 'adjust_inventory':
                 return `Perfect! ${result.description}`;
             case 'get_tasks':
-                const tasks = result.details;
-                if (!tasks || tasks.length === 0) {
-                    return "There are no tasks matching that criteria.";
+                {
+                    const tasks = result.details;
+                    if (!tasks || tasks.length === 0) {
+                        return "There are no tasks matching that criteria.";
+                    }
+                    return `I found ${tasks.length} task${tasks.length === 1 ? '' : 's'} matching your criteria.`;
                 }
-                return `I found ${tasks.length} task${tasks.length === 1 ? '' : 's'} matching your criteria.`;
             case 'complete_task':
                 return `Excellent! I've marked that task as completed. ${result.description}`;
             default:
@@ -222,7 +256,7 @@ class VapiService {
     }
     // Helper method to get enhanced system prompt for phone calls
     // Handle placing a new order via phone
-    async handlePlaceOrder(parameters, userId) {
+    async handlePlaceOrder(parameters, _userId) {
         try {
             const voiceService = VoiceOrderingService_1.VoiceOrderingService.getInstance();
             const result = await voiceService.createOrder(parameters);
@@ -252,7 +286,7 @@ class VapiService {
         }
     }
     // Handle menu information requests
-    async handleGetMenuInfo(parameters, userId) {
+    async handleGetMenuInfo(parameters, _userId) {
         try {
             const voiceService = VoiceOrderingService_1.VoiceOrderingService.getInstance();
             const items = voiceService.searchMenu(parameters.itemName || parameters.category || '');
@@ -283,7 +317,7 @@ class VapiService {
         }
     }
     // Handle order status checks
-    async handleCheckOrderStatus(parameters, userId) {
+    async handleCheckOrderStatus(parameters, _userId) {
         try {
             const { orderId, phoneNumber } = parameters;
             const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();

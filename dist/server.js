@@ -92,6 +92,7 @@ async function initializeServer() {
         const { default: integrationsRoutes } = await Promise.resolve().then(() => __importStar(require('./routes/integrations')));
         const { default: vapiRoutes } = await Promise.resolve().then(() => __importStar(require('./routes/vapi')));
         const { default: voiceRoutes } = await Promise.resolve().then(() => __importStar(require('./routes/voice')));
+        const { default: voiceHubRoutes } = await Promise.resolve().then(() => __importStar(require('./routes/voice-hub')));
         const { default: adminRoutes } = await Promise.resolve().then(() => __importStar(require('./routes/admin')));
         const { default: notificationsRoutes } = await Promise.resolve().then(() => __importStar(require('./routes/notifications')));
         // API Routes
@@ -123,8 +124,13 @@ async function initializeServer() {
         app.use('/api/restaurant', auth_1.requireAuth, restaurantRoutes);
         app.use('/api/integrations', auth_1.requireAuth, integrationsRoutes);
         app.use('/api/notifications', auth_1.requireAuth, notificationsRoutes);
+        app.use('/api/voice-hub', voiceHubRoutes);
         // 404 handler (must be last)
         app.use((req, res, next) => {
+            // If something already started the response, don't overwrite it with a 404.
+            // This protects us from any middleware that mistakenly calls `next()` after sending.
+            if (res.headersSent)
+                return next();
             res.status(404).json({
                 error: 'Not Found',
                 message: `Route ${req.method} ${req.originalUrl} not found`
@@ -253,6 +259,15 @@ setInterval(() => {
     for (const [key, value] of cache.entries()) {
         if (now - value.timestamp > CACHE_TTL) {
             cache.delete(key);
+        }
+    }
+    // Safety valve: ensure cache can't grow unbounded even if cleanup misses entries.
+    if (cache.size > MAX_CACHE_SIZE) {
+        const entries = Array.from(cache.entries());
+        entries.sort((a, b) => (a[1]?.timestamp || 0) - (b[1]?.timestamp || 0)); // oldest first
+        const toRemove = cache.size - MAX_CACHE_SIZE;
+        for (let i = 0; i < toRemove; i++) {
+            cache.delete(entries[i][0]);
         }
     }
 }, 5 * 60 * 1000); // Clean every 5 minutes

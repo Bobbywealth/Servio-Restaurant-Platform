@@ -77,7 +77,7 @@ router.get('/profile', (0, errorHandler_1.asyncHandler)(async (req, res) => {
         pickup_enabled: Boolean(restaurant.pickup_enabled),
         is_active: Boolean(restaurant.is_active)
     };
-    res.json({
+    return res.json({
         success: true,
         data: formattedRestaurant
     });
@@ -90,7 +90,7 @@ router.put('/profile', upload.fields([
     { name: 'logo', maxCount: 1 },
     { name: 'coverImage', maxCount: 1 }
 ]), (0, errorHandler_1.asyncHandler)(async (req, res) => {
-    const { name, description, cuisineType, priceRange, phone, email, website, address, socialLinks, operatingHours, onlineOrderingEnabled, deliveryEnabled, pickupEnabled, deliveryRadius, deliveryFee, minimumOrder, customDomain } = req.body;
+    const { name, slug, description, cuisineType, priceRange, phone, email, website, address, socialLinks, operatingHours, onlineOrderingEnabled, deliveryEnabled, pickupEnabled, deliveryRadius, deliveryFee, minimumOrder, customDomain } = req.body;
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
     const restaurantId = req.user?.restaurantId;
     const existingRestaurant = await db.get('SELECT * FROM restaurants WHERE id = ?', [restaurantId]);
@@ -135,6 +135,26 @@ router.put('/profile', upload.fields([
     if (name !== undefined) {
         updateFields.push('name = ?');
         updateValues.push(name);
+    }
+    if (slug !== undefined) {
+        // Validate slug format (lowercase, alphanumeric with hyphens)
+        const normalizedSlug = slug.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+        if (!normalizedSlug) {
+            return res.status(400).json({
+                success: false,
+                error: { message: 'Invalid slug format' }
+            });
+        }
+        // Check for uniqueness
+        const existingSlug = await db.get('SELECT id FROM restaurants WHERE slug = ? AND id != ?', [normalizedSlug, restaurantId]);
+        if (existingSlug) {
+            return res.status(409).json({
+                success: false,
+                error: { message: 'This slug is already taken by another restaurant' }
+            });
+        }
+        updateFields.push('slug = ?');
+        updateValues.push(normalizedSlug);
     }
     if (description !== undefined) {
         updateFields.push('description = ?');
@@ -214,7 +234,7 @@ router.put('/profile', upload.fields([
   `, [restaurantId]);
     await DatabaseService_1.DatabaseService.getInstance().logAudit(restaurantId, req.user?.id || 'system', 'update_restaurant_profile', 'restaurant', restaurantId, { name, description, cuisineType });
     logger_1.logger.info(`Restaurant profile updated: ${name || existingRestaurant.name}`);
-    res.json({
+    return res.json({
         success: true,
         data: {
             ...updatedRestaurant,

@@ -50,9 +50,10 @@ router.get('/today', (0, errorHandler_1.asyncHandler)(async (req, res) => {
 router.get('/', (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const { status, type, assignedTo } = req.query;
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
+    const restaurantId = req.user?.restaurantId;
     let query = 'SELECT * FROM tasks';
-    const params = [];
-    const conditions = [];
+    const params = [restaurantId];
+    const conditions = ['restaurant_id = ?'];
     if (status) {
         conditions.push('status = ?');
         params.push(status);
@@ -83,7 +84,7 @@ router.post('/:id/complete', (0, errorHandler_1.asyncHandler)(async (req, res) =
     const { id } = req.params;
     const { userId } = req.body;
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
-    const task = await db.get('SELECT * FROM tasks WHERE id = ?', [id]);
+    const task = await db.get('SELECT * FROM tasks WHERE id = ? AND restaurant_id = ?', [id, req.user?.restaurantId]);
     if (!task) {
         return res.status(404).json({
             success: false,
@@ -125,7 +126,7 @@ router.post('/:id/start', (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const { id } = req.params;
     const { userId } = req.body;
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
-    const task = await db.get('SELECT * FROM tasks WHERE id = ?', [id]);
+    const task = await db.get('SELECT * FROM tasks WHERE id = ? AND restaurant_id = ?', [id, req.user?.restaurantId]);
     if (!task) {
         return res.status(404).json({
             success: false,
@@ -210,10 +211,11 @@ router.post('/', (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const taskId = `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     await db.run(`
     INSERT INTO tasks (
-      id, title, description, type, assigned_to, due_date, status
-    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      id, restaurant_id, title, description, type, assigned_to, due_date, status
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `, [
         taskId,
+        req.user?.restaurantId,
         title,
         description || null,
         type,
