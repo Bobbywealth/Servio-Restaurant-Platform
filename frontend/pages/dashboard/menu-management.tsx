@@ -21,7 +21,8 @@ import {
   Clock,
   DollarSign,
   Tag,
-  X
+  X,
+  Copy
 } from 'lucide-react';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import { useUser } from '../../contexts/UserContext';
@@ -75,6 +76,8 @@ const MenuManagement: React.FC = () => {
   const { user } = useUser();
   const [categories, setCategories] = useState<CategoryWithItems[]>([]);
   const [loading, setLoading] = useState(true);
+  const [restaurantSlug, setRestaurantSlug] = useState<string | null>(null);
+  const [publicOrderUrl, setPublicOrderUrl] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
@@ -178,6 +181,62 @@ const MenuManagement: React.FC = () => {
   useEffect(() => {
     loadMenuData();
   }, [loadMenuData]);
+
+  // Load restaurant slug for public ordering link
+  useEffect(() => {
+    if (!user?.restaurantId) return;
+    let cancelled = false;
+
+    const run = async () => {
+      try {
+        const resp = await api.get(`/api/restaurants/${user.restaurantId}`);
+        const slug = resp.data?.data?.slug as string | undefined;
+        if (cancelled) return;
+        if (slug) {
+          setRestaurantSlug(slug);
+          if (typeof window !== 'undefined') {
+            setPublicOrderUrl(`${window.location.origin}/r/${slug}`);
+          }
+        } else {
+          setRestaurantSlug(null);
+          setPublicOrderUrl('');
+        }
+      } catch {
+        if (cancelled) return;
+        setRestaurantSlug(null);
+        setPublicOrderUrl('');
+      }
+    };
+
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.restaurantId]);
+
+  const copyPublicLink = async () => {
+    if (!publicOrderUrl) return;
+    try {
+      await navigator.clipboard.writeText(publicOrderUrl);
+      toast.success('Public ordering link copied');
+    } catch {
+      // Fallback: attempt to copy via selection API
+      try {
+        const el = document.getElementById('public-order-url') as HTMLInputElement | null;
+        if (el) {
+          el.focus();
+          el.select();
+          const ok = document.execCommand('copy');
+          if (ok) toast.success('Public ordering link copied');
+          else toast.error('Copy failed—select and copy manually');
+        } else {
+          toast.error('Copy failed—select and copy manually');
+        }
+      } catch {
+        toast.error('Copy failed—select and copy manually');
+      }
+    }
+  };
 
   const openAddCategoryModal = () => {
     setNewCategory({ name: '', description: '', sortOrder: 0 });
@@ -428,6 +487,53 @@ const MenuManagement: React.FC = () => {
                   <Plus className="w-4 h-4" />
                   Add Item
                 </button>
+              </div>
+            </div>
+
+            {/* Public ordering link (shareable) */}
+            <div className="mt-4">
+              <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
+                <div className="min-w-0">
+                  <div className="text-xs font-semibold tracking-widest uppercase text-gray-500 dark:text-gray-400">
+                    Public ordering link
+                  </div>
+                  <div className="mt-2 flex items-center gap-2">
+                    <input
+                      id="public-order-url"
+                      readOnly
+                      value={publicOrderUrl || (restaurantSlug ? `/r/${restaurantSlug}` : '')}
+                      placeholder="No restaurant slug found"
+                      className="w-full lg:w-[520px] px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 font-mono text-sm"
+                    />
+                  </div>
+                  <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                    Share this link with customers to place orders for your menu.
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={copyPublicLink}
+                    disabled={!publicOrderUrl}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    title={publicOrderUrl ? 'Copy link' : 'Link unavailable'}
+                  >
+                    <Copy className="w-4 h-4" />
+                    Copy
+                  </button>
+                  <a
+                    href={publicOrderUrl || '#'}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => {
+                      if (!publicOrderUrl) e.preventDefault();
+                    }}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors ${!publicOrderUrl ? 'opacity-50 pointer-events-none' : ''}`}
+                    title="Open public menu"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                    Open
+                  </a>
+                </div>
               </div>
             </div>
 

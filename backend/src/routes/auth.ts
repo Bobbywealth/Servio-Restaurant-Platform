@@ -27,6 +27,31 @@ function safeUser(row: any) {
   };
 }
 
+function slugify(input: string) {
+  const base = String(input || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9-]/g, '')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return base || 'restaurant';
+}
+
+async function generateUniqueSlug(db: any, name: string) {
+  const base = slugify(name).slice(0, 64);
+  let candidate = base;
+  // Try base, then base-2..base-50, then random suffix fallback.
+  for (let i = 0; i < 50; i++) {
+    const exists = await db.get('SELECT id FROM restaurants WHERE slug = ? LIMIT 1', [candidate]);
+    if (!exists) return candidate;
+    candidate = `${base}-${i + 2}`.slice(0, 64);
+  }
+  // Random suffix fallback (keeps uniqueness under heavy collisions)
+  const suffix = Math.random().toString(36).slice(2, 7);
+  return `${base}-${suffix}`.slice(0, 64);
+}
+
 router.post(
   '/signup',
   asyncHandler(async (req: Request, res: Response) => {
@@ -39,7 +64,7 @@ router.post(
     
     // 1. Create Restaurant
     const restaurantId = uuidv4();
-    const slug = restaurantName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+    const slug = await generateUniqueSlug(db, restaurantName);
     await db.run(
       'INSERT INTO restaurants (id, name, slug) VALUES (?, ?, ?)',
       [restaurantId, restaurantName, slug]
