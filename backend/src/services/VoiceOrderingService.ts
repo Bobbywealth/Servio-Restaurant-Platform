@@ -7,7 +7,24 @@ import { SmsService } from './SmsService';
 import { eventBus } from '../events/bus';
 import { logger } from '../utils/logger';
 
-const MENU_DATA_PATH = path.join(process.cwd(), 'backend/data/menu/sasheys_menu_vapi.json');
+// Try multiple paths for different environments
+const MENU_DATA_PATHS = [
+  path.join(process.cwd(), 'backend/data/menu/sasheys_menu_vapi.json'), // Local dev
+  path.join(process.cwd(), 'data/menu/sasheys_menu_vapi.json'),          // Production (Render)
+  path.join(__dirname, '../data/menu/sasheys_menu_vapi.json'),           // Compiled dist
+  path.join(__dirname, '../../data/menu/sasheys_menu_vapi.json')         // Alt path
+];
+
+function findMenuDataPath(): string | null {
+  for (const p of MENU_DATA_PATHS) {
+    if (fs.existsSync(p)) {
+      return p;
+    }
+  }
+  return null;
+}
+
+const MENU_DATA_PATH = findMenuDataPath();
 
 export class VoiceOrderingService {
   private static instance: VoiceOrderingService;
@@ -26,9 +43,14 @@ export class VoiceOrderingService {
 
   private loadMenuData() {
     try {
-      if (fs.existsSync(MENU_DATA_PATH)) {
+      if (MENU_DATA_PATH && fs.existsSync(MENU_DATA_PATH)) {
+        logger.info(`Loading menu from: ${MENU_DATA_PATH}`);
         const raw = fs.readFileSync(MENU_DATA_PATH, 'utf8');
         this.menuData = JSON.parse(raw);
+        logger.info(`Menu loaded successfully with ${this.menuData?.categories?.length || 0} categories`);
+      } else {
+        logger.warn(`Menu data file not found. Tried paths:`, MENU_DATA_PATHS);
+        logger.warn('Vapi voice ordering will not work without menu data!');
       }
     } catch (error) {
       logger.error('Failed to load menu data:', error);
