@@ -1,6 +1,9 @@
 import { Router, Request, Response } from 'express';
 import { VapiService, VapiWebhookPayload } from '../services/VapiService';
 import { logger } from '../utils/logger';
+import { DatabaseService } from '../services/DatabaseService';
+import { requirePlatformAdmin } from '../middleware/adminAuth';
+import { requireAuth } from '../middleware/auth';
 
 const router = Router();
 const vapiService = new VapiService();
@@ -333,6 +336,38 @@ router.get('/assistant-config', async (req: Request, res: Response) => {
     logger.error('Error getting assistant config:', error);
     res.status(500).json({ error: 'Failed to get assistant configuration' });
   }
+});
+
+/**
+ * Platform-admin diagnostic: resolve restaurant by phoneNumberId.
+ */
+router.post('/debug/resolve-restaurant', requireAuth, requirePlatformAdmin, async (req: Request, res: Response) => {
+  const { phoneNumberId } = req.body || {};
+  if (!phoneNumberId) {
+    return res.status(400).json({ error: 'phoneNumberId is required' });
+  }
+
+  const db = DatabaseService.getInstance().getDatabase();
+  const restaurants = await db.all('SELECT id, name, settings FROM restaurants WHERE is_active = TRUE');
+  const matches: Array<{ restaurantId: string; restaurantName: string }> = [];
+
+  for (const r of restaurants) {
+    let settings: any = {};
+    try {
+      settings = JSON.parse(r.settings || '{}');
+    } catch {
+      settings = {};
+    }
+    if (settings?.vapi?.phoneNumberId === phoneNumberId) {
+      matches.push({ restaurantId: r.id, restaurantName: r.name });
+    }
+  }
+
+  if (matches.length === 0) {
+    return res.status(404).json({ error: 'No restaurant matched that phoneNumberId' });
+  }
+
+  res.json({ success: true, matches });
 });
 
 // Health check endpoint

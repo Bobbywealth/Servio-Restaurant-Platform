@@ -2,6 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react'
 import Head from 'next/head'
 import { motion, AnimatePresence } from 'framer-motion'
 import dynamic from 'next/dynamic'
+import { useUser } from '../../../contexts/UserContext'
+import { api } from '../../../lib/api'
 import { 
   FileText, 
   Plus, 
@@ -58,6 +60,7 @@ interface Receipt {
 }
 
 export default function ReceiptsPage() {
+  const { user } = useUser()
   const [receipts, setReceipts] = useState<Receipt[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -73,13 +76,14 @@ export default function ReceiptsPage() {
   const [newItem, setNewItem] = useState({ itemName: '', quantity: 1, unitCost: 0, inventoryItemId: '' })
   const [invSearch, setInvSearch] = useState('')
 
-  // Mock restaurant ID for v1 (would come from context in prod)
-  const restaurantId = 'demo-restaurant-id'
+  const restaurantId = user?.restaurantId
 
   useEffect(() => {
+    if (!restaurantId) return
     fetchReceipts()
     fetchInventory()
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [restaurantId])
 
   useEffect(() => {
     if (selectedReceipt) {
@@ -90,11 +94,10 @@ export default function ReceiptsPage() {
   const fetchReceipts = async () => {
     try {
       setLoading(true)
-      const res = await fetch(`/api/receipts/list?restaurantId=${restaurantId}`, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` }
-      })
-      const data = await res.json()
-      if (data.success) setReceipts(data.data.receipts)
+      if (!restaurantId) return
+      const res = await api.get('/api/receipts/list')
+      const data = res.data
+      if (data?.success) setReceipts(data.data.receipts)
     } catch (error) {
       console.error('Failed to fetch receipts:', error)
     } finally {
@@ -104,11 +107,10 @@ export default function ReceiptsPage() {
 
   const fetchInventory = async () => {
     try {
-      const res = await fetch(`/api/inventory?restaurantId=${restaurantId}`, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` }
-      })
-      const data = await res.json()
-      if (data.success) setInventoryItems(data.data.items || [])
+      if (!restaurantId) return
+      const res = await api.get('/api/inventory/search')
+      const data = res.data
+      if (data?.success) setInventoryItems(data.data || [])
     } catch (error) {
       console.error('Failed to fetch inventory:', error)
     }
@@ -116,11 +118,9 @@ export default function ReceiptsPage() {
 
   const fetchLineItems = async (id: string) => {
     try {
-      const res = await fetch(`/api/receipts/${id}/items`, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` }
-      })
-      const data = await res.json()
-      if (data.success) setLineItems(data.data.items)
+      const res = await api.get(`/api/receipts/${id}/items`)
+      const data = res.data
+      if (data?.success) setLineItems(data.data.items)
     } catch (error) {
       console.error('Failed to fetch line items:', error)
     }
@@ -129,15 +129,8 @@ export default function ReceiptsPage() {
   const handleAddLineItem = async () => {
     if (!selectedReceipt || !newItem.itemName) return
     try {
-      const res = await fetch(`/api/receipts/${selectedReceipt.id}/items`, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('accessToken')}` 
-        },
-        body: JSON.stringify(newItem)
-      })
-      if (res.ok) {
+      const res = await api.post(`/api/receipts/${selectedReceipt.id}/items`, newItem)
+      if (res.status < 400) {
         setIsAddingItem(false)
         setNewItem({ itemName: '', quantity: 1, unitCost: 0, inventoryItemId: '' })
         fetchLineItems(selectedReceipt.id)
@@ -150,10 +143,7 @@ export default function ReceiptsPage() {
   const handleDeleteItem = async (itemId: string) => {
     if (!confirm('Remove this line item?')) return
     try {
-      await fetch(`/api/receipts/items/${itemId}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` }
-      })
+      await api.delete(`/api/receipts/items/${itemId}`)
       fetchLineItems(selectedReceipt!.id)
     } catch (error) {
       console.error('Failed to delete item:', error)
@@ -176,12 +166,9 @@ export default function ReceiptsPage() {
     if (!confirm(`Apply the following to inventory?\n\n${preview}`)) return
 
     try {
-      const res = await fetch(`/api/receipts/${selectedReceipt.id}/apply`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` }
-      })
-      const data = await res.json()
-      if (data.success) {
+      const res = await api.post(`/api/receipts/${selectedReceipt.id}/apply`)
+      const data = res.data
+      if (data?.success) {
         alert(data.data.message)
         setSelectedReceipt(null)
         fetchReceipts()
@@ -204,20 +191,12 @@ export default function ReceiptsPage() {
     try {
       setUploadProgress('generating')
       
-      const createRes = await fetch('/api/receipts/create-upload', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
-        },
-        body: JSON.stringify({
-          fileName: uploadFile.name,
-          contentType: uploadFile.type,
-          restaurantId
-        })
+      const createRes = await api.post('/api/receipts/create-upload', {
+        fileName: uploadFile.name,
+        contentType: uploadFile.type,
+        restaurantId
       })
-      
-      const createData = await createRes.json()
+      const createData = createRes.data
       if (!createData.success) throw new Error(createData.error?.message || 'Failed to initiate upload')
       
       const { receiptId, uploadUrl } = createData.data
@@ -232,16 +211,8 @@ export default function ReceiptsPage() {
       if (!uploadRes.ok) throw new Error('Failed to upload file to storage')
 
       setUploadProgress('confirming')
-      const confirmRes = await fetch(`/api/receipts/${receiptId}/confirm-upload`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
-        },
-        body: JSON.stringify({ fileSize: uploadFile.size })
-      })
-
-      const confirmData = await confirmRes.json()
+      const confirmRes = await api.post(`/api/receipts/${receiptId}/confirm-upload`, { fileSize: uploadFile.size })
+      const confirmData = confirmRes.data
       if (!confirmData.success) throw new Error(confirmData.error?.message || 'Failed to confirm upload')
 
       setUploadProgress('success')

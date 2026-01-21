@@ -36,7 +36,7 @@ export class JobRunnerService {
   private static instance: JobRunnerService;
   private handlers: Map<string, JobHandler> = new Map();
   private isRunning: boolean = false;
-  private pollInterval: NodeJS.Timeout | null = null;
+  private pollInterval: ReturnType<typeof setInterval> | null = null;
 
   private constructor() {}
 
@@ -101,7 +101,7 @@ export class JobRunnerService {
       if (jobs.length > 0) {
         logger.info(`Found ${jobs.length} jobs to process`);
         for (const job of jobs) {
-          // Parse JSON fields if they are strings (SQLite)
+          // Parse JSON fields if they are strings
           if (typeof job.payload === 'string') job.payload = JSON.parse(job.payload);
           if (typeof job.metadata === 'string') job.metadata = JSON.parse(job.metadata);
           

@@ -21,7 +21,6 @@ import { registerServices } from './bootstrap/services';
 
 // Security & Monitoring
 import { 
-  globalRateLimiter, 
   authRateLimiter, 
   apiRateLimiter,
   heavyOperationRateLimiter 
@@ -39,7 +38,7 @@ import { getMetricsService } from './services/MetricsService';
 import { setupAlertHandlers } from './config/alerts';
 import { container } from './container/ServiceContainer';
 import { containerMiddleware } from './middleware/container';
-import { ensureDemoUsers } from './bootstrap/ensureDemoUsers';
+import { eventBus } from './events/bus';
 
 const app = express();
 const server = createServer(app);
@@ -78,9 +77,6 @@ async function initializeServer() {
     await DatabaseService.initialize();
     logger.info('Database initialized successfully');
 
-    // Ensure demo accounts exist for demo environments
-    await ensureDemoUsers();
-
     // Initialize services
     initializeNotifications(io);
     registerServices();
@@ -89,7 +85,7 @@ async function initializeServer() {
     setupAlertHandlers();
     
     // Initialize metrics service
-    const metrics = getMetricsService();
+    getMetricsService();
     logger.info('Metrics service initialized');
 
     // Now load routes after database is ready
@@ -112,6 +108,7 @@ async function initializeServer() {
     const { default: integrationsRoutes } = await import('./routes/integrations');
     const { default: vapiRoutes } = await import('./routes/vapi');
     const { default: voiceRoutes } = await import('./routes/voice');
+    const { default: voiceHubRoutes } = await import('./routes/voice-hub');
     const { default: adminRoutes } = await import('./routes/admin');
     const { default: bookingsRoutes } = await import('./routes/bookings');
     const { default: notificationsRoutes } = await import('./routes/notifications');
@@ -159,9 +156,10 @@ async function initializeServer() {
     app.use('/api/restaurants', requireAuth, apiRateLimiter, restaurantSettingsRoutes);
     app.use('/api/integrations', requireAuth, apiRateLimiter, integrationsRoutes);
     app.use('/api/notifications', requireAuth, apiRateLimiter, notificationsRoutes);
+    app.use('/api/voice-hub', requireAuth, apiRateLimiter, voiceHubRoutes);
 
     // 404 handler (must be last)
-    app.use((req, res, next) => {
+    app.use((req, res) => {
       res.status(404).json({
         error: 'Not Found',
         message: `Route ${req.method} ${req.originalUrl} not found`
@@ -330,6 +328,23 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     logger.info(`Client disconnected: ${socket.id}`);
   });
+});
+
+// Bridge domain events to realtime order updates (so phone/Vapi orders appear instantly).
+eventBus.on('order.created_vapi', async (event: any) => {
+  try {
+    const payload = {
+      orderId: event?.payload?.orderId,
+      totalAmount: event?.payload?.totalAmount,
+      channel: event?.payload?.channel || 'vapi',
+      status: 'received',
+      createdAt: event?.occurredAt || new Date().toISOString()
+    };
+    io.to(`restaurant-${event.restaurantId}`).emit('new-order', payload);
+    io.to(`restaurant-${event.restaurantId}`).emit('order:new', payload);
+  } catch (err) {
+    logger.error('Failed to emit realtime Vapi order event', { err });
+  }
 });
 
 // Make io available to routes

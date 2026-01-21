@@ -183,6 +183,12 @@ router.post('/:id/status', requireAuth, requirePermission('orders:write'), async
     status
   });
 
+  const order = await orderService.getOrderById(id);
+  const io = req.app.get('socketio');
+  if (io && order?.restaurantId) {
+    io.to(`restaurant-${order.restaurantId}`).emit('order:updated', order);
+  }
+
   res.json({ success: true, data });
 }));
 
@@ -232,6 +238,10 @@ router.post('/:id/accept', requireAuth, requirePermission('orders:write'), async
 
   // Return updated order
   const order = await orderService.getOrderById(id);
+  const io = req.app.get('socketio');
+  if (io && order?.restaurantId) {
+    io.to(`restaurant-${order.restaurantId}`).emit('order:updated', order);
+  }
 
   res.json({
     success: true,

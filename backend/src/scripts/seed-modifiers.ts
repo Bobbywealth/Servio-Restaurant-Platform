@@ -11,16 +11,14 @@ async function seedModifiers() {
   const dbService = DatabaseService.getInstance();
   const db = dbService.getDatabase();
   
-  // Get the demo restaurant ID - try multiple possible slugs
-  let restaurant = await db.get('SELECT id FROM restaurants WHERE slug = ? LIMIT 1', ['demo-restaurant-1']);
+  // Prefer configured/default restaurant slug; fall back to first restaurant.
+  const preferredSlug = process.env.DEFAULT_RESTAURANT_SLUG || DatabaseService.DEFAULT_RESTAURANT_SLUG;
+  let restaurant = await db.get('SELECT id FROM restaurants WHERE slug = ? LIMIT 1', [preferredSlug]);
   if (!restaurant) {
-    restaurant = await db.get('SELECT id FROM restaurants WHERE slug = ? LIMIT 1', ['demo-restaurant']);
+    restaurant = await db.get('SELECT id FROM restaurants ORDER BY created_at ASC LIMIT 1');
   }
   if (!restaurant) {
-    restaurant = await db.get('SELECT id FROM restaurants WHERE name LIKE ? LIMIT 1', ['%Demo%']);
-  }
-  if (!restaurant) {
-    console.error('❌ Demo restaurant not found. Please create a restaurant first.');
+    console.error('❌ No restaurant found. Please create a restaurant first.');
     return;
   }
   

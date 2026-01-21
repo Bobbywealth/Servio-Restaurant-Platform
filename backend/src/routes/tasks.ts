@@ -87,7 +87,6 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
  */
 router.post('/:id/complete', asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { userId } = req.body;
 
   const db = DatabaseService.getInstance().getDatabase();
 
@@ -148,7 +147,6 @@ router.post('/:id/complete', asyncHandler(async (req: Request, res: Response) =>
  */
 router.post('/:id/start', asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { userId } = req.body;
 
   const db = DatabaseService.getInstance().getDatabase();
 
@@ -244,7 +242,7 @@ router.get('/stats', asyncHandler(async (req: Request, res: Response) => {
  * Create a new task
  */
 router.post('/', asyncHandler(async (req: Request, res: Response) => {
-  const { title, description, type = 'one_time', assignedTo, dueDate, userId } = req.body;
+  const { title, description, type = 'one_time', assignedTo, dueDate } = req.body;
 
   if (!title) {
     return res.status(400).json({

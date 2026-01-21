@@ -7,7 +7,7 @@
 -- MENU CATEGORY ENHANCEMENTS
 -- ============================================================================
 
--- Add image field to menu categories (SQLite compatible - no IF NOT EXISTS)
+-- Add image field to menu categories
 ALTER TABLE menu_categories ADD COLUMN image VARCHAR(500);
 ALTER TABLE menu_categories ADD COLUMN image_alt_text VARCHAR(255);
 
@@ -89,5 +89,5 @@ CREATE INDEX idx_menu_categories_image ON menu_categories(image);
 -- ============================================================================
 -- SAMPLE DATA FOR MODIFIERS
 -- ============================================================================
--- TODO: Sample data creation removed for SQLite compatibility
+-- TODO: Sample data creation removed
 -- Can be added later using simple INSERT statements if needed

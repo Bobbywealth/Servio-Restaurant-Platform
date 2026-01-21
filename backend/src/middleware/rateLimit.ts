@@ -58,16 +58,16 @@ function createLimiter(options: { windowMs: number; max: number }) {
   });
 }
 
-// Global rate limiter - 100 requests per 15 minutes
+// Global rate limiter - 100 requests per 15 minutes (5000 in dev mode)  
 export const globalRateLimiter = createLimiter({
   windowMs: 15 * 60 * 1000,
-  max: 100
+  max: process.env.NODE_ENV === 'development' ? 5000 : 100
 });
 
-// Auth endpoints - 10 requests per 15 minutes
+// Auth endpoints - 10 requests per 15 minutes (1000 in dev mode)
 export const authRateLimiter = createLimiter({
   windowMs: 15 * 60 * 1000,
-  max: 10
+  max: process.env.NODE_ENV === 'development' ? 1000 : 10
 });
 
 // API endpoints - 100 requests per minute

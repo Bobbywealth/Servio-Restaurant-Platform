@@ -133,7 +133,7 @@ export default function TabletHistoryPage() {
     <TabletLayout title="Order History" onRefresh={fetchOrders}>
       {!canReadOrders ? (
         <div className="bg-red-500/15 border border-red-500/30 text-red-200 rounded-2xl p-4">
-          This account doesn't have access to view order history.
+          This account doesn&apos;t have access to view order history.
         </div>
       ) : (
         <>

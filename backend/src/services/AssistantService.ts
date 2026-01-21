@@ -163,8 +163,7 @@ export class AssistantService {
     }
   }
 
-  private getLastActivityTime(userId: string): number {
-    const history = this.conversationHistory.get(userId) || [];
+  private getLastActivityTime(_userId: string): number {
     // For simplicity, we'll use current time minus conversation timeout
     // In a real implementation, you'd store timestamps with each message
     return Date.now();
@@ -484,7 +483,10 @@ export class AssistantService {
 
   private async getSystemPrompt(userId: string): Promise<string> {
     const user = await this.db.get('SELECT * FROM users WHERE id = ?', [userId]);
-    const restaurantId = user?.restaurant_id || 'demo-restaurant-1';
+    const restaurantId =
+      user?.restaurant_id ||
+      process.env.DEFAULT_RESTAURANT_ID ||
+      DatabaseService.DEFAULT_RESTAURANT_ID;
 
     // Get cached restaurant context
     const context = await this.getRestaurantContext(restaurantId);
@@ -859,7 +861,10 @@ Remember: You're not just executing commands - you're a smart restaurant assista
   private async handleGetOrders(args: any, userId: string): Promise<AssistantResponse['actions'][0]> {
     const { status, limit = 10 } = args;
     const user = await this.db.get('SELECT restaurant_id FROM users WHERE id = ?', [userId]);
-    const restaurantId = user?.restaurant_id || 'demo-restaurant-1';
+    const restaurantId =
+      user?.restaurant_id ||
+      process.env.DEFAULT_RESTAURANT_ID ||
+      DatabaseService.DEFAULT_RESTAURANT_ID;
 
     let query = 'SELECT * FROM orders WHERE restaurant_id = ?';
     const params: any[] = [restaurantId];
@@ -895,7 +900,10 @@ Remember: You're not just executing commands - you're a smart restaurant assista
   private async handleGetMenuItemDetails(args: any, userId: string): Promise<AssistantResponse['actions'][0]> {
     const { itemName } = args;
     const user = await this.db.get('SELECT restaurant_id FROM users WHERE id = ?', [userId]);
-    const restaurantId = user?.restaurant_id || 'demo-restaurant-1';
+    const restaurantId =
+      user?.restaurant_id ||
+      process.env.DEFAULT_RESTAURANT_ID ||
+      DatabaseService.DEFAULT_RESTAURANT_ID;
 
     // Find menu item with fuzzy matching
     const allMenuItems = await this.db.all(
@@ -959,7 +967,10 @@ Remember: You're not just executing commands - you're a smart restaurant assista
   private async handleSearchMenuWithModifiers(args: any, userId: string): Promise<AssistantResponse['actions'][0]> {
     const { query, includeModifiers = true } = args;
     const user = await this.db.get('SELECT restaurant_id FROM users WHERE id = ?', [userId]);
-    const restaurantId = user?.restaurant_id || 'demo-restaurant-1';
+    const restaurantId =
+      user?.restaurant_id ||
+      process.env.DEFAULT_RESTAURANT_ID ||
+      DatabaseService.DEFAULT_RESTAURANT_ID;
 
     // Search menu items
     const q = `%${query.toLowerCase().trim()}%`;
@@ -1053,7 +1064,10 @@ Remember: You're not just executing commands - you're a smart restaurant assista
   private async handleUpdateOrderStatus(args: any, userId: string): Promise<AssistantResponse['actions'][0]> {
     const { orderId, status } = args;
     const user = await this.db.get('SELECT restaurant_id FROM users WHERE id = ?', [userId]);
-    const restaurantId = user?.restaurant_id || 'demo-restaurant-1';
+    const restaurantId =
+      user?.restaurant_id ||
+      process.env.DEFAULT_RESTAURANT_ID ||
+      DatabaseService.DEFAULT_RESTAURANT_ID;
 
     const result = await this.db.run(
       'UPDATE orders SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND restaurant_id = ?',
@@ -1104,7 +1118,10 @@ Remember: You're not just executing commands - you're a smart restaurant assista
   private async handleSetItemAvailability(args: any, userId: string): Promise<AssistantResponse['actions'][0]> {
     const { itemName, available, channels = ['all'] } = args;
     const user = await this.db.get('SELECT restaurant_id FROM users WHERE id = ?', [userId]);
-    const restaurantId = user?.restaurant_id || 'demo-restaurant-1';
+    const restaurantId =
+      user?.restaurant_id ||
+      process.env.DEFAULT_RESTAURANT_ID ||
+      DatabaseService.DEFAULT_RESTAURANT_ID;
 
     // Get all menu items for fuzzy matching
     const allMenuItems = await this.db.all(
@@ -1136,7 +1153,6 @@ Remember: You're not just executing commands - you're a smart restaurant assista
     // **DISAMBIGUATION: Multiple matches found**
     if (matchingItems.length > 1) {
       const itemNames = matchingItems.map((i: any) => i.name).join(', ');
-      const action = available ? 'restore' : '86';
       throw new Error(`I found ${matchingItems.length} items matching "${itemName}": ${itemNames}. Which one did you mean?`);
     }
 
@@ -1178,7 +1194,10 @@ Remember: You're not just executing commands - you're a smart restaurant assista
   private async handleGetInventory(args: any, userId: string): Promise<AssistantResponse['actions'][0]> {
     const { search, lowStock } = args;
     const user = await this.db.get('SELECT restaurant_id FROM users WHERE id = ?', [userId]);
-    const restaurantId = user?.restaurant_id || 'demo-restaurant-1';
+    const restaurantId =
+      user?.restaurant_id ||
+      process.env.DEFAULT_RESTAURANT_ID ||
+      DatabaseService.DEFAULT_RESTAURANT_ID;
 
     let query = 'SELECT * FROM inventory_items WHERE restaurant_id = ?';
     const params: any[] = [restaurantId];
@@ -1217,7 +1236,10 @@ Remember: You're not just executing commands - you're a smart restaurant assista
   private async handleAdjustInventory(args: any, userId: string): Promise<AssistantResponse['actions'][0]> {
     const { itemName, quantity, reason } = args;
     const user = await this.db.get('SELECT restaurant_id FROM users WHERE id = ?', [userId]);
-    const restaurantId = user?.restaurant_id || 'demo-restaurant-1';
+    const restaurantId =
+      user?.restaurant_id ||
+      process.env.DEFAULT_RESTAURANT_ID ||
+      DatabaseService.DEFAULT_RESTAURANT_ID;
 
     // Get all inventory items for fuzzy matching
     const allInventoryItems = await this.db.all(
@@ -1273,7 +1295,10 @@ Remember: You're not just executing commands - you're a smart restaurant assista
   private async handleGetTasks(args: any, userId: string): Promise<AssistantResponse['actions'][0]> {
     const { status, type } = args;
     const user = await this.db.get('SELECT restaurant_id FROM users WHERE id = ?', [userId]);
-    const restaurantId = user?.restaurant_id || 'demo-restaurant-1';
+    const restaurantId =
+      user?.restaurant_id ||
+      process.env.DEFAULT_RESTAURANT_ID ||
+      DatabaseService.DEFAULT_RESTAURANT_ID;
 
     let query = 'SELECT * FROM tasks WHERE restaurant_id = ?';
     const params: any[] = [restaurantId];
@@ -1312,7 +1337,10 @@ Remember: You're not just executing commands - you're a smart restaurant assista
   private async handleCompleteTask(args: any, userId: string): Promise<AssistantResponse['actions'][0]> {
     const { taskId } = args;
     const user = await this.db.get('SELECT restaurant_id FROM users WHERE id = ?', [userId]);
-    const restaurantId = user?.restaurant_id || 'demo-restaurant-1';
+    const restaurantId =
+      user?.restaurant_id ||
+      process.env.DEFAULT_RESTAURANT_ID ||
+      DatabaseService.DEFAULT_RESTAURANT_ID;
 
     const task = await this.db.get('SELECT * FROM tasks WHERE id = ? AND restaurant_id = ?', [taskId, restaurantId]);
 

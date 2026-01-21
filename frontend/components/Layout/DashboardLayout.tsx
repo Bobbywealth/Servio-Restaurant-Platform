@@ -13,6 +13,7 @@ import {
   Bot,
   Home,
   Mic,
+  Phone,
   ClipboardList,
   Package,
   Users,
@@ -104,6 +105,14 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       description: 'AI voice assistant',
       color: 'text-servio-orange-500',
       highlight: true,
+      roles: ['manager', 'owner', 'admin']
+    },
+    {
+      name: 'Voice Hub',
+      href: '/dashboard/voice-hub',
+      icon: Phone,
+      description: 'Call logs & analytics',
+      color: 'text-indigo-500',
       roles: ['manager', 'owner', 'admin']
     },
     {

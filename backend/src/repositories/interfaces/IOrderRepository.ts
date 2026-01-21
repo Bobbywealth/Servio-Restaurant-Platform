@@ -52,6 +52,7 @@ export interface OrderStatsSummary {
   totalOrders: number;
   activeOrders: number;
   completedToday: number;
+  completedTodaySales: number;
   avgOrderValue: number;
   ordersByStatus: Record<string, number>;
   ordersByChannel: Record<string, number>;

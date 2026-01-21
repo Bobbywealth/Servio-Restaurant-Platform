@@ -48,7 +48,7 @@ router.get('/public/:slug', asyncHandler(async (req: Request, res: Response) => 
   const { slug } = req.params;
   const db = DatabaseService.getInstance().getDatabase();
 
-  const restaurant = await db.get('SELECT id, name, settings FROM restaurants WHERE slug = ? AND is_active = TRUE', [slug]);
+  const restaurant = await db.get('SELECT id, name, slug, settings, logo_url FROM restaurants WHERE slug = ? AND is_active = TRUE', [slug]);
   if (!restaurant) {
     return res.status(404).json({ success: false, error: { message: 'Restaurant not found' } });
   }
@@ -61,11 +61,25 @@ router.get('/public/:slug', asyncHandler(async (req: Request, res: Response) => 
     ORDER BY mc.sort_order ASC, mi.name ASC
   `, [restaurant.id]);
 
+  const formattedItems = (items || []).map((item: any) => ({
+    ...item,
+    images: JSON.parse(item.images || '[]'),
+    allergens: JSON.parse(item.allergens || '[]'),
+    nutritional_info: item.nutritional_info ? JSON.parse(item.nutritional_info) : null,
+    is_available: Boolean(item.is_available)
+  }));
+
   res.json({
     success: true,
     data: {
-      restaurant: { name: restaurant.name, settings: JSON.parse(restaurant.settings || '{}') },
-      items
+      restaurant: {
+        id: restaurant.id,
+        name: restaurant.name,
+        slug: restaurant.slug,
+        logoUrl: restaurant.logo_url ?? null,
+        settings: JSON.parse(restaurant.settings || '{}')
+      },
+      items: formattedItems
     }
   });
 }));

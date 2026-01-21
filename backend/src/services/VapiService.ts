@@ -2,8 +2,6 @@ import { AssistantService } from './AssistantService';
 import { DatabaseService } from './DatabaseService';
 import { VoiceOrderingService } from './VoiceOrderingService';
 import { logger } from '../utils/logger';
-import { v4 as uuidv4 } from 'uuid';
-import { eventBus } from '../events/bus';
 
 export interface VapiWebhookPayload {
   message: {
@@ -252,6 +250,9 @@ export class VapiService {
           });
           break;
         case 'createOrder':
+        case 'create_order':
+        case 'placeOrder':
+        case 'place_order':
           result = await VoiceOrderingService.getInstance().createOrder(parameters, restaurantId);
           logger.info('🛒 createOrder result', {
             order_id: result.orderId,
@@ -264,15 +265,17 @@ export class VapiService {
           break;
         default:
           // Fall back to existing assistant service functions
-          const mockToolCall = {
-            id: 'phone_call',
-            type: 'function' as const,
-            function: {
-              name,
-              arguments: JSON.stringify(parameters)
-            }
-          };
-          result = await (this.assistantService as any).executeTool(mockToolCall, userId);
+          {
+            const mockToolCall = {
+              id: 'phone_call',
+              type: 'function' as const,
+              function: {
+                name,
+                arguments: JSON.stringify(parameters)
+              }
+            };
+            result = await (this.assistantService as any).executeTool(mockToolCall, userId);
+          }
       }
       
       const toolDuration = Date.now() - toolStartTime;
@@ -343,7 +346,6 @@ export class VapiService {
 
   private async logTranscript(message: any): Promise<void> {
     const callId = message.call?.id;
-    const customerNumber = message.call?.customer?.number;
     const transcript = message.transcript;
 
     // Log for training/improvement purposes
@@ -466,12 +468,13 @@ export class VapiService {
     }
 
     switch (result.type) {
-      case 'get_orders':
+      case 'get_orders': {
         const orders = result.details;
         if (!orders || orders.length === 0) {
           return "There are no orders matching that criteria right now.";
         }
         return `I found ${orders.length} order${orders.length === 1 ? '' : 's'}. ${result.description}`;
+      }
 
       case 'update_order_status':
         return `Got it! ${result.description}. The order has been updated.`;
@@ -479,22 +482,24 @@ export class VapiService {
       case 'set_item_availability':
         return `Done! ${result.description}. This change will sync to all delivery platforms within 30 seconds.`;
 
-      case 'get_inventory':
+      case 'get_inventory': {
         const items = result.details;
         if (!items || items.length === 0) {
           return "I didn't find any inventory items matching that search.";
         }
         return `I found ${items.length} inventory item${items.length === 1 ? '' : 's'} matching your search.`;
+      }
 
       case 'adjust_inventory':
         return `Perfect! ${result.description}`;
 
-      case 'get_tasks':
+      case 'get_tasks': {
         const tasks = result.details;
         if (!tasks || tasks.length === 0) {
           return "There are no tasks matching that criteria.";
         }
         return `I found ${tasks.length} task${tasks.length === 1 ? '' : 's'} matching your criteria.`;
+      }
 
       case 'complete_task':
         return `Excellent! I've marked that task as completed. ${result.description}`;

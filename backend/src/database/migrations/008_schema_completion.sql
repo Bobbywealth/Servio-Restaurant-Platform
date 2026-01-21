@@ -1,7 +1,7 @@
 -- Migration 008: Schema Completion  
 -- Date: 2026-01-20
 -- Completes schema to match ERD specification for existing database structure
--- Postgres & SQLite-compatible version
+-- Postgres version
 
 -- ============================================================================
 -- 1. ADD MISSING COLUMNS TO SYNC_JOBS

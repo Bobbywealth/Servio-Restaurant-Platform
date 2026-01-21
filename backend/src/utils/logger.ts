@@ -175,7 +175,7 @@ class EnhancedLogger {
     this.winston.log(level, `API Call: ${service}`, {
       service,
       method,
-      url: url.replace(/\/[^\/]*$/, '/*'), // Mask IDs in URLs
+      url: url.replace(/\/[^/]*$/, '/*'), // Mask IDs in URLs
       status,
       duration_ms: duration,
       ...meta

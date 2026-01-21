@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState, useCallback } from 'react'
 import Head from 'next/head'
 import DashboardLayout from '../../components/Layout/DashboardLayout'
 import { useUser } from '../../contexts/UserContext'
@@ -95,7 +95,7 @@ export default function OrdersPage() {
     }
   }
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setIsLoading(true)
     setError(null)
     try {
@@ -119,7 +119,7 @@ export default function OrdersPage() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [statusFilter, channelFilter])
 
   useEffect(() => {
     if (!hasPermission('orders:read')) return
@@ -130,6 +130,19 @@ export default function OrdersPage() {
   useEffect(() => {
     fetchRestaurantSlug()
   }, [user?.restaurantId])
+
+  useEffect(() => {
+    if (!socket || !user?.restaurantId || !hasPermission('orders:read')) return
+    socket.joinRestaurantRoom(user.restaurantId)
+    const onNew = () => fetchData()
+    const onUpdated = () => fetchData()
+    socket.on('order:new', onNew as any)
+    socket.on('order:updated', onUpdated as any)
+    return () => {
+      socket.off('order:new', onNew as any)
+      socket.off('order:updated', onUpdated as any)
+    }
+  }, [socket, user?.restaurantId, hasPermission, fetchData])
 
   const updateOrderStatus = async (orderId: string, status: OrderStatus) => {
     if (!canUpdateOrders) return

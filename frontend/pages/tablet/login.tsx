@@ -207,7 +207,7 @@ export default function TabletLoginPage() {
                   value={restaurantSlug}
                   onChange={(e) => setRestaurantSlug(e.target.value)}
                   className="w-full bg-gray-900 border border-white/10 rounded-xl pl-11 pr-3 py-3 text-white text-lg outline-none focus:ring-2 focus:ring-teal-500/40"
-                  placeholder="e.g. demo-restaurant"
+                  placeholder="e.g. sashyes-kitchen"
                   autoCapitalize="none"
                   autoCorrect="off"
                   inputMode="text"
@@ -243,9 +243,7 @@ export default function TabletLoginPage() {
             </form>
 
             <div className="mt-4 text-xs text-white/50">
-            Tip: Demo restaurant slug is <span className="text-white/80 font-semibold">demo-restaurant</span>. Demo PINs are{' '}
-            <span className="text-white/80 font-semibold">1111</span> (staff) /{' '}
-            <span className="text-white/80 font-semibold">2222</span> (manager).
+            Tip: Use your restaurant’s slug (ask your manager/admin) and your staff PIN.
           </div>
         </div>
 

@@ -11,10 +11,14 @@ async function seedMenuItems() {
   const dbService = DatabaseService.getInstance();
   const db = dbService.getDatabase();
   
-  // Get the demo restaurant ID
-  const restaurant = await db.get('SELECT id FROM restaurants WHERE slug = ? OR slug = ? LIMIT 1', ['demo-restaurant-1', 'demo-restaurant']);
+  // Prefer configured/default restaurant slug; fall back to first restaurant.
+  const preferredSlug = process.env.DEFAULT_RESTAURANT_SLUG || DatabaseService.DEFAULT_RESTAURANT_SLUG;
+  let restaurant = await db.get('SELECT id FROM restaurants WHERE slug = ? LIMIT 1', [preferredSlug]);
   if (!restaurant) {
-    console.error('❌ Demo restaurant (demo-restaurant-1) not found. Please create a restaurant first.');
+    restaurant = await db.get('SELECT id FROM restaurants ORDER BY created_at ASC LIMIT 1');
+  }
+  if (!restaurant) {
+    console.error('❌ No restaurant found. Please create a restaurant first.');
     return;
   }
   

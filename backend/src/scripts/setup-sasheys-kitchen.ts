@@ -6,32 +6,6 @@ import bcrypt from 'bcryptjs';
 import * as fs from 'fs';
 import * as path from 'path';
 
-interface MenuItem {
-  id: string;
-  name: string;
-  description?: string;
-  price: number;
-  category: string;
-  image?: string;
-  tags?: string[];
-  modifierGroups?: string[];
-}
-
-interface ModifierGroup {
-  id: string;
-  name: string;
-  required?: boolean;
-  minSelect?: number;
-  maxSelect?: number;
-  options: ModifierOption[];
-}
-
-interface ModifierOption {
-  id: string;
-  name: string;
-  priceDelta: number;
-}
-
 async function setupSasheysKitchen() {
   console.log('🏪 Setting up Sashey\'s Kitchen Jamaican Restaurant...');
   
@@ -39,15 +13,15 @@ async function setupSasheysKitchen() {
   const dbService = DatabaseService.getInstance();
   const db = dbService.getDatabase();
   
-  const restaurantId = 'sasheys-kitchen-union';
+  const restaurantId = process.env.DEFAULT_RESTAURANT_ID || DatabaseService.DEFAULT_RESTAURANT_ID;
   
   // 1. Create/Update Sashey's Kitchen restaurant
   console.log('📍 Creating restaurant record...');
   
   const restaurantData = {
     id: restaurantId,
-    name: 'Sasheys Kitchen',
-    slug: 'sasheys-kitchen',
+    name: DatabaseService.DEFAULT_RESTAURANT_NAME,
+    slug: process.env.DEFAULT_RESTAURANT_SLUG || DatabaseService.DEFAULT_RESTAURANT_SLUG,
     address: '1400 Burnet Avenue, Union, NJ',
     phone: '(908) 686-8178',
     email: 'sasheysk@gmail.com',

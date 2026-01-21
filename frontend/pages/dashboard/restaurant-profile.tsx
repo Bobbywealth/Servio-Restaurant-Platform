@@ -26,6 +26,7 @@ import { useDropzone } from 'react-dropzone';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import { useUser } from '../../contexts/UserContext';
 import toast from 'react-hot-toast';
+import { api } from '../../lib/api';
 
 interface RestaurantProfile {
   id: string;
@@ -404,11 +405,9 @@ export default function RestaurantProfile() {
 
   const fetchProfile = useCallback(async () => {
     try {
-      const response = await fetch('/api/restaurant/profile', {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-      });
-      const data = await response.json();
-      if (data.success) {
+      const response = await api.get('/api/restaurant/profile');
+      const data = response.data;
+      if (data?.success) {
         setProfile(data.data);
         setProfileData({
           name: data.data.name || '',
@@ -437,11 +436,9 @@ export default function RestaurantProfile() {
 
   const fetchTheme = useCallback(async () => {
     try {
-      const response = await fetch('/api/restaurant/theme', {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-      });
-      const data = await response.json();
-      if (data.success) {
+      const response = await api.get('/api/restaurant/theme');
+      const data = response.data;
+      if (data?.success) {
         setTheme(data.data);
         setThemeData({
           name: data.data.name || 'Custom Theme',
@@ -460,11 +457,9 @@ export default function RestaurantProfile() {
 
   const fetchLinks = useCallback(async () => {
     try {
-      const response = await fetch('/api/restaurant/links', {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-      });
-      const data = await response.json();
-      if (data.success) {
+      const response = await api.get('/api/restaurant/links');
+      const data = response.data;
+      if (data?.success) {
         setLinks(data.data);
       }
     } catch (error) {
@@ -488,14 +483,11 @@ export default function RestaurantProfile() {
     formData.append(type === 'logo' ? 'logo' : 'coverImage', files[0]);
 
     try {
-      const response = await fetch('/api/restaurant/profile', {
-        method: 'PUT',
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
-        body: formData
+      const response = await api.put('/api/restaurant/profile', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
       });
-
-      const data = await response.json();
-      if (data.success) {
+      const data = response.data;
+      if (data?.success) {
         toast.success(`${type === 'logo' ? 'Logo' : 'Cover image'} updated successfully`);
         await fetchProfile();
       } else {
@@ -510,17 +502,9 @@ export default function RestaurantProfile() {
   const handleSaveProfile = async () => {
     setSaving(true);
     try {
-      const response = await fetch('/api/restaurant/profile', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify(profileData)
-      });
-
-      const data = await response.json();
-      if (data.success) {
+      const response = await api.put('/api/restaurant/profile', profileData);
+      const data = response.data;
+      if (data?.success) {
         toast.success('Profile updated successfully');
         await fetchProfile();
       } else {
@@ -537,17 +521,9 @@ export default function RestaurantProfile() {
   const handleSaveTheme = async () => {
     setSaving(true);
     try {
-      const response = await fetch('/api/restaurant/theme', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify(themeData)
-      });
-
-      const data = await response.json();
-      if (data.success) {
+      const response = await api.put('/api/restaurant/theme', themeData);
+      const data = response.data;
+      if (data?.success) {
         toast.success('Theme updated successfully');
         await fetchTheme();
       } else {
@@ -565,18 +541,9 @@ export default function RestaurantProfile() {
     try {
       const url = editingLink ? `/api/restaurant/links/${editingLink.id}` : '/api/restaurant/links';
       const method = editingLink ? 'PUT' : 'POST';
-
-      const response = await fetch(url, {
-        method,
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify(linkData)
-      });
-
-      const data = await response.json();
-      if (data.success) {
+      const response = await api.request({ url, method, data: linkData });
+      const data = response.data;
+      if (data?.success) {
         toast.success(editingLink ? 'Link updated' : 'Link created');
         await fetchLinks();
         setShowLinkForm(false);
@@ -594,13 +561,9 @@ export default function RestaurantProfile() {
     if (!confirm('Are you sure you want to delete this link?')) return;
 
     try {
-      const response = await fetch(`/api/restaurant/links/${id}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-      });
-
-      const data = await response.json();
-      if (data.success) {
+      const response = await api.delete(`/api/restaurant/links/${id}`);
+      const data = response.data;
+      if (data?.success) {
         toast.success('Link deleted successfully');
         await fetchLinks();
       } else {
@@ -614,17 +577,9 @@ export default function RestaurantProfile() {
 
   const handleToggleLink = async (id: string, active: boolean) => {
     try {
-      const response = await fetch(`/api/restaurant/links/${id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify({ isActive: active })
-      });
-
-      const data = await response.json();
-      if (data.success) {
+      const response = await api.put(`/api/restaurant/links/${id}`, { isActive: active });
+      const data = response.data;
+      if (data?.success) {
         toast.success(active ? 'Link activated' : 'Link deactivated');
         await fetchLinks();
       } else {

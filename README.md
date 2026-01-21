@@ -34,7 +34,7 @@ Servio is an on-screen AI assistant specifically designed for restaurant staff t
 - **AI Assistant Service** - OpenAI GPT-4 with custom restaurant tools
 - **Speech-to-Text** - OpenAI Whisper for voice transcription
 - **Text-to-Speech** - OpenAI TTS (optional), ElevenLabs integration (optional)
-- **SQLite Database** - Lightweight, embedded database
+- **PostgreSQL Database** - Uses `DATABASE_URL` (Render)
 - **RESTful APIs** - Complete API suite for all operations
 
 ### 🚀 Quick Start
@@ -202,7 +202,7 @@ servio-restaurant-platform/
 │   │   ├── routes/          # API route handlers
 │   │   ├── middleware/      # Express middleware
 │   │   └── utils/           # Utility functions
-│   └── data/                # SQLite database
+│   └── src/database/        # SQL migrations / schema
 └── package.json             # Workspace configuration
 ```
 

@@ -186,6 +186,49 @@ export default function TabletSettingsPage() {
     }
   }
 
+  const testAgentPrint = async () => {
+    if (receiptSettings.printMode !== 'agent') {
+      setError('Switch print mode to "LAN Printer (Print Agent)" to test printing.')
+      return
+    }
+    if (!receiptSettings.agentUrl || !receiptSettings.agentPrinter?.host) {
+      setError('Select a print agent URL and printer before testing.')
+      return
+    }
+    setSaving(true)
+    setError(null)
+    setSuccess(null)
+    try {
+      const url = receiptSettings.agentUrl.replace(/\/+$/, '')
+      const resp = await fetch(`${url}/print`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          printer: receiptSettings.agentPrinter,
+          text: [
+            'SERVIO TEST PRINT',
+            '------------------------------',
+            `Restaurant: ${user?.name || user?.email || 'Servio'}`,
+            `Time: ${new Date().toLocaleString()}`,
+            '',
+            'If this printed, the agent is working.',
+            ''
+          ].join('\n')
+        })
+      })
+      const data = await resp.json().catch(() => ({}))
+      if (!resp.ok || data?.success === false) {
+        throw new Error(data?.error?.message || 'Print agent test failed')
+      }
+      setSuccess('Test print sent successfully!')
+      setTimeout(() => setSuccess(null), 3000)
+    } catch (e: any) {
+      setError(e?.message || 'Failed to send test print.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const tabs = [
     { id: 'printing', name: 'Printing', icon: Printer },
     { id: 'alerts', name: 'Alert Calls', icon: PhoneCall },
@@ -257,7 +300,7 @@ export default function TabletSettingsPage() {
                       Receipt & Ticket Printing
                     </h2>
                     <p className="text-white/70 mb-6">
-                      Configure how your order tickets print when you tap "Print" on orders.
+                      Configure how your order tickets print when you tap &quot;Print&quot; on orders.
                     </p>
                   </div>
 
@@ -327,6 +370,14 @@ export default function TabletSettingsPage() {
                             >
                               <Wifi className="w-4 h-4" />
                               {scanningPrinters ? 'Scanning...' : 'Find Printers'}
+                            </button>
+                            <button
+                              onClick={testAgentPrint}
+                              disabled={saving || !receiptSettings.agentPrinter}
+                              className="px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm inline-flex items-center gap-2 disabled:opacity-50"
+                            >
+                              <TestTube className="w-4 h-4" />
+                              {saving ? 'Sending...' : 'Test Print'}
                             </button>
                             {availablePrinters.length > 0 && (
                               <select
@@ -467,7 +518,7 @@ export default function TabletSettingsPage() {
                       Automatic Alert Calls
                     </h2>
                     <p className="text-white/70 mb-6">
-                      Get an automatic phone call when orders can't reach your system. Configure your supervisor's phone number below.
+                      Get an automatic phone call when orders can&apos;t reach your system. Configure your supervisor&apos;s phone number below.
                     </p>
                   </div>
 

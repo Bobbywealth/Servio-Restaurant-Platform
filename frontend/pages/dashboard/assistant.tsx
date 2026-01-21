@@ -1048,7 +1048,7 @@ export default function AssistantPage() {
                   <p className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">💡 Quick Examples:</p>
                   <div className="flex flex-wrap gap-1.5">
                     <button onClick={() => handleQuickCommand('check current orders')} disabled={state.isProcessing || state.isRecording} className="px-2 py-1 text-xs bg-gray-100 dark:bg-gray-700 rounded hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50">Check orders</button>
-                    <button onClick={() => handleQuickCommand('what items are 86\'d')} disabled={state.isProcessing || state.isRecording} className="px-2 py-1 text-xs bg-gray-100 dark:bg-gray-700 rounded hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50">What's 86'd?</button>
+                    <button onClick={() => handleQuickCommand('what items are 86\'d')} disabled={state.isProcessing || state.isRecording} className="px-2 py-1 text-xs bg-gray-100 dark:bg-gray-700 rounded hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50">What&apos;s 86&apos;d?</button>
                     <button onClick={() => handleQuickCommand('show inventory levels')} disabled={state.isProcessing || state.isRecording} className="px-2 py-1 text-xs bg-gray-100 dark:bg-gray-700 rounded hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50">Inventory</button>
                   </div>
                 </div>

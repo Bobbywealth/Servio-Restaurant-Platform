@@ -1,4 +1,4 @@
--- Additional Production Performance Indexes (SQLite Compatible)
+-- Additional Production Performance Indexes
 -- Date: 2026-01-20
 -- Purpose: Critical indexes for production launch as per Day 6-8 requirements
 -- Refactored to match actual schema columns and tables
@@ -87,7 +87,7 @@ CREATE INDEX idx_audit_logs_action_created
 -- USERS & AUTHENTICATION
 -- ============================================================================
 
--- Index for user lookup by email (login) - skip LOWER() for SQLite simplicity
+-- Index for user lookup by email (login)
 CREATE INDEX idx_users_email_active
   ON users(email, is_active);
 

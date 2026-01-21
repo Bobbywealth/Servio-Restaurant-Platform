@@ -1,5 +1,5 @@
 -- Demo bookings table for "Book Demo" calendar
--- Works for both SQLite and Postgres (keeps id as TEXT)
+-- Uses TEXT ids (compatible with Postgres)
 
 CREATE TABLE IF NOT EXISTS demo_bookings (
   id TEXT PRIMARY KEY,

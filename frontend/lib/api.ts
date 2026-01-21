@@ -34,8 +34,7 @@ export const api = axios.create({
 
 api.interceptors.request.use((config) => {
   if (typeof window === 'undefined') return config
-  // Try both common token keys
-  const token = localStorage.getItem('servio_access_token') || localStorage.getItem('accessToken')
+  const token = localStorage.getItem('servio_access_token')
   if (token) {
     config.headers = config.headers ?? {}
     config.headers.Authorization = `Bearer ${token}`

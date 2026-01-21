@@ -7,7 +7,7 @@ This roadmap outlines the phased development approach for building Servio into a
 ## Current State Analysis
 
 ### ✅ Already Implemented (MVP)
-- **Backend Foundation**: Express.js API with SQLite database
+- **Backend Foundation**: Express.js API with PostgreSQL (via `DATABASE_URL`)
 - **Voice Processing**: OpenAI Whisper integration for speech-to-text
 - **AI Assistant**: GPT-4 powered assistant with function calling
 - **Basic UI**: Next.js frontend with modern design
@@ -32,7 +32,7 @@ This roadmap outlines the phased development approach for building Servio into a
 **Goal**: Upgrade to production-ready backend infrastructure
 
 #### 1.1 Database Migration
-- [ ] **Migrate to PostgreSQL**: Replace SQLite with PostgreSQL
+- [x] **Migrate to PostgreSQL**: Use PostgreSQL everywhere (via `DATABASE_URL`)
 - [ ] **Enhanced Schema**: Implement comprehensive database schema from architecture doc
 - [ ] **Data Migration**: Build migration scripts for existing data
 - [ ] **Connection Pooling**: Implement connection pooling for performance

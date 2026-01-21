@@ -2,8 +2,7 @@
 -- Version: 1.1.1
 -- Date: 2026-01-20
 
--- Note: SQLite doesn't support modifying CHECK constraints easily
--- The role validation will be handled in the application layer
+-- Note: Role validation is handled in the application layer
 
 -- Create initial platform admin user (password: admin123)
 -- Note: This should be changed immediately in production

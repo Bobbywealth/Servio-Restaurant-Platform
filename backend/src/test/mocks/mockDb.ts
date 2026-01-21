@@ -9,7 +9,7 @@ export type MockDbHandlers = Partial<{
 
 export function createMockDb(handlers: MockDbHandlers = {}): DbClient {
   return {
-    dialect: 'sqlite',
+    dialect: 'postgres',
     all: async (sql: string, params: any[] = []) => {
       if (!handlers.all) throw new Error(`MockDb missing handler for all(): ${sql}`);
       return await handlers.all(sql, params);

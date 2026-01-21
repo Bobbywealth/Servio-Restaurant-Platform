@@ -58,23 +58,6 @@ export default function LoginPage() {
     return '/dashboard';
   };
 
-  const handleDemoLogin = async (demoEmail: string, demoPassword: string) => {
-    setEmail(demoEmail);
-    setPassword(demoPassword);
-    setError('');
-    setLoading(true);
-
-    try {
-      await login(demoEmail, demoPassword);
-      router.push(routeAfterLogin());
-    } catch (err: any) {
-      const message = err.response?.data?.error?.message || err.message || 'Failed to login with demo credentials.';
-      setError(message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -142,10 +125,10 @@ export default function LoginPage() {
             </Link>
             <div className="hidden md:flex items-center space-x-8">
               <Link href="/" className="text-gray-300 hover:text-white font-medium transition-colors">Home</Link>
-              <a href="/#services" className="text-gray-300 hover:text-white font-medium transition-colors">Services</a>
-              <a href="/#features" className="text-gray-300 hover:text-white font-medium transition-colors">Features</a>
-              <a href="/#pricing" className="text-gray-300 hover:text-white font-medium transition-colors">Pricing</a>
-              <a href="/#faq" className="text-gray-300 hover:text-white font-medium transition-colors">FAQ</a>
+              <Link href="/#services" className="text-gray-300 hover:text-white font-medium transition-colors">Services</Link>
+              <Link href="/#features" className="text-gray-300 hover:text-white font-medium transition-colors">Features</Link>
+              <Link href="/#pricing" className="text-gray-300 hover:text-white font-medium transition-colors">Pricing</Link>
+              <Link href="/#faq" className="text-gray-300 hover:text-white font-medium transition-colors">FAQ</Link>
             </div>
             {/* Mobile Home Link */}
             <div className="md:hidden">
@@ -324,51 +307,6 @@ export default function LoginPage() {
               </button>
             </p>
           </div>
-
-          {!isSignUpMode && (
-            <div className="mt-10">
-            <div className="flex items-center gap-4 mb-6">
-              <div className="h-px flex-1 bg-gray-600" />
-              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-2">Demo Access</span>
-              <div className="h-px flex-1 bg-gray-600" />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <button 
-                type="button"
-                onClick={() => handleDemoLogin('admin@servio.com', 'password')}
-                className="bg-gray-700/50 hover:bg-gray-700 p-3 rounded-xl text-left transition-all group border border-gray-600 hover:border-teal-500/50 hover:shadow-[0_10px_24px_-18px_rgba(20,184,166,0.3)]"
-              >
-                <p className="text-[10px] font-bold text-gray-400 uppercase mb-1 group-hover:text-teal-400 transition-colors">Admin</p>
-                <p className="text-xs font-bold text-gray-300 italic">One-tap login</p>
-              </button>
-              <button 
-                type="button"
-                onClick={() => handleDemoLogin('owner@demo.servio', 'password')}
-                className="bg-gray-700/50 hover:bg-gray-700 p-3 rounded-xl text-left transition-all group border border-gray-600 hover:border-teal-500/50 hover:shadow-[0_10px_24px_-18px_rgba(20,184,166,0.3)]"
-              >
-                <p className="text-[10px] font-bold text-gray-400 uppercase mb-1 group-hover:text-teal-400 transition-colors">Owner</p>
-                <p className="text-xs font-bold text-gray-300 italic">One-tap login</p>
-              </button>
-              <button 
-                type="button"
-                onClick={() => handleDemoLogin('manager@demo.servio', 'password')}
-                className="bg-gray-700/50 hover:bg-gray-700 p-3 rounded-xl text-left transition-all group border border-gray-600 hover:border-teal-500/50 hover:shadow-[0_10px_24px_-18px_rgba(20,184,166,0.3)]"
-              >
-                <p className="text-[10px] font-bold text-gray-400 uppercase mb-1 group-hover:text-teal-400 transition-colors">Manager</p>
-                <p className="text-xs font-bold text-gray-300 italic">One-tap login</p>
-              </button>
-              <button 
-                type="button"
-                onClick={() => handleDemoLogin('staff@demo.servio', 'password')}
-                className="bg-gray-700/50 hover:bg-gray-700 p-3 rounded-xl text-left transition-all group border border-gray-600 hover:border-teal-500/50 hover:shadow-[0_10px_24px_-18px_rgba(20,184,166,0.3)]"
-              >
-                <p className="text-[10px] font-bold text-gray-400 uppercase mb-1 group-hover:text-teal-400 transition-colors">Staff</p>
-                <p className="text-xs font-bold text-gray-300 italic">One-tap login</p>
-              </button>
-            </div>
-          </div>
-          )}
         </div>
         
         <p className="mt-8 text-center text-gray-400 text-sm font-medium">

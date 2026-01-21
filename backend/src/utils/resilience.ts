@@ -229,7 +229,7 @@ export const safeTwilioCall = createCircuitBreaker(
  * Wrap generic external API calls
  */
 export const safeExternalAPICall = createCircuitBreaker(
-  async (fn: () => Promise<any>, serviceName: string = 'external-api') => {
+  async (fn: () => Promise<any>, _serviceName: string = 'external-api') => {
     return externalAPILimiter.schedule(() => fn());
   },
   {

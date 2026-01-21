@@ -825,7 +825,7 @@ const IntegrationsTab: React.FC<{ restaurant: Restaurant }> = ({ restaurant }) =
             Looking for Phone System?
           </h3>
           <p className="text-xs text-yellow-700 dark:text-yellow-400 mt-1">
-            Vapi phone configuration has been moved to the "Phone System" tab (not shown here to avoid confusion with in-app AI Assistant)
+            Vapi phone configuration has been moved to the &quot;Phone System&quot; tab (not shown here to avoid confusion with in-app AI Assistant)
           </p>
         </div>
       </div>

@@ -49,10 +49,10 @@
    FRONTEND_URL=https://your-netlify-app.netlify.app
    JWT_SECRET=generate-a-secure-random-string
    OPENAI_API_KEY=your-openai-key-here
+   DATABASE_URL=postgres://...
+   DATABASE_SSL=true
    ```
-5. **Add Persistent Disk** (for SQLite database):
-   - Mount path: `/app/backend/data`
-   - Size: 1GB
+5. **Provision a Postgres database** (Render Postgres or external) and paste its `DATABASE_URL`
 6. **Deploy** and copy your Render URL
 
 ---
@@ -123,8 +123,7 @@ After deploying the backend, update your Netlify environment variables:
 
 ## **Database Notes**
 
-- **SQLite database** is stored in `backend/data/servio.db`
-- **Persistent volumes** are essential to keep your data
+- **Database** is PostgreSQL via `DATABASE_URL` (Render)
 - **Automatic migrations** run on startup
 - **Demo data** seeds automatically on first run
 
@@ -139,8 +138,8 @@ After deploying the backend, update your Netlify environment variables:
    - Check TypeScript compilation
 
 2. **Database errors**
-   - Verify persistent volume is mounted to `/app/backend/data`
-   - Check write permissions
+   - Verify `DATABASE_URL` is set correctly
+   - If your provider requires SSL, set `DATABASE_SSL=true`
 
 3. **CORS errors**
    - Verify `FRONTEND_URL` matches your Netlify domain exactly

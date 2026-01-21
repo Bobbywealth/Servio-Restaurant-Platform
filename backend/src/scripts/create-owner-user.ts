@@ -13,7 +13,15 @@ async function createOwnerUser() {
     await DatabaseService.initialize();
     const db = DatabaseService.getInstance().getDatabase();
 
-    const email = 'owner@demo.servio';
+    const email = process.env.OWNER_EMAIL;
+    const password = process.env.OWNER_PASSWORD;
+    const restaurantId = process.env.DEFAULT_RESTAURANT_ID || DatabaseService.DEFAULT_RESTAURANT_ID;
+
+    if (!email || !password) {
+      console.error('❌ Missing OWNER_EMAIL / OWNER_PASSWORD env vars.');
+      console.error('   Example: OWNER_EMAIL="owner@sashyeskitchen.com" OWNER_PASSWORD="your-strong-password" npm run create-owner');
+      process.exit(1);
+    }
     
     // Check if user already exists
     const existing = await db.get('SELECT id FROM users WHERE email = ?', [email]);
@@ -23,7 +31,6 @@ async function createOwnerUser() {
     }
 
     // Create password hash
-    const password = 'owner123';
     const passwordHash = await bcryptjs.hash(password, 10);
 
     // Create user
@@ -33,8 +40,8 @@ async function createOwnerUser() {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       userId,
-      'demo-restaurant-1',
-      'Demo Owner',
+      restaurantId,
+      'Owner',
       email,
       passwordHash,
       'owner',
@@ -46,8 +53,7 @@ async function createOwnerUser() {
 
     console.log('✅ Owner user created successfully!');
     console.log('   Email:', email);
-    console.log('   Password:', password);
-    console.log('   Restaurant ID: demo-restaurant-1');
+    console.log('   Restaurant ID:', restaurantId);
     
     process.exit(0);
   } catch (error) {

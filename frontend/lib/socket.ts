@@ -56,17 +56,28 @@ class SocketManager {
   private isConnected = false
   private connectionListeners: Array<(status: boolean) => void> = []
   private eventHandlers = new Map<string, Function[]>()
+  private lastRestaurantId: string | null = null
+  private lastOrderNewAt: string | null = null
+  private baseUrl: string
 
   constructor() {
+    this.baseUrl = this.resolveSocketUrl()
     this.connect()
+  }
+
+  private resolveSocketUrl(): string {
+    const env =
+      process.env.NEXT_PUBLIC_SOCKET_URL ||
+      process.env.NEXT_PUBLIC_BACKEND_URL ||
+      process.env.NEXT_PUBLIC_API_URL ||
+      'http://localhost:3002'
+    return env.startsWith('http') ? env : `https://${env}`
   }
 
   connect(): void {
     if (this.socket?.connected) {
       return
     }
-
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3002'
 
     const socketOptions = {
       transports: ['websocket', 'polling'],
@@ -79,7 +90,7 @@ class SocketManager {
       pingInterval: 25000,
     } as Partial<ManagerOptionsWithPing>
 
-    this.socket = io(backendUrl, socketOptions)
+    this.socket = io(this.baseUrl, socketOptions)
 
     this.setupEventListeners()
   }
@@ -100,6 +111,13 @@ class SocketManager {
       const user = this.getUserFromStorage()
       if (user) {
         this.socket?.emit('join:user', { userId: user.id, restaurantId: user.restaurantId })
+        if (user.restaurantId) {
+          this.socket?.emit('join:restaurant', { restaurantId: user.restaurantId })
+          this.lastRestaurantId = user.restaurantId
+        }
+      }
+      if (!user && this.lastRestaurantId) {
+        this.socket?.emit('join:restaurant', { restaurantId: this.lastRestaurantId })
       }
     })
 
@@ -128,6 +146,16 @@ class SocketManager {
     this.socket.on('reconnect', (attemptNumber) => {
       console.log('🔌 Socket reconnected after', attemptNumber, 'attempts')
       showToast.success('Reconnected to Servio')
+      const user = this.getUserFromStorage()
+      if (user) {
+        this.socket?.emit('join:user', { userId: user.id, restaurantId: user.restaurantId })
+        if (user.restaurantId) {
+          this.socket?.emit('join:restaurant', { restaurantId: user.restaurantId })
+          this.lastRestaurantId = user.restaurantId
+        }
+      } else if (this.lastRestaurantId) {
+        this.socket?.emit('join:restaurant', { restaurantId: this.lastRestaurantId })
+      }
     })
 
     this.socket.on('reconnect_attempt', (attemptNumber) => {
@@ -238,11 +266,15 @@ class SocketManager {
   }
 
   joinRestaurantRoom(restaurantId: string): void {
+    this.lastRestaurantId = restaurantId
     this.emit('join:restaurant', { restaurantId })
   }
 
   leaveRestaurantRoom(restaurantId: string): void {
     this.emit('leave:restaurant', { restaurantId })
+    if (this.lastRestaurantId === restaurantId) {
+      this.lastRestaurantId = null
+    }
   }
 
   // Disconnect
@@ -258,6 +290,20 @@ class SocketManager {
   reconnect(): void {
     this.disconnect()
     this.connect()
+  }
+
+  markOrderNew(): void {
+    this.lastOrderNewAt = new Date().toISOString()
+  }
+
+  getDebugInfo() {
+    return {
+      connected: this.connected,
+      id: this.id,
+      baseUrl: this.baseUrl,
+      restaurantId: this.lastRestaurantId,
+      lastOrderNewAt: this.lastOrderNewAt
+    }
   }
 }
 

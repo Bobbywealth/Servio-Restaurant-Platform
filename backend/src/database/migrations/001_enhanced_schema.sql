@@ -2,7 +2,7 @@
 -- Version: 1.1.0
 -- Date: 2026-01-19
 
--- Drop existing tables if they exist (SQLite compatible)
+-- Drop existing tables if they exist
 DROP TABLE IF EXISTS audit_logs;
 DROP TABLE IF EXISTS auth_sessions;
 DROP TABLE IF EXISTS receipt_line_items;

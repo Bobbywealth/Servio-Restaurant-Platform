@@ -23,10 +23,14 @@ interface MenuItem {
   price: number;
   is_available: boolean;
   category_name: string;
+  images?: string[];
 }
 
 interface RestaurantInfo {
+  id?: string;
   name: string;
+  slug?: string;
+  logoUrl?: string | null;
   settings: any;
 }
 
@@ -47,6 +51,14 @@ export default function PublicProfile() {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [orderComplete, setOrderComplete] = useState<string | null>(null);
+
+  const resolveAssetUrl = (url: string | null | undefined) => {
+    if (!url) return undefined
+    if (/^https?:\/\//i.test(url)) return url
+    const base = String((api as any)?.defaults?.baseURL || '').replace(/\/+$/, '')
+    if (!base) return url
+    return `${base}${url.startsWith('/') ? '' : '/'}${url}`
+  }
 
   useEffect(() => {
     if (!restaurantSlug) return;
@@ -121,41 +133,78 @@ export default function PublicProfile() {
     );
   }
 
+  const menuSettings = restaurant?.settings?.menu || {}
+  const heading = String(menuSettings.heading || '').trim() || restaurant.name
+  const subheading = String(menuSettings.subheading || '').trim()
+  const showLogo = menuSettings.showLogo !== false
+  const logoUrl = resolveAssetUrl(restaurant?.logoUrl)
+  const shareUrl =
+    typeof window !== 'undefined' && restaurantSlug
+      ? `${window.location.origin}/r/${restaurantSlug}`
+      : ''
+
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
       <Head>
-        <title>{restaurant.name} - Online Ordering</title>
+        <title>{heading} - Menu</title>
       </Head>
 
-      <div className="bg-white shadow-sm border-b">
-        <div className="max-w-4xl mx-auto px-4 py-6">
-          <h1 className="text-3xl font-bold text-gray-900">{restaurant.name}</h1>
-          <div className="flex flex-wrap gap-4 mt-3 text-sm text-gray-500">
-            <span className="flex items-center"><Clock className="w-4 h-4 mr-1" /> Pickup in 20-30 mins</span>
-            <span className="flex items-center"><MapPin className="w-4 h-4 mr-1" /> New York, NY</span>
+      <div className="bg-gradient-to-br from-gray-950 via-slate-900 to-gray-950 text-white shadow-sm border-b border-white/10">
+        <div className="max-w-5xl mx-auto px-4 py-10">
+          <div className="flex items-start gap-4">
+            {showLogo && logoUrl && (
+              <div className="w-16 h-16 rounded-2xl bg-white/10 border border-white/10 overflow-hidden flex items-center justify-center">
+                <img src={logoUrl} alt="Logo" className="w-full h-full object-cover" />
+              </div>
+            )}
+            <div className="flex-1">
+              <h1 className="text-4xl font-extrabold tracking-tight">{heading}</h1>
+              {subheading && <p className="mt-2 text-white/80">{subheading}</p>}
+              <div className="flex flex-wrap gap-4 mt-4 text-sm text-white/70">
+                <span className="flex items-center"><Clock className="w-4 h-4 mr-1" /> Fast pickup ordering</span>
+                <span className="flex items-center"><MapPin className="w-4 h-4 mr-1" /> {restaurantSlug}</span>
+              </div>
+              {shareUrl && (
+                <div className="mt-4 text-xs text-white/60">
+                  Menu URL: <span className="font-mono text-white/80">{shareUrl}</span>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="max-w-4xl mx-auto px-4 py-8">
+      <div className="max-w-5xl mx-auto px-4 py-8">
         <div className="grid grid-cols-1 gap-8">
           {Array.from(new Set(items.map(i => i.category_name))).map(cat => (
             <div key={cat}>
               <h2 className="text-xl font-bold mb-4 border-b pb-2">{cat}</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {items.filter(i => i.category_name === cat).map(item => (
-                  <div key={item.id} className="bg-white p-4 rounded-xl border hover:shadow-md transition-all flex justify-between items-center">
-                    <div>
-                      <h3 className="font-semibold text-lg">{item.name}</h3>
-                      <p className="text-gray-500 text-sm mb-2">{item.description}</p>
-                      <p className="font-bold text-blue-600">${item.price.toFixed(2)}</p>
+                  <div key={item.id} className="bg-white rounded-2xl border border-gray-200 hover:shadow-lg transition-all overflow-hidden">
+                    <div className="flex gap-4 p-4">
+                      <div className="w-24 h-24 rounded-xl bg-gray-100 border border-gray-200 overflow-hidden shrink-0">
+                        {item.images?.[0] ? (
+                          <img src={resolveAssetUrl(item.images[0])} alt={item.name} className="w-full h-full object-cover" />
+                        ) : null}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between gap-3">
+                          <h3 className="font-extrabold text-lg text-gray-900 truncate">{item.name}</h3>
+                          <div className="font-extrabold text-blue-600 shrink-0">${item.price.toFixed(2)}</div>
+                        </div>
+                        <p className="text-gray-600 text-sm mt-1 line-clamp-2">{item.description}</p>
+                        <div className="mt-4 flex justify-end">
+                          <button
+                            onClick={() => addToCart(item)}
+                            className="px-4 py-2 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-700 transition-colors inline-flex items-center gap-2"
+                          >
+                            <Plus className="w-5 h-5" />
+                            Add
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                    <button 
-                      onClick={() => addToCart(item)}
-                      className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
-                    >
-                      <Plus className="w-6 h-6" />
-                    </button>
                   </div>
                 ))}
               </div>

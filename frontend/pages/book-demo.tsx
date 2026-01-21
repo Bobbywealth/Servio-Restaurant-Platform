@@ -228,7 +228,7 @@ export default function BookDemoPage() {
                 </div>
                 <div>
                   <h1 className="text-2xl md:text-3xl font-bold text-white">Book a demo</h1>
-                  <p className="text-gray-300">Choose a date and time. We'll confirm by email.</p>
+                  <p className="text-gray-300">Choose a date and time. We&apos;ll confirm by email.</p>
                 </div>
               </div>
 
@@ -362,7 +362,7 @@ export default function BookDemoPage() {
                     <CheckCircle2 className="w-5 h-5 mt-0.5 text-green-400" />
                     <div>
                       <div className="font-semibold">Booked!</div>
-                      <div className="text-sm text-green-300">We'll reach out shortly to confirm.</div>
+                      <div className="text-sm text-green-300">We&apos;ll reach out shortly to confirm.</div>
                     </div>
                   </div>
                 </div>

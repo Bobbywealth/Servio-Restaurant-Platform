@@ -216,7 +216,7 @@ export default function OrderHistoryPage() {
             Access Denied
           </h3>
           <p className="text-gray-500 dark:text-gray-400">
-            You don't have permission to view order history.
+            You don&apos;t have permission to view order history.
           </p>
         </div>
       </DashboardLayout>

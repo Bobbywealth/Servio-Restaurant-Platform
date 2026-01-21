@@ -15,7 +15,13 @@ let performanceMonitor: any = null;
 function MyApp({ Component, pageProps, router }: AppProps) {
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [isRouteLoading, setIsRouteLoading] = useState(false);
+  const [isClientMounted, setIsClientMounted] = useState(false);
   const initialLoadStartRef = useRef<number | null>(null);
+
+  // Set client mounted state to fix hydration issues
+  useEffect(() => {
+    setIsClientMounted(true);
+  }, []);
 
   // Show splash on first page load (briefly)
   useEffect(() => {
@@ -178,26 +184,28 @@ function MyApp({ Component, pageProps, router }: AppProps) {
               <SplashScreen message={isRouteLoading ? 'Loading…' : 'Starting Servio…'} />
             )}
             <Component {...pageProps} />
-            <Toaster 
-              position="top-right"
-              toastOptions={{
-                duration: 4000,
-                style: {
-                  background: '#363636',
-                  color: '#fff',
-                },
-                success: {
+            {isClientMounted && (
+              <Toaster 
+                position="top-right"
+                toastOptions={{
+                  duration: 4000,
                   style: {
-                    background: '#10b981',
+                    background: '#363636',
+                    color: '#fff',
                   },
-                },
-                error: {
-                  style: {
-                    background: '#ef4444',
+                  success: {
+                    style: {
+                      background: '#10b981',
+                    },
                   },
-                },
-              }}
-            />
+                  error: {
+                    style: {
+                      background: '#ef4444',
+                    },
+                  },
+                }}
+              />
+            )}
           </TourProvider>
         </ThemeProvider>
       </UserProvider>

@@ -28,6 +28,14 @@ import { useUser } from '../../contexts/UserContext';
 import { api } from '../../lib/api';
 import toast from 'react-hot-toast';
 
+function resolveAssetUrl(url: string | null | undefined) {
+  if (!url) return undefined
+  if (/^https?:\/\//i.test(url)) return url
+  const base = String((api as any)?.defaults?.baseURL || '').replace(/\/+$/, '')
+  if (!base) return url
+  return `${base}${url.startsWith('/') ? '' : '/'}${url}`
+}
+
 interface MenuCategory {
   id: string;
   name: string;
@@ -76,6 +84,10 @@ const MenuManagement: React.FC = () => {
   const [showAddItemModal, setShowAddItemModal] = useState(false);
   const [showAddCategoryModal, setShowAddCategoryModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [newItemImageFile, setNewItemImageFile] = useState<File | null>(null);
+  const [newItemImagePreview, setNewItemImagePreview] = useState<string | null>(null);
   const [newCategory, setNewCategory] = useState({
     name: '',
     description: '',
@@ -181,6 +193,8 @@ const MenuManagement: React.FC = () => {
       preparationTime: '',
       isAvailable: true
     });
+    setNewItemImageFile(null);
+    setNewItemImagePreview(null);
     setShowAddItemModal(true);
   };
 
@@ -224,17 +238,27 @@ const MenuManagement: React.FC = () => {
 
     setIsSaving(true);
     try {
-      await api.post('/api/menu/items', {
-        name: newItem.name.trim(),
-        description: newItem.description.trim(),
-        price: Number(newItem.price),
-        categoryId: newItem.categoryId,
-        preparationTime: newItem.preparationTime ? Number(newItem.preparationTime) : 0,
-        sortOrder: 0,
-        isAvailable: newItem.isAvailable
+      const formData = new FormData();
+      formData.append('name', newItem.name.trim());
+      formData.append('description', newItem.description.trim());
+      formData.append('price', String(Number(newItem.price)));
+      formData.append('categoryId', newItem.categoryId);
+      formData.append('preparationTime', String(newItem.preparationTime ? Number(newItem.preparationTime) : 0));
+      formData.append('sortOrder', '0');
+      formData.append('isAvailable', String(Boolean(newItem.isAvailable)));
+      if (newItemImageFile) {
+        formData.append('images', newItemImageFile);
+      }
+
+      await api.post('/api/menu/items', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
       });
       toast.success('Menu item created');
       setShowAddItemModal(false);
+      setNewItemImageFile(null);
+      setNewItemImagePreview(null);
       await loadMenuData();
     } catch (error) {
       console.error('Failed to create menu item:', error);
@@ -242,6 +266,93 @@ const MenuManagement: React.FC = () => {
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const handleUpdateItem = async () => {
+    if (!editingItem || !editingItem.name.trim()) {
+      toast.error('Item name is required');
+      return;
+    }
+    if (!editingItem.price || Number(editingItem.price) <= 0) {
+      toast.error('Price must be greater than 0');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const formData = new FormData();
+      formData.append('name', editingItem.name.trim());
+      formData.append('description', editingItem.description || '');
+      formData.append('price', editingItem.price.toString());
+      formData.append('preparationTime', (editingItem.preparation_time || 0).toString());
+      formData.append('isAvailable', editingItem.is_available.toString());
+
+      // Preserve existing images unless user explicitly removed them.
+      const existingImages = Array.isArray(editingItem.images)
+        ? editingItem.images
+        : editingItem.image
+          ? [editingItem.image]
+          : [];
+      formData.append('existingImages', JSON.stringify(existingImages));
+      
+      if (imageFile) {
+        formData.append('images', imageFile);
+      }
+
+      await api.put(`/api/menu/items/${editingItem.id}`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      
+      toast.success('Menu item updated');
+      setEditingItem(null);
+      setImageFile(null);
+      setImagePreview(null);
+      await loadMenuData();
+    } catch (error) {
+      console.error('Failed to update menu item:', error);
+      toast.error('Failed to update menu item');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      setImageFile(file);
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setImagePreview(e.target?.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleNewItemImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      setNewItemImageFile(file);
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setNewItemImagePreview(e.target?.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const removeImage = () => {
+    setImageFile(null);
+    setImagePreview(null);
+    if (editingItem) {
+      setEditingItem({ ...editingItem, images: [], image: undefined });
+    }
+  };
+
+  const removeNewItemImage = () => {
+    setNewItemImageFile(null);
+    setNewItemImagePreview(null);
   };
 
   const toggleCategory = (categoryId: string) => {
@@ -371,6 +482,7 @@ const MenuManagement: React.FC = () => {
                   onToggle={() => toggleCategory(category.id)}
                   searchTerm={searchTerm}
                   onAddItem={openAddItemModal}
+                  onEditItem={setEditingItem}
                 />
               ))}
               
@@ -482,6 +594,45 @@ const MenuManagement: React.FC = () => {
             >
               <h2 className="text-xl font-bold text-gray-900 dark:text-white">Add Menu Item</h2>
               <div className="mt-4 space-y-4">
+                {/* Photo Upload */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Photo</label>
+                  <div className="space-y-4">
+                    {newItemImagePreview && (
+                      <div className="relative inline-block">
+                        <img
+                          src={newItemImagePreview}
+                          alt="New item"
+                          className="w-32 h-32 object-cover rounded-lg border border-gray-200 dark:border-gray-600"
+                        />
+                        <button
+                          type="button"
+                          onClick={removeNewItemImage}
+                          className="absolute -top-2 -right-2 bg-red-500 hover:bg-red-600 text-white rounded-full p-1 transition-colors"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )}
+
+                    <div>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleNewItemImageUpload}
+                        className="hidden"
+                        id="new-item-image-upload"
+                      />
+                      <label
+                        htmlFor="new-item-image-upload"
+                        className="inline-flex items-center gap-2 px-4 py-2 border border-gray-200 dark:border-gray-600 rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                      >
+                        <Upload className="w-4 h-4" />
+                        {newItemImagePreview ? 'Change Photo' : 'Upload Photo'}
+                      </label>
+                    </div>
+                  </div>
+                </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Name</label>
                   <input
@@ -573,6 +724,158 @@ const MenuManagement: React.FC = () => {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Edit Item Modal */}
+      <AnimatePresence>
+        {editingItem && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+            onClick={() => {
+              setEditingItem(null);
+              setImageFile(null);
+              setImagePreview(null);
+            }}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white dark:bg-gray-800 rounded-lg max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white">Edit Menu Item</h2>
+              <div className="mt-4 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Name</label>
+                  <input
+                    type="text"
+                    value={editingItem.name}
+                    onChange={(e) => setEditingItem({ ...editingItem, name: e.target.value })}
+                    className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                    placeholder="e.g. Jerk Chicken"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Description</label>
+                  <textarea
+                    value={editingItem.description || ''}
+                    onChange={(e) => setEditingItem({ ...editingItem, description: e.target.value })}
+                    className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                    rows={3}
+                    placeholder="Describe your menu item..."
+                  />
+                </div>
+
+                {/* Image Upload Section */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Image</label>
+                  <div className="space-y-4">
+                    {/* Current Image or Preview */}
+                    {(imagePreview || editingItem.image) && (
+                      <div className="relative inline-block">
+                        <img
+                          src={imagePreview || resolveAssetUrl(editingItem.image)}
+                          alt={editingItem.name}
+                          className="w-32 h-32 object-cover rounded-lg border border-gray-200 dark:border-gray-600"
+                        />
+                        <button
+                          type="button"
+                          onClick={removeImage}
+                          className="absolute -top-2 -right-2 bg-red-500 hover:bg-red-600 text-white rounded-full p-1 transition-colors"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )}
+                    
+                    {/* Upload Button */}
+                    <div>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleImageUpload}
+                        className="hidden"
+                        id="image-upload"
+                      />
+                      <label
+                        htmlFor="image-upload"
+                        className="inline-flex items-center gap-2 px-4 py-2 border border-gray-200 dark:border-gray-600 rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                      >
+                        <Upload className="w-4 h-4" />
+                        {editingItem.image || imagePreview ? 'Change Image' : 'Upload Image'}
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Price ($)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={editingItem.price}
+                      onChange={(e) => setEditingItem({ ...editingItem, price: Number(e.target.value) })}
+                      className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                      placeholder="0.00"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Prep Time (min)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={editingItem.preparation_time || ''}
+                      onChange={(e) => setEditingItem({ ...editingItem, preparation_time: Number(e.target.value) || undefined })}
+                      className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                      placeholder="15"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="edit-available"
+                    checked={editingItem.is_available}
+                    onChange={(e) => setEditingItem({ ...editingItem, is_available: e.target.checked })}
+                    className="w-4 h-4 text-red-600 bg-gray-100 border-gray-300 rounded focus:ring-red-500 dark:focus:ring-red-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600"
+                  />
+                  <label htmlFor="edit-available" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Available for ordering
+                  </label>
+                </div>
+              </div>
+
+              <div className="mt-6 flex justify-end gap-3">
+                <button
+                  onClick={() => {
+                    setEditingItem(null);
+                    setImageFile(null);
+                    setImagePreview(null);
+                  }}
+                  className="px-4 py-2 rounded-lg border border-gray-200 text-gray-600 hover:text-gray-900 dark:border-gray-600 dark:text-gray-300"
+                  disabled={isSaving}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleUpdateItem}
+                  className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white"
+                  disabled={isSaving}
+                >
+                  {isSaving ? 'Updating...' : 'Update Item'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </DashboardLayout>
   );
 };
@@ -584,6 +887,7 @@ interface CategorySectionProps {
   onToggle: () => void;
   searchTerm: string;
   onAddItem: (categoryId: string) => void;
+  onEditItem: (item: MenuItem) => void;
 }
 
 const CategorySection: React.FC<CategorySectionProps> = ({
@@ -591,7 +895,8 @@ const CategorySection: React.FC<CategorySectionProps> = ({
   isExpanded,
   onToggle,
   searchTerm,
-  onAddItem
+  onAddItem,
+  onEditItem
 }) => {
   const filteredItems = category.items?.filter(item =>
     searchTerm === '' ||
@@ -660,7 +965,7 @@ const CategorySection: React.FC<CategorySectionProps> = ({
               {filteredItems.length > 0 ? (
                 <div className="space-y-2 pt-3">
                   {filteredItems.map((item) => (
-                    <MenuItemCard key={item.id} item={item} />
+                    <MenuItemCard key={item.id} item={item} onEdit={onEditItem} />
                   ))}
                 </div>
               ) : (
@@ -685,16 +990,17 @@ const CategorySection: React.FC<CategorySectionProps> = ({
 // Menu Item Card Component
 interface MenuItemCardProps {
   item: MenuItem;
+  onEdit: (item: MenuItem) => void;
 }
 
-const MenuItemCard: React.FC<MenuItemCardProps> = ({ item }) => {
+const MenuItemCard: React.FC<MenuItemCardProps> = ({ item, onEdit }) => {
   return (
     <div className="flex items-center gap-4 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors">
       {/* Item Image */}
       <div className="w-12 h-12 bg-gray-200 dark:bg-gray-600 rounded-lg flex-shrink-0 overflow-hidden">
         {item.image ? (
           <img 
-            src={item.image} 
+            src={resolveAssetUrl(item.image)} 
             alt={item.name}
             className="w-full h-full object-cover"
           />
@@ -743,7 +1049,10 @@ const MenuItemCard: React.FC<MenuItemCardProps> = ({ item }) => {
           )}
         </div>
         
-        <button className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-white dark:hover:bg-gray-800 transition-colors">
+        <button 
+          className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-white dark:hover:bg-gray-800 transition-colors"
+          onClick={() => onEdit(item)}
+        >
           <Edit3 className="w-4 h-4" />
         </button>
         

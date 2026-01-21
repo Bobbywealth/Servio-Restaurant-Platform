@@ -94,7 +94,7 @@ export default function AssistantMonitoringPage() {
           <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg p-6">
             <h2 className="text-lg font-semibold text-red-900 dark:text-red-100 mb-2">Access Denied</h2>
             <p className="text-red-700 dark:text-red-300">
-              You don't have permission to view the AI Assistant monitoring dashboard.
+              You don&apos;t have permission to view the AI Assistant monitoring dashboard.
             </p>
           </div>
         </div>

@@ -37,7 +37,7 @@ export default function SettingsPage() {
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [settings, setSettings] = useState({
     // General Settings
-    restaurantName: 'Servio Restaurant',
+    restaurantName: 'Sashyes Kitchen',
     timeZone: 'America/New_York',
     currency: 'USD',
     language: 'English',
@@ -133,6 +133,22 @@ export default function SettingsPage() {
     enabledForSystemDown: true
   })
 
+  // Menu Settings (public menu link + heading)
+  const [isLoadingMenu, setIsLoadingMenu] = useState(false)
+  const [isSavingMenu, setIsSavingMenu] = useState(false)
+  const [menuRestaurantSlug, setMenuRestaurantSlug] = useState<string>('')
+  const [menuFormData, setMenuFormData] = useState<{ heading: string; subheading: string; showLogo: boolean }>({
+    heading: '',
+    subheading: '',
+    showLogo: true
+  })
+
+  useEffect(() => {
+    if (activeTab === 'menu' && user?.restaurantId) {
+      loadMenuSettings()
+    }
+  }, [activeTab, user?.restaurantId])
+
   // Load Vapi settings when phone tab is active
   useEffect(() => {
     if (activeTab === 'phone' && user?.restaurantId) {
@@ -153,6 +169,45 @@ export default function SettingsPage() {
       loadAlertSettings()
     }
   }, [activeTab, user?.restaurantId])
+
+  const loadMenuSettings = async () => {
+    if (!user?.restaurantId) return
+    setIsLoadingMenu(true)
+    try {
+      const [settingsResp, profileResp] = await Promise.all([
+        api.get(`/api/restaurants/${user.restaurantId}/menu-settings`),
+        api.get('/api/restaurant/profile')
+      ])
+      const data = settingsResp.data?.data
+      const profile = profileResp.data?.data
+      if (profile?.slug) setMenuRestaurantSlug(String(profile.slug))
+      if (data) {
+        setMenuFormData({
+          heading: data.heading || '',
+          subheading: data.subheading || '',
+          showLogo: data.showLogo !== false
+        })
+      }
+    } catch (err: any) {
+      console.error('Failed to load menu settings:', err)
+    } finally {
+      setIsLoadingMenu(false)
+    }
+  }
+
+  const saveMenuSettings = async () => {
+    if (!user?.restaurantId) return
+    setIsSavingMenu(true)
+    try {
+      await api.put(`/api/restaurants/${user.restaurantId}/menu-settings`, menuFormData)
+      alert('Menu settings saved successfully!')
+      await loadMenuSettings()
+    } catch (err: any) {
+      alert(getErrorMessage(err, 'Failed to save menu settings'))
+    } finally {
+      setIsSavingMenu(false)
+    }
+  }
 
   const loadVapiSettings = async () => {
     if (!user?.restaurantId) return
@@ -285,6 +340,46 @@ export default function SettingsPage() {
     }
   }
 
+  const testAgentPrint = async () => {
+    if (receiptFormData.printMode !== 'agent') {
+      alert('Switch to "LAN (Print Agent)" mode to test printing.')
+      return
+    }
+    if (!receiptFormData.agentUrl || !receiptFormData.agentPrinter?.host) {
+      alert('Select a print agent URL and printer before testing.')
+      return
+    }
+    setIsSavingReceipt(true)
+    try {
+      const url = (receiptFormData.agentUrl || 'http://localhost:8787').replace(/\/+$/, '')
+      const resp = await fetch(`${url}/print`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          printer: receiptFormData.agentPrinter,
+          text: [
+            'SERVIO TEST PRINT',
+            '------------------------------',
+            `Restaurant: ${receiptMeta?.name || user?.name || 'Servio'}`,
+            `Time: ${new Date().toLocaleString()}`,
+            '',
+            'If this printed, the agent is working.',
+            ''
+          ].join('\n')
+        })
+      })
+      const data = await resp.json().catch(() => ({}))
+      if (!resp.ok || data?.success === false) {
+        throw new Error(data?.error?.message || 'Print agent test failed')
+      }
+      alert('Test print sent successfully!')
+    } catch (err: any) {
+      alert(getErrorMessage(err, 'Failed to send test print.'))
+    } finally {
+      setIsSavingReceipt(false)
+    }
+  }
+
   const testVapiConnection = async () => {
     if (!user?.restaurantId) return
     
@@ -303,6 +398,7 @@ export default function SettingsPage() {
   const tabs = [
     { id: 'account', name: 'Account', icon: User },
     { id: 'general', name: 'General', icon: SettingsIcon },
+    { id: 'menu', name: 'Menu Page', icon: Globe },
     { id: 'phone', name: 'Phone System', icon: Phone },
     { id: 'printing', name: 'Receipt / Printing', icon: Printer },
     { id: 'alerts', name: 'Alert Calls', icon: PhoneCall },
@@ -644,6 +740,94 @@ export default function SettingsPage() {
           </div>
         )
 
+      case 'menu':
+        if (isLoadingMenu) {
+          return <div className="text-center py-8">Loading menu settings...</div>
+        }
+
+        const menuUrl =
+          typeof window !== 'undefined' && menuRestaurantSlug
+            ? `${window.location.origin}/r/${menuRestaurantSlug}`
+            : ''
+
+        return (
+          <div className="space-y-6">
+            <div className="bg-surface-50 dark:bg-surface-800 rounded-lg p-4 border border-surface-200 dark:border-surface-700">
+              <h3 className="text-sm font-medium text-surface-900 dark:text-surface-100 mb-1">Public Menu URL</h3>
+              <p className="text-xs text-surface-600 dark:text-surface-400">
+                Share this link with customers to view your menu and place orders.
+              </p>
+              <div className="mt-3 flex items-center gap-2">
+                <input className="input-field font-mono" value={menuUrl} readOnly />
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => {
+                    if (!menuUrl) return
+                    navigator.clipboard.writeText(menuUrl)
+                    alert('Menu URL copied!')
+                  }}
+                >
+                  Copy
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-surface-900 dark:text-surface-100 mb-2">
+                  Menu Heading
+                </label>
+                <input
+                  className="input-field"
+                  value={menuFormData.heading}
+                  onChange={(e) => setMenuFormData({ ...menuFormData, heading: e.target.value })}
+                  placeholder="Leave blank to use restaurant name"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-surface-900 dark:text-surface-100 mb-2">
+                  Menu Subheading
+                </label>
+                <input
+                  className="input-field"
+                  value={menuFormData.subheading}
+                  onChange={(e) => setMenuFormData({ ...menuFormData, subheading: e.target.value })}
+                  placeholder="e.g. Authentic Jamaican • Union, NJ"
+                />
+              </div>
+
+              <label className="flex items-center gap-3 py-2">
+                <input
+                  type="checkbox"
+                  checked={menuFormData.showLogo}
+                  onChange={(e) => setMenuFormData({ ...menuFormData, showLogo: e.target.checked })}
+                  className="w-4 h-4"
+                />
+                <span className="text-sm text-surface-800 dark:text-surface-200 font-medium">Show restaurant logo</span>
+              </label>
+
+              <div className="pt-2">
+                <motion.button
+                  onClick={saveMenuSettings}
+                  disabled={isSavingMenu}
+                  className="btn-primary inline-flex items-center space-x-2"
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                >
+                  {isSavingMenu ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <Save className="w-4 h-4" />
+                  )}
+                  <span>{isSavingMenu ? 'Saving...' : 'Save Menu Settings'}</span>
+                </motion.button>
+              </div>
+            </div>
+          </div>
+        )
+
       case 'phone':
         if (isLoadingVapi) {
           return <div className="text-center py-8">Loading phone system settings...</div>
@@ -912,6 +1096,14 @@ export default function SettingsPage() {
                         >
                           {isScanningAgent ? 'Scanning…' : 'Find Nearby Printers'}
                         </button>
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          onClick={testAgentPrint}
+                          disabled={isSavingReceipt || !receiptFormData.agentPrinter}
+                        >
+                          Test Print
+                        </button>
                         {receiptFormData.agentPrinter ? (
                           <div className="text-sm text-surface-700 dark:text-surface-300">
                             Selected: <span className="font-semibold">{receiptFormData.agentPrinter.name || receiptFormData.agentPrinter.host}</span>
@@ -1125,7 +1317,7 @@ export default function SettingsPage() {
                     Automatic Alert Calls - Order Failure Protection
                   </h3>
                   <p className="text-xs text-orange-700 dark:text-orange-400 mt-1">
-                    Get an alert call when orders can't be pushed to your system in real-time. Requires Twilio phone system configuration.
+                    Get an alert call when orders can&apos;t be pushed to your system in real-time. Requires Twilio phone system configuration.
                   </p>
                 </div>
               </div>

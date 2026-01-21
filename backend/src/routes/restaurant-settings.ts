@@ -28,6 +28,7 @@ function defaultReceiptSettings() {
     showCustomerPhone: true,
     showChannel: true,
     footerText: 'Thank you!',
+    autoPrint: false,
 
     // Printing destination
     // - browser: uses OS print dialog (AirPrint / system printers)
@@ -36,6 +37,14 @@ function defaultReceiptSettings() {
     printMode: 'browser' as 'browser' | 'agent' | 'bluetooth',
     agentUrl: 'http://localhost:8787',
     agentPrinter: null as null | { name?: string; host: string; port?: number; type?: string }
+  };
+}
+
+function defaultMenuSettings() {
+  return {
+    heading: '',
+    subheading: '',
+    showLogo: true
   };
 }
 
@@ -292,6 +301,7 @@ router.put('/:restaurantId/receipt', requireAuth, asyncHandler(async (req: Reque
     showCustomerPhone: req.body.showCustomerPhone ?? currentReceipt.showCustomerPhone,
     showChannel: req.body.showChannel ?? currentReceipt.showChannel,
     footerText: req.body.footerText ?? currentReceipt.footerText,
+    autoPrint: req.body.autoPrint ?? currentReceipt.autoPrint,
     printMode: req.body.printMode ?? currentReceipt.printMode,
     agentUrl: req.body.agentUrl ?? currentReceipt.agentUrl,
     agentPrinter: req.body.agentPrinter ?? currentReceipt.agentPrinter
@@ -311,6 +321,82 @@ router.put('/:restaurantId/receipt', requireAuth, asyncHandler(async (req: Reque
     data: {
       receipt: nextReceipt
     }
+  });
+}));
+
+/**
+ * GET /api/restaurants/:restaurantId/menu-settings
+ * Get public menu page settings (non-sensitive)
+ */
+router.get('/:restaurantId/menu-settings', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+  const { restaurantId } = req.params;
+  const db = DatabaseService.getInstance().getDatabase();
+
+  if (req.user?.restaurantId !== restaurantId && req.user?.role !== 'platform-admin') {
+    return res.status(403).json({ error: 'Unauthorized' });
+  }
+
+  const restaurant = await db.get(
+    'SELECT id, name, settings FROM restaurants WHERE id = ?',
+    [restaurantId]
+  );
+
+  if (!restaurant) {
+    return res.status(404).json({ error: 'Restaurant not found' });
+  }
+
+  const settings = safeJsonParse<Record<string, any>>(restaurant.settings, {});
+  const menu = { ...defaultMenuSettings(), ...(settings.menu ?? {}) };
+
+  res.json({
+    success: true,
+    data: menu
+  });
+}));
+
+/**
+ * PUT /api/restaurants/:restaurantId/menu-settings
+ * Update public menu page settings
+ */
+router.put('/:restaurantId/menu-settings', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+  const { restaurantId } = req.params;
+  const db = DatabaseService.getInstance().getDatabase();
+
+  if (req.user?.restaurantId !== restaurantId && req.user?.role !== 'platform-admin') {
+    return res.status(403).json({ error: 'Unauthorized' });
+  }
+
+  const restaurant = await db.get(
+    'SELECT id, name, settings FROM restaurants WHERE id = ?',
+    [restaurantId]
+  );
+
+  if (!restaurant) {
+    return res.status(404).json({ error: 'Restaurant not found' });
+  }
+
+  const currentSettings = safeJsonParse<Record<string, any>>(restaurant.settings, {});
+  const currentMenu = { ...defaultMenuSettings(), ...(currentSettings.menu ?? {}) };
+
+  const nextMenu = {
+    ...currentMenu,
+    heading: req.body.heading ?? currentMenu.heading,
+    subheading: req.body.subheading ?? currentMenu.subheading,
+    showLogo: req.body.showLogo ?? currentMenu.showLogo
+  };
+
+  currentSettings.menu = nextMenu;
+
+  await db.run(
+    'UPDATE restaurants SET settings = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+    [JSON.stringify(currentSettings), restaurantId]
+  );
+
+  logger.info('Menu settings updated', { restaurantId, userId: req.user?.id });
+
+  res.json({
+    success: true,
+    data: nextMenu
   });
 }));
 

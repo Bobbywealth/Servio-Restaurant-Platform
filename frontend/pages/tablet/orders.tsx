@@ -267,6 +267,8 @@ async function printViaAgent(agentUrl: string, printer: { host: string; port?: n
 export default function TabletOrdersPage() {
   const { user, hasPermission } = useUser()
   const socket = useSocket()
+  const [debugEnabled, setDebugEnabled] = React.useState(false)
+  const [debugInfo, setDebugInfo] = React.useState<any>(null)
 
   const [orders, setOrders] = React.useState<Order[]>([])
   const [loading, setLoading] = React.useState(false)
@@ -307,6 +309,20 @@ export default function TabletOrdersPage() {
     }
   }, [user?.restaurantId])
 
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    setDebugEnabled(params.get('debug') === '1')
+  }, [])
+
+  React.useEffect(() => {
+    if (!debugEnabled) return
+    const update = () => setDebugInfo(socket.getDebugInfo())
+    update()
+    const id = window.setInterval(update, 1000)
+    return () => window.clearInterval(id)
+  }, [debugEnabled, socket])
+
   const fetchRestaurantSlug = React.useCallback(async () => {
     if (!user?.restaurantId) return
     try {
@@ -326,7 +342,8 @@ export default function TabletOrdersPage() {
     setError(null)
     try {
       const resp = await api.get('/api/orders', {
-        params: { channel: 'website', limit: 50, offset: 0 }
+        // Tablet should show all incoming orders (web + phone), not just website.
+        params: { limit: 50, offset: 0 }
       })
       setOrders(resp.data?.data?.orders || [])
     } catch (e: any) {
@@ -499,6 +516,7 @@ export default function TabletOrdersPage() {
     const onNew = (payload: any) => {
       // Short chime + then the loud alarm will persist until accepted/declined.
       playNewOrderSound()
+      socket.markOrderNew()
       fetchOrders()
       
       // Auto-print if enabled
@@ -508,7 +526,10 @@ export default function TabletOrdersPage() {
             const detail = await api.get(`/api/orders/${payload.orderId}`)
             const order = detail.data?.data
             const w = window.open('', '_blank', 'noopener,noreferrer,width=420,height=700')
-            if (!w) return
+            if (!w) {
+              setError('Popup blocked. Allow popups to enable browser printing.')
+              return
+            }
             w.document.open()
             w.document.write(printableTicketHtml(order, receiptCfg))
             w.document.close()
@@ -518,10 +539,15 @@ export default function TabletOrdersPage() {
         }, 1500) // Small delay to ensure order data is loaded
       }
     }
+    const onUpdated = () => {
+      fetchOrders()
+    }
     socket.on('order:new', onNew as any)
+    socket.on('order:updated', onUpdated as any)
 
     return () => {
       socket.off('order:new', onNew as any)
+      socket.off('order:updated', onUpdated as any)
     }
   }, [socket, user?.restaurantId, fetchOrders, playNewOrderSound, receiptCfg])
 
@@ -1079,6 +1105,16 @@ export default function TabletOrdersPage() {
               )}
             </div>
           </div>
+        </div>
+      )}
+      {debugEnabled && (
+        <div className="fixed bottom-4 right-4 z-50 rounded-xl border border-white/15 bg-black/70 text-white text-xs p-3 space-y-1 shadow-lg">
+          <div className="font-semibold">Realtime Debug</div>
+          <div>socket: {debugInfo?.connected ? 'connected' : 'disconnected'}</div>
+          <div>socketId: {debugInfo?.id || 'n/a'}</div>
+          <div>baseURL: {debugInfo?.baseUrl || 'n/a'}</div>
+          <div>room: {debugInfo?.restaurantId || 'none'}</div>
+          <div>last order:new: {debugInfo?.lastOrderNewAt || 'never'}</div>
         </div>
       )}
     </TabletLayout>

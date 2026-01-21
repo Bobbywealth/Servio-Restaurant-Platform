@@ -24,7 +24,10 @@ type MenuItemRow = {
   name: string;
 };
 
-const RESTAURANT_SLUGS = ['demo-restaurant-1', 'demo-restaurant'];
+const RESTAURANT_SLUGS = [
+  process.env.DEFAULT_RESTAURANT_SLUG,
+  DatabaseService.DEFAULT_RESTAURANT_SLUG
+].filter(Boolean) as string[];
 
 const modifierGroups: ModifierGroupSeed[] = [
   {

@@ -80,7 +80,7 @@ export class OrderRepository implements IOrderRepository {
   async getStatsSummary(restaurantId: string): Promise<OrderStatsSummary> {
     const completedTodayCondition = "status = 'completed' AND date(created_at) = date('now')";
 
-    const [totalOrders, activeOrders, completedToday, avgOrderValue, ordersByStatus, ordersByChannel] =
+    const [totalOrders, activeOrders, completedToday, completedTodaySales, avgOrderValue, ordersByStatus, ordersByChannel] =
       await Promise.all([
         this.db.get<any>('SELECT COUNT(*) as count FROM orders WHERE restaurant_id = ?', [restaurantId]),
         this.db.get<any>(
@@ -89,6 +89,10 @@ export class OrderRepository implements IOrderRepository {
         ),
         this.db.get<any>(
           `SELECT COUNT(*) as count FROM orders WHERE ${completedTodayCondition} AND restaurant_id = ?`,
+          [restaurantId]
+        ),
+        this.db.get<any>(
+          `SELECT COALESCE(SUM(total_amount), 0) as sum FROM orders WHERE ${completedTodayCondition} AND restaurant_id = ?`,
           [restaurantId]
         ),
         this.db.get<any>(
@@ -117,6 +121,7 @@ export class OrderRepository implements IOrderRepository {
       totalOrders: asNumber(totalOrders?.count),
       activeOrders: asNumber(activeOrders?.count),
       completedToday: asNumber(completedToday?.count),
+      completedTodaySales: asNumber(completedTodaySales?.sum),
       avgOrderValue: parseFloat(Number(avgOrderValue?.avg ?? 0).toFixed(2)),
       ordersByStatus: ordersByStatusMap,
       ordersByChannel: ordersByChannelMap
