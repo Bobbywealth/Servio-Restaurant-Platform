@@ -79,7 +79,7 @@ router.get('/profile', asyncHandler(async (req: Request, res: Response) => {
     is_active: Boolean(restaurant.is_active)
   };
 
-  res.json({
+  return res.json({
     success: true,
     data: formattedRestaurant
   });
@@ -284,7 +284,7 @@ router.put('/profile', upload.fields([
 
   logger.info(`Restaurant profile updated: ${name || existingRestaurant.name}`);
 
-  res.json({
+  return res.json({
     success: true,
     data: {
       ...updatedRestaurant,
