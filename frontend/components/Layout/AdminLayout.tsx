@@ -33,7 +33,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
   description = 'Servio Platform Administration'
 }) => {
   const router = useRouter()
-  const { logout } = useUser()
+  const { logout, user, isLoading } = useUser()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [currentUser, setCurrentUser] = useState<any | null>(null)
   const [mounted, setMounted] = useState(false)
@@ -56,6 +56,18 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
   useEffect(() => {
     setMounted(true)
   }, [])
+
+  // Hard guard: platform-admin only
+  useEffect(() => {
+    if (!mounted || isLoading) return
+    if (!user) {
+      router.replace('/login')
+      return
+    }
+    if (user.role !== 'platform-admin') {
+      router.replace('/dashboard')
+    }
+  }, [mounted, isLoading, user, router])
 
   useEffect(() => {
     if (!mounted || typeof window === 'undefined') return
@@ -108,6 +120,9 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
       </Head>
 
       <div className="min-h-screen bg-[#F9FAFB] dark:bg-gray-900">
+        {mounted && !isLoading && (!user || user.role !== 'platform-admin') ? (
+          <div className="p-8 text-center text-gray-600 dark:text-gray-300">Redirecting...</div>
+        ) : (
         {/* Mobile sidebar overlay */}
         {sidebarOpen && (
           <div 
@@ -281,6 +296,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
             })}
           </div>
         </div>
+        )}
       </div>
     </>
   )

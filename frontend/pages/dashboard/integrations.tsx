@@ -60,7 +60,7 @@ export default function IntegrationsPage() {
     const loadIntegrations = async () => {
       setIsLoading(true)
       try {
-        const response = await api.get('/integrations', {
+        const response = await api.get('/api/integrations', {
           params: { search: searchTerm }
         })
         setIntegrations(response.data.integrations || [])
@@ -83,7 +83,7 @@ export default function IntegrationsPage() {
 
   const toggleIntegrationStatus = async (id: string) => {
     try {
-      const response = await api.post(`/integrations/${id}/toggle`)
+      const response = await api.post(`/api/integrations/${id}/toggle`)
       const updatedIntegration = response.data.integration
 
       setIntegrations(prev => prev.map(integration => 

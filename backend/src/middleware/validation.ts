@@ -1,6 +1,6 @@
 import { body, param, query, validationResult, ValidationChain } from 'express-validator';
 import { Request, Response, NextFunction } from 'express';
-import DOMPurify from 'isomorphic-dompurify';
+import sanitizeHtml from 'sanitize-html';
 import { logger } from '../utils/logger';
 
 /**
@@ -42,9 +42,10 @@ export const handleValidationErrors = (req: Request, res: Response, next: NextFu
  */
 export const sanitizeString = (value: any): string => {
   if (typeof value !== 'string') return '';
-  return DOMPurify.sanitize(value, { 
-    ALLOWED_TAGS: [], 
-    ALLOWED_ATTR: [] 
+  return sanitizeHtml(value, {
+    allowedTags: [],
+    allowedAttributes: {},
+    disallowedTagsMode: 'recursiveEscape'
   }).trim();
 };
 

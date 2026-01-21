@@ -194,8 +194,35 @@ export function UserProvider({ children }: UserProviderProps) {
     if (!user) return false
     const permissions = user.permissions || []
     if (permissions.includes('*')) return true
-    if (!action) return permissions.some((p) => p === resource || p.startsWith(`${resource}.`))
-    return permissions.includes(`${resource}.${action}`)
+    // Support both backend-style "resource:action" and legacy frontend-style "resource.action"
+    // Also support wildcard prefixes like "orders.*" or "orders:*"
+    const normalize = (p: string) => String(p || '').trim()
+    const perms = permissions.map(normalize)
+
+    if (!action) {
+      // If caller passes a full permission string like "orders:read"
+      if (resource.includes(':') || resource.includes('.')) {
+        const direct = normalize(resource)
+        const [resKey] = direct.split(/[:.]/)
+        return (
+          perms.includes(direct) ||
+          perms.includes(`${resKey}.*`) ||
+          perms.includes(`${resKey}:*`)
+        )
+      }
+
+      // If caller passes just "orders"
+      return perms.some((p) => p === resource || p.startsWith(`${resource}.`) || p.startsWith(`${resource}:`))
+    }
+
+    const dot = `${resource}.${action}`
+    const colon = `${resource}:${action}`
+    return (
+      perms.includes(dot) ||
+      perms.includes(colon) ||
+      perms.includes(`${resource}.*`) ||
+      perms.includes(`${resource}:*`)
+    )
   }
 
   const updateUser = (updates: Partial<User>) => {
