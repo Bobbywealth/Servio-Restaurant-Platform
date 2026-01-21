@@ -361,8 +361,6 @@ export class DatabaseService {
   private async seedData(): Promise<void> {
     const db = this.getDatabase();
 
-    // Ensure demo users are always valid for login
-    const demoEmails = ['staff@demo.servio', 'manager@demo.servio'];
     logger.info('Ensuring demo users exist with valid credentials...');
     const restaurantId = 'demo-restaurant-1';
     
@@ -419,10 +417,18 @@ export class DatabaseService {
     ];
 
     for (const cat of categories) {
-      await db.run(
-        'INSERT INTO menu_categories (id, restaurant_id, name) VALUES (?, ?, ?)',
-        [cat.id, cat.restaurant_id, cat.name]
-      );
+      try {
+        await db.run(
+          `INSERT INTO menu_categories (id, restaurant_id, name)
+           VALUES (?, ?, ?)
+           ON CONFLICT (id) DO UPDATE SET
+             restaurant_id = excluded.restaurant_id,
+             name = excluded.name`,
+          [cat.id, cat.restaurant_id, cat.name]
+        );
+      } catch (err) {
+        logger.warn('Demo menu category seed/update failed:', err);
+      }
     }
 
     // Sample menu items
