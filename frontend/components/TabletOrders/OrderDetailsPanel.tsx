@@ -1,5 +1,5 @@
 import React from 'react'
-import { ExternalLink, MapPin, Phone, User, CreditCard, Package, Printer, CheckCircle2, Timer, Truck } from 'lucide-react'
+import { ExternalLink, MapPin, Phone, User, CreditCard, Package, Printer, CheckCircle2, Timer, Truck, XCircle } from 'lucide-react'
 
 export type TabletOrderDetails = {
   id: string
@@ -39,6 +39,8 @@ export default function OrderDetailsPanel({
   onConfirm,
   onMarkReady,
   onComplete,
+  onDecline,
+  onAssignDriver,
   assistant
 }: {
   order: TabletOrderDetails | null
@@ -48,8 +50,16 @@ export default function OrderDetailsPanel({
   onConfirm: (orderId: string, prepTimeMinutes?: number) => void
   onMarkReady: (orderId: string) => void
   onComplete: (orderId: string) => void
+  onDecline: (orderId: string) => void
+  onAssignDriver: (orderId: string, driver: { name?: string; phone?: string; notes?: string }) => Promise<void> | void
   assistant: React.ReactNode
 }) {
+  const [assignOpen, setAssignOpen] = React.useState(false)
+  const [assignName, setAssignName] = React.useState('')
+  const [assignPhone, setAssignPhone] = React.useState('')
+  const [assignNotes, setAssignNotes] = React.useState('')
+  const [assignBusy, setAssignBusy] = React.useState(false)
+
   if (!order) {
     return (
       <div className="bg-black/25 border border-white/10 rounded-2xl p-6 text-white/70">
@@ -67,6 +77,7 @@ export default function OrderDetailsPanel({
   const canConfirm = String(status).toLowerCase() === 'received'
   const canReady = String(status).toLowerCase() === 'preparing'
   const canComplete = String(status).toLowerCase() === 'ready'
+  const canDecline = ['received', 'preparing'].includes(String(status).toLowerCase())
 
   return (
     <div className="space-y-4">
@@ -98,10 +109,11 @@ export default function OrderDetailsPanel({
               Print
             </button>
             <a
-              href="#"
-              onClick={(e) => e.preventDefault()}
+              href={`/tablet/orders?orderId=${encodeURIComponent(detail.id)}`}
+              target="_blank"
+              rel="noopener noreferrer"
               className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/15 border border-white/10 font-extrabold inline-flex items-center gap-2 text-white/80"
-              title="Open in new tab (coming soon)"
+              title="Open this order in a new tab"
             >
               <ExternalLink className="w-4 h-4" />
             </a>
@@ -233,18 +245,100 @@ export default function OrderDetailsPanel({
               </button>
 
               <button
-                onClick={() => {}}
-                disabled
-                className="w-full px-4 py-3 rounded-xl font-extrabold bg-white/5 border border-white/10 text-white/35 inline-flex items-center justify-center gap-2"
-                title="Driver assignment is not enabled yet"
+                onClick={() => setAssignOpen(true)}
+                className="w-full px-4 py-3 rounded-xl font-extrabold bg-white/10 hover:bg-white/15 border border-white/10 text-white/80 inline-flex items-center justify-center gap-2 transition-colors"
               >
                 <Truck className="w-5 h-5" />
                 Assign driver
+              </button>
+
+              <button
+                onClick={() => onDecline(detail.id)}
+                disabled={!canDecline}
+                className={[
+                  'w-full px-4 py-3 rounded-xl font-extrabold transition-colors inline-flex items-center justify-center gap-2',
+                  canDecline ? 'bg-red-500/15 hover:bg-red-500/25 border border-red-500/25 text-red-100' : 'bg-white/5 border border-white/10 text-white/35'
+                ].join(' ')}
+              >
+                <XCircle className="w-5 h-5" />
+                Decline / Cancel
               </button>
             </div>
           </div>
         </div>
       </div>
+
+      {assignOpen && (
+        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-gray-950 border border-white/10 rounded-2xl p-5">
+            <div className="text-white/60 text-sm">Assign driver</div>
+            <div className="text-xl font-extrabold mt-1 truncate">{idLabel}</div>
+            <div className="text-white/70 text-sm mt-2">Create a delivery/driver task for this order.</div>
+
+            <div className="mt-4 space-y-3">
+              <div>
+                <label className="text-xs font-semibold text-white/70">Driver name (optional)</label>
+                <input
+                  value={assignName}
+                  onChange={(e) => setAssignName(e.target.value)}
+                  className="mt-1 w-full bg-gray-900 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:ring-2 focus:ring-teal-500/30"
+                  placeholder="e.g. Alex"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-white/70">Driver phone (optional)</label>
+                <input
+                  value={assignPhone}
+                  onChange={(e) => setAssignPhone(e.target.value)}
+                  className="mt-1 w-full bg-gray-900 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:ring-2 focus:ring-teal-500/30"
+                  placeholder="e.g. (555) 987-6543"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-white/70">Notes (optional)</label>
+                <textarea
+                  value={assignNotes}
+                  onChange={(e) => setAssignNotes(e.target.value)}
+                  className="mt-1 w-full bg-gray-900 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:ring-2 focus:ring-teal-500/30 min-h-[92px]"
+                  placeholder="Drop-off instructions, ETA, etc."
+                />
+              </div>
+            </div>
+
+            <div className="mt-5 flex gap-2">
+              <button
+                onClick={() => setAssignOpen(false)}
+                className="flex-1 px-4 py-3 rounded-xl bg-white/10 hover:bg-white/15 border border-white/10 font-extrabold"
+                disabled={assignBusy}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  setAssignBusy(true)
+                  try {
+                    await onAssignDriver(detail.id, {
+                      name: assignName.trim() || undefined,
+                      phone: assignPhone.trim() || undefined,
+                      notes: assignNotes.trim() || undefined
+                    })
+                    setAssignOpen(false)
+                    setAssignName('')
+                    setAssignPhone('')
+                    setAssignNotes('')
+                  } finally {
+                    setAssignBusy(false)
+                  }
+                }}
+                className="flex-1 px-4 py-3 rounded-xl bg-teal-500 hover:bg-teal-600 font-extrabold text-gray-950"
+                disabled={assignBusy}
+              >
+                {assignBusy ? 'Assigning…' : 'Assign'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -5,7 +5,8 @@ import TabletLayout from '../../components/Layout/TabletLayout'
 import { api } from '../../lib/api'
 import { useUser } from '../../contexts/UserContext'
 import { useSocket } from '../../lib/socket'
-import { ShoppingBag, Volume2 } from 'lucide-react'
+import { useRouter } from 'next/router'
+import { Check, ShoppingBag, Volume2 } from 'lucide-react'
 import SplitContainer from '../../components/TabletOrders/SplitContainer'
 import OrdersListPanel from '../../components/TabletOrders/OrdersListPanel'
 import OrderDetailsPanel from '../../components/TabletOrders/OrderDetailsPanel'
@@ -269,6 +270,7 @@ async function printViaAgent(agentUrl: string, printer: { host: string; port?: n
 }
 
 export default function TabletOrdersPage() {
+  const router = useRouter()
   const { user, hasPermission } = useUser()
   const socket = useSocket()
   const [debugEnabled, setDebugEnabled] = React.useState(false)
@@ -287,7 +289,9 @@ export default function TabletOrdersPage() {
   const [selectedOrderId, setSelectedOrderId] = React.useState<string | null>(null)
   const [orderDetails, setOrderDetails] = React.useState<any>(null)
   const [loadingDetails, setLoadingDetails] = React.useState(false)
+  const [mobileView, setMobileView] = React.useState<'orders' | 'details'>('orders')
   const [creatingTestOrder, setCreatingTestOrder] = React.useState(false)
+  const [notice, setNotice] = React.useState<string | null>(null)
 
   const canReadOrders = hasPermission('orders:read')
   const canWriteOrders = hasPermission('orders:write')
@@ -319,6 +323,17 @@ export default function TabletOrdersPage() {
     const params = new URLSearchParams(window.location.search)
     setDebugEnabled(params.get('debug') === '1')
   }, [])
+
+  // Deep link support: /tablet/orders?orderId=...&view=details
+  React.useEffect(() => {
+    if (!router.isReady) return
+    const oid = typeof router.query.orderId === 'string' ? router.query.orderId : null
+    if (oid) {
+      setSelectedOrderId(oid)
+      const view = typeof router.query.view === 'string' ? router.query.view : ''
+      if (view === 'details') setMobileView('details')
+    }
+  }, [router.isReady, router.query.orderId, router.query.view])
 
   React.useEffect(() => {
     if (!debugEnabled) return
@@ -523,6 +538,10 @@ export default function TabletOrdersPage() {
       playNewOrderSound()
       socket.markOrderNew()
       fetchOrders()
+      if (payload?.orderId) {
+        setSelectedOrderId(payload.orderId)
+        setMobileView('details')
+      }
       
       // Auto-print if enabled
       if (receiptCfg?.receipt?.autoPrint && payload?.orderId) {
@@ -612,6 +631,7 @@ export default function TabletOrdersPage() {
       })
       setActiveModalOrder(null)
       await fetchOrders()
+      await fetchOrderDetails(activeModalOrder.id)
     } catch (e: any) {
       setError(e?.response?.data?.error?.message || e?.message || 'Failed to accept order')
     } finally {
@@ -690,10 +710,36 @@ export default function TabletOrdersPage() {
       await api.post(`/api/orders/${orderId}/status`, { status })
       await fetchOrders()
       await fetchOrderDetails(orderId)
+      setNotice(`Order updated: ${status}`)
+      window.setTimeout(() => setNotice(null), 3500)
     } catch (e: any) {
       setError(e?.response?.data?.error?.message || e?.message || 'Failed to update order')
     } finally {
       setActingOrderId(null)
+    }
+  }
+
+  const assignDriver = async (orderId: string, driver: { name?: string; phone?: string; notes?: string }) => {
+    setError(null)
+    try {
+      const title = driver?.name ? `Assign driver (${driver.name}) for ${orderId}` : `Assign driver for ${orderId}`
+      const descriptionLines = [
+        `Order: ${orderId}`,
+        driver?.name ? `Driver: ${driver.name}` : null,
+        driver?.phone ? `Phone: ${driver.phone}` : null,
+        driver?.notes ? `Notes: ${driver.notes}` : null
+      ].filter(Boolean) as string[]
+
+      await api.post('/api/tasks', {
+        title,
+        description: descriptionLines.join('\n'),
+        type: 'one_time'
+      })
+
+      setNotice('Driver task created')
+      window.setTimeout(() => setNotice(null), 3500)
+    } catch (e: any) {
+      setError(e?.response?.data?.error?.message || e?.message || 'Failed to assign driver')
     }
   }
 
@@ -727,8 +773,18 @@ export default function TabletOrdersPage() {
         ]
       }
 
-      await api.post('/api/orders', testOrderData)
+      const resp = await api.post('/api/orders', testOrderData)
       await fetchOrders()
+      const createdId =
+        resp?.data?.data?.orderId ||
+        resp?.data?.orderId ||
+        null
+      if (createdId) {
+        setSelectedOrderId(String(createdId))
+        setMobileView('details')
+      }
+      setNotice('Test order created')
+      window.setTimeout(() => setNotice(null), 3500)
     } catch (e: any) {
       setError(e?.response?.data?.error?.message || e?.message || 'Failed to create test order')
     } finally {
@@ -752,7 +808,7 @@ export default function TabletOrdersPage() {
                 className="px-4 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold inline-flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 title="Create a test order to verify tablet functionality"
               >
-                <BadgeCheck className={`w-5 h-5 ${creatingTestOrder ? 'animate-spin' : ''}`} />
+                <Check className={`w-5 h-5 ${creatingTestOrder ? 'animate-spin' : ''}`} />
                 {creatingTestOrder ? 'Creating...' : 'Create Test Order'}
               </button>
             )}
@@ -801,33 +857,81 @@ export default function TabletOrdersPage() {
             </div>
           )}
 
+          {notice && (
+            <div className="mb-4 bg-emerald-500/15 border border-emerald-500/30 text-emerald-100 rounded-2xl p-4">
+              {notice}
+            </div>
+          )}
+
+          <div className="mb-3 lg:hidden">
+            <div className="bg-white/5 border border-white/10 rounded-2xl p-2 flex gap-2">
+              <button
+                onClick={() => setMobileView('orders')}
+                className={[
+                  'flex-1 px-3 py-2 rounded-xl font-extrabold border transition-colors',
+                  mobileView === 'orders' ? 'bg-white text-gray-950 border-white' : 'bg-white/5 text-white/70 border-white/10'
+                ].join(' ')}
+              >
+                Orders
+              </button>
+              <button
+                onClick={() => setMobileView('details')}
+                className={[
+                  'flex-1 px-3 py-2 rounded-xl font-extrabold border transition-colors',
+                  mobileView === 'details' ? 'bg-white text-gray-950 border-white' : 'bg-white/5 text-white/70 border-white/10'
+                ].join(' ')}
+                disabled={!selectedOrderId}
+                title={!selectedOrderId ? 'Select an order first' : undefined}
+              >
+                Details
+              </button>
+            </div>
+          </div>
+
           <SplitContainer
             left={
-              <OrdersListPanel
-                orders={todaysOrders as any}
-                selectedOrderId={selectedOrderId}
-                onSelectOrderId={setSelectedOrderId}
-                nowMs={nowTick}
-              />
+              <div className={mobileView === 'orders' ? 'block' : 'hidden lg:block'}>
+                <OrdersListPanel
+                  orders={todaysOrders as any}
+                  selectedOrderId={selectedOrderId}
+                  onSelectOrderId={(id) => {
+                    setSelectedOrderId(id)
+                    setMobileView('details')
+                  }}
+                  nowMs={nowTick}
+                />
+              </div>
             }
             right={
-              <OrderDetailsPanel
-                order={selectedOrder as any}
-                orderDetails={orderDetails as any}
-                loadingDetails={loadingDetails}
-                onPrint={handlePrint}
-                onConfirm={(orderId) => {
-                  const o = todaysOrders.find((x) => x.id === orderId)
-                  if (o) openAccept(o)
-                }}
-                onMarkReady={(orderId) => updateOrderStatus(orderId, 'ready')}
-                onComplete={(orderId) => updateOrderStatus(orderId, 'completed')}
-                assistant={
-                  <div className="bg-white/5 border border-white/10 rounded-xl p-3">
-                    <EmbeddedAssistant />
-                  </div>
-                }
-              />
+              <div className={mobileView === 'details' ? 'block' : 'hidden lg:block'}>
+                <div className="lg:hidden mb-3">
+                  <button
+                    onClick={() => setMobileView('orders')}
+                    className="w-full px-4 py-3 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 text-white/80 font-extrabold"
+                  >
+                    Back to Orders
+                  </button>
+                </div>
+                <OrderDetailsPanel
+                  order={selectedOrder as any}
+                  orderDetails={orderDetails as any}
+                  loadingDetails={loadingDetails}
+                  onPrint={handlePrint}
+                  onConfirm={(orderId) => {
+                    const o = todaysOrders.find((x) => x.id === orderId)
+                    if (o) openAccept(o)
+                  }}
+                  onMarkReady={(orderId) => updateOrderStatus(orderId, 'ready')}
+                  onComplete={(orderId) => updateOrderStatus(orderId, 'completed')}
+                  onDecline={(orderId) => updateOrderStatus(orderId, 'cancelled')}
+                  onAssignDriver={assignDriver}
+                  assistant={
+                    <div className="bg-white/5 border border-white/10 rounded-xl p-3">
+                      <EmbeddedAssistant />
+                    </div>
+                  }
+                />
+              </div>
             }
           />
 

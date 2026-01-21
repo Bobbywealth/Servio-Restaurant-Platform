@@ -51,7 +51,9 @@ export default function OrderListItem({
       className={[
         'w-full text-left rounded-2xl border transition-colors',
         'px-4 py-3',
-        selected ? 'bg-white/10 border-white/20' : 'bg-white/5 hover:bg-white/7 border-white/10'
+        selected
+          ? 'bg-white/10 border-teal-400/40 ring-2 ring-teal-500/20'
+          : 'bg-white/5 hover:bg-white/7 border-white/10'
       ].join(' ')}
     >
       <div className="flex items-start justify-between gap-3">
