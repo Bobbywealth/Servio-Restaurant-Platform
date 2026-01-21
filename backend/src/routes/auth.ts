@@ -26,6 +26,15 @@ router.post('/test-post', (req, res) => {
   });
 });
 
+// DEBUG: Test with asyncHandler to see if it's the issue
+router.get('/test-async', asyncHandler(async (req: Request, res: Response) => {
+  res.json({ 
+    success: true, 
+    message: 'Async handler test works!',
+    timestamp: new Date().toISOString()
+  });
+}));
+
 const REFRESH_TOKEN_TTL_DAYS = Number(process.env.REFRESH_TOKEN_TTL_DAYS ?? 30);
 
 function safeUser(row: any) {

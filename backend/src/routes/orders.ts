@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { asyncHandler } from '../middleware/errorHandler';
 import { requireAuth, requirePermission } from '../middleware/auth';
 import { getService } from '../bootstrap/services';
+import { DatabaseService } from '../services/DatabaseService';
 import type { OrderService } from '../services/OrderService';
 
 const router = Router();
@@ -76,10 +77,17 @@ router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) =>
   // Notify dashboard via Socket.IO
   const io = req.app.get('socketio');
   if (io) {
-    io.to(`restaurant-${created.restaurantId}`).emit('new-order', {
+    const payload = {
       orderId: created.orderId,
-      totalAmount: created.totalAmount
-    });
+      totalAmount: created.totalAmount,
+      channel: 'website',
+      status: created.status,
+      createdAt: new Date().toISOString()
+    };
+    // Legacy event name (older clients)
+    io.to(`restaurant-${created.restaurantId}`).emit('new-order', payload);
+    // Canonical event name (frontend expects this)
+    io.to(`restaurant-${created.restaurantId}`).emit('order:new', payload);
   }
 
   res.status(201).json({
@@ -115,6 +123,20 @@ router.post('/', requireAuth, requirePermission('orders:write'), asyncHandler(as
     customerPhone,
     totalAmount
   });
+
+  // Notify dashboard/tablet via Socket.IO
+  const io = req.app.get('socketio');
+  if (io) {
+    const payload = {
+      orderId: created.orderId,
+      totalAmount,
+      channel: channel || null,
+      status: created.status,
+      createdAt: created.createdAt
+    };
+    io.to(`restaurant-${req.user?.restaurantId}`).emit('new-order', payload);
+    io.to(`restaurant-${req.user?.restaurantId}`).emit('order:new', payload);
+  }
 
   res.status(201).json({
     success: true,
@@ -162,6 +184,62 @@ router.post('/:id/status', requireAuth, requirePermission('orders:write'), async
   });
 
   res.json({ success: true, data });
+}));
+
+/**
+ * POST /api/orders/:id/accept
+ * Accept an order and set prep time.
+ * Requires orders:write permission.
+ */
+router.post('/:id/accept', requireAuth, requirePermission('orders:write'), asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const prepTimeMinutesRaw = req.body?.prepTimeMinutes;
+  const prepTimeMinutes = prepTimeMinutesRaw === undefined || prepTimeMinutesRaw === null
+    ? null
+    : Number(prepTimeMinutesRaw);
+
+  if (prepTimeMinutes !== null && (!Number.isFinite(prepTimeMinutes) || prepTimeMinutes < 0 || prepTimeMinutes > 240)) {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'prepTimeMinutes must be a number between 0 and 240' }
+    });
+  }
+
+  const orderService = getService<OrderService>('orderService');
+
+  // 1) Move to preparing (accepted)
+  const statusResult = await orderService.updateOrderStatus({
+    restaurantId: req.user?.restaurantId!,
+    userId: req.user?.id || 'system',
+    orderId: id,
+    status: 'preparing'
+  });
+
+  // 2) Store prep time + acceptance metadata
+  const db = DatabaseService.getInstance().getDatabase();
+  await db.run(
+    `
+      UPDATE orders
+      SET
+        prep_time_minutes = COALESCE(?, prep_time_minutes),
+        accepted_at = COALESCE(accepted_at, CURRENT_TIMESTAMP),
+        accepted_by_user_id = COALESCE(accepted_by_user_id, ?),
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ? AND restaurant_id = ?
+    `,
+    [prepTimeMinutes, req.user?.id || null, id, req.user?.restaurantId]
+  );
+
+  // Return updated order
+  const order = await orderService.getOrderById(id);
+
+  res.json({
+    success: true,
+    data: {
+      ...statusResult,
+      order
+    }
+  });
 }));
 
 export default router;

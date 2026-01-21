@@ -27,6 +27,9 @@ export interface Order {
   paymentStatus?: string | null;
   customerName?: string | null;
   customerPhone?: string | null;
+  prepTimeMinutes?: number | null;
+  acceptedAt?: string | null;
+  acceptedByUserId?: string | null;
   source?: string | null;
   callId?: string | null;
   createdAt?: string | null;
