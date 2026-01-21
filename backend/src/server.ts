@@ -115,8 +115,10 @@ async function initializeServer() {
     // SQL injection prevention (global)
     app.use(preventSQLInjection);
     
-    // API Routes with rate limiting
-    app.use('/api/auth', authRateLimiter, authRoutes);
+    // API Routes with rate limiting - temporarily disable rate limiter for auth debugging
+    logger.info('Mounting auth routes at /api/auth');
+    app.use('/api/auth', authRoutes);
+    logger.info('Auth routes mounted successfully');
     
     // Vapi webhook routes (no auth required for external webhooks)
     app.use('/api/vapi', vapiRoutes);
