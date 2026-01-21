@@ -169,10 +169,10 @@ export class VapiService {
           result = VoiceOrderingService.getInstance().getStoreStatus();
           break;
         case 'searchMenu':
-          result = VoiceOrderingService.getInstance().searchMenu(parameters.q || '');
+          result = await VoiceOrderingService.getInstance().searchMenu(parameters.q || '', restaurantId);
           break;
         case 'getMenuItem':
-          result = VoiceOrderingService.getInstance().getMenuItem(parameters.id);
+          result = await VoiceOrderingService.getInstance().getMenuItem(parameters.id, restaurantId);
           break;
         case 'quoteOrder':
           result = VoiceOrderingService.getInstance().validateQuote(parameters);

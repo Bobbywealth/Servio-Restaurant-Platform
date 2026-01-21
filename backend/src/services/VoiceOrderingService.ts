@@ -77,7 +77,102 @@ export class VoiceOrderingService {
     return this.menuData;
   }
 
-  public searchMenu(query: string) {
+  /**
+   * Search menu - now uses LIVE database with real-time availability
+   */
+  public async searchMenu(query: string, restaurantId: string = 'demo-restaurant-1') {
+    try {
+      const db = DatabaseService.getInstance().getDatabase();
+      const q = `%${query.toLowerCase()}%`;
+      
+      // Query live menu from database - ONLY available items
+      const items = await db.all(`
+        SELECT 
+          mi.id,
+          mi.name,
+          mi.description,
+          mi.price,
+          mc.name as category,
+          mi.is_available
+        FROM menu_items mi
+        LEFT JOIN menu_categories mc ON mi.category_id = mc.id
+        WHERE mi.restaurant_id = ?
+          AND mi.is_available = TRUE
+          AND (
+            LOWER(mi.name) LIKE ?
+            OR LOWER(mi.description) LIKE ?
+            OR LOWER(mc.name) LIKE ?
+          )
+        ORDER BY mi.name
+        LIMIT 20
+      `, [restaurantId, q, q, q]);
+
+      logger.info(`Found ${items.length} available menu items for query: ${query}`);
+
+      return items.map((item: any) => ({
+        id: item.id,
+        name: item.name,
+        price: parseFloat(item.price),
+        description: item.description || '',
+        category: item.category || 'Other'
+      }));
+    } catch (error) {
+      logger.error('Failed to search menu from database:', error);
+      // Fallback to static menu if database fails
+      return this.searchMenuFallback(query);
+    }
+  }
+
+  /**
+   * Get specific menu item - now from LIVE database
+   */
+  public async getMenuItem(id: string, restaurantId: string = 'demo-restaurant-1') {
+    try {
+      const db = DatabaseService.getInstance().getDatabase();
+      
+      const item = await db.get(`
+        SELECT 
+          mi.id,
+          mi.name,
+          mi.description,
+          mi.price,
+          mc.name as category,
+          mi.is_available
+        FROM menu_items mi
+        LEFT JOIN menu_categories mc ON mi.category_id = mc.id
+        WHERE mi.id = ? AND mi.restaurant_id = ?
+      `, [id, restaurantId]);
+
+      if (!item) {
+        logger.warn(`Menu item not found in database: ${id}`);
+        return this.getMenuItemFallback(id);
+      }
+
+      // Check if item is available
+      if (!item.is_available) {
+        logger.warn(`Menu item is 86'd (unavailable): ${item.name}`);
+        return null; // Don't offer unavailable items
+      }
+
+      return {
+        id: item.id,
+        name: item.name,
+        basePrice: parseFloat(item.price),
+        description: item.description || '',
+        category: item.category || 'Other',
+        modifierGroups: [], // TODO: Load modifiers from database
+        tags: []
+      };
+    } catch (error) {
+      logger.error('Failed to get menu item from database:', error);
+      return this.getMenuItemFallback(id);
+    }
+  }
+
+  /**
+   * Fallback to static JSON menu if database fails
+   */
+  private searchMenuFallback(query: string) {
     if (!this.menuData) return [];
     const results: any[] = [];
     const q = query.toLowerCase();
@@ -85,7 +180,6 @@ export class VoiceOrderingService {
     this.menuData.categories.forEach((cat: any) => {
       cat.items.forEach((item: any) => {
         if (item.name.toLowerCase().includes(q)) {
-          // Determine base price
           let price = item.price || 0;
           if (!price && item.modifierGroups) {
             const sizeGroup = item.modifierGroups.find((g: any) => g.id === 'size' || g.name.toLowerCase().includes('size'));
@@ -107,12 +201,14 @@ export class VoiceOrderingService {
     return results;
   }
 
-  public getMenuItem(id: string) {
+  /**
+   * Fallback to get item from static JSON
+   */
+  private getMenuItemFallback(id: string) {
     if (!this.menuData) return null;
     for (const cat of this.menuData.categories) {
       const item = cat.items.find((i: any) => i.id === id);
       if (item) {
-        // Determine base price for response
         let basePrice = item.price || 0;
         if (!basePrice && item.modifierGroups) {
           const sizeGroup = item.modifierGroups.find((g: any) => g.id === 'size' || g.name.toLowerCase().includes('size'));
@@ -121,7 +217,6 @@ export class VoiceOrderingService {
           }
         }
 
-        // Return structured data for Vapi
         return {
           id: item.id,
           name: item.name,
