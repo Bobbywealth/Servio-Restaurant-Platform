@@ -60,6 +60,11 @@ export default function TabletLayout({
                   </span>
                 </div>
                 <div className="text-lg font-extrabold leading-tight truncate">{title}</div>
+                {user?.email && (
+                  <div className="text-xs text-white/50 font-medium truncate mt-1">
+                    👤 {user.email}
+                  </div>
+                )}
               </div>
             </div>
             <div className="flex items-center gap-2">
