@@ -98,6 +98,7 @@ async function initializeServer() {
     const { default: assistantRoutes } = await import('./routes/assistant');
     const { default: assistantMonitoringRoutes } = await import('./routes/assistant-monitoring');
     const { default: ordersRoutes } = await import('./routes/orders');
+    const { default: orderHistoryRoutes } = await import('./routes/order-history');
     const { default: inventoryRoutes } = await import('./routes/inventory');
     const { default: menuRoutes } = await import('./routes/menu');
     const { default: tasksRoutes } = await import('./routes/tasks');
@@ -145,6 +146,7 @@ async function initializeServer() {
     app.use('/api/assistant', requireAuth, heavyOperationRateLimiter, assistantRoutes);
     app.use('/api/assistant-monitoring', requireAuth, apiRateLimiter, assistantMonitoringRoutes);
     app.use('/api/orders', requireAuth, apiRateLimiter, ordersRoutes);
+    app.use('/api/orders/history', requireAuth, apiRateLimiter, orderHistoryRoutes);
     app.use('/api/inventory', requireAuth, apiRateLimiter, inventoryRoutes);
     app.use('/api/menu', requireAuth, apiRateLimiter, menuRoutes);
     app.use('/api/tasks', requireAuth, apiRateLimiter, tasksRoutes);

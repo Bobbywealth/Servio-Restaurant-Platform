@@ -28,7 +28,8 @@ import {
   Store,
   Wifi,
   FileText,
-  HelpCircle
+  HelpCircle,
+  History
 } from 'lucide-react';
 
 interface DashboardLayoutProps {
@@ -111,6 +112,14 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       icon: ClipboardList,
       description: 'Manage all orders',
       color: 'text-primary-500',
+      roles: ['manager', 'owner', 'admin']
+    },
+    {
+      name: 'Order History',
+      href: '/dashboard/order-history',
+      icon: History,
+      description: 'View historical orders',
+      color: 'text-blue-500',
       roles: ['manager', 'owner', 'admin']
     },
     {
