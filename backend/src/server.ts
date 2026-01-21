@@ -39,6 +39,7 @@ import { getMetricsService } from './services/MetricsService';
 import { setupAlertHandlers } from './config/alerts';
 import { container } from './container/ServiceContainer';
 import { containerMiddleware } from './middleware/container';
+import { ensureDemoUsers } from './bootstrap/ensureDemoUsers';
 
 const app = express();
 const server = createServer(app);
@@ -76,6 +77,9 @@ async function initializeServer() {
   try {
     await DatabaseService.initialize();
     logger.info('Database initialized successfully');
+
+    // Ensure demo accounts exist for demo environments
+    await ensureDemoUsers();
 
     // Initialize services
     initializeNotifications(io);

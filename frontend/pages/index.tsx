@@ -26,23 +26,48 @@ export default function HomePage() {
 
       <div className="min-h-screen bg-gray-900 text-white">
         {/* Navigation */}
-        <nav className="fixed top-0 left-0 right-0 bg-gray-900/95 backdrop-blur-md z-50">
+        <nav className="fixed top-0 left-0 right-0 bg-transparent z-50">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between items-center h-16">
+            <div className="flex flex-col items-center justify-center py-4 md:py-0 md:flex-row md:justify-between md:h-16">
               <Link href="/" className="flex items-center group">
                 <img
                   src="/images/servio_icon_tight.png"
                   alt="Servio Icon"
-                  className="h-8 w-auto transition-transform group-hover:scale-105"
+                  className="h-10 md:h-8 w-auto transition-transform group-hover:scale-105"
                 />
-                <span className="ml-2 text-xl font-bold text-white">Servio</span>
+                <span className="ml-2 text-3xl md:text-xl font-bold text-white tracking-tight">servio</span>
               </Link>
-              <div className="hidden md:flex items-center space-x-8">
-                <a href="#services" className="text-gray-300 hover:text-white font-medium transition-colors">Services</a>
-                <a href="#features" className="text-gray-300 hover:text-white font-medium transition-colors">Features</a>
-                <a href="#pricing" className="text-gray-300 hover:text-white font-medium transition-colors">Pricing</a>
-                <a href="#faq" className="text-gray-300 hover:text-white font-medium transition-colors">FAQ</a>
-                <Link href="/login" className="text-gray-300 hover:text-white font-medium transition-colors">Login</Link>
+              <div className="mt-4 md:mt-0 flex items-center gap-7 md:gap-8">
+                <a
+                  href="#services"
+                  className="text-gray-200 hover:text-white font-medium transition-colors text-lg md:text-sm"
+                >
+                  Services
+                </a>
+                <a
+                  href="#features"
+                  className="text-gray-200 hover:text-white font-medium transition-colors text-lg md:text-sm"
+                >
+                  Features
+                </a>
+                <a
+                  href="#pricing"
+                  className="text-gray-200 hover:text-white font-medium transition-colors text-lg md:text-sm"
+                >
+                  Pricing
+                </a>
+                <a
+                  href="#faq"
+                  className="text-gray-200 hover:text-white font-medium transition-colors text-lg md:text-sm"
+                >
+                  FAQ
+                </a>
+                <Link
+                  href="/login"
+                  className="text-gray-200 hover:text-white font-medium transition-colors text-lg md:text-sm"
+                >
+                  Login
+                </Link>
               </div>
             </div>
           </div>
@@ -87,7 +112,7 @@ export default function HomePage() {
 
               <div className="flex flex-col sm:flex-row gap-6 justify-center items-center">
                 <Link
-                  href="/dashboard/assistant"
+                  href="/login"
                   className="bg-teal-600 hover:bg-teal-700 text-white px-8 py-4 rounded-lg font-semibold text-lg transition-all duration-200 transform hover:scale-105 shadow-xl"
                 >
                   Get Started
@@ -213,7 +238,7 @@ export default function HomePage() {
                     <ArrowRight className="ml-2 w-4 h-4" />
                   </Link>
                   <Link
-                    href="/dashboard/assistant"
+                    href="/login"
                     className="border border-gray-700 hover:border-gray-500 text-gray-200 hover:text-white px-6 py-3 rounded-lg font-semibold transition-all duration-200 inline-flex items-center justify-center"
                   >
                     Try the voice agent
@@ -677,7 +702,7 @@ export default function HomePage() {
 
             <div className="text-center mt-12">
               <Link
-                href="/dashboard/assistant"
+                href="/login"
                 className="inline-flex items-center bg-teal-600 hover:bg-teal-700 text-white px-8 py-4 rounded-lg font-semibold text-lg transition-all duration-200 transform hover:scale-105"
               >
                 Try the Assistant

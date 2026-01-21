@@ -336,7 +336,7 @@ export default function LoginPage() {
             <div className="grid grid-cols-2 gap-3">
               <button 
                 type="button"
-                onClick={() => handleDemoLogin('admin@servio.com', 'admin123')}
+                onClick={() => handleDemoLogin('admin@servio.com', 'password')}
                 className="bg-gray-700/50 hover:bg-gray-700 p-3 rounded-xl text-left transition-all group border border-gray-600 hover:border-teal-500/50 hover:shadow-[0_10px_24px_-18px_rgba(20,184,166,0.3)]"
               >
                 <p className="text-[10px] font-bold text-gray-400 uppercase mb-1 group-hover:text-teal-400 transition-colors">Admin</p>
