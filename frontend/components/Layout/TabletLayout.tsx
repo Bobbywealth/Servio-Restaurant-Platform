@@ -2,7 +2,7 @@ import React from 'react'
 import Head from 'next/head'
 import { useRouter } from 'next/router'
 import { useUser } from '../../contexts/UserContext'
-import { LogOut, RefreshCw, Sparkles, Mic } from 'lucide-react'
+import { LogOut, RefreshCw, Sparkles, Mic, Settings } from 'lucide-react'
 
 export default function TabletLayout({
   title,

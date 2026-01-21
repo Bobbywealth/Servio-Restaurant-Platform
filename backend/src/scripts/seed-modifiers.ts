@@ -11,8 +11,14 @@ async function seedModifiers() {
   const dbService = DatabaseService.getInstance();
   const db = dbService.getDatabase();
   
-  // Get the demo restaurant ID
-  const restaurant = await db.get('SELECT id FROM restaurants WHERE slug = "demo-restaurant" LIMIT 1');
+  // Get the demo restaurant ID - try multiple possible slugs
+  let restaurant = await db.get('SELECT id FROM restaurants WHERE slug = ? LIMIT 1', ['demo-restaurant-1']);
+  if (!restaurant) {
+    restaurant = await db.get('SELECT id FROM restaurants WHERE slug = ? LIMIT 1', ['demo-restaurant']);
+  }
+  if (!restaurant) {
+    restaurant = await db.get('SELECT id FROM restaurants WHERE name LIKE ? LIMIT 1', ['%Demo%']);
+  }
   if (!restaurant) {
     console.error('❌ Demo restaurant not found. Please create a restaurant first.');
     return;
