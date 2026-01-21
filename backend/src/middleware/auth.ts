@@ -70,10 +70,14 @@ export function requirePermission(permission: string) {
     // Check for exact permission match
     if (user.permissions.includes(permission)) return next();
     
-    // Check for wildcard pattern matches (e.g., "orders.*" matches "orders:read")
+    // Check for wildcard pattern matches (e.g., "orders:*" matches "orders:read")
     const permissionPrefix = permission.split(':')[0];
-    const wildcardPermission = `${permissionPrefix}.*`;
+    const wildcardPermission = `${permissionPrefix}:*`;
     if (user.permissions.includes(wildcardPermission)) return next();
+    
+    // Also support legacy dot notation for wildcards (e.g., "orders.*")
+    const legacyWildcard = `${permissionPrefix}.*`;
+    if (user.permissions.includes(legacyWildcard)) return next();
     
     return next(new ForbiddenError(`Missing permission: ${permission}`));
   };

@@ -22,6 +22,7 @@ import {
   Clock,
   XCircle
 } from 'lucide-react'
+import toast from 'react-hot-toast'
 
 const DashboardLayout = dynamic(() => import('../../components/Layout/DashboardLayout'), {
   ssr: true,
@@ -66,6 +67,7 @@ export default function IntegrationsPage() {
         setIntegrations(response.data.integrations || [])
       } catch (error) {
         console.error('Failed to load integrations:', error)
+        toast.error('Failed to load integrations. Please retry.')
         setIntegrations([])
       } finally {
         setIsLoading(false)
@@ -91,7 +93,7 @@ export default function IntegrationsPage() {
       ))
     } catch (error) {
       console.error('Failed to toggle integration status:', error)
-      // Optionally show an error message to the user
+      toast.error('Failed to update integration. Please retry.')
     }
   }
 

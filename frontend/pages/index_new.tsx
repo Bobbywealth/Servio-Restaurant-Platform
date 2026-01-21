@@ -29,10 +29,10 @@ export default function HomePage() {
         <nav className="fixed top-0 left-0 right-0 bg-white/80 backdrop-blur-md shadow-sm z-50">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between items-center h-16">
-              <div className="flex items-center">
-                <img src="/images/servio_logo_transparent_tight.png" alt="Servio Logo" className="h-8 w-auto" />
+              <Link href="/" className="flex items-center group">
+                <img src="/images/servio_logo_transparent_tight.png" alt="Servio Logo" className="h-8 w-auto transition-transform group-hover:scale-105" />
                 <span className="ml-2 text-xl font-bold text-gray-900">Servio</span>
-              </div>
+              </Link>
               <div className="hidden md:flex items-center space-x-8">
                 <a href="#features" className="text-gray-600 hover:text-gray-900 font-medium">Features</a>
                 <a href="#how-it-works" className="text-gray-600 hover:text-gray-900 font-medium">How It Works</a>

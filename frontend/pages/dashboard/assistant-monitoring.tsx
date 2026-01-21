@@ -87,7 +87,7 @@ export default function AssistantMonitoringPage() {
     };
   }, [fetchDashboardData, autoRefresh]);
 
-  if (!hasPermission('admin') && !hasPermission('platform:admin')) {
+  if (!hasPermission('assistant:read') && !hasPermission('platform:admin')) {
     return (
       <DashboardLayout>
         <div className="max-w-4xl mx-auto">

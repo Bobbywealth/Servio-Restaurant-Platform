@@ -1,13 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { enhancedLogger } from '../utils/logger';
 
-interface ErrorWithStatus extends Error {
-  status?: number;
-  statusCode?: number;
-  code?: string;
-  details?: any;
-}
-
 export interface AppError extends Error {
   statusCode?: number;
   isOperational?: boolean;

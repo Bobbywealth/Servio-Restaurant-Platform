@@ -120,21 +120,22 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
       </Head>
 
       <div className="min-h-screen bg-[#F9FAFB] dark:bg-gray-900">
-        {mounted && !isLoading && (!user || user.role !== 'platform-admin') ? (
+        {Boolean(mounted && !isLoading && (!user || user.role !== 'platform-admin')) ? (
           <div className="p-8 text-center text-gray-600 dark:text-gray-300">Redirecting...</div>
         ) : (
-        {/* Mobile sidebar overlay */}
-        {sidebarOpen && (
-          <div 
-            className="fixed inset-0 z-40 bg-gray-600 bg-opacity-75 lg:hidden"
-            onClick={() => setSidebarOpen(false)}
-          />
-        )}
+          <>
+          {/* Mobile sidebar overlay */}
+          {sidebarOpen && (
+            <div 
+              className="fixed inset-0 z-40 bg-gray-600 bg-opacity-75 lg:hidden"
+              onClick={() => setSidebarOpen(false)}
+            />
+          )}
 
-        {/* Sidebar */}
-        <div className={`fixed inset-y-0 left-0 z-50 w-64 transform bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 transition-transform duration-300 ease-in-out lg:translate-x-0 ${
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-        }`}>
+          {/* Sidebar */}
+          <div className={`fixed inset-y-0 left-0 z-50 w-64 transform bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 transition-transform duration-300 ease-in-out lg:translate-x-0 ${
+            sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+          }`}>
           <div className="flex h-full flex-col">
             {/* Logo */}
             <div className="flex h-16 items-center justify-between px-6 border-b border-gray-200 dark:border-gray-700">
@@ -276,26 +277,27 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
           </main>
         </div>
 
-        {/* Mobile bottom navigation */}
-        <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 border-t border-gray-200 backdrop-blur-md lg:hidden pb-safe-bottom">
-          <div className="grid grid-cols-2 px-2 py-2">
-            {navigation.map((item) => {
-              const isActive = router.pathname === item.href || router.pathname.startsWith(item.href)
-              return (
-                <Link
-                  key={item.name}
-                  href={item.href}
-                  className={`flex flex-col items-center justify-center py-2 rounded-lg text-xs font-medium ${
-                    isActive ? 'text-red-600' : 'text-gray-500'
-                  }`}
-                >
-                  <item.icon className="w-5 h-5" />
-                  <span className="mt-1">{item.name}</span>
-                </Link>
-              )
-            })}
+          {/* Mobile bottom navigation */}
+          <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 border-t border-gray-200 backdrop-blur-md lg:hidden pb-safe-bottom">
+            <div className="grid grid-cols-2 px-2 py-2">
+              {navigation.map((item) => {
+                const isActive = router.pathname === item.href || router.pathname.startsWith(item.href)
+                return (
+                  <Link
+                    key={item.name}
+                    href={item.href}
+                    className={`flex flex-col items-center justify-center py-2 rounded-lg text-xs font-medium ${
+                      isActive ? 'text-red-600' : 'text-gray-500'
+                    }`}
+                  >
+                    <item.icon className="w-5 h-5" />
+                    <span className="mt-1">{item.name}</span>
+                  </Link>
+                )
+              })}
+            </div>
           </div>
-        </div>
+          </>
         )}
       </div>
     </>

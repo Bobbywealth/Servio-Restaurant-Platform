@@ -180,29 +180,34 @@ export default function BookDemoPage() {
         </div>
 
         {/* Navigation */}
-        <nav className="relative bg-gray-900/95 backdrop-blur-md border-b border-gray-800 z-50">
+        <nav className="fixed top-0 left-0 right-0 bg-gray-900/95 backdrop-blur-md border-b border-gray-800 z-50">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between items-center h-16">
-              <div className="flex items-center">
+              <Link href="/" className="flex items-center group">
                 <img
                   src="/images/servio_logo_transparent_tight.png"
                   alt="Servio Logo"
-                  className="h-8 w-auto brightness-0 invert"
+                  className="h-8 w-auto brightness-0 invert transition-transform group-hover:scale-105"
                 />
                 <span className="ml-2 text-xl font-bold text-white">Servio</span>
-              </div>
+              </Link>
               <div className="hidden md:flex items-center space-x-8">
+                <Link href="/" className="text-gray-300 hover:text-white font-medium transition-colors">Home</Link>
                 <Link href="/#services" className="text-gray-300 hover:text-white font-medium transition-colors">Services</Link>
                 <Link href="/#features" className="text-gray-300 hover:text-white font-medium transition-colors">Features</Link>
                 <Link href="/#pricing" className="text-gray-300 hover:text-white font-medium transition-colors">Pricing</Link>
                 <Link href="/#faq" className="text-gray-300 hover:text-white font-medium transition-colors">FAQ</Link>
                 <Link href="/login" className="text-gray-300 hover:text-white font-medium transition-colors">Login</Link>
               </div>
+              {/* Mobile Home Link */}
+              <div className="md:hidden">
+                <Link href="/" className="text-gray-300 hover:text-white font-medium text-sm transition-colors">Home</Link>
+              </div>
             </div>
           </div>
         </nav>
 
-        <div className="relative max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+        <div className="relative max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10 mt-16">
           <div className="flex items-center justify-between mb-10">
             <Link href="/" className="inline-flex items-center text-gray-300 hover:text-white transition-colors">
               <ArrowLeft className="w-4 h-4 mr-2" />

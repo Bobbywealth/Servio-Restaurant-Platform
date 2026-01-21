@@ -17,7 +17,7 @@ const SENTRY_ENABLED = Boolean(SENTRY_DSN);
 /**
  * Initialize Sentry APM
  */
-export const initializeSentry = (app: Express): void => {
+export const initializeSentry = (_app: Express): void => {
   if (!SENTRY_ENABLED) {
     logger.warn('Sentry DSN not configured - APM disabled');
     return;
@@ -75,7 +75,7 @@ export const initializeSentry = (app: Express): void => {
       },
 
       // Breadcrumbs filtering
-      beforeBreadcrumb(breadcrumb: any, hint: any) {
+      beforeBreadcrumb(breadcrumb: any, _hint: any) {
         // Don't log query strings with sensitive data
         if (breadcrumb.category === 'http' && breadcrumb.data?.url) {
           breadcrumb.data.url = breadcrumb.data.url.split('?')[0];

@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import Head from 'next/head';
+import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Lock, Mail, AlertCircle, Loader2, ArrowRight } from 'lucide-react';
@@ -131,30 +132,35 @@ export default function LoginPage() {
       <nav className="fixed top-0 left-0 right-0 bg-gray-900/95 backdrop-blur-md border-b border-gray-800 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-3">
+            <Link href="/" className="flex items-center space-x-3 group">
               <img
                 src="/images/servio_icon_tight.png"
                 alt="Servio"
-                className="h-10 w-auto"
+                className="h-10 w-auto transition-transform group-hover:scale-105"
               />
               <span className="text-xl font-bold text-white">Servio</span>
-            </div>
+            </Link>
             <div className="hidden md:flex items-center space-x-8">
+              <Link href="/" className="text-gray-300 hover:text-white font-medium transition-colors">Home</Link>
               <a href="/#services" className="text-gray-300 hover:text-white font-medium transition-colors">Services</a>
               <a href="/#features" className="text-gray-300 hover:text-white font-medium transition-colors">Features</a>
               <a href="/#pricing" className="text-gray-300 hover:text-white font-medium transition-colors">Pricing</a>
               <a href="/#faq" className="text-gray-300 hover:text-white font-medium transition-colors">FAQ</a>
             </div>
+            {/* Mobile Home Link */}
+            <div className="md:hidden">
+              <Link href="/" className="text-gray-300 hover:text-white font-medium text-sm transition-colors">Home</Link>
+            </div>
           </div>
         </div>
       </nav>
 
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="w-full max-w-md z-10"
-      >
+      <div className="w-full max-w-md z-10 mt-20 mb-10">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+        >
         <div className="bg-gray-800/95 rounded-2xl shadow-[0_25px_60px_-35px_rgba(0,0,0,0.8)] border border-gray-700 p-8 md:p-10 backdrop-blur">
           <div className="flex flex-col items-center mb-10">
             <h1 className="text-3xl font-extrabold tracking-tight text-white">

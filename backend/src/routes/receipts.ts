@@ -247,6 +247,7 @@ router.post('/:id/items', requireAuth, asyncHandler(async (req: Request, res: Re
   const { id } = req.params;
   const { description, quantity, unitCost, inventoryItemId } = req.body;
   const user = req.user!;
+  void user;
 
   const db = DatabaseService.getInstance().getDatabase();
   const itemId = uuidv4();

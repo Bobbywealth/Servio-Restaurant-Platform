@@ -46,19 +46,28 @@ function splitSqlStatements(sql: string): string[] {
   let current = '';
   let inSingleQuote = false;
   let inDoubleQuote = false;
+  let inDollarQuote = false;
 
   for (let i = 0; i < sql.length; i += 1) {
     const char = sql[i];
     const prev = sql[i - 1];
+    const next = sql[i + 1];
 
-    if (char === "'" && prev !== '\\' && !inDoubleQuote) {
+    if (char === "'" && prev !== '\\' && !inDoubleQuote && !inDollarQuote) {
       inSingleQuote = !inSingleQuote;
     }
-    if (char === '"' && prev !== '\\' && !inSingleQuote) {
+    if (char === '"' && prev !== '\\' && !inSingleQuote && !inDollarQuote) {
       inDoubleQuote = !inDoubleQuote;
     }
+    // Handle Postgres dollar quoting $$
+    if (char === '$' && next === '$' && !inSingleQuote && !inDoubleQuote) {
+      inDollarQuote = !inDollarQuote;
+      current += '$$';
+      i += 1;
+      continue;
+    }
 
-    if (char === ';' && !inSingleQuote && !inDoubleQuote) {
+    if (char === ';' && !inSingleQuote && !inDoubleQuote && !inDollarQuote) {
       statements.push(current);
       current = '';
       continue;
@@ -213,15 +222,45 @@ export class DatabaseService {
         // Some migrations might have multiple statements
         
         if (isPg) {
-          // PG can handle multiple statements in one query often, or we use a transaction
-          await db.exec('BEGIN');
-          try {
-            await db.exec(sql);
+          // PG can handle multiple statements in one query often
+          // However, CREATE INDEX CONCURRENTLY cannot run inside a transaction block
+          // and multiple statements in one call are often treated as an implicit transaction.
+          const hasConcurrent = sql.toUpperCase().includes('CONCURRENTLY');
+          
+          if (!hasConcurrent) {
+            await db.exec('BEGIN');
+            try {
+              await db.exec(sql);
+              await db.run('INSERT INTO _migrations (name) VALUES (?)', [file]);
+              await db.exec('COMMIT');
+            } catch (err) {
+              await db.exec('ROLLBACK');
+              throw err;
+            }
+          } else {
+            // Concurrent index creation must be run statement by statement outside of any transaction
+            logger.info(`📝 detected CONCURRENTLY in ${file} - splitting into statements`);
+            const cleanedSql = stripSqlComments(sql);
+            const statements = splitSqlStatements(cleanedSql);
+            logger.info(`📑 split into ${statements.length} statements`);
+            
+            for (const statement of statements) {
+              const trimmed = statement.trim();
+              if (!trimmed) continue;
+              try {
+                await db.exec(trimmed);
+              } catch (err: any) {
+                // If it's a concurrent index creation error, log it but don't necessarily crash
+                // unless it's a syntax error. Existing indexes are fine.
+                if (err.message.includes('already exists')) {
+                  logger.warn(`Index already exists, skipping: ${trimmed.substring(0, 50)}...`);
+                  continue;
+                }
+                logger.error(`❌ Statement failed: ${trimmed.substring(0, 100)}...`);
+                throw err;
+              }
+            }
             await db.run('INSERT INTO _migrations (name) VALUES (?)', [file]);
-            await db.exec('COMMIT');
-          } catch (err) {
-            await db.exec('ROLLBACK');
-            throw err;
           }
         } else {
       // SQLite: run statements one by one to allow idempotent ALTERs
@@ -437,7 +476,7 @@ export class DatabaseService {
         password: 'password',
         pin: '1111',
         role: 'staff',
-        permissions: JSON.stringify(['inventory.read', 'inventory.adjust', 'timeclock.*'])
+        permissions: JSON.stringify(['inventory:read', 'inventory:write', 'timeclock:*'])
       },
       {
         id: 'user-2',

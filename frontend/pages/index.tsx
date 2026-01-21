@@ -26,16 +26,17 @@ export default function HomePage() {
 
       <div className="min-h-screen bg-gray-900 text-white">
         {/* Navigation */}
-        <nav className="fixed top-0 left-0 right-0 bg-gray-900/95 backdrop-blur-md border-b border-gray-800 z-50">
+        <nav className="fixed top-0 left-0 right-0 bg-gray-900/95 backdrop-blur-md z-50">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between items-center h-16">
-              <div className="flex items-center">
+              <Link href="/" className="flex items-center group">
                 <img
-                  src="/images/servio_logo_transparent_tight.png"
-                  alt="Servio Logo"
-                  className="h-8 w-auto brightness-0 invert"
+                  src="/images/servio_icon_tight.png"
+                  alt="Servio Icon"
+                  className="h-8 w-auto transition-transform group-hover:scale-105"
                 />
-              </div>
+                <span className="ml-2 text-xl font-bold text-white">Servio</span>
+              </Link>
               <div className="hidden md:flex items-center space-x-8">
                 <a href="#services" className="text-gray-300 hover:text-white font-medium transition-colors">Services</a>
                 <a href="#features" className="text-gray-300 hover:text-white font-medium transition-colors">Features</a>
@@ -178,14 +179,14 @@ export default function HomePage() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
               <div className="space-y-6">
                 <div className="inline-flex items-center px-4 py-2 rounded-full bg-blue-500/15 border border-blue-500/30 text-blue-200 text-sm font-medium">
-                  Vapi-Powered Phone Answering
+                  AI-Powered Phone Answering
                 </div>
                 <h2 className="text-4xl md:text-5xl font-bold text-white leading-tight">
                   We answer every call<br />
                   <span className="text-teal-400">and take the order for you.</span>
                 </h2>
                 <p className="text-lg text-gray-300 leading-relaxed">
-                  Servio&apos;s Vapi voice agent picks up in two rings, speaks naturally, captures the order, respects your hours, syncs availability, and pushes tickets into your POS and delivery platforms—so no call or revenue is missed.
+                  Servio&apos;s intelligent voice assistant picks up in two rings, speaks naturally, captures the order, respects your hours, syncs availability, and pushes tickets into your POS and delivery platforms—so no call or revenue is missed.
                 </p>
                 <p className="text-base text-gray-400 leading-relaxed">
                   Admins can tune call rules, hours, menus, and escalation from the dashboard, while each restaurant sees the agent inside their back office with your POS and delivery integrations already connected.
@@ -235,7 +236,7 @@ export default function HomePage() {
                       <div className="w-2 h-2 bg-teal-400 rounded-full"></div>
                       <span className="text-sm text-gray-300">LIVE CALL • SERVIO</span>
                     </div>
-                    <span className="text-xs text-gray-500">Vapi Agent</span>
+                    <span className="text-xs text-gray-500">Voice Agent</span>
                   </div>
                   <div className="space-y-4">
                     <div className="flex items-start space-x-3">
@@ -299,7 +300,7 @@ export default function HomePage() {
                 </div>
                 <h3 className="text-xl font-semibold text-white mb-4">Assistant & Phone</h3>
                 <p className="text-gray-400 leading-relaxed">
-                  Vapi-powered voice for calls and in-app commands—answers in two rings and executes across your menus, orders, and ops.
+                  AI-powered voice for calls and in-app commands—answers in two rings and executes across your menus, orders, and ops.
                 </p>
               </div>
 
@@ -692,7 +693,7 @@ export default function HomePage() {
             <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
               <div>
                 <div className="flex items-center mb-4">
-                  <img src="/images/servio_logo_transparent_tight.png" alt="Servio Logo" className="h-8 w-auto brightness-0 invert" />
+                  <img src="/images/servio_icon_tight.png" alt="Servio Icon" className="h-8 w-auto" />
                   <span className="ml-2 text-xl font-bold text-white">Servio</span>
                 </div>
                 <p className="text-gray-400 mb-4">

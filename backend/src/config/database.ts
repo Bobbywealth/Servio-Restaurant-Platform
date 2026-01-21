@@ -5,8 +5,7 @@ import { logger } from '../utils/logger';
  * Production-ready PostgreSQL connection pool configuration
  */
 
-const isDevelopment = process.env.NODE_ENV !== 'production';
-const isTest = process.env.NODE_ENV === 'test';
+// NOTE: keep environment flags local when needed (avoid unused vars for lint)
 
 // Connection pool configuration
 export const poolConfig: PoolConfig = {
@@ -56,7 +55,7 @@ export const getPool = (): Pool => {
     pool = new Pool(poolConfig);
     
     // Log pool events
-    pool.on('connect', (client) => {
+    pool.on('connect', (_client) => {
       logger.debug('New database client connected', {
         totalCount: pool?.totalCount,
         idleCount: pool?.idleCount,
@@ -64,7 +63,7 @@ export const getPool = (): Pool => {
       });
     });
 
-    pool.on('acquire', (client) => {
+    pool.on('acquire', (_client) => {
       logger.debug('Client acquired from pool', {
         totalCount: pool?.totalCount,
         idleCount: pool?.idleCount,
@@ -72,7 +71,7 @@ export const getPool = (): Pool => {
       });
     });
 
-    pool.on('remove', (client) => {
+    pool.on('remove', (_client) => {
       logger.debug('Client removed from pool', {
         totalCount: pool?.totalCount,
         idleCount: pool?.idleCount,
@@ -80,7 +79,7 @@ export const getPool = (): Pool => {
       });
     });
 
-    pool.on('error', (err, client) => {
+    pool.on('error', (err, _client) => {
       logger.error('Unexpected database error', { error: err.message, stack: err.stack });
     });
 

@@ -10,11 +10,11 @@ const redis = new Redis({
   port: parseInt(process.env.REDIS_PORT || '6379'),
   password: process.env.REDIS_PASSWORD || undefined,
   db: 0,
-  maxRetriesPerRequest: 3,
+  maxRetriesPerRequest: null, // Unlimited retries in background
   enableReadyCheck: true,
   enableOfflineQueue: true,
   retryStrategy: (times) => {
-    const delay = Math.min(times * 50, 2000);
+    const delay = Math.min(times * 100, 5000); // Wait up to 5s
     return delay;
   }
 });

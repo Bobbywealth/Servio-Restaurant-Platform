@@ -109,6 +109,7 @@ const DashboardIndex = memo(() => {
       setPendingTasks(tasksRes.data.data.pending)
     } catch (err) {
       console.error('Failed to fetch dashboard stats', err)
+      toast.error('Failed to load dashboard stats. Please retry.')
     } finally {
       setIsFetching(false)
     }

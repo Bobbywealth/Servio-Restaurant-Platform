@@ -61,7 +61,7 @@ export default function OrdersPage() {
   const [error, setError] = useState<string | null>(null)
   const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null)
 
-  const canUpdateOrders = hasPermission('orders', 'update')
+  const canUpdateOrders = hasPermission('orders:write')
 
   const channels = useMemo(() => {
     const set = new Set<string>()
@@ -98,7 +98,7 @@ export default function OrdersPage() {
   }
 
   useEffect(() => {
-    if (!hasPermission('orders', 'read')) return
+    if (!hasPermission('orders:read')) return
     fetchData()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter, channelFilter])

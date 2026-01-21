@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { asyncHandler } from '../middleware/errorHandler';
+import { requireAuth, requirePermission } from '../middleware/auth';
 import { getService } from '../bootstrap/services';
 import type { InventoryService } from '../services/InventoryService';
 
@@ -9,7 +10,7 @@ const router = Router();
  * GET /api/inventory/search
  * Search inventory items
  */
-router.get('/search', asyncHandler(async (req: Request, res: Response) => {
+router.get('/search', requireAuth, requirePermission('inventory:read'), asyncHandler(async (req: Request, res: Response) => {
   const { q, category, lowStock } = req.query;
   const restaurantId = req.user?.restaurantId;
   const inventoryService = getService<InventoryService>('inventoryService');
@@ -29,7 +30,7 @@ router.get('/search', asyncHandler(async (req: Request, res: Response) => {
  * POST /api/inventory/receive
  * Record inventory received
  */
-router.post('/receive', asyncHandler(async (req: Request, res: Response) => {
+router.post('/receive', requireAuth, requirePermission('inventory:write'), asyncHandler(async (req: Request, res: Response) => {
   const { items, userId } = req.body;
   const restaurantId = req.user?.restaurantId;
   const inventoryService = getService<InventoryService>('inventoryService');
@@ -49,7 +50,7 @@ router.post('/receive', asyncHandler(async (req: Request, res: Response) => {
  * POST /api/inventory/adjust
  * Adjust inventory quantities
  */
-router.post('/adjust', asyncHandler(async (req: Request, res: Response) => {
+router.post('/adjust', requireAuth, requirePermission('inventory:write'), asyncHandler(async (req: Request, res: Response) => {
   const { itemId, quantity, reason, userId } = req.body;
   const restaurantId = req.user?.restaurantId;
   const inventoryService = getService<InventoryService>('inventoryService');
@@ -71,7 +72,7 @@ router.post('/adjust', asyncHandler(async (req: Request, res: Response) => {
  * GET /api/inventory/low-stock
  * Get items that are low in stock
  */
-router.get('/low-stock', asyncHandler(async (req: Request, res: Response) => {
+router.get('/low-stock', requireAuth, requirePermission('inventory:read'), asyncHandler(async (req: Request, res: Response) => {
   const restaurantId = req.user?.restaurantId;
   const inventoryService = getService<InventoryService>('inventoryService');
   const lowStockItems = await inventoryService.listLowStock(restaurantId!);
@@ -86,7 +87,7 @@ router.get('/low-stock', asyncHandler(async (req: Request, res: Response) => {
  * GET /api/inventory/categories
  * Get all inventory categories
  */
-router.get('/categories', asyncHandler(async (req: Request, res: Response) => {
+router.get('/categories', requireAuth, requirePermission('inventory:read'), asyncHandler(async (req: Request, res: Response) => {
   const restaurantId = req.user?.restaurantId;
   const inventoryService = getService<InventoryService>('inventoryService');
   const categories = await inventoryService.listCategories(restaurantId!);

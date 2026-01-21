@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { DatabaseService } from '../services/DatabaseService';
-import { asyncHandler, NotFoundError, UnauthorizedError } from '../middleware/errorHandler';
+import { asyncHandler, UnauthorizedError } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
 import multer from 'multer';
 import sharp from 'sharp';
@@ -73,7 +73,7 @@ router.get('/public/:slug', asyncHandler(async (req: Request, res: Response) => 
  * GET /api/menu/categories/all
  * Get all menu categories for a restaurant
  */
-router.get('/categories/all', asyncHandler(async (req: Request, res: Response) => {
+router.get('/categories/all', requireAuth, requirePermission('menu:read'), asyncHandler(async (req: Request, res: Response) => {
   const db = DatabaseService.getInstance().getDatabase();
   const restaurantId = req.user?.restaurantId;
   
@@ -97,7 +97,7 @@ router.get('/categories/all', asyncHandler(async (req: Request, res: Response) =
   });
 }));
 
-router.post('/categories', asyncHandler(async (req: Request, res: Response) => {
+router.post('/categories', requireAuth, requirePermission('menu:write'), asyncHandler(async (req: Request, res: Response) => {
   const { name, description, sortOrder = 0 } = req.body;
   const db = DatabaseService.getInstance().getDatabase();
   const restaurantId = req.user?.restaurantId;
@@ -125,7 +125,7 @@ router.post('/categories', asyncHandler(async (req: Request, res: Response) => {
   res.status(201).json({ success: true, data: { id: categoryId, name, description, sortOrder } });
 }));
 
-router.put('/categories/:id', asyncHandler(async (req: Request, res: Response) => {
+router.put('/categories/:id', requireAuth, requirePermission('menu:write'), asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
   const { name, description, sortOrder, isActive } = req.body;
   const db = DatabaseService.getInstance().getDatabase();
@@ -156,7 +156,7 @@ router.put('/categories/:id', asyncHandler(async (req: Request, res: Response) =
   res.json({ success: true });
 }));
 
-router.delete('/categories/:id', asyncHandler(async (req: Request, res: Response) => {
+router.delete('/categories/:id', requireAuth, requirePermission('menu:write'), asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
   const db = DatabaseService.getInstance().getDatabase();
   const restaurantId = req.user?.restaurantId;
@@ -185,7 +185,7 @@ router.delete('/categories/:id', asyncHandler(async (req: Request, res: Response
  * POST /api/menu/items
  * Create a new menu item with image upload
  */
-router.post('/items', upload.array('images', 5), asyncHandler(async (req: Request, res: Response) => {
+router.post('/items', requireAuth, requirePermission('menu:write'), upload.array('images', 5), asyncHandler(async (req: Request, res: Response) => {
   const {
     name,
     description,
@@ -287,7 +287,7 @@ router.post('/items', upload.array('images', 5), asyncHandler(async (req: Reques
  * PUT /api/menu/items/:id
  * Update a menu item
  */
-router.put('/items/:id', upload.array('images', 5), asyncHandler(async (req: Request, res: Response) => {
+router.put('/items/:id', requireAuth, requirePermission('menu:write'), upload.array('images', 5), asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
   const {
     name,
@@ -419,7 +419,7 @@ router.put('/items/:id', upload.array('images', 5), asyncHandler(async (req: Req
  * GET /api/menu/items/full
  * Get all menu items with full details including categories
  */
-router.get('/items/full', asyncHandler(async (req: Request, res: Response) => {
+router.get('/items/full', requireAuth, requirePermission('menu:read'), asyncHandler(async (req: Request, res: Response) => {
   const db = DatabaseService.getInstance().getDatabase();
   const restaurantId = req.user?.restaurantId;
 
@@ -471,7 +471,7 @@ router.get('/items/full', asyncHandler(async (req: Request, res: Response) => {
  * GET /api/menu/items/search
  * Search menu items
  */
-router.get('/items/search', asyncHandler(async (req: Request, res: Response) => {
+router.get('/items/search', requireAuth, requirePermission('menu:read'), asyncHandler(async (req: Request, res: Response) => {
   const { q, category, available } = req.query;
   const db = DatabaseService.getInstance().getDatabase();
   const restaurantId = req.user?.restaurantId;
@@ -529,8 +529,8 @@ router.get('/items/search', asyncHandler(async (req: Request, res: Response) => 
  * POST /api/menu/items/set-unavailable
  * 86 (make unavailable) menu items
  */
-router.post('/items/set-unavailable', asyncHandler(async (req: Request, res: Response) => {
-  const { itemId, channels = ['all'], userId } = req.body;
+router.post('/items/set-unavailable', requireAuth, requirePermission('menu:write'), asyncHandler(async (req: Request, res: Response) => {
+  const { itemId, channels = ['all'] } = req.body;
 
   if (!itemId) {
     return res.status(400).json({
@@ -605,8 +605,8 @@ router.post('/items/set-unavailable', asyncHandler(async (req: Request, res: Res
  * POST /api/menu/items/set-available
  * Restore menu item availability
  */
-router.post('/items/set-available', asyncHandler(async (req: Request, res: Response) => {
-  const { itemId, channels = ['all'], userId } = req.body;
+router.post('/items/set-available', requireAuth, requirePermission('menu:write'), asyncHandler(async (req: Request, res: Response) => {
+  const { itemId, channels = ['all'] } = req.body;
 
   if (!itemId) {
     return res.status(400).json({
@@ -681,7 +681,7 @@ router.post('/items/set-available', asyncHandler(async (req: Request, res: Respo
  * GET /api/menu/unavailable
  * Get currently unavailable (86'd) items
  */
-router.get('/unavailable', asyncHandler(async (req: Request, res: Response) => {
+router.get('/unavailable', requireAuth, requirePermission('menu:read'), asyncHandler(async (req: Request, res: Response) => {
   const db = DatabaseService.getInstance().getDatabase();
 
   const unavailableItems = await db.all(`
@@ -707,7 +707,7 @@ router.get('/unavailable', asyncHandler(async (req: Request, res: Response) => {
  * GET /api/menu/categories
  * Get menu categories
  */
-router.get('/categories', asyncHandler(async (req: Request, res: Response) => {
+router.get('/categories', requireAuth, requirePermission('menu:read'), asyncHandler(async (req: Request, res: Response) => {
   const db = DatabaseService.getInstance().getDatabase();
   const restaurantId = req.user?.restaurantId;
 
@@ -742,7 +742,7 @@ router.get('/categories', asyncHandler(async (req: Request, res: Response) => {
  * GET /api/menu/modifier-groups
  * Get all modifier groups for a restaurant
  */
-router.get('/modifier-groups', asyncHandler(async (req: Request, res: Response) => {
+router.get('/modifier-groups', requireAuth, requirePermission('menu:read'), asyncHandler(async (req: Request, res: Response) => {
   const db = DatabaseService.getInstance().getDatabase();
   const restaurantId = req.user?.restaurantId;
 
@@ -767,7 +767,7 @@ router.get('/modifier-groups', asyncHandler(async (req: Request, res: Response) 
  * POST /api/menu/modifier-groups
  * Create a new modifier group
  */
-router.post('/modifier-groups', asyncHandler(async (req: Request, res: Response) => {
+router.post('/modifier-groups', requireAuth, requirePermission('menu:write'), asyncHandler(async (req: Request, res: Response) => {
   const { name, description, minSelections = 0, maxSelections = 1, isRequired = false } = req.body;
   const db = DatabaseService.getInstance().getDatabase();
 
@@ -811,7 +811,7 @@ router.post('/modifier-groups', asyncHandler(async (req: Request, res: Response)
  * GET /api/menu/modifier-groups/:id/options
  * Get options for a modifier group
  */
-router.get('/modifier-groups/:id/options', asyncHandler(async (req: Request, res: Response) => {
+router.get('/modifier-groups/:id/options', requireAuth, requirePermission('menu:read'), asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
   const db = DatabaseService.getInstance().getDatabase();
 
@@ -831,7 +831,7 @@ router.get('/modifier-groups/:id/options', asyncHandler(async (req: Request, res
  * POST /api/menu/modifier-groups/:id/options
  * Add option to a modifier group
  */
-router.post('/modifier-groups/:id/options', asyncHandler(async (req: Request, res: Response) => {
+router.post('/modifier-groups/:id/options', requireAuth, requirePermission('menu:write'), asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
   const { name, description, priceModifier = 0 } = req.body;
   const db = DatabaseService.getInstance().getDatabase();
@@ -873,7 +873,7 @@ router.post('/modifier-groups/:id/options', asyncHandler(async (req: Request, re
  * GET /api/menu/items/:id/modifiers
  * Get modifiers assigned to a menu item
  */
-router.get('/items/:id/modifiers', asyncHandler(async (req: Request, res: Response) => {
+router.get('/items/:id/modifiers', requireAuth, requirePermission('menu:read'), asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
   const db = DatabaseService.getInstance().getDatabase();
 
@@ -917,7 +917,7 @@ router.get('/items/:id/modifiers', asyncHandler(async (req: Request, res: Respon
  * POST /api/menu/items/:id/modifiers
  * Assign modifier groups to a menu item
  */
-router.post('/items/:id/modifiers', asyncHandler(async (req: Request, res: Response) => {
+router.post('/items/:id/modifiers', requireAuth, requirePermission('menu:write'), asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
   const { modifierGroupIds } = req.body;
   const db = DatabaseService.getInstance().getDatabase();
@@ -974,7 +974,7 @@ router.post('/items/:id/modifiers', asyncHandler(async (req: Request, res: Respo
  * POST /api/menu/import
  * Import menu from Excel/CSV file
  */
-router.post('/import', upload.single('file'), asyncHandler(async (req: Request, res: Response) => {
+router.post('/import', requireAuth, requirePermission('menu:write'), upload.single('file'), asyncHandler(async (req: Request, res: Response) => {
   if (!req.file) {
     return res.status(400).json({
       success: false,
@@ -1127,7 +1127,7 @@ router.post('/import', upload.single('file'), asyncHandler(async (req: Request, 
  * GET /api/menu/imports
  * Get menu import history
  */
-router.get('/imports', asyncHandler(async (req: Request, res: Response) => {
+router.get('/imports', requireAuth, requirePermission('menu:read'), asyncHandler(async (req: Request, res: Response) => {
   const db = DatabaseService.getInstance().getDatabase();
   const restaurantId = req.user?.restaurantId;
 

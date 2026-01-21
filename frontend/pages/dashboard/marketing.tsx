@@ -984,8 +984,8 @@ export default function Marketing() {
                     key={campaign.id}
                     campaign={campaign}
                     onView={(campaign) => {
-                      // TODO: Implement campaign view modal
-                      console.log('View campaign:', campaign);
+                      // Minimal v1: show details in a toast until modal is implemented
+                      toast.success(`Campaign: ${campaign.name || campaign.id}`)
                     }}
                     onSend={handleSendCampaign}
                   />

@@ -6,8 +6,6 @@ import { MonitoringService } from '../services/MonitoringService';
 import { logger } from '../utils/logger';
 import { asyncHandler, UnauthorizedError } from '../middleware/errorHandler';
 import { 
-  requestSizeLimit,
-  validateAudioContentType,
   validateTextContentType,
   securityLogger,
   validateAssistantPermissions
