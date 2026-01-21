@@ -257,20 +257,33 @@ router.get('/assistant-config', async (req: Request, res: Response) => {
         },
         {
           name: 'quoteOrder',
-          description: 'Validate an order and get the subtotal, tax, and total before placing it',
+          description: 'REQUIRED: Validate order items and modifiers, check for missing required selections. Returns validation errors if mandatory modifiers are missing.',
           parameters: {
             type: 'object',
             properties: {
               items: {
                 type: 'array',
+                description: 'Array of ordered items with all required modifiers',
                 items: {
                   type: 'object',
                   properties: {
-                    itemId: { type: 'string' },
-                    qty: { type: 'number' },
-                    modifiers: { type: 'object' }
+                    itemId: { type: 'string', description: 'Menu item ID' },
+                    qty: { type: 'number', description: 'Quantity' },
+                    modifiers: { 
+                      type: 'object',
+                      description: 'REQUIRED modifiers: rice_choice, cabbage, spice_level for dinners; wings_size, wings_sauce for wings; callaloo_add for ackee; fish_style for fish',
+                      properties: {
+                        rice_choice: { type: 'string', enum: ['rice_and_peas', 'white_rice'] },
+                        cabbage: { type: 'string', enum: ['yes', 'no'] },
+                        spice_level: { type: 'string', enum: ['mild', 'medium', 'spicy'] },
+                        wings_size: { type: 'string', enum: ['small', 'medium', 'large'] },
+                        wings_sauce: { type: 'string', enum: ['jerk', 'bbq', 'plain'] },
+                        callaloo_add: { type: 'string', enum: ['yes', 'no'] },
+                        fish_style: { type: 'string', enum: ['escovitch', 'brown_stewed'] }
+                      }
+                    }
                   },
-                  required: ['itemId', 'qty']
+                  required: ['itemId', 'qty', 'modifiers']
                 }
               },
               orderType: { type: 'string', enum: ['pickup', 'delivery'] }
@@ -280,7 +293,7 @@ router.get('/assistant-config', async (req: Request, res: Response) => {
         },
         {
           name: 'createOrder',
-          description: 'Place the final order in the system as PENDING',
+          description: 'ONLY call after successful quoteOrder validation. Places the final confirmed order in the system as PENDING status.',
           parameters: {
             type: 'object',
             properties: {
