@@ -265,10 +265,16 @@ export const validateUserRegistration = [
 
 // Generic SQL injection prevention
 export const preventSQLInjection = (req: Request, res: Response, next: NextFunction) => {
+  // Allow external webhooks / voice payloads to pass through.
+  // These endpoints accept natural language (often contains apostrophes/keywords like "union"),
+  // and all DB access should be parameterized.
+  if (req.path.startsWith('/api/vapi') || req.path.startsWith('/api/voice')) {
+    return next();
+  }
+
   const sqlInjectionPatterns = [
     /(\b(SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|EXEC|EXECUTE|UNION|DECLARE)\b)/gi,
-    /(;|--|\/\*|\*\/|xp_|sp_)/gi,
-    /('|(\\')|(--)|(%27)|(;)|(0x))/gi
+    /(;|--|\/\*|\*\/|xp_|sp_)/gi
   ];
 
   const checkForInjection = (obj: any): boolean => {

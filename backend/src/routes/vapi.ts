@@ -5,11 +5,91 @@ import { logger } from '../utils/logger';
 const router = Router();
 const vapiService = new VapiService();
 
+function safeJsonParse(value: unknown): any | undefined {
+  if (typeof value !== 'string') return undefined;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Vapi can hit this endpoint in two ways:
+ * 1) Standard webhook event payloads: { message: { type, call?, functionCall? ... } }
+ * 2) "Tool" apiRequest payloads (shape varies). In that case, we normalize into (1).
+ */
+function normalizeToVapiWebhookPayload(body: any): VapiWebhookPayload | null {
+  if (body?.message?.type) return body as VapiWebhookPayload;
+
+  // Common tool payload shapes (best-effort).
+  const name =
+    body?.message?.functionCall?.name ||
+    body?.functionCall?.name ||
+    body?.name ||
+    body?.toolCall?.function?.name ||
+    body?.function?.name;
+
+  const parameters =
+    body?.message?.functionCall?.parameters ||
+    body?.functionCall?.parameters ||
+    body?.parameters ||
+    safeJsonParse(body?.toolCall?.function?.arguments) ||
+    safeJsonParse(body?.function?.arguments) ||
+    // Some tools might post fields directly
+    (typeof body?.q === 'string' ? { q: body.q } : undefined) ||
+    {};
+
+  if (!name) return null;
+
+  const call =
+    body?.message?.call ||
+    body?.call ||
+    (body?.callId || body?.phoneNumberId || body?.customerNumber
+      ? {
+          id: body?.callId ?? 'unknown',
+          orgId: body?.orgId ?? 'unknown',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          type: 'webCall' as const,
+          phoneNumberId: body?.phoneNumberId,
+          customer: body?.customerNumber ? { number: body.customerNumber } : undefined,
+          status: 'in-progress' as const
+        }
+      : undefined);
+
+  return {
+    message: {
+      type: 'function-call',
+      call,
+      functionCall: { name, parameters }
+    }
+  };
+}
+
 // Webhook endpoint for Vapi
 router.post('/webhook', async (req: Request, res: Response) => {
   const startTime = Date.now();
   try {
-    const payload: VapiWebhookPayload = req.body;
+    const rawBody = req.body;
+    const payload = normalizeToVapiWebhookPayload(rawBody);
+
+    if (!payload) {
+      logger.warn('⚠️ Vapi webhook received unknown payload shape', {
+        keys: rawBody && typeof rawBody === 'object' ? Object.keys(rawBody).slice(0, 50) : typeof rawBody,
+        body_preview: (() => {
+          try {
+            return JSON.stringify(rawBody).slice(0, 1000);
+          } catch {
+            return String(rawBody).slice(0, 1000);
+          }
+        })()
+      });
+      return res.status(400).json({
+        error: 'Bad request',
+        result: "I'm sorry, I couldn't process that request. Please try again."
+      });
+    }
     
     // STRUCTURED LOGGING - Entry point
     logger.info('🔔 Vapi webhook received', {

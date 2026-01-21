@@ -43,10 +43,26 @@ export class VapiService {
   }
 
   async handleWebhook(payload: VapiWebhookPayload): Promise<VapiResponse> {
-    const { message } = payload;
-    
-    logger.info('Vapi webhook received:', { 
-      type: message.type, 
+    const message: any = (payload as any)?.message;
+    if (!message?.type) {
+      logger.warn('⚠️ VapiService.handleWebhook called with invalid payload', {
+        keys: payload && typeof payload === 'object' ? Object.keys(payload as any).slice(0, 50) : typeof payload,
+        payload_preview: (() => {
+          try {
+            return JSON.stringify(payload).slice(0, 1000);
+          } catch {
+            return String(payload).slice(0, 1000);
+          }
+        })()
+      });
+      return {
+        error: 'Bad request',
+        result: "I'm sorry, I couldn't process that request. Please try again."
+      };
+    }
+
+    logger.info('Vapi webhook received:', {
+      type: message.type,
       callId: message.call?.id,
       customerNumber: message.call?.customer?.number,
       phoneNumberId: message.call?.phoneNumberId
@@ -102,9 +118,11 @@ export class VapiService {
       // Look up restaurant by phone_number_id in settings
       const db = DatabaseService.getInstance().getDatabase();
       const restaurant = await db.get(
-        `SELECT id, settings FROM restaurants 
-         WHERE json_extract(settings, '$.vapi.phoneNumberId') = ? 
-         AND is_active = TRUE`,
+        `SELECT id, settings
+         FROM restaurants
+         WHERE is_active = TRUE
+           AND json_valid(COALESCE(settings, '{}'))
+           AND json_extract(COALESCE(settings, '{}'), '$.vapi.phoneNumberId') = ?`,
         [phoneNumberId]
       );
       
@@ -175,6 +193,15 @@ export class VapiService {
 
       // Handle phone-specific functions
       switch (name) {
+        case 'getMenu':
+          // Backwards-compat alias for older Vapi tool configs.
+          // Returns top menu items (same behavior as empty search).
+          result = await VoiceOrderingService.getInstance().searchMenu('', restaurantId);
+          logger.info('📋 getMenu (alias) result', {
+            restaurant_id: restaurantId,
+            items_found: Array.isArray(result) ? result.length : 0
+          });
+          break;
         case 'getStoreStatus':
           result = VoiceOrderingService.getInstance().getStoreStatus();
           break;

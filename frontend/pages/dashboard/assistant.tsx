@@ -76,10 +76,33 @@ export default function AssistantPage() {
     stateRef.current = state
   }, [state])
 
+  const getApiErrorMessage = useCallback((error: unknown) => {
+    // Axios-style error parsing without importing axios types.
+    const anyErr = error as any
+    const status = anyErr?.response?.status as number | undefined
+    const backendMsg =
+      anyErr?.response?.data?.error?.message ||
+      anyErr?.response?.data?.message ||
+      anyErr?.response?.data?.error ||
+      anyErr?.response?.data
+
+    if (status) {
+      if (typeof backendMsg === 'string') return `HTTP ${status}: ${backendMsg}`
+      if (backendMsg) return `HTTP ${status}: ${JSON.stringify(backendMsg)}`
+      return `HTTP ${status}`
+    }
+
+    const msg = anyErr?.message
+    return typeof msg === 'string' && msg.length > 0 ? msg : 'Unknown error'
+  }, [])
+
   const resolveAudioUrl = useCallback((audioUrl: string) => {
     // Backend returns /uploads/...; make it absolute for the browser.
     if (audioUrl.startsWith('http://') || audioUrl.startsWith('https://')) return audioUrl
-    const backendUrl = process.env.BACKEND_URL || 'http://localhost:3002'
+    const backendUrl =
+      process.env.NEXT_PUBLIC_API_URL ||
+      process.env.NEXT_PUBLIC_BACKEND_URL ||
+      (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3002')
     if (audioUrl.startsWith('/')) return `${backendUrl}${audioUrl}`
     return `${backendUrl}/${audioUrl}`
   }, [])
@@ -379,7 +402,7 @@ export default function AssistantPage() {
 
     } catch (error) {
       console.error('Failed to process recording:', error)
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      const errorMessage = getApiErrorMessage(error)
       
       addMessage({
         type: 'system',
@@ -420,7 +443,7 @@ export default function AssistantPage() {
         }, 800); // Slightly longer delay
       }
     }
-  }, [user?.id, addMessage, playAudio])
+  }, [user?.id, addMessage, playAudio, getApiErrorMessage])
 
   const getSupportedMimeType = useCallback(() => {
     const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4']
@@ -623,7 +646,7 @@ export default function AssistantPage() {
 
     } catch (error) {
       console.error('Failed to process command:', error)
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      const errorMessage = getApiErrorMessage(error)
       const isNetworkError = errorMessage.includes('network') || errorMessage.includes('fetch')
       const isTimeoutError = errorMessage.includes('timeout')
       
@@ -664,7 +687,7 @@ export default function AssistantPage() {
         }, 800);
       }
     }
-  }, [user?.id, addMessage, playAudio])
+  }, [user?.id, addMessage, playAudio, getApiErrorMessage])
 
   // Update handleQuickCommandRef
   useEffect(() => {

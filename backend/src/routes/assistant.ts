@@ -143,7 +143,20 @@ router.post('/process-audio', assistantRateLimit, upload.single('audio'), asyncH
 
     // Return appropriate error based on error type
     if (error instanceof Error) {
-      if (error.message.includes('API key')) {
+      const msg = error.message || '';
+      const missingConfig =
+        msg.includes('OPENAI_API_KEY') ||
+        msg.includes('environment variable is required');
+
+      if (missingConfig) {
+        res.status(503).json({
+          success: false,
+          error: {
+            message: 'Assistant is not configured on the server',
+            type: 'MissingConfiguration',
+          }
+        });
+      } else if (msg.includes('API key')) {
         res.status(503).json({
           success: false,
           error: {
@@ -239,7 +252,20 @@ router.post('/process-text',
 
     // Return appropriate error based on error type
     if (error instanceof Error) {
-      if (error.message.includes('API key')) {
+      const msg = error.message || '';
+      const missingConfig =
+        msg.includes('OPENAI_API_KEY') ||
+        msg.includes('environment variable is required');
+
+      if (missingConfig) {
+        res.status(503).json({
+          success: false,
+          error: {
+            message: 'Assistant is not configured on the server',
+            type: 'MissingConfiguration',
+          }
+        });
+      } else if (msg.includes('API key')) {
         res.status(503).json({
           success: false,
           error: {
