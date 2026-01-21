@@ -148,7 +148,7 @@ async function importSasheysMenu() {
             
             await db.run(`
               INSERT INTO modifier_options (
-                id, modifier_group_id, name, price_delta, sort_order, is_available,
+                id, modifier_group_id, name, price_modifier, sort_order, is_available,
                 created_at, updated_at
               ) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             `, [
@@ -193,7 +193,7 @@ async function importSasheysMenu() {
         
         await db.run(`
           INSERT INTO modifier_options (
-            id, modifier_group_id, name, price_delta, sort_order, is_available,
+            id, modifier_group_id, name, price_modifier, sort_order, is_available,
             created_at, updated_at
           ) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         `, [
