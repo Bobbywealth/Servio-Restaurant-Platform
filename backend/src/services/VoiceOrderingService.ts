@@ -230,13 +230,13 @@ export class VoiceOrderingService {
     return null;
   }
 
-  public validateQuote(input: any) {
+  public async validateQuote(input: any) {
     const { items } = input;
     const errors: string[] = [];
     let subtotal = 0;
 
-    const validatedItems = items.map((inputItem: any) => {
-      const menuItem = this.getMenuItem(inputItem.itemId);
+    const validatedItems = await Promise.all(items.map(async (inputItem: any) => {
+      const menuItem = await this.getMenuItem(inputItem.itemId);
       if (!menuItem) {
         errors.push(`Item not found: ${inputItem.itemId}`);
         return null;
@@ -300,7 +300,7 @@ export class VoiceOrderingService {
 
       subtotal += itemPrice * (inputItem.qty || 1);
       return { ...inputItem, price: itemPrice };
-    });
+    }));
 
     const tax = subtotal * 0.06625; // Using tax rate from JSON
     const total = subtotal + tax;
@@ -317,7 +317,7 @@ export class VoiceOrderingService {
   }
 
   public async createOrder(input: any) {
-    const quote = this.validateQuote(input);
+    const quote = await this.validateQuote(input);
     if (!quote.valid) return { success: false, errors: quote.errors };
 
     const db = DatabaseService.getInstance().getDatabase();
@@ -337,7 +337,7 @@ export class VoiceOrderingService {
     ]);
 
     for (const item of (quote.items as any[])) {
-      const menuItem = this.getMenuItem(item.itemId);
+      const menuItem = await this.getMenuItem(item.itemId);
       await db.run(`
         INSERT INTO order_items (
           id, order_id, item_id, item_name_snapshot, qty, unit_price_snapshot, modifiers_json, created_at
