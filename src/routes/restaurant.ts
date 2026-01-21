@@ -95,6 +95,7 @@ router.put('/profile', upload.fields([
 ]), asyncHandler(async (req: Request, res: Response) => {
   const {
     name,
+    slug,
     description,
     cuisineType,
     priceRange,
@@ -168,6 +169,29 @@ router.put('/profile', upload.fields([
   if (name !== undefined) {
     updateFields.push('name = ?');
     updateValues.push(name);
+  }
+  if (slug !== undefined) {
+    // Validate slug format (lowercase, alphanumeric with hyphens)
+    const normalizedSlug = slug.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+    if (!normalizedSlug) {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'Invalid slug format' }
+      });
+    }
+    // Check for uniqueness
+    const existingSlug = await db.get(
+      'SELECT id FROM restaurants WHERE slug = ? AND id != ?',
+      [normalizedSlug, restaurantId]
+    );
+    if (existingSlug) {
+      return res.status(409).json({
+        success: false,
+        error: { message: 'This slug is already taken by another restaurant' }
+      });
+    }
+    updateFields.push('slug = ?');
+    updateValues.push(normalizedSlug);
   }
   if (description !== undefined) {
     updateFields.push('description = ?');
