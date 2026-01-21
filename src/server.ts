@@ -9,7 +9,6 @@ import morgan from 'morgan';
 import compression from 'compression';
 import { createServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
-import path from 'path';
 
 // Services
 import { DatabaseService } from './services/DatabaseService';
@@ -62,6 +61,7 @@ async function initializeServer() {
     const { default: integrationsRoutes } = await import('./routes/integrations');
     const { default: vapiRoutes } = await import('./routes/vapi');
     const { default: voiceRoutes } = await import('./routes/voice');
+    const { default: voiceHubRoutes } = await import('./routes/voice-hub');
     const { default: adminRoutes } = await import('./routes/admin');
     const { default: notificationsRoutes } = await import('./routes/notifications');
 
@@ -99,6 +99,7 @@ async function initializeServer() {
     app.use('/api/restaurant', requireAuth, restaurantRoutes);
     app.use('/api/integrations', requireAuth, integrationsRoutes);
     app.use('/api/notifications', requireAuth, notificationsRoutes);
+    app.use('/api/voice-hub', voiceHubRoutes);
 
     // 404 handler (must be last)
     app.use((req, res, next) => {
@@ -243,6 +244,16 @@ setInterval(() => {
   for (const [key, value] of cache.entries()) {
     if (now - value.timestamp > CACHE_TTL) {
       cache.delete(key);
+    }
+  }
+
+  // Safety valve: ensure cache can't grow unbounded even if cleanup misses entries.
+  if (cache.size > MAX_CACHE_SIZE) {
+    const entries = Array.from(cache.entries());
+    entries.sort((a, b) => (a[1]?.timestamp || 0) - (b[1]?.timestamp || 0)); // oldest first
+    const toRemove = cache.size - MAX_CACHE_SIZE;
+    for (let i = 0; i < toRemove; i++) {
+      cache.delete(entries[i][0]);
     }
   }
 }, 5 * 60 * 1000); // Clean every 5 minutes

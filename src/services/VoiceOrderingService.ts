@@ -286,11 +286,26 @@ export class VoiceOrderingService {
 
   public async logCall(input: any) {
     const db = DatabaseService.getInstance().getDatabase();
-    const id = uuidv4();
-    await db.run(`
-      INSERT INTO call_logs (id, call_id, from_phone, transcript, summary_json, created_at)
-      VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-    `, [id, input.callId, input.fromPhone, input.transcript, JSON.stringify(input.summary || {})]);
+    const callId = input?.callId;
+    const id = callId || uuidv4();
+    const summaryJson = input?.summary ? JSON.stringify(input.summary) : '{}';
+
+    // Use an UPSERT so we can safely log transcript updates + end-of-call summaries.
+    await db.run(
+      `
+        INSERT INTO call_logs (id, call_id, from_phone, transcript, summary_json, created_at)
+        VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(id) DO UPDATE SET
+          from_phone = COALESCE(excluded.from_phone, call_logs.from_phone),
+          transcript = COALESCE(excluded.transcript, call_logs.transcript),
+          summary_json = CASE
+            WHEN excluded.summary_json IS NOT NULL AND excluded.summary_json != '{}' THEN excluded.summary_json
+            ELSE call_logs.summary_json
+          END
+      `,
+      [id, callId, input?.fromPhone, input?.transcript, summaryJson]
+    );
+
     return { success: true };
   }
 }

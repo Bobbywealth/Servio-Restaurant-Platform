@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Logs
+logs/
+**/logs/
+*.log
+
+# Local databases / SQLite artifacts
+data/*.db
+data/*.db-*
+data/*.sqlite
+data/*.sqlite-*
+**/*.db
+**/*.db-*
+**/*.sqlite
+**/*.sqlite-*
+
+# Next.js build output
+.next/
+out/
+**/.next/
+**/out/
+
+# Local-only folders accidentally generated/copied
+backend/
+print-agent/
+
+# OS / editor
+.DS_Store
+
+# Environment files (keep example)
+.env
+.env.*
+!.env.example
+
+# TypeScript build info
+*.tsbuildinfo
+

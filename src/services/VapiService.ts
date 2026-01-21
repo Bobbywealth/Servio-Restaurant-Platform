@@ -2,8 +2,6 @@ import { AssistantService } from './AssistantService';
 import { DatabaseService } from './DatabaseService';
 import { VoiceOrderingService } from './VoiceOrderingService';
 import { logger } from '../utils/logger';
-import { v4 as uuidv4 } from 'uuid';
-import { eventBus } from '../events/bus';
 
 export interface VapiWebhookPayload {
   message: {
@@ -130,22 +128,29 @@ export class VapiService {
           result = VoiceOrderingService.getInstance().validateQuote(parameters);
           break;
         case 'createOrder':
+          // Ensure the order is linked to the inbound call for matching later in Voice Hub
+          parameters.callId = parameters.callId || message.call?.id;
+          parameters.source = parameters.source || 'vapi';
+          if (!parameters.customer) parameters.customer = {};
+          parameters.customer.phone = parameters.customer.phone || message.call?.customer?.number;
           result = await VoiceOrderingService.getInstance().createOrder(parameters);
           break;
         case 'check_order_status':
           result = await this.handleCheckOrderStatus(parameters, userId);
           break;
         default:
-          // Fall back to existing assistant service functions
-          const mockToolCall = {
-            id: 'phone_call',
-            type: 'function' as const,
-            function: {
-              name,
-              arguments: JSON.stringify(parameters)
-            }
-          };
-          result = await (this.assistantService as any).executeTool(mockToolCall, userId);
+          {
+            // Fall back to existing assistant service functions
+            const mockToolCall = {
+              id: 'phone_call',
+              type: 'function' as const,
+              function: {
+                name,
+                arguments: JSON.stringify(parameters)
+              }
+            };
+            result = await (this.assistantService as any).executeTool(mockToolCall, userId);
+          }
       }
       
       if (result.status === 'error') {
@@ -185,6 +190,20 @@ export class VapiService {
     );
 
     logger.info(`Call ${callId} ended: ${endedReason}, duration: ${duration}s`);
+
+    // Persist a call log row (used by Voice Hub to match inbound calls to orders)
+    if (callId) {
+      await VoiceOrderingService.getInstance().logCall({
+        callId,
+        fromPhone: customerNumber,
+        transcript: message.transcript,
+        summary: {
+          duration,
+          endedReason,
+          customerNumber
+        }
+      });
+    }
     
     return { result: 'call logged' };
   }
@@ -197,7 +216,14 @@ export class VapiService {
     // Log for training/improvement purposes
     logger.info(`Call ${callId} transcript:`, transcript);
     
-    // Could store in database for analytics if needed
+    // Store transcript so Voice Hub can show it (and match to orders)
+    if (callId && transcript) {
+      await VoiceOrderingService.getInstance().logCall({
+        callId,
+        fromPhone: customerNumber,
+        transcript
+      });
+    }
   }
 
   private getPhoneUserId(phoneNumber?: string): string {
@@ -256,11 +282,13 @@ export class VapiService {
 
     switch (result.type) {
       case 'get_orders':
-        const orders = result.details;
-        if (!orders || orders.length === 0) {
-          return "There are no orders matching that criteria right now.";
+        {
+          const orders = result.details;
+          if (!orders || orders.length === 0) {
+            return "There are no orders matching that criteria right now.";
+          }
+          return `I found ${orders.length} order${orders.length === 1 ? '' : 's'}. ${result.description}`;
         }
-        return `I found ${orders.length} order${orders.length === 1 ? '' : 's'}. ${result.description}`;
 
       case 'update_order_status':
         return `Got it! ${result.description}. The order has been updated.`;
@@ -269,21 +297,25 @@ export class VapiService {
         return `Done! ${result.description}. This change will sync to all delivery platforms within 30 seconds.`;
 
       case 'get_inventory':
-        const items = result.details;
-        if (!items || items.length === 0) {
-          return "I didn't find any inventory items matching that search.";
+        {
+          const items = result.details;
+          if (!items || items.length === 0) {
+            return "I didn't find any inventory items matching that search.";
+          }
+          return `I found ${items.length} inventory item${items.length === 1 ? '' : 's'} matching your search.`;
         }
-        return `I found ${items.length} inventory item${items.length === 1 ? '' : 's'} matching your search.`;
 
       case 'adjust_inventory':
         return `Perfect! ${result.description}`;
 
       case 'get_tasks':
-        const tasks = result.details;
-        if (!tasks || tasks.length === 0) {
-          return "There are no tasks matching that criteria.";
+        {
+          const tasks = result.details;
+          if (!tasks || tasks.length === 0) {
+            return "There are no tasks matching that criteria.";
+          }
+          return `I found ${tasks.length} task${tasks.length === 1 ? '' : 's'} matching your criteria.`;
         }
-        return `I found ${tasks.length} task${tasks.length === 1 ? '' : 's'} matching your criteria.`;
 
       case 'complete_task':
         return `Excellent! I've marked that task as completed. ${result.description}`;
@@ -295,7 +327,7 @@ export class VapiService {
 
   // Helper method to get enhanced system prompt for phone calls
   // Handle placing a new order via phone
-  private async handlePlaceOrder(parameters: any, userId: string): Promise<any> {
+  private async handlePlaceOrder(parameters: any, _userId: string): Promise<any> {
     try {
       const voiceService = VoiceOrderingService.getInstance();
       const result = await voiceService.createOrder(parameters);
@@ -327,7 +359,7 @@ export class VapiService {
   }
 
   // Handle menu information requests
-  private async handleGetMenuInfo(parameters: any, userId: string): Promise<any> {
+  private async handleGetMenuInfo(parameters: any, _userId: string): Promise<any> {
     try {
       const voiceService = VoiceOrderingService.getInstance();
       const items = voiceService.searchMenu(parameters.itemName || parameters.category || '');
@@ -363,7 +395,7 @@ export class VapiService {
   }
 
   // Handle order status checks
-  private async handleCheckOrderStatus(parameters: any, userId: string): Promise<any> {
+  private async handleCheckOrderStatus(parameters: any, _userId: string): Promise<any> {
     try {
       const { orderId, phoneNumber } = parameters;
       const db = DatabaseService.getInstance().getDatabase();

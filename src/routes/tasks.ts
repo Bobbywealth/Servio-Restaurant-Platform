@@ -57,10 +57,11 @@ router.get('/today', asyncHandler(async (req: Request, res: Response) => {
 router.get('/', asyncHandler(async (req: Request, res: Response) => {
   const { status, type, assignedTo } = req.query;
   const db = DatabaseService.getInstance().getDatabase();
+  const restaurantId = req.user?.restaurantId;
 
   let query = 'SELECT * FROM tasks';
-  const params: any[] = [];
-  const conditions: string[] = [];
+  const params: any[] = [restaurantId];
+  const conditions: string[] = ['restaurant_id = ?'];
 
   if (status) {
     conditions.push('status = ?');
@@ -101,7 +102,7 @@ router.post('/:id/complete', asyncHandler(async (req: Request, res: Response) =>
 
   const db = DatabaseService.getInstance().getDatabase();
 
-  const task = await db.get('SELECT * FROM tasks WHERE id = ?', [id]);
+  const task = await db.get('SELECT * FROM tasks WHERE id = ? AND restaurant_id = ?', [id, req.user?.restaurantId]);
   if (!task) {
     return res.status(404).json({
       success: false,
@@ -162,7 +163,7 @@ router.post('/:id/start', asyncHandler(async (req: Request, res: Response) => {
 
   const db = DatabaseService.getInstance().getDatabase();
 
-  const task = await db.get('SELECT * FROM tasks WHERE id = ?', [id]);
+  const task = await db.get('SELECT * FROM tasks WHERE id = ? AND restaurant_id = ?', [id, req.user?.restaurantId]);
   if (!task) {
     return res.status(404).json({
       success: false,
@@ -280,10 +281,11 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
 
   await db.run(`
     INSERT INTO tasks (
-      id, title, description, type, assigned_to, due_date, status
-    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      id, restaurant_id, title, description, type, assigned_to, due_date, status
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `, [
     taskId,
+    req.user?.restaurantId,
     title,
     description || null,
     type,

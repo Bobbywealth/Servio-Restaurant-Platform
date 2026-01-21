@@ -186,6 +186,7 @@ router.get('/stats/summary', asyncHandler(async (req: Request, res: Response) =>
     totalOrders,
     activeOrders,
     completedToday,
+    completedTodaySales,
     avgOrderValue,
     ordersByStatus,
     ordersByChannel
@@ -193,6 +194,7 @@ router.get('/stats/summary', asyncHandler(async (req: Request, res: Response) =>
     db.get('SELECT COUNT(*) as count FROM orders WHERE restaurant_id = ?', [restaurantId]),
     db.get('SELECT COUNT(*) as count FROM orders WHERE status IN (\'received\', \'preparing\', \'ready\') AND restaurant_id = ?', [restaurantId]),
     db.get(`SELECT COUNT(*) as count FROM orders WHERE ${completedTodayCondition} AND restaurant_id = ?`, [restaurantId]),
+    db.get(`SELECT COALESCE(SUM(total_amount), 0) as sum FROM orders WHERE ${completedTodayCondition} AND restaurant_id = ?`, [restaurantId]),
     db.get(`SELECT AVG(total_amount) as avg FROM orders WHERE ${completedTodayCondition} AND restaurant_id = ?`, [restaurantId]),
     db.all('SELECT status, COUNT(*) as count FROM orders WHERE restaurant_id = ? GROUP BY status', [restaurantId]),
     db.all('SELECT channel, COUNT(*) as count FROM orders WHERE restaurant_id = ? GROUP BY channel', [restaurantId])
@@ -202,6 +204,7 @@ router.get('/stats/summary', asyncHandler(async (req: Request, res: Response) =>
     totalOrders: num(totalOrders.count),
     activeOrders: num(activeOrders.count),
     completedToday: num(completedToday.count),
+    completedTodaySales: parseFloat((completedTodaySales.sum || 0).toFixed(2)),
     avgOrderValue: parseFloat((avgOrderValue.avg || 0).toFixed(2)),
     ordersByStatus: ordersByStatus.reduce((acc: any, row: any) => {
       acc[row.status] = num(row.count);
