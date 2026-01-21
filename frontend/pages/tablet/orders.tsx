@@ -14,6 +14,7 @@ type OrderItem = {
   quantity?: number | null
   unitPrice?: number | null
   notes?: string | null
+  modifiers?: any
 }
 
 type Order = {
@@ -92,11 +93,13 @@ function printableTicketHtml(order: Order, config: { receipt: ReceiptSettings; r
       const qty = Number(it.quantity ?? 0)
       const name = String(it.name ?? 'Item')
       const notes = it.notes ? String(it.notes) : ''
+      const mods = formatModifiers(it.modifiers)
       return `
         <div class="row">
           <div class="qty">${qty}x</div>
           <div class="name">
             <div class="title">${escapeHtml(name)}</div>
+            ${mods ? `<div class="notes">Modifiers: ${escapeHtml(mods)}</div>` : ''}
             ${notes ? `<div class="notes">${escapeHtml(notes)}</div>` : ''}
           </div>
         </div>
@@ -200,6 +203,8 @@ function textTicket(order: Order, config: { receipt: ReceiptSettings; restaurant
     const qty = Number(it.quantity ?? 0)
     const name = String(it.name ?? 'Item')
     lines.push(`${qty}x ${name}`)
+    const mods = formatModifiers(it.modifiers)
+    if (mods) lines.push(`  * ${mods}`)
     if (it.notes) lines.push(`  - ${String(it.notes)}`)
   }
   lines.push('')
@@ -210,6 +215,32 @@ function textTicket(order: Order, config: { receipt: ReceiptSettings; restaurant
   }
   lines.push('\n')
   return lines.join('\n')
+}
+
+function formatModifiers(modifiers: any): string {
+  if (!modifiers) return ''
+  if (Array.isArray(modifiers)) {
+    return modifiers
+      .map((m) => {
+        if (typeof m === 'string') return m
+        if (m && typeof m === 'object') return m.name || m.label || JSON.stringify(m)
+        return String(m)
+      })
+      .filter(Boolean)
+      .join(', ')
+  }
+  if (typeof modifiers === 'object') {
+    const entries = Object.entries(modifiers)
+      .map(([k, v]) => {
+        if (v == null) return null
+        if (Array.isArray(v)) return `${k}: ${v.join(', ')}`
+        if (typeof v === 'object') return `${k}: ${JSON.stringify(v)}`
+        return `${k}: ${String(v)}`
+      })
+      .filter(Boolean) as string[]
+    return entries.join(' | ')
+  }
+  return String(modifiers)
 }
 
 async function printViaAgent(agentUrl: string, printer: { host: string; port?: number }, text: string) {
@@ -451,6 +482,7 @@ export default function TabletOrdersPage() {
               const status = String(o.status || '')
               const isNew = String(o.status || '').toLowerCase() === 'received'
               const isActing = actingOrderId === o.id
+              const itemLines = Array.isArray(o.orderItems) ? o.orderItems : []
               return (
                 <div key={o.id} className="bg-white/5 border border-white/10 rounded-2xl p-4">
                   <div className="flex items-start justify-between gap-3">
@@ -489,6 +521,36 @@ export default function TabletOrdersPage() {
                       )}
                     </div>
                   </div>
+
+                  {/* Item details */}
+                  {itemLines.length > 0 && (
+                    <div className="mt-4 bg-black/20 rounded-xl p-3">
+                      <div className="text-xs text-white/60 mb-2">Items</div>
+                      <div className="space-y-2">
+                        {itemLines.map((it, idx) => {
+                          const qty = Number(it.quantity ?? 0)
+                          const name = String(it.name ?? 'Item')
+                          const mods = formatModifiers((it as any).modifiers)
+                          const notes = it.notes ? String(it.notes) : ''
+                          return (
+                            <div key={idx} className="border-b border-white/10 last:border-b-0 pb-2 last:pb-0">
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="text-white font-semibold">
+                                  {qty}× {name}
+                                </div>
+                              </div>
+                              {(mods || notes) && (
+                                <div className="text-sm text-white/70 mt-1 space-y-1">
+                                  {mods && <div>Modifiers: {mods}</div>}
+                                  {notes && <div>Notes: {notes}</div>}
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
 
                   <div className="mt-4 flex gap-2">
                     <button

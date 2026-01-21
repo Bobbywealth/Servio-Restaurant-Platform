@@ -108,6 +108,11 @@ router.get('/after-signup', (req: Request, res: Response) => {
   res.json({ success: true, message: 'Route after signup works!' });
 });
 
+// DEBUG: POST with asyncHandler right after signup
+router.post('/test-async-post', asyncHandler(async (req: Request, res: Response) => {
+  res.json({ success: true, message: 'POST async after signup works!', body: req.body });
+}));
+
 logger.info('Auth routes: after-signup registered');
 
 router.post(
