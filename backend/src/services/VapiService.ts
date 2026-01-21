@@ -370,6 +370,14 @@ export class VapiService {
       .slice(0, 500); // Limit response length for better voice experience
   }
 
+  private formatCurrency(value: unknown): string {
+    const parsed = typeof value === 'number' ? value : Number(value);
+    if (Number.isFinite(parsed)) {
+      return `$${parsed.toFixed(2)}`;
+    }
+    return '$0.00';
+  }
+
   private formatActionResultForVoice(result: any): string {
     if (!result) return "I'm sorry, I couldn't complete that action.";
 
@@ -388,7 +396,10 @@ export class VapiService {
 
     if (Array.isArray(result)) {
       if (result.length === 0) return "I couldn't find anything matching that.";
-      const items = result.slice(0, 3).map(i => `${i.name} for $${i.price}`).join(', ');
+      const items = result
+        .slice(0, 3)
+        .map(i => `${i.name} for ${this.formatCurrency(i.price)}`)
+        .join(', ');
       return `I found: ${items}. Would you like more details?`;
     }
 
@@ -483,9 +494,10 @@ export class VapiService {
         };
       }
 
-      const itemList = items.slice(0, 5).map((item: any) => 
-        `${item.name} for ${item.price} dollars`
-      ).join(', ');
+      const itemList = items
+        .slice(0, 5)
+        .map((item: any) => `${item.name} for ${this.formatCurrency(item.price)}`)
+        .join(', ');
 
       return {
         type: 'get_menu_info',
