@@ -48,6 +48,7 @@ type ReceiptSettings = {
   printMode?: 'browser' | 'agent' | 'bluetooth'
   agentUrl?: string
   agentPrinter?: null | { name?: string; host: string; port?: number; type?: string }
+  autoPrint?: boolean
 }
 
 type ReceiptMeta = {
@@ -495,17 +496,34 @@ export default function TabletOrdersPage() {
     // Ensure we're in the restaurant room (socket manager also does this on connect).
     socket.joinRestaurantRoom(user.restaurantId)
 
-    const onNew = (_payload: any) => {
+    const onNew = (payload: any) => {
       // Short chime + then the loud alarm will persist until accepted/declined.
       playNewOrderSound()
       fetchOrders()
+      
+      // Auto-print if enabled
+      if (receiptCfg?.receipt?.autoPrint && payload?.orderId) {
+        setTimeout(async () => {
+          try {
+            const detail = await api.get(`/api/orders/${payload.orderId}`)
+            const order = detail.data?.data
+            const w = window.open('', '_blank', 'noopener,noreferrer,width=420,height=700')
+            if (!w) return
+            w.document.open()
+            w.document.write(printableTicketHtml(order, receiptCfg))
+            w.document.close()
+          } catch (e) {
+            console.error('Auto-print failed:', e)
+          }
+        }, 1500) // Small delay to ensure order data is loaded
+      }
     }
     socket.on('order:new', onNew as any)
 
     return () => {
       socket.off('order:new', onNew as any)
     }
-  }, [socket, user?.restaurantId, fetchOrders, playNewOrderSound])
+  }, [socket, user?.restaurantId, fetchOrders, playNewOrderSound, receiptCfg])
 
   const handlePrint = async (orderId: string) => {
     try {
