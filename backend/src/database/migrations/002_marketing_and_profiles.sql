@@ -187,28 +187,28 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_menu_categories_unique ON menu_categories(
 INSERT INTO restaurant_themes (restaurant_id, name, primary_color, secondary_color)
 SELECT id, 'Default Theme', '#ff6b35', '#f7931e'
 FROM restaurants
-WHERE slug = 'sashyes-kitchen'
+WHERE slug = 'sasheyskitchen-union'
 ON CONFLICT (restaurant_id) DO NOTHING;
 
 -- Insert default menu categories
 INSERT INTO menu_categories (restaurant_id, name, description, sort_order)
 SELECT r.id, 'Appetizers', 'Start your meal with our delicious appetizers', 1
-FROM restaurants r WHERE r.slug = 'sashyes-kitchen'
+FROM restaurants r WHERE r.slug = 'sasheyskitchen-union'
 ON CONFLICT (restaurant_id, name) DO NOTHING;
 
 INSERT INTO menu_categories (restaurant_id, name, description, sort_order)
 SELECT r.id, 'Main Courses', 'Our signature main dishes', 2
-FROM restaurants r WHERE r.slug = 'sashyes-kitchen'
+FROM restaurants r WHERE r.slug = 'sasheyskitchen-union'
 ON CONFLICT (restaurant_id, name) DO NOTHING;
 
 INSERT INTO menu_categories (restaurant_id, name, description, sort_order)
 SELECT r.id, 'Beverages', 'Refreshing drinks to complement your meal', 3
-FROM restaurants r WHERE r.slug = 'sashyes-kitchen'
+FROM restaurants r WHERE r.slug = 'sasheyskitchen-union'
 ON CONFLICT (restaurant_id, name) DO NOTHING;
 
 INSERT INTO menu_categories (restaurant_id, name, description, sort_order)
 SELECT r.id, 'Desserts', 'Sweet treats to end your meal perfectly', 4
-FROM restaurants r WHERE r.slug = 'sashyes-kitchen'
+FROM restaurants r WHERE r.slug = 'sasheyskitchen-union'
 ON CONFLICT (restaurant_id, name) DO NOTHING;
 
 -- Insert some sample menu items with enhanced data
@@ -231,7 +231,7 @@ SELECT
     'Appetizers'
 FROM restaurants r
 JOIN menu_categories c ON c.restaurant_id = r.id
-WHERE r.slug = 'sashyes-kitchen' AND c.name = 'Appetizers'
+WHERE r.slug = 'sasheyskitchen-union' AND c.name = 'Appetizers'
 ON CONFLICT (restaurant_id, name) DO NOTHING;
 
 INSERT INTO menu_items (
@@ -253,7 +253,7 @@ SELECT
     'Main Courses'
 FROM restaurants r
 JOIN menu_categories c ON c.restaurant_id = r.id
-WHERE r.slug = 'sashyes-kitchen' AND c.name = 'Main Courses'
+WHERE r.slug = 'sasheyskitchen-union' AND c.name = 'Main Courses'
 ON CONFLICT (restaurant_id, name) DO NOTHING;
 
 INSERT INTO menu_items (
@@ -275,21 +275,21 @@ SELECT
     'Main Courses'
 FROM restaurants r
 JOIN menu_categories c ON c.restaurant_id = r.id
-WHERE r.slug = 'sashyes-kitchen' AND c.name = 'Main Courses'
+WHERE r.slug = 'sasheyskitchen-union' AND c.name = 'Main Courses'
 ON CONFLICT (restaurant_id, name) DO NOTHING;
 
 -- Insert default restaurant links
 INSERT INTO restaurant_links (restaurant_id, name, description, url_path, link_type)
 SELECT id, 'View Menu', 'Browse our full menu online', 'menu', 'menu'
-FROM restaurants WHERE slug = 'sashyes-kitchen'
+FROM restaurants WHERE slug = 'sasheyskitchen-union'
 ON CONFLICT (restaurant_id, url_path) DO NOTHING;
 
 INSERT INTO restaurant_links (restaurant_id, name, description, url_path, link_type)
 SELECT id, 'Order Online', 'Place your order for pickup or delivery', 'order', 'order'
-FROM restaurants WHERE slug = 'sashyes-kitchen'
+FROM restaurants WHERE slug = 'sasheyskitchen-union'
 ON CONFLICT (restaurant_id, url_path) DO NOTHING;
 
 INSERT INTO restaurant_links (restaurant_id, name, description, url_path, link_type)
 SELECT id, 'Contact Us', 'Get in touch with our restaurant', 'contact', 'contact'
-FROM restaurants WHERE slug = 'sashyes-kitchen'
+FROM restaurants WHERE slug = 'sasheyskitchen-union'
 ON CONFLICT (restaurant_id, url_path) DO NOTHING;

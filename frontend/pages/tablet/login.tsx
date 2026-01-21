@@ -3,7 +3,7 @@
 import React from 'react'
 import Head from 'next/head'
 import { useRouter } from 'next/router'
-import { Lock, Store, Mail, Loader2, AlertCircle, ArrowRight, ShieldCheck } from 'lucide-react'
+import { Lock, Store, Mail, Loader2, AlertCircle, ArrowRight, ShieldCheck, Eye, EyeOff } from 'lucide-react'
 import { api } from '../../lib/api'
 import { useUser } from '../../contexts/UserContext'
 
@@ -19,6 +19,7 @@ export default function TabletLoginPage() {
   const [error, setError] = React.useState<string | null>(null)
   const [submitting, setSubmitting] = React.useState(false)
   const [submittingPin, setSubmittingPin] = React.useState(false)
+  const [showPassword, setShowPassword] = React.useState(false)
 
   React.useEffect(() => setMounted(true), [])
 
@@ -161,13 +162,24 @@ export default function TabletLoginPage() {
                     <Lock className="w-5 h-5 text-white/40" />
                   </div>
                   <input
-                    type="password"
+                    type={showPassword ? "text" : "password"}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="w-full bg-gray-900 border border-white/10 rounded-xl pl-11 pr-3 py-3 text-white text-lg outline-none focus:ring-2 focus:ring-teal-500/40"
+                    className="w-full bg-gray-900 border border-white/10 rounded-xl pl-11 pr-11 py-3 text-white text-lg outline-none focus:ring-2 focus:ring-teal-500/40"
                     placeholder="••••••••"
                     required
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-white/40 hover:text-teal-400 transition-colors"
+                  >
+                    {showPassword ? (
+                      <EyeOff className="w-5 h-5" />
+                    ) : (
+                      <Eye className="w-5 h-5" />
+                    )}
+                  </button>
                 </div>
               </label>
 
@@ -207,7 +219,7 @@ export default function TabletLoginPage() {
                   value={restaurantSlug}
                   onChange={(e) => setRestaurantSlug(e.target.value)}
                   className="w-full bg-gray-900 border border-white/10 rounded-xl pl-11 pr-3 py-3 text-white text-lg outline-none focus:ring-2 focus:ring-teal-500/40"
-                  placeholder="e.g. sashyes-kitchen"
+                  placeholder="e.g. sasheyskitchen"
                   autoCapitalize="none"
                   autoCorrect="off"
                   inputMode="text"

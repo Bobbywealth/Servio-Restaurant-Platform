@@ -86,9 +86,9 @@ export class DatabaseService {
 
   private constructor() {}
 
-  public static readonly DEFAULT_RESTAURANT_ID = 'sashyes-kitchen';
-  public static readonly DEFAULT_RESTAURANT_SLUG = 'sashyes-kitchen';
-  public static readonly DEFAULT_RESTAURANT_NAME = 'Sashyes Kitchen';
+  public static readonly DEFAULT_RESTAURANT_ID = 'sasheyskitchen-union';
+  public static readonly DEFAULT_RESTAURANT_SLUG = 'sasheyskitchen-union';
+  public static readonly DEFAULT_RESTAURANT_NAME = 'Sasheyskitchen';
 
   public static getInstance(): DatabaseService {
     if (!DatabaseService.instance) {

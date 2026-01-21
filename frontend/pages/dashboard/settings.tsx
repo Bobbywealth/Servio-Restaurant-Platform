@@ -37,7 +37,7 @@ export default function SettingsPage() {
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [settings, setSettings] = useState({
     // General Settings
-    restaurantName: 'Sashyes Kitchen',
+    restaurantName: 'Sasheyskitchen',
     timeZone: 'America/New_York',
     currency: 'USD',
     language: 'English',

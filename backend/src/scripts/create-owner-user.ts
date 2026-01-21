@@ -19,7 +19,7 @@ async function createOwnerUser() {
 
     if (!email || !password) {
       console.error('❌ Missing OWNER_EMAIL / OWNER_PASSWORD env vars.');
-      console.error('   Example: OWNER_EMAIL="owner@sashyeskitchen.com" OWNER_PASSWORD="your-strong-password" npm run create-owner');
+      console.error('   Example: OWNER_EMAIL="owner@sasheyskitchen.com" OWNER_PASSWORD="your-strong-password" npm run create-owner');
       process.exit(1);
     }
     

@@ -5,7 +5,7 @@ import Head from 'next/head';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Lock, Mail, AlertCircle, Loader2, ArrowRight } from 'lucide-react';
+import { Lock, Mail, AlertCircle, Loader2, ArrowRight, Eye, EyeOff } from 'lucide-react';
 import { useUser } from '../contexts/UserContext';
 
 export default function LoginPage() {
@@ -18,6 +18,8 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [mounted, setMounted] = React.useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const router = useRouter();
   const { login, signup, user, isLoading } = useUser();
 
@@ -236,14 +238,25 @@ export default function LoginPage() {
                   <Lock className="w-5 h-5 text-gray-400 group-focus-within:text-teal-400 transition-colors" />
                 </div>
                 <input
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-gray-700/50 border border-gray-600 focus:bg-gray-700 focus:ring-2 focus:ring-teal-500/30 focus:border-teal-400 rounded-xl pl-12 pr-4 py-3 text-white font-medium transition-all outline-none placeholder-gray-400"
+                  className="w-full bg-gray-700/50 border border-gray-600 focus:bg-gray-700 focus:ring-2 focus:ring-teal-500/30 focus:border-teal-400 rounded-xl pl-12 pr-12 py-3 text-white font-medium transition-all outline-none placeholder-gray-400"
                   placeholder="••••••••"
                   minLength={isSignUpMode ? 6 : undefined}
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute inset-y-0 right-0 pr-4 flex items-center text-gray-400 hover:text-teal-400 transition-colors"
+                >
+                  {showPassword ? (
+                    <EyeOff className="w-5 h-5" />
+                  ) : (
+                    <Eye className="w-5 h-5" />
+                  )}
+                </button>
               </div>
             </div>
 
@@ -255,14 +268,25 @@ export default function LoginPage() {
                     <Lock className="w-5 h-5 text-gray-400 group-focus-within:text-teal-400 transition-colors" />
                   </div>
                   <input
-                    type="password"
+                    type={showConfirmPassword ? "text" : "password"}
                     required
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="w-full bg-gray-700/50 border border-gray-600 focus:bg-gray-700 focus:ring-2 focus:ring-teal-500/30 focus:border-teal-400 rounded-xl pl-12 pr-4 py-3 text-white font-medium transition-all outline-none placeholder-gray-400"
+                    className="w-full bg-gray-700/50 border border-gray-600 focus:bg-gray-700 focus:ring-2 focus:ring-teal-500/30 focus:border-teal-400 rounded-xl pl-12 pr-12 py-3 text-white font-medium transition-all outline-none placeholder-gray-400"
                     placeholder="••••••••"
                     minLength={6}
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute inset-y-0 right-0 pr-4 flex items-center text-gray-400 hover:text-teal-400 transition-colors"
+                  >
+                    {showConfirmPassword ? (
+                      <EyeOff className="w-5 h-5" />
+                    ) : (
+                      <Eye className="w-5 h-5" />
+                    )}
+                  </button>
                 </div>
               </div>
             )}
