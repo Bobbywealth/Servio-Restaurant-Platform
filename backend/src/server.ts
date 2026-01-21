@@ -17,65 +17,49 @@ import { logger } from './utils/logger';
 import { errorHandler } from './middleware/errorHandler';
 import { requireAuth } from './middleware/auth';
 import { initializeNotifications } from './notifications/initNotifications';
+import { registerServices } from './bootstrap/services';
+
+// Security & Monitoring
+import { 
+  globalRateLimiter, 
+  authRateLimiter, 
+  apiRateLimiter,
+  heavyOperationRateLimiter 
+} from './middleware/rateLimit';
+import { preventSQLInjection } from './middleware/validation';
+import { corsOptions } from './config/cors';
+import { 
+  initializeSentry, 
+  sentryRequestHandler, 
+  sentryTracingHandler, 
+  sentryErrorHandler 
+} from './config/apm';
+import { performanceMiddleware } from './middleware/performance';
+import { getMetricsService } from './services/MetricsService';
+import { setupAlertHandlers } from './config/alerts';
+import { container } from './container/ServiceContainer';
+import { containerMiddleware } from './middleware/container';
 
 const app = express();
 const server = createServer(app);
 
-// CORS
-// - In production, keep this strict (set FRONTEND_URL / CORS_ORIGINS).
-// - In local dev, allow common localhost ports (e.g. Next dev servers on 3000/3005).
-const LOCALHOST_ORIGINS = new Set([
-  'http://localhost:3000',
-  'http://localhost:3005',
-  'http://127.0.0.1:3000',
-  'http://127.0.0.1:3005',
-]);
+// Initialize Sentry APM (must be first)
+initializeSentry(app);
 
-function parseCorsOrigins(envValue?: string) {
-  return (envValue || '')
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
-}
+// Sentry request handler (must be first middleware)
+app.use(sentryRequestHandler());
 
-const envCorsOrigins = [
-  ...parseCorsOrigins(process.env.CORS_ORIGINS),
-  ...(process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : []),
-].filter(Boolean);
+// Sentry tracing handler
+app.use(sentryTracingHandler());
 
-const STATIC_ORIGINS = [
-  ...new Set([
-    ...envCorsOrigins,
-    ...Array.from(LOCALHOST_ORIGINS),
-    'https://serviorestaurantplatform.netlify.app',
-    'https://servio-app.onrender.com',
-  ]),
-];
+// Performance monitoring middleware
+app.use(performanceMiddleware);
 
-const corsOrigin: cors.CorsOptions['origin'] = (origin, callback) => {
-  // Allow non-browser tools (no Origin header)
-  if (!origin) return callback(null, true);
-
-  // Always allow configured/static origins
-  if (STATIC_ORIGINS.includes(origin)) return callback(null, true);
-
-  // In development, allow any localhost port (useful when Next chooses a new port)
-  if (
-    process.env.NODE_ENV !== 'production' &&
-    /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin)
-  ) {
-    return callback(null, true);
-  }
-
-  return callback(new Error(`CORS blocked origin: ${origin}`));
-};
+// Request-scoped DI container (creates req.scopeId + req.container)
+app.use(containerMiddleware(container));
 
 const io = new SocketIOServer(server, {
-  cors: {
-    origin: corsOrigin,
-    methods: ["GET", "POST"],
-    credentials: true
-  },
+  cors: corsOptions as any,
   transports: ['polling', 'websocket'],
   allowEIO3: true,
   pingTimeout: 60000,
@@ -90,11 +74,22 @@ async function initializeServer() {
     await DatabaseService.initialize();
     logger.info('Database initialized successfully');
 
+    // Initialize services
     initializeNotifications(io);
+    registerServices();
+    
+    // Setup alert handlers
+    setupAlertHandlers();
+    
+    // Initialize metrics service
+    const metrics = getMetricsService();
+    logger.info('Metrics service initialized');
 
     // Now load routes after database is ready
+    const { default: healthRoutes } = await import('./routes/health');
     const { default: authRoutes } = await import('./routes/auth');
     const { default: assistantRoutes } = await import('./routes/assistant');
+    const { default: assistantMonitoringRoutes } = await import('./routes/assistant-monitoring');
     const { default: ordersRoutes } = await import('./routes/orders');
     const { default: inventoryRoutes } = await import('./routes/inventory');
     const { default: menuRoutes } = await import('./routes/menu');
@@ -113,8 +108,15 @@ async function initializeServer() {
     const { default: bookingsRoutes } = await import('./routes/bookings');
     const { default: notificationsRoutes } = await import('./routes/notifications');
 
-    // API Routes
-    app.use('/api/auth', authRoutes);
+    // Health check routes (no rate limiting, no auth)
+    app.use('/health', healthRoutes);
+    app.use('/api/health', healthRoutes);
+    
+    // SQL injection prevention (global)
+    app.use(preventSQLInjection);
+    
+    // API Routes with rate limiting
+    app.use('/api/auth', authRateLimiter, authRoutes);
     
     // Vapi webhook routes (no auth required for external webhooks)
     app.use('/api/vapi', vapiRoutes);
@@ -136,21 +138,22 @@ async function initializeServer() {
       res.json({ message: 'Direct route works' });
     });
 
-    // Protected routes
-    app.use('/api/assistant', requireAuth, assistantRoutes);
-    app.use('/api/orders', requireAuth, ordersRoutes);
-    app.use('/api/inventory', requireAuth, inventoryRoutes);
-    app.use('/api/menu', requireAuth, menuRoutes);
-    app.use('/api/tasks', requireAuth, tasksRoutes);
-    app.use('/api/sync', requireAuth, syncRoutes);
-    app.use('/api/receipts', requireAuth, receiptsRoutes);
-    app.use('/api/audit', requireAuth, auditRoutes);
-    app.use('/api/timeclock', requireAuth, timeclockRoutes);
-    app.use('/api/marketing', requireAuth, marketingRoutes);
-    app.use('/api/restaurant', requireAuth, restaurantRoutes);
-    app.use('/api/restaurants', requireAuth, restaurantSettingsRoutes);
-    app.use('/api/integrations', requireAuth, integrationsRoutes);
-    app.use('/api/notifications', requireAuth, notificationsRoutes);
+    // Protected routes with appropriate rate limiting
+    app.use('/api/assistant', requireAuth, heavyOperationRateLimiter, assistantRoutes);
+    app.use('/api/assistant-monitoring', requireAuth, apiRateLimiter, assistantMonitoringRoutes);
+    app.use('/api/orders', requireAuth, apiRateLimiter, ordersRoutes);
+    app.use('/api/inventory', requireAuth, apiRateLimiter, inventoryRoutes);
+    app.use('/api/menu', requireAuth, apiRateLimiter, menuRoutes);
+    app.use('/api/tasks', requireAuth, apiRateLimiter, tasksRoutes);
+    app.use('/api/sync', requireAuth, apiRateLimiter, syncRoutes);
+    app.use('/api/receipts', requireAuth, apiRateLimiter, receiptsRoutes);
+    app.use('/api/audit', requireAuth, apiRateLimiter, auditRoutes);
+    app.use('/api/timeclock', requireAuth, apiRateLimiter, timeclockRoutes);
+    app.use('/api/marketing', requireAuth, apiRateLimiter, marketingRoutes);
+    app.use('/api/restaurant', requireAuth, apiRateLimiter, restaurantRoutes);
+    app.use('/api/restaurants', requireAuth, apiRateLimiter, restaurantSettingsRoutes);
+    app.use('/api/integrations', requireAuth, apiRateLimiter, integrationsRoutes);
+    app.use('/api/notifications', requireAuth, apiRateLimiter, notificationsRoutes);
 
     // 404 handler (must be last)
     app.use((req, res, next) => {
@@ -159,6 +162,9 @@ async function initializeServer() {
         message: `Route ${req.method} ${req.originalUrl} not found`
       });
     });
+
+    // Sentry error handler (must be before other error handlers)
+    app.use(sentryErrorHandler());
 
     // Error handler MUST be after all routes and 404 handler
     app.use(errorHandler);
@@ -188,13 +194,7 @@ app.use(helmet({
   }
 }));
 
-app.use(cors({
-  origin: corsOrigin,
-  credentials: true,
-  optionsSuccessStatus: 200,
-  preflightContinue: false,
-  maxAge: 86400 // 24 hour preflight cache
-}));
+app.use(cors(corsOptions));
 
 // LIGHTNING FAST COMPRESSION
 app.use(compression({
@@ -335,8 +335,8 @@ app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
 // Routes will be loaded after database initialization
 
-// Health check
-app.get('/health', (req, res) => {
+// Basic health check (backup - main health routes loaded in initializeServer)
+app.get('/health-basic', (req, res) => {
   res.status(200).json({
     status: 'ok',
     timestamp: new Date().toISOString(),

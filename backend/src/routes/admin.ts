@@ -801,6 +801,62 @@ router.get('/system/health', async (req, res) => {
   try {
     const db = await DatabaseService.getInstance().getDatabase();
 
+    // DB connected check
+    let dbConnected = true;
+    try {
+      await db.get('SELECT 1 as ok');
+    } catch {
+      dbConnected = false;
+    }
+
+    // Worker heartbeat (stale if > 90s old)
+    const systemHealth = await db.get<any>(
+      `SELECT worker_last_seen_at FROM system_health WHERE id = 'global'`
+    ).catch(() => undefined);
+
+    const workerLastSeenAt = systemHealth?.worker_last_seen_at || null;
+    const workerHealthy = (() => {
+      if (!workerLastSeenAt) return false;
+      const last = new Date(workerLastSeenAt).getTime();
+      if (Number.isNaN(last)) return false;
+      return Date.now() - last <= 90_000;
+    })();
+
+    // Job backlog (pending jobs)
+    const jobBacklog = await db.get<any>(
+      `SELECT COUNT(*) as count FROM sync_jobs WHERE status = 'pending'`
+    ).catch(() => ({ count: 0 }));
+
+    // Error rate proxy last 1h (audit events with error/fail markers / all audit events)
+    const auditTotal1h = await db.get<any>(
+      `SELECT COUNT(*) as count FROM audit_logs WHERE created_at >= datetime('now', '-1 hour')`
+    ).catch(() => ({ count: 0 }));
+    const auditErrors1h = await db.get<any>(
+      `SELECT COUNT(*) as count FROM audit_logs 
+       WHERE created_at >= datetime('now', '-1 hour')
+         AND (action LIKE '%error%' OR action LIKE '%fail%')`
+    ).catch(() => ({ count: 0 }));
+
+    const errorRateLast1h =
+      (Number(auditTotal1h?.count || 0) > 0)
+        ? Number(auditErrors1h?.count || 0) / Number(auditTotal1h.count)
+        : 0;
+
+    // Last Vapi call log received
+    const lastVapiCallLog = await db.get<any>(
+      `SELECT created_at FROM call_logs ORDER BY created_at DESC LIMIT 1`
+    ).catch(() => undefined);
+
+    // Last order created
+    const lastOrder = await db.get<any>(
+      `SELECT created_at FROM orders ORDER BY created_at DESC LIMIT 1`
+    ).catch(() => undefined);
+
+    // Last notification created
+    const lastNotification = await db.get<any>(
+      `SELECT created_at FROM notifications ORDER BY created_at DESC LIMIT 1`
+    ).catch(() => undefined);
+
     // Get failed jobs count
     const failedJobs = await db.get(`
       SELECT COUNT(*) as count FROM sync_jobs WHERE status = 'failed'
@@ -827,8 +883,26 @@ router.get('/system/health', async (req, res) => {
       LIMIT 5
     `).catch(() => []);
 
+    const overallStatus =
+      !dbConnected
+        ? 'down'
+        : (!workerHealthy || Number(failedJobs?.count || 0) > 0)
+            ? 'degraded'
+            : 'operational';
+
     res.json({
-      status: 'operational',
+      status: overallStatus,
+      apiUp: true,
+      dbConnected,
+      worker: {
+        healthy: workerHealthy,
+        lastSeenAt: workerLastSeenAt
+      },
+      jobBacklogCount: Number(jobBacklog?.count || 0),
+      errorRateLast1h,
+      lastVapiCallLogReceivedAt: lastVapiCallLog?.created_at || null,
+      lastOrderCreatedAt: lastOrder?.created_at || null,
+      lastNotificationCreatedAt: lastNotification?.created_at || null,
       failedJobs: failedJobs?.count || 0,
       recentErrors: recentErrors || [],
       storageErrors: storageErrors || [],

@@ -1,5 +1,12 @@
 import { Request, Response, NextFunction } from 'express';
-import { logger } from '../utils/logger';
+import { enhancedLogger } from '../utils/logger';
+
+interface ErrorWithStatus extends Error {
+  status?: number;
+  statusCode?: number;
+  code?: string;
+  details?: any;
+}
 
 export interface AppError extends Error {
   statusCode?: number;
@@ -83,10 +90,39 @@ export const errorHandler = (
     params: req.params
   };
 
+  // Enhanced error logging with context
   if (statusCode >= 500) {
-    logger.error('Server Error:', errorInfo);
+    enhancedLogger.errorWithContext(error, `${req.method} ${req.path}`, {
+      statusCode,
+      isOperational,
+      ip: req.ip,
+      userAgent: req.get('User-Agent'),
+      userId: (req as any).user?.id,
+      restaurantId: (req as any).user?.restaurantId,
+      body: req.body,
+      query: req.query,
+      params: req.params,
+      headers: req.headers
+    });
+
+    // Track error in monitoring service
+    const MonitoringService = require('../services/MonitoringService');
+    MonitoringService.getInstance?.()?.recordError(error.name, {
+      statusCode,
+      path: req.path,
+      method: req.method
+    });
   } else {
-    logger.warn('Client Error:', errorInfo);
+    enhancedLogger.warn(`Client Error: ${error.name}`, {
+      message: error.message,
+      statusCode,
+      path: req.path,
+      method: req.method,
+      ip: req.ip,
+      userId: (req as any).user?.id,
+      query: req.query,
+      params: req.params
+    });
   }
 
   // Handle specific error types

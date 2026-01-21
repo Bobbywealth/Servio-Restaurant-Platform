@@ -63,7 +63,18 @@ export function requirePermission(permission: string) {
   return (req: Request, _res: Response, next: NextFunction) => {
     const user = req.user;
     if (!user) return next(new UnauthorizedError());
-    if (user.permissions.includes('*') || user.permissions.includes(permission)) return next();
+    
+    // Check for wildcard permission
+    if (user.permissions.includes('*')) return next();
+    
+    // Check for exact permission match
+    if (user.permissions.includes(permission)) return next();
+    
+    // Check for wildcard pattern matches (e.g., "orders.*" matches "orders:read")
+    const permissionPrefix = permission.split(':')[0];
+    const wildcardPermission = `${permissionPrefix}.*`;
+    if (user.permissions.includes(wildcardPermission)) return next();
+    
     return next(new ForbiddenError(`Missing permission: ${permission}`));
   };
 }

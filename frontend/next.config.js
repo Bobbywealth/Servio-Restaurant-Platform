@@ -1,14 +1,19 @@
 /** @type {import('next').NextConfig} */
+const path = require('path');
+const { BundleAnalyzerPlugin } = require('webpack-bundle-analyzer');
+
 const nextConfig = {
   reactStrictMode: true,
   trailingSlash: false,
-  // Temporarily disable static export to support dynamic restaurant pages
-  // output: 'export', // Enable static export for static site deployment
-
-  // AGGRESSIVE IMAGE OPTIMIZATION
+  
+  // PRODUCTION IMAGE OPTIMIZATION
   images: {
-    unoptimized: true,
+    unoptimized: false, // Enable optimization in production
     remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: '**.render.com',
+      },
       {
         protocol: 'http',
         hostname: 'localhost',
@@ -29,12 +34,19 @@ const nextConfig = {
     BACKEND_URL: process.env.BACKEND_URL || 'http://localhost:3002',
     NEXT_PUBLIC_BACKEND_URL: process.env.NEXT_PUBLIC_BACKEND_URL || process.env.BACKEND_URL || 'http://localhost:3002',
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || process.env.BACKEND_URL || 'http://localhost:3002',
+    NEXT_PUBLIC_WS_URL: process.env.NEXT_PUBLIC_WS_URL || process.env.BACKEND_URL || 'http://localhost:3002',
+    NEXT_PUBLIC_ASSISTANT_ENABLED: process.env.NEXT_PUBLIC_ASSISTANT_ENABLED || 'true',
+    NEXT_PUBLIC_WAKE_WORD_ENABLED: process.env.NEXT_PUBLIC_WAKE_WORD_ENABLED || 'false',
+    NEXT_PUBLIC_TTS_ENABLED: process.env.NEXT_PUBLIC_TTS_ENABLED || 'true'
   },
 
-  // EXPERIMENTAL FEATURES
-  // Keep this minimal in dev to avoid Fast Refresh full reload loops.
+  // External packages configuration
+  serverExternalPackages: ['sharp'],
+  
+  // EXPERIMENTAL FEATURES FOR PRODUCTION
   experimental: {
     scrollRestoration: true,
+    optimizeCss: true,
   },
 
   // PREVENT WATCH LOOPS IN DEV
@@ -43,9 +55,53 @@ const nextConfig = {
     pagesBufferLength: 5, // number of pages that should be kept in memory
   },
 
-  // AGGRESSIVE COMPRESSION
+  // PRODUCTION HEADERS AND SECURITY
   compress: true,
   poweredByHeader: false,
+  
+  async headers() {
+    return [
+      {
+        source: '/(.*)',
+        headers: [
+          {
+            key: 'X-Frame-Options',
+            value: 'DENY',
+          },
+          {
+            key: 'X-Content-Type-Options',
+            value: 'nosniff',
+          },
+          {
+            key: 'Referrer-Policy',
+            value: 'strict-origin-when-cross-origin',
+          },
+          {
+            key: 'Permissions-Policy',
+            value: 'microphone=(self), camera=(self)',
+          },
+        ],
+      },
+      {
+        source: '/static/(.*)',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=31536000, immutable',
+          },
+        ],
+      },
+      {
+        source: '/:path*\.(png|jpg|jpeg|gif|webp|avif|ico|svg)',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=86400, s-maxage=31536000',
+          },
+        ],
+      },
+    ];
+  },
 
   // WEBPACK OPTIMIZATIONS (Serverless-friendly)
   webpack: (config, { dev, isServer }) => {
@@ -62,9 +118,46 @@ const nextConfig = {
         ...config.resolve.alias,
         '@': require('path').join(__dirname, '.'),
       }
-      // Better tree shaking
+      
+      // Advanced tree shaking and optimizations
       config.optimization.usedExports = true
       config.optimization.sideEffects = false
+      config.optimization.providedExports = true
+      config.optimization.innerGraph = true
+      config.optimization.mangleExports = true
+      
+      // Split chunks optimization
+      config.optimization.splitChunks = {
+        chunks: 'all',
+        cacheGroups: {
+          vendor: {
+            test: /[\\/]node_modules[\\/]/,
+            name: 'vendors',
+            priority: 10,
+            enforce: true,
+          },
+          common: {
+            name: 'common',
+            minChunks: 2,
+            priority: 5,
+            reuseExistingChunk: true,
+          },
+        },
+      }
+      
+      // Minimize bundles
+      config.optimization.minimize = true
+      
+      // Bundle analyzer in production analysis mode
+      if (process.env.ANALYZE === 'true') {
+        config.plugins.push(
+          new BundleAnalyzerPlugin({
+            analyzerMode: 'static',
+            openAnalyzer: false,
+            reportFilename: 'bundle-report.html',
+          })
+        );
+      }
     }
 
     // PERFORMANCE OPTIMIZATIONS FOR ALL BUILDS

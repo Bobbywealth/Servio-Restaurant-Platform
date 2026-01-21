@@ -105,7 +105,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       icon: ClipboardList,
       description: 'Manage all orders',
       color: 'text-primary-500',
-      roles: ['staff', 'manager', 'owner', 'admin']
+      roles: ['manager', 'owner', 'admin']
     },
     {
       name: 'Time Clock',

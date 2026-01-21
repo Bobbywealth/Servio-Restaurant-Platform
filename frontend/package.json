@@ -6,8 +6,12 @@
     "dev": "node scripts/ensure-port.js 3000 && NODE_OPTIONS='--max-old-space-size=2048' next dev -p 3000",
     "dev:fast": "node scripts/ensure-port.js 3000 && NODE_OPTIONS='--max-old-space-size=2048' SKIP_ENV_VALIDATION=1 next dev -p 3000 --turbo",
     "build": "NODE_OPTIONS='--max-old-space-size=2048' next build",
+    "build:analyze": "NODE_OPTIONS='--max-old-space-size=2048' ANALYZE=true next build",
+    "build:production": "NODE_OPTIONS='--max-old-space-size=2048' NODE_ENV=production next build && next-sitemap",
+    "build:sitemap": "next-sitemap",
     "export": "next export",
-    "start": "next start",
+    "start": "NODE_ENV=production next start -p ${PORT:-3000}",
+    "start:production": "NODE_ENV=production next start -p ${PORT:-3000}",
     "lint": "next lint",
     "install:ci": "NODE_OPTIONS='--max-old-space-size=1024' npm ci --legacy-peer-deps"
   },
@@ -25,6 +29,7 @@
     "axios": "^1.6.2",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.0.0",
+    "critters": "^0.0.23",
     "eslint": "^8",
     "eslint-config-next": "14.0.4",
     "framer-motion": "^12.23.26",
@@ -49,6 +54,7 @@
   },
   "devDependencies": {
     "@svgr/webpack": "^8.1.0",
+    "next-sitemap": "^4.2.3",
     "webpack-bundle-analyzer": "^4.10.1"
   }
 }

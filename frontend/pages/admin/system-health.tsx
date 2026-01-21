@@ -7,6 +7,17 @@ import { getErrorMessage } from '../../lib/utils'
 
 interface SystemHealth {
   status: string
+  apiUp?: boolean
+  dbConnected?: boolean
+  worker?: {
+    healthy: boolean
+    lastSeenAt: string | null
+  }
+  jobBacklogCount?: number
+  errorRateLast1h?: number
+  lastVapiCallLogReceivedAt?: string | null
+  lastOrderCreatedAt?: string | null
+  lastNotificationCreatedAt?: string | null
   failedJobs: number
   recentErrors: Array<{
     action: string
@@ -185,6 +196,80 @@ export default function SystemHealth() {
                   Last 24 hours
                 </p>
               </motion.div>
+            </div>
+
+            {/* System Checks */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400">API</h3>
+                  <Server className="h-5 w-5 text-gray-400" />
+                </div>
+                <div className="text-sm text-gray-900 dark:text-white">
+                  {health.apiUp === false ? 'Down' : 'Up'}
+                </div>
+              </div>
+
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400">Database</h3>
+                  <Database className="h-5 w-5 text-gray-400" />
+                </div>
+                <div className="text-sm text-gray-900 dark:text-white">
+                  {health.dbConnected === false ? 'Disconnected' : 'Connected'}
+                </div>
+              </div>
+
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400">Worker Heartbeat</h3>
+                  <Zap className="h-5 w-5 text-gray-400" />
+                </div>
+                <div className="text-sm text-gray-900 dark:text-white">
+                  {health.worker?.healthy ? 'Healthy' : 'Stale / Missing'}
+                </div>
+                {health.worker?.lastSeenAt && (
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                    Last seen: {new Date(health.worker.lastSeenAt).toLocaleString()}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Last-seen + rates */}
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-8">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div>
+                  <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400">Job Backlog</h3>
+                  <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                    {health.jobBacklogCount ?? 0}
+                  </div>
+                </div>
+                <div>
+                  <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400">Error rate (last 1h)</h3>
+                  <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                    {((health.errorRateLast1h ?? 0) * 100).toFixed(1)}%
+                  </div>
+                </div>
+                <div>
+                  <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400">Last Vapi call log</h3>
+                  <div className="text-sm text-gray-900 dark:text-white">
+                    {health.lastVapiCallLogReceivedAt ? new Date(health.lastVapiCallLogReceivedAt).toLocaleString() : '—'}
+                  </div>
+                </div>
+                <div>
+                  <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400">Last order created</h3>
+                  <div className="text-sm text-gray-900 dark:text-white">
+                    {health.lastOrderCreatedAt ? new Date(health.lastOrderCreatedAt).toLocaleString() : '—'}
+                  </div>
+                </div>
+                <div>
+                  <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400">Last notification created</h3>
+                  <div className="text-sm text-gray-900 dark:text-white">
+                    {health.lastNotificationCreatedAt ? new Date(health.lastNotificationCreatedAt).toLocaleString() : '—'}
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* Failed Jobs */}

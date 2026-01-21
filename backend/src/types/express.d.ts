@@ -1,5 +1,6 @@
 import type { AuthUser } from './auth';
 import 'multer';
+import type { ServiceContainer } from '../container/ServiceContainer';
 
 declare global {
   namespace Express {
@@ -7,6 +8,8 @@ declare global {
       user?: AuthUser;
       file?: Multer.File;
       files?: Multer.File[] | { [fieldname: string]: Multer.File[] };
+      scopeId?: string;
+      container?: ServiceContainer;
     }
     
     namespace Multer {

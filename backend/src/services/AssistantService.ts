@@ -5,6 +5,7 @@ import os from 'os';
 import { DatabaseService } from './DatabaseService';
 import { logger } from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
+import { distance } from 'fastest-levenshtein';
 
 // Tool interfaces
 interface ToolCall {
@@ -33,15 +34,101 @@ interface AssistantResponse {
 
 
 
+// Restaurant context cache interface
+interface RestaurantContextCache {
+  data: {
+    orders: any[];
+    unavailableItems: any[];
+    lowStockItems: any[];
+    pendingTasks: any[];
+    menuItems: any[];
+    urgentOrders: any[];
+  };
+  expires: number;
+}
+
+// Circuit breaker for OpenAI API resilience
+class OpenAICircuitBreaker {
+  private failures = 0;
+  private lastFailure = 0;
+  private readonly maxFailures: number;
+  private readonly resetTimeout: number;
+
+  constructor(maxFailures = 3, resetTimeoutMs = 60000) {
+    this.maxFailures = maxFailures;
+    this.resetTimeout = resetTimeoutMs;
+  }
+
+  private isCircuitOpen(): boolean {
+    return this.failures >= this.maxFailures && 
+           (Date.now() - this.lastFailure) < this.resetTimeout;
+  }
+
+  private onSuccess(): void {
+    this.failures = 0;
+    this.lastFailure = 0;
+  }
+
+  private onFailure(): void {
+    this.failures++;
+    this.lastFailure = Date.now();
+    logger.warn(`Circuit breaker failure count: ${this.failures}/${this.maxFailures}`);
+  }
+
+  async execute<T>(apiCall: () => Promise<T>, fallback: () => T): Promise<T> {
+    if (this.isCircuitOpen()) {
+      logger.warn('Circuit breaker is open, using fallback');
+      return fallback();
+    }
+
+    try {
+      const result = await apiCall();
+      this.onSuccess();
+      return result;
+    } catch (error) {
+      this.onFailure();
+      
+      if (this.failures >= this.maxFailures) {
+        logger.error('Circuit breaker tripped - switching to fallback mode');
+      }
+      
+      throw error;
+    }
+  }
+}
+
 export class AssistantService {
   private openai: OpenAI;
   private _db: any = null;
   private conversationHistory: Map<string, Array<{role: 'user' | 'assistant' | 'system', content: string}>> = new Map();
+  private readonly MAX_HISTORY_LENGTH = parseInt(process.env.ASSISTANT_MAX_HISTORY_LENGTH || '15'); // Reduced from 50 for faster LLM processing
+  private readonly CONVERSATION_TIMEOUT = parseInt(process.env.ASSISTANT_CONVERSATION_TIMEOUT || '1800000'); // 30 minutes
+  
+  // Restaurant context cache with 5-minute TTL
+  private contextCache = new Map<string, RestaurantContextCache>();
+  private readonly CONTEXT_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+  
+  // Circuit breaker for API resilience
+  private circuitBreaker = new OpenAICircuitBreaker();
 
   constructor() {
+    if (!process.env.OPENAI_API_KEY) {
+      throw new Error('OPENAI_API_KEY environment variable is required');
+    }
+
     this.openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY || ''
+      apiKey: process.env.OPENAI_API_KEY,
+      maxRetries: 3,
+      timeout: 60000, // 60 seconds
     });
+
+    // Clean up expired conversations and context cache periodically
+    if (typeof setInterval !== 'undefined') {
+      setInterval(() => {
+        this.cleanupExpiredConversations();
+        this.cleanupExpiredContextCache();
+      }, 300000); // Every 5 minutes
+    }
   }
 
   private get db() {
@@ -49,6 +136,53 @@ export class AssistantService {
       this._db = DatabaseService.getInstance().getDatabase();
     }
     return this._db;
+  }
+
+  private cleanupExpiredConversations(): void {
+    const now = Date.now();
+    for (const [userId, history] of this.conversationHistory.entries()) {
+      // Remove conversations older than timeout
+      if (history.length === 0 || now - this.getLastActivityTime(userId) > this.CONVERSATION_TIMEOUT) {
+        this.conversationHistory.delete(userId);
+        logger.debug(`Cleaned up expired conversation for user ${userId}`);
+      }
+    }
+  }
+
+  private cleanupExpiredContextCache(): void {
+    const now = Date.now();
+    let cleaned = 0;
+    for (const [restaurantId, cache] of this.contextCache.entries()) {
+      if (cache.expires <= now) {
+        this.contextCache.delete(restaurantId);
+        cleaned++;
+      }
+    }
+    if (cleaned > 0) {
+      logger.debug(`Cleaned up ${cleaned} expired context cache entries`);
+    }
+  }
+
+  private getLastActivityTime(userId: string): number {
+    const history = this.conversationHistory.get(userId) || [];
+    // For simplicity, we'll use current time minus conversation timeout
+    // In a real implementation, you'd store timestamps with each message
+    return Date.now();
+  }
+
+  private trimConversationHistory(userId: string): void {
+    const history = this.conversationHistory.get(userId);
+    if (history && history.length > this.MAX_HISTORY_LENGTH) {
+      // Keep system prompt and trim older messages
+      const systemPrompts = history.filter(msg => msg.role === 'system');
+      const nonSystemMessages = history.filter(msg => msg.role !== 'system');
+      
+      // Keep the most recent messages
+      const trimmedNonSystem = nonSystemMessages.slice(-this.MAX_HISTORY_LENGTH + systemPrompts.length);
+      
+      this.conversationHistory.set(userId, [...systemPrompts, ...trimmedNonSystem]);
+      logger.debug(`Trimmed conversation history for user ${userId}`);
+    }
   }
 
   async processAudio(audioBuffer: Buffer, userId: string): Promise<AssistantResponse> {
@@ -98,32 +232,40 @@ export class AssistantService {
       // Get system prompt with current context
       const systemPrompt = await this.getSystemPrompt(userId);
 
-      // Get conversation history for this user (keep last 6 messages for context)
-      if (!this.conversationHistory.has(userId)) {
-        this.conversationHistory.set(userId, []);
-      }
-      const history = this.conversationHistory.get(userId)!;
-      
-      // Add current message to history
-      history.push({ role: 'user', content: text });
-      
-      // Keep only last 6 messages (3 exchanges) for speed
-      if (history.length > 6) {
-        history.splice(0, history.length - 6);
+      // Get or create conversation history
+      let history = this.conversationHistory.get(userId) || [];
+      if (history.length === 0) {
+        history.push({ role: 'system', content: systemPrompt });
       }
 
-      const completion = await this.openai.chat.completions.create({
-        model: 'gpt-4o-mini', // Much faster than gpt-4-turbo, still very capable
-        messages: [
-          { role: 'system', content: systemPrompt },
-          ...history // Include conversation history for natural flow
-        ],
-        tools: this.getTools(),
-        tool_choice: 'auto',
-        temperature: 0.5, // Slightly more natural
-        max_tokens: 300, // Shorter responses for faster processing
-        stream: false
-      });
+      // Add user input to history
+      history.push({ role: 'user', content: text });
+
+      // Trim history if it's getting too long
+      this.trimConversationHistory(userId);
+
+      const completion = await this.circuitBreaker.execute(
+        () => this.openai.chat.completions.create({
+          model: 'gpt-4o-mini', // Much faster than gpt-4-turbo, still very capable
+          messages: [
+            { role: 'system', content: systemPrompt },
+            ...history // Include conversation history for natural flow
+          ],
+          tools: this.getTools(),
+          tool_choice: 'auto',
+          temperature: 0.5, // Slightly more natural
+          max_tokens: 300, // Shorter responses for faster processing
+          stream: false
+        }),
+        () => ({
+          choices: [{
+            message: {
+              content: "I'm experiencing technical difficulties. Please try your request again in a moment, or use the text commands below.",
+              tool_calls: null
+            }
+          }]
+        } as any)
+      );
 
       const message = completion.choices[0]?.message;
       if (!message) {
@@ -132,6 +274,9 @@ export class AssistantService {
 
       let response = message.content || "I understand, let me help with that.";
       const actions: AssistantResponse['actions'] = [];
+
+      // Start TTS generation in parallel with tool execution for faster response
+      const ttsPromise = this.generateSpeech(response);
 
       // Process tool calls
       if (message.tool_calls) {
@@ -144,8 +289,8 @@ export class AssistantService {
       // Add assistant response to history for natural conversation flow
       history.push({ role: 'assistant', content: response });
 
-      // Generate TTS audio (in parallel for speed)
-      const audioUrl = await this.generateSpeech(response);
+      // Wait for TTS to complete (should be done by now due to parallel execution)
+      const audioUrl = await ttsPromise;
 
       return {
         response,
@@ -176,11 +321,14 @@ export class AssistantService {
 
       fs.writeFileSync(tempPath, audioBuffer);
 
-      const transcription = await this.openai.audio.transcriptions.create({
-        file: fs.createReadStream(tempPath),
-        model: 'whisper-1',
-        language: 'en'
-      });
+      const transcription = await this.circuitBreaker.execute(
+        () => this.openai.audio.transcriptions.create({
+          file: fs.createReadStream(tempPath),
+          model: 'whisper-1',
+          language: 'en'
+        }),
+        () => ({ text: '' }) // Empty fallback - will be handled upstream
+      );
 
       // Clean up temp file
       fs.unlinkSync(tempPath);
@@ -204,13 +352,21 @@ export class AssistantService {
       const voice = (process.env.OPENAI_TTS_VOICE || 'nova') as any; // Nova is clearer and faster
       const speed = 1.1; // Slightly faster speech
 
-      const speech = await this.openai.audio.speech.create({
-        model,
-        voice,
-        input,
-        response_format: 'mp3',
-        speed
-      });
+      const speech = await this.circuitBreaker.execute(
+        () => this.openai.audio.speech.create({
+          model,
+          voice,
+          input,
+          response_format: 'mp3',
+          speed
+        }),
+        () => null // No TTS fallback - will skip audio generation
+      );
+
+      if (!speech) {
+        logger.warn('TTS circuit breaker active - skipping audio generation');
+        return '';
+      }
 
       const arrayBuffer = await speech.arrayBuffer();
       const audioBuffer = Buffer.from(arrayBuffer);
@@ -230,16 +386,109 @@ export class AssistantService {
     }
   }
 
+  // Get cached restaurant context or fetch fresh data
+  private async getRestaurantContext(restaurantId: string): Promise<RestaurantContextCache['data']> {
+    const cached = this.contextCache.get(restaurantId);
+    if (cached && cached.expires > Date.now()) {
+      logger.debug(`Using cached restaurant context for ${restaurantId}`);
+      return cached.data;
+    }
+
+    logger.debug(`Fetching fresh restaurant context for ${restaurantId}`);
+    
+    // Fetch all context data in parallel for better performance
+    const [orders, unavailableItems, lowStockItems, pendingTasks, menuItems] = await Promise.all([
+      this.db.all('SELECT * FROM orders WHERE restaurant_id = ? AND status != "completed" ORDER BY created_at DESC LIMIT 10', [restaurantId]),
+      this.db.all('SELECT name, updated_at FROM menu_items WHERE restaurant_id = ? AND is_available = FALSE ORDER BY updated_at DESC', [restaurantId]),
+      this.db.all('SELECT name, on_hand_qty, unit, low_stock_threshold FROM inventory_items WHERE restaurant_id = ? AND on_hand_qty <= low_stock_threshold', [restaurantId]),
+      this.db.all('SELECT title FROM tasks WHERE restaurant_id = ? AND status = "pending" LIMIT 5', [restaurantId]),
+      this.db.all('SELECT name FROM menu_items WHERE restaurant_id = ? AND is_available = TRUE LIMIT 20', [restaurantId])
+    ]);
+
+    // Calculate urgent orders
+    const urgentOrders = orders.filter((o: any) => {
+      const createdTime = new Date(o.created_at).getTime();
+      const now = Date.now();
+      return (now - createdTime) > 15 * 60 * 1000; // Over 15 minutes
+    });
+
+    const contextData = {
+      orders,
+      unavailableItems,
+      lowStockItems,
+      pendingTasks,
+      menuItems,
+      urgentOrders
+    };
+
+    // Cache the data
+    this.contextCache.set(restaurantId, {
+      data: contextData,
+      expires: Date.now() + this.CONTEXT_CACHE_TTL
+    });
+
+    return contextData;
+  }
+
+  // Generate smart, context-aware suggestions based on current restaurant state
+  private generateSmartSuggestions(context: RestaurantContextCache['data'], timeContext: { hour: number, dayOfWeek: string, timeOfDay: string }): string[] {
+    const suggestions: string[] = [];
+    const { orders, unavailableItems, lowStockItems, urgentOrders } = context;
+    const { hour, timeOfDay } = timeContext;
+
+    // Urgent order management
+    if (urgentOrders.length > 0) {
+      suggestions.push(`⚠️ URGENT: ${urgentOrders.length} orders over 15 minutes old need immediate attention`);
+    }
+
+    // High volume management
+    if (orders.length > 8) {
+      suggestions.push(`📈 HIGH VOLUME: ${orders.length} active orders. Consider 86'ing slow items to reduce ticket times`);
+    }
+
+    // Low stock alerts with timing context
+    if (lowStockItems.length > 0) {
+      const criticalItems = lowStockItems.filter((item: any) => item.on_hand_qty <= 1);
+      if (criticalItems.length > 0) {
+        suggestions.push(`🚨 CRITICAL STOCK: ${criticalItems.map((i: any) => i.name).join(', ')} almost depleted`);
+      } else if (timeOfDay === 'breakfast' || timeOfDay === 'lunch') {
+        suggestions.push(`📊 Stock watch: ${lowStockItems.slice(0, 2).map((i: any) => i.name).join(', ')} running low for ${timeOfDay} rush`);
+      }
+    }
+
+    // Time-based operational suggestions
+    if (timeOfDay === 'breakfast' && hour >= 8 && orders.length < 3) {
+      suggestions.push(`☀️ Slow breakfast service - good time for prep work or cleaning tasks`);
+    }
+
+    if (timeOfDay === 'lunch' && hour >= 11 && hour <= 13 && orders.length < 5) {
+      suggestions.push(`🍽️ Pre-lunch lull - perfect time to prep popular lunch items`);
+    }
+
+    if (timeOfDay === 'dinner' && hour >= 17 && orders.length < 4) {
+      suggestions.push(`🌆 Dinner prep time - ensure dinner specials are ready`);
+    }
+
+    // 86'd items management
+    if (unavailableItems.length > 3) {
+      suggestions.push(`📝 Menu management: ${unavailableItems.length} items currently 86'd. Review availability status`);
+    }
+
+    // End of day suggestions
+    if (hour >= 20 && orders.length < 3) {
+      suggestions.push(`🌙 Winding down - consider closing prep and inventory count`);
+    }
+
+    return suggestions.slice(0, 3); // Limit to top 3 most relevant suggestions
+  }
+
   private async getSystemPrompt(userId: string): Promise<string> {
     const user = await this.db.get('SELECT * FROM users WHERE id = ?', [userId]);
     const restaurantId = user?.restaurant_id || 'demo-restaurant-1';
 
-    // Get comprehensive restaurant context
-    const orders = await this.db.all('SELECT * FROM orders WHERE restaurant_id = ? AND status != "completed" ORDER BY created_at DESC LIMIT 10', [restaurantId]);
-    const unavailableItems = await this.db.all('SELECT name, updated_at FROM menu_items WHERE restaurant_id = ? AND is_available = FALSE ORDER BY updated_at DESC', [restaurantId]);
-    const lowStockItems = await this.db.all('SELECT name, on_hand_qty, unit, low_stock_threshold FROM inventory_items WHERE restaurant_id = ? AND on_hand_qty <= low_stock_threshold', [restaurantId]);
-    const pendingTasks = await this.db.all('SELECT title FROM tasks WHERE restaurant_id = ? AND status = "pending" LIMIT 5', [restaurantId]);
-    const menuItems = await this.db.all('SELECT name FROM menu_items WHERE restaurant_id = ? AND is_available = TRUE LIMIT 20', [restaurantId]);
+    // Get cached restaurant context
+    const context = await this.getRestaurantContext(restaurantId);
+    const { orders, unavailableItems, lowStockItems, pendingTasks, menuItems, urgentOrders } = context;
     
     // Get time context
     const now = new Date();
@@ -250,11 +499,9 @@ export class AssistantService {
     // Build detailed context strings
     const unavailableList = unavailableItems.map((item: any) => item.name).join(', ') || 'None';
     const lowStockList = lowStockItems.map((item: any) => `${item.name} (${item.on_hand_qty} ${item.unit})`).join(', ') || 'None';
-    const urgentOrders = orders.filter((o: any) => {
-      const createdTime = new Date(o.created_at).getTime();
-      const now = Date.now();
-      return (now - createdTime) > 15 * 60 * 1000; // Over 15 minutes
-    });
+    
+    // Generate smart suggestions based on current context
+    const smartSuggestions = this.generateSmartSuggestions(context, { hour, dayOfWeek, timeOfDay });
 
     return `You are Servio, an intelligent AI assistant specifically designed for restaurant operations. You have deep knowledge of restaurant workflows, terminology, and best practices.
 
@@ -266,6 +513,9 @@ Urgent Orders (>15min): ${urgentOrders.length}
 Currently 86'd Items: ${unavailableList}
 Low Stock Items: ${lowStockList}
 Pending Tasks: ${pendingTasks.length}
+
+SMART OPERATIONAL INSIGHTS:
+${smartSuggestions.length > 0 ? smartSuggestions.map(s => `• ${s}`).join('\n') : '• All systems running smoothly'}
 
 YOUR ADVANCED CAPABILITIES:
 1. 📦 Order Management:
@@ -638,35 +888,49 @@ Remember: You're not just executing commands - you're a smart restaurant assista
     };
   }
 
+  // Fuzzy string matching helper for menu items
+  private findBestMatches(query: string, menuItems: any[]): Array<{item: any, score: number}> {
+    const queryLower = query.toLowerCase().trim();
+    
+    return menuItems
+      .map(item => {
+        const nameLower = item.name.toLowerCase();
+        const exactMatch = nameLower.includes(queryLower);
+        const fuzzyScore = distance(queryLower, nameLower);
+        
+        // Prioritize exact substring matches, then fuzzy matches
+        let finalScore = exactMatch ? 0 : fuzzyScore;
+        
+        // Boost score for matches at word boundaries
+        if (nameLower.split(' ').some((word: string) => word.startsWith(queryLower))) {
+          finalScore = finalScore * 0.5; // Better score
+        }
+        
+        return { item, score: finalScore };
+      })
+      .filter(match => match.score <= 3 || match.item.name.toLowerCase().includes(queryLower))
+      .sort((a, b) => a.score - b.score)
+      .slice(0, 5); // Top 5 matches
+  }
+
   private async handleSetItemAvailability(args: any, userId: string): Promise<AssistantResponse['actions'][0]> {
     const { itemName, available, channels = ['all'] } = args;
     const user = await this.db.get('SELECT restaurant_id FROM users WHERE id = ?', [userId]);
     const restaurantId = user?.restaurant_id || 'demo-restaurant-1';
 
-    // Search for ALL matching items to detect ambiguity
-    let matchingItems: any[] = [];
-    
-    // Strategy 1: Exact partial match - find ALL matches
-    matchingItems = await this.db.all(
-      'SELECT * FROM menu_items WHERE name LIKE ? AND restaurant_id = ?',
-      [`%${itemName}%`, restaurantId]
+    // Get all menu items for fuzzy matching
+    const allMenuItems = await this.db.all(
+      'SELECT * FROM menu_items WHERE restaurant_id = ?',
+      [restaurantId]
     );
+
+    // Use fuzzy matching to find best matches
+    const matchResults = this.findBestMatches(itemName, allMenuItems);
+    let matchingItems = matchResults.map(r => r.item);
     
-    // Strategy 2: If no exact matches, try word-by-word search
-    if (matchingItems.length === 0) {
-      const words = itemName.split(/\s+/).filter((w: string) => w.length > 2);
-      for (const word of words) {
-        const wordMatches = await this.db.all(
-          'SELECT * FROM menu_items WHERE name LIKE ? AND restaurant_id = ?',
-          [`%${word}%`, restaurantId]
-        );
-        if (wordMatches.length > 0) {
-          matchingItems = wordMatches;
-          logger.info(`Found ${wordMatches.length} items by word match: "${word}"`);
-          break;
-        }
-      }
-    }
+    logger.info(`Fuzzy search for "${itemName}" found ${matchingItems.length} matches:`, 
+      matchResults.slice(0, 3).map(r => `${r.item.name} (score: ${r.score})`));
+    
     
     // Strategy 3: If trying to restore, search unavailable items
     if (matchingItems.length === 0 && available === true) {
@@ -767,15 +1031,29 @@ Remember: You're not just executing commands - you're a smart restaurant assista
     const user = await this.db.get('SELECT restaurant_id FROM users WHERE id = ?', [userId]);
     const restaurantId = user?.restaurant_id || 'demo-restaurant-1';
 
-    // Find the inventory item
-    const item = await this.db.get(
-      'SELECT * FROM inventory_items WHERE name LIKE ? AND restaurant_id = ?',
-      [`%${itemName}%`, restaurantId]
+    // Get all inventory items for fuzzy matching
+    const allInventoryItems = await this.db.all(
+      'SELECT * FROM inventory_items WHERE restaurant_id = ?',
+      [restaurantId]
     );
 
-    if (!item) {
-      throw new Error(`Inventory item "${itemName}" not found`);
+    // Use fuzzy matching to find the best match
+    const matchResults = this.findBestMatches(itemName, allInventoryItems);
+    
+    if (matchResults.length === 0) {
+      const availableItems = allInventoryItems.slice(0, 5).map((i: any) => i.name).join(', ');
+      throw new Error(`Inventory item "${itemName}" not found. Available items: ${availableItems}`);
     }
+
+    // If multiple good matches, ask for clarification
+    if (matchResults.length > 1 && matchResults[0].score > 0) {
+      const suggestions = matchResults.slice(0, 3).map((r: any) => r.item.name).join(', ');
+      throw new Error(`Multiple inventory items match "${itemName}": ${suggestions}. Please be more specific.`);
+    }
+
+    const item = matchResults[0].item;
+    logger.info(`Fuzzy matched inventory item "${itemName}" to "${item.name}" (score: ${matchResults[0].score})`);
+    
 
     const newQuantity = item.on_hand_qty + quantity;
 
