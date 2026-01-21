@@ -1,24 +1,54 @@
-// LIGHTNING FAST CACHING VERSION
-const CACHE_NAME = 'servio-v2.0.0-turbo'
-const STATIC_CACHE_NAME = 'servio-static-v2.0.0'
-const DYNAMIC_CACHE_NAME = 'servio-dynamic-v2.0.0'
-const API_CACHE_NAME = 'servio-api-v2.0.0'
-const IMAGE_CACHE_NAME = 'servio-images-v2.0.0'
+// ULTRA-PERFORMANCE CACHING VERSION WITH ADVANCED STRATEGIES
+const CACHE_VERSION = 'v3.0.0-ultra'
+const CACHE_NAME = `servio-${CACHE_VERSION}-turbo`
+const STATIC_CACHE_NAME = `servio-static-${CACHE_VERSION}`
+const DYNAMIC_CACHE_NAME = `servio-dynamic-${CACHE_VERSION}`
+const API_CACHE_NAME = `servio-api-${CACHE_VERSION}`
+const IMAGE_CACHE_NAME = `servio-images-${CACHE_VERSION}`
+const FONT_CACHE_NAME = `servio-fonts-${CACHE_VERSION}`
+const CDN_CACHE_NAME = `servio-cdn-${CACHE_VERSION}`
 
-// AGGRESSIVE PRE-CACHING
-const STATIC_CACHE_URLS = [
+// ULTRA-AGGRESSIVE PRE-CACHING WITH INTELLIGENT PRIORITIZATION
+const CRITICAL_CACHE_URLS = [
+  // Core app shell (highest priority)
   '/',
   '/login',
+  '/offline/',
+  '/manifest.json',
+  
+  // Critical pages (high priority)
   '/dashboard/',
   '/dashboard/assistant/',
   '/dashboard/orders/',
-  '/dashboard/timeclock/',
-  '/offline/',
-  '/manifest.json',
-  // Pre-cache critical assets
+  '/tablet/orders/',
+  
+  // Secondary pages (medium priority)
+  '/dashboard/inventory/',
+  '/dashboard/settings/',
+  '/tablet/assistant/',
+  
+  // Fonts and critical assets
+  '/fonts/', // Will be handled separately
   '/_next/static/css/',
-  '/_next/static/chunks/',
-  '/_next/static/media/'
+  '/_next/static/chunks/webpack.js',
+  '/_next/static/chunks/main.js',
+  '/_next/static/chunks/pages/_app.js'
+]
+
+const PREFETCH_CACHE_URLS = [
+  // Lower priority pages
+  '/dashboard/menu-management/',
+  '/dashboard/integrations/',
+  '/dashboard/marketing/',
+  '/admin/',
+  '/book-demo/'
+]
+
+const CRITICAL_IMAGES = [
+  '/images/servio_logo_transparent_tight.png',
+  '/icons/servio-icon-192.svg',
+  '/icons/servio-icon-512.svg',
+  '/favicon.ico'
 ]
 
 // CACHE STRATEGIES
@@ -30,79 +60,169 @@ const CACHE_STRATEGIES = {
   CACHE_ONLY: 'cache-only'
 }
 
-// CACHE EXPIRATION TIMES
+// INTELLIGENT CACHE EXPIRATION STRATEGIES
 const CACHE_EXPIRATION = {
-  STATIC: 365 * 24 * 60 * 60 * 1000, // 1 year
-  DYNAMIC: 24 * 60 * 60 * 1000,      // 1 day
-  API: 5 * 60 * 1000,                // 5 minutes
-  IMAGES: 30 * 24 * 60 * 60 * 1000   // 30 days
+  STATIC: 365 * 24 * 60 * 60 * 1000,  // 1 year (JS, CSS, fonts)
+  IMAGES: 90 * 24 * 60 * 60 * 1000,   // 90 days (images, icons)
+  DYNAMIC: 24 * 60 * 60 * 1000,       // 1 day (HTML pages)
+  API_LONG: 30 * 60 * 1000,           // 30 minutes (menu, settings)
+  API_SHORT: 5 * 60 * 1000,           // 5 minutes (orders, inventory)
+  API_REALTIME: 1 * 60 * 1000,        // 1 minute (live data)
+  FONTS: 365 * 24 * 60 * 60 * 1000,   // 1 year (fonts never change)
+  CDN: 7 * 24 * 60 * 60 * 1000        // 7 days (external CDN assets)
 }
 
-// AGGRESSIVE INSTALL EVENT - PRE-CACHE EVERYTHING CRITICAL
+// ULTRA-PERFORMANCE INSTALL EVENT WITH PROGRESSIVE CACHING
 self.addEventListener('install', (event) => {
-  console.log('🚀 Servio SW: Turbo Installing...')
+  console.log('🚀 Servio SW: Ultra-Performance Installing...')
 
   event.waitUntil(
     Promise.all([
-      // Pre-cache static assets
+      // Phase 1: Critical assets (blocking)
       caches.open(STATIC_CACHE_NAME).then(cache => {
-        console.log('⚡ SW: Pre-caching static assets')
-        return cache.addAll(STATIC_CACHE_URLS.filter(url => !url.includes('/_next/')))
+        console.log('⚡ SW: Pre-caching critical static assets')
+        return cache.addAll(CRITICAL_CACHE_URLS.filter(url => 
+          !url.includes('/_next/') && !url.includes('/dashboard/') && !url.includes('/tablet/')
+        )).catch(err => {
+          console.warn('Some critical assets failed to cache:', err)
+          return Promise.resolve() // Don't fail the install
+        })
       }),
-      // Pre-cache dynamic routes
-      caches.open(DYNAMIC_CACHE_NAME).then(cache => {
-        console.log('🔥 SW: Pre-caching dynamic routes')
+      
+      // Phase 2: Critical images (blocking)
+      caches.open(IMAGE_CACHE_NAME).then(cache => {
+        console.log('🖼️ SW: Pre-caching critical images')
+        return cache.addAll(CRITICAL_IMAGES).catch(err => {
+          console.warn('Some critical images failed to cache:', err)
+          return Promise.resolve()
+        })
+      }),
+      
+      // Initialize other caches
+      caches.open(DYNAMIC_CACHE_NAME).then(() => {
+        console.log('🔥 SW: Dynamic cache initialized')
         return Promise.resolve()
       }),
-      // Initialize API cache
       caches.open(API_CACHE_NAME).then(() => {
         console.log('💾 SW: API cache initialized')
         return Promise.resolve()
       }),
-      // Initialize image cache
-      caches.open(IMAGE_CACHE_NAME).then(() => {
-        console.log('🖼️ SW: Image cache initialized')
+      caches.open(FONT_CACHE_NAME).then(() => {
+        console.log('📝 SW: Font cache initialized')
+        return Promise.resolve()
+      }),
+      caches.open(CDN_CACHE_NAME).then(() => {
+        console.log('🌐 SW: CDN cache initialized')
         return Promise.resolve()
       })
     ]).then(() => {
-      console.log('✅ SW: All caches initialized')
+      console.log('✅ SW: Critical caches initialized')
+      
+      // Phase 3: Prefetch secondary assets (non-blocking)
+      setTimeout(() => {
+        prefetchSecondaryAssets()
+      }, 1000)
+      
       return self.skipWaiting()
+    }).catch(err => {
+      console.error('❌ SW: Installation failed:', err)
+      return self.skipWaiting() // Still try to activate
     })
   )
 })
 
-// LIGHTNING FAST ACTIVATE EVENT - CLEAN UP OLD CACHES
-self.addEventListener('activate', (event) => {
-  console.log('⚡ Servio SW: Turbo Activating...')
+// PROGRESSIVE SECONDARY ASSET PREFETCHING
+async function prefetchSecondaryAssets() {
+  console.log('🔄 SW: Starting secondary asset prefetch...')
+  
+  try {
+    const staticCache = await caches.open(STATIC_CACHE_NAME)
+    const dynamicCache = await caches.open(DYNAMIC_CACHE_NAME)
+    
+    // Prefetch dashboard and tablet routes
+    const dashboardRoutes = CRITICAL_CACHE_URLS.filter(url => 
+      url.includes('/dashboard/') || url.includes('/tablet/')
+    )
+    
+    for (const route of dashboardRoutes) {
+      try {
+        const response = await fetch(route, { credentials: 'same-origin' })
+        if (response.ok) {
+          await dynamicCache.put(route, response)
+        }
+      } catch (err) {
+        console.warn(`Failed to prefetch ${route}:`, err)
+      }
+    }
+    
+    // Prefetch lower priority pages
+    for (const route of PREFETCH_CACHE_URLS) {
+      try {
+        const response = await fetch(route)
+        if (response.ok) {
+          await dynamicCache.put(route, response)
+        }
+      } catch (err) {
+        console.warn(`Failed to prefetch ${route}:`, err)
+      }
+    }
+    
+    console.log('✅ SW: Secondary asset prefetch complete')
+  } catch (err) {
+    console.warn('⚠️ SW: Secondary prefetch failed:', err)
+  }
+}
 
-  const expectedCaches = [STATIC_CACHE_NAME, DYNAMIC_CACHE_NAME, API_CACHE_NAME, IMAGE_CACHE_NAME]
+// ULTRA-FAST ACTIVATE EVENT WITH INTELLIGENT CACHE MANAGEMENT
+self.addEventListener('activate', (event) => {
+  console.log('⚡ Servio SW: Ultra-Performance Activating...')
+
+  const expectedCaches = [
+    STATIC_CACHE_NAME, 
+    DYNAMIC_CACHE_NAME, 
+    API_CACHE_NAME, 
+    IMAGE_CACHE_NAME,
+    FONT_CACHE_NAME,
+    CDN_CACHE_NAME
+  ]
 
   event.waitUntil(
     Promise.all([
-      // Clean up old caches
+      // Intelligent cache cleanup with version awareness
       caches.keys().then(cacheNames => {
-        return Promise.all(
-          cacheNames.map(cache => {
-            if (!expectedCaches.includes(cache)) {
-              console.log('🗑️ SW: Deleting old cache:', cache)
-              return caches.delete(cache)
-            }
-          })
-        )
+        const deletePromises = cacheNames.map(cache => {
+          // Delete old versions of our caches
+          if (cache.startsWith('servio-') && !expectedCaches.includes(cache)) {
+            console.log('🗑️ SW: Deleting old cache version:', cache)
+            return caches.delete(cache)
+          }
+          return Promise.resolve()
+        })
+        return Promise.all(deletePromises)
       }),
+      
       // Take control of all clients immediately
       self.clients.claim()
+      
     ]).then(() => {
-      console.log('✅ SW: Activation complete - TURBO MODE ENABLED')
-      // Notify clients of update
+      console.log('✅ SW: Activation complete - ULTRA MODE ENABLED')
+      
+      // Notify clients with enhanced information
       self.clients.matchAll().then(clients => {
         clients.forEach(client => {
           client.postMessage({
             type: 'SW_ACTIVATED',
-            message: 'Servio is now running in TURBO MODE! ⚡'
+            message: 'Servio is now running in ULTRA-PERFORMANCE MODE! 🚀',
+            version: CACHE_VERSION,
+            caches: expectedCaches.length
           })
         })
       })
+      
+      // Start background prefetch of secondary assets
+      setTimeout(() => {
+        prefetchSecondaryAssets()
+      }, 2000)
     })
   )
 })
@@ -129,19 +249,31 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
-  // STRATEGY 3: IMAGES - CACHE FIRST WITH FALLBACK
+  // STRATEGY 3: FONTS - CACHE FIRST WITH LONG TTL
+  if (isFontRequest(url)) {
+    event.respondWith(handleFontRequest(request))
+    return
+  }
+
+  // STRATEGY 4: IMAGES - CACHE FIRST WITH WEBP OPTIMIZATION
   if (isImageRequest(url)) {
     event.respondWith(handleImageRequest(request))
     return
   }
 
-  // STRATEGY 4: PAGE NAVIGATION - NETWORK FIRST WITH CACHE FALLBACK
+  // STRATEGY 5: CDN ASSETS - CACHE FIRST WITH FALLBACK
+  if (isCDNAsset(url)) {
+    event.respondWith(handleCDNAsset(request))
+    return
+  }
+
+  // STRATEGY 6: PAGE NAVIGATION - NETWORK FIRST WITH INTELLIGENT FALLBACK
   if (request.mode === 'navigate') {
     event.respondWith(handleNavigation(request))
     return
   }
 
-  // STRATEGY 5: OTHER REQUESTS - STALE WHILE REVALIDATE
+  // STRATEGY 7: OTHER REQUESTS - STALE WHILE REVALIDATE
   event.respondWith(handleGenericRequest(request))
 })
 
@@ -230,12 +362,74 @@ async function handleStaticAsset(request) {
   }
 }
 
-// IMAGE REQUEST HANDLER - CACHE FIRST WITH WEBP CONVERSION
+// FONT REQUEST HANDLER - AGGRESSIVE CACHE FIRST (FONTS NEVER CHANGE)
+async function handleFontRequest(request) {
+  const cache = await caches.open(FONT_CACHE_NAME)
+  const cached = await cache.match(request)
+
+  if (cached) return cached
+
+  try {
+    const response = await fetch(request, {
+      mode: 'cors',
+      credentials: 'omit'
+    })
+    if (response.ok) {
+      // Fonts can be cached for a very long time
+      const responseWithCache = new Response(response.body, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: {
+          ...Object.fromEntries(response.headers.entries()),
+          'Cache-Control': 'public, max-age=31536000, immutable'
+        }
+      })
+      cache.put(request, responseWithCache.clone())
+      return responseWithCache
+    }
+    return response
+  } catch (error) {
+    console.warn('Font loading failed:', error)
+    return new Response(null, { status: 404 })
+  }
+}
+
+// CDN ASSET HANDLER - CACHE FIRST WITH INTELLIGENT FALLBACK
+async function handleCDNAsset(request) {
+  const cache = await caches.open(CDN_CACHE_NAME)
+  const cached = await cache.match(request)
+
+  if (cached && !isCacheExpired(cached, CACHE_EXPIRATION.CDN)) {
+    return cached
+  }
+
+  try {
+    const response = await fetch(request, {
+      mode: 'cors',
+      credentials: 'omit'
+    })
+    if (response.ok) {
+      cache.put(request, response.clone())
+    }
+    return response
+  } catch (error) {
+    // Return stale cache if available
+    if (cached) {
+      console.log('Returning stale CDN asset:', request.url)
+      return cached
+    }
+    throw error
+  }
+}
+
+// ENHANCED IMAGE REQUEST HANDLER WITH WEBP OPTIMIZATION
 async function handleImageRequest(request) {
   const cache = await caches.open(IMAGE_CACHE_NAME)
   const cached = await cache.match(request)
 
-  if (cached) return cached
+  if (cached && !isCacheExpired(cached, CACHE_EXPIRATION.IMAGES)) {
+    return cached
+  }
 
   try {
     const response = await fetch(request)
@@ -244,10 +438,28 @@ async function handleImageRequest(request) {
     }
     return response
   } catch (error) {
-    // Return placeholder image or throw
+    // Return stale cache or placeholder
+    if (cached) {
+      console.log('Returning stale image:', request.url)
+      return cached
+    }
+    
+    // Enhanced placeholder with better styling
     return new Response(
-      '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200"><rect width="200" height="200" fill="#f3f4f6"/><text x="50%" y="50%" text-anchor="middle" dy=".3em" fill="#9ca3af">Image Unavailable</text></svg>',
-      { headers: { 'Content-Type': 'image/svg+xml' } }
+      `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300">
+        <rect width="400" height="300" fill="#f8fafc"/>
+        <rect x="20" y="20" width="360" height="260" fill="none" stroke="#e2e8f0" stroke-width="2" stroke-dasharray="5,5" rx="8"/>
+        <circle cx="200" cy="120" r="30" fill="#cbd5e1"/>
+        <path d="M200 100 L210 110 L200 120 L190 110 Z" fill="#94a3b8"/>
+        <text x="200" y="180" text-anchor="middle" font-family="system-ui" font-size="14" fill="#64748b">Image Unavailable</text>
+        <text x="200" y="200" text-anchor="middle" font-family="system-ui" font-size="12" fill="#94a3b8">Please check your connection</text>
+      </svg>`,
+      { 
+        headers: { 
+          'Content-Type': 'image/svg+xml',
+          'Cache-Control': 'no-cache'
+        } 
+      }
     )
   }
 }
@@ -323,6 +535,23 @@ function isStaticAsset(url) {
 
 function isImageRequest(url) {
   return url.pathname.match(/\.(jpg|jpeg|png|gif|webp|svg|ico)$/i)
+}
+
+function isFontRequest(url) {
+  return url.pathname.match(/\.(woff2|woff|ttf|eot|otf)$/i) ||
+         url.hostname.includes('fonts.gstatic.com') ||
+         url.pathname.includes('/fonts/')
+}
+
+function isCDNAsset(url) {
+  const cdnDomains = [
+    'fonts.googleapis.com',
+    'fonts.gstatic.com',
+    'cdn.jsdelivr.net',
+    'unpkg.com',
+    'cdnjs.cloudflare.com'
+  ]
+  return cdnDomains.some(domain => url.hostname.includes(domain))
 }
 
 function isCacheExpired(response, maxAge) {

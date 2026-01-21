@@ -26,7 +26,7 @@ const nextConfig = {
 
   // Configure Turbopack root to resolve lockfile warning
   turbopack: {
-    root: __dirname,
+    root: path.join(__dirname, '..'),
   },
 
   env: {
@@ -46,7 +46,25 @@ const nextConfig = {
   experimental: {
     scrollRestoration: true,
     optimizeCss: true,
+    webpackBuildWorker: true,
+    parallelServerBuildTraces: true,
+    parallelServerCompiles: true,
+    gzipSize: true,
+    // Bundle optimizer
+    optimizePackageImports: [
+      'react',
+      'react-dom',
+      'framer-motion',
+      'lucide-react',
+      '@dnd-kit/core',
+      '@dnd-kit/sortable',
+      'axios',
+      'socket.io-client'
+    ]
   },
+
+  // Enable cache components (replaces experimental.ppr)
+  cacheComponents: true,
 
   // PREVENT WATCH LOOPS IN DEV
   onDemandEntries: {
@@ -124,21 +142,82 @@ const nextConfig = {
       config.optimization.providedExports = true
       config.optimization.innerGraph = true
       config.optimization.mangleExports = true
+      config.optimization.concatenateModules = true
+      config.optimization.flagIncludedChunks = true
+      config.optimization.mergeDuplicateChunks = true
+      config.optimization.removeAvailableModules = true
+      config.optimization.removeEmptyChunks = true
       
-      // Split chunks optimization
+      // Module concatenation for smaller bundles
+      if (config.mode === 'production') {
+        const ModuleConcatenationPlugin = require('webpack/lib/optimize/ModuleConcatenationPlugin')
+        config.plugins.push(new ModuleConcatenationPlugin())
+      }
+      
+      // Aggressive module resolution for performance
+      config.resolve.modules = ['node_modules', require('path').resolve(__dirname)]
+      config.resolve.mainFields = ['browser', 'module', 'main']
+      
+      // Advanced split chunks optimization for MAXIMUM performance
       config.optimization.splitChunks = {
         chunks: 'all',
+        minSize: 20000,
+        maxSize: 244000,
         cacheGroups: {
+          // React core bundle
+          react: {
+            test: /[\\/]node_modules[\\/](react|react-dom)[\\/]/,
+            name: 'react',
+            priority: 40,
+            enforce: true,
+          },
+          // Framer Motion (heavy animation library)
+          framer: {
+            test: /[\\/]node_modules[\\/]framer-motion[\\/]/,
+            name: 'framer-motion',
+            priority: 35,
+            enforce: true,
+          },
+          // UI libraries
+          ui: {
+            test: /[\\/]node_modules[\\/](lucide-react|@dnd-kit)[\\/]/,
+            name: 'ui-libs',
+            priority: 30,
+            enforce: true,
+          },
+          // API and networking
+          network: {
+            test: /[\\/]node_modules[\\/](axios|socket\.io-client)[\\/]/,
+            name: 'network',
+            priority: 25,
+            enforce: true,
+          },
+          // Form handling
+          forms: {
+            test: /[\\/]node_modules[\\/](react-hook-form|@hookform|zod)[\\/]/,
+            name: 'forms',
+            priority: 20,
+            enforce: true,
+          },
+          // Vendor bundle (remaining node_modules)
           vendor: {
             test: /[\\/]node_modules[\\/]/,
             name: 'vendors',
             priority: 10,
             enforce: true,
           },
+          // Common app code
           common: {
             name: 'common',
             minChunks: 2,
             priority: 5,
+            reuseExistingChunk: true,
+          },
+          // Dashboard chunks (lazy loaded)
+          dashboard: {
+            test: /[\\/](components|pages)[\\/].*dashboard.*[\\/]/,
+            name: 'dashboard',
+            priority: 15,
             reuseExistingChunk: true,
           },
         },

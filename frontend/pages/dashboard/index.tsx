@@ -1,63 +1,64 @@
-import React, { memo, useMemo, useEffect, useState } from 'react'
+import React, { memo, useMemo, useEffect, useState, useCallback } from 'react'
 import Head from 'next/head'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
-import dynamic from 'next/dynamic'
 import { useUser } from '../../contexts/UserContext'
 import { api } from '../../lib/api'
 import { useSocket } from '../../lib/socket'
 import { MessageCircle, ShoppingCart, Package, CheckSquare, TrendingUp, Sparkles, ArrowRight } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { LayoutDynamic } from '../../lib/dynamic-loader'
+import { OptimizedMotion, LazyComponent, createOptimizedComponent, useBatchedUpdates } from '../../lib/optimized-components'
 
-import DashboardLayout from '../../components/Layout/DashboardLayout'
-
-// STAT CARD COMPONENT FOR PERFORMANCE
-const StatCard = memo(({ stat, index }: { stat: any; index: number }) => (
-  <motion.div
-    className="card-hover"
-    initial={{ opacity: 0, y: 20 }}
-    animate={{ opacity: 1, y: 0 }}
-    transition={{ delay: 0.1 * (index + 2) }}
-    whileHover={{ y: -4 }}
-  >
-    <div className="flex items-center">
-      <motion.div
-        className={`p-3 rounded-xl ${stat.color || 'bg-primary-500'}`}
-        whileHover={{ scale: 1.1, rotate: 5 }}
-        transition={{ type: "spring", stiffness: 400, damping: 10 }}
-      >
-        <stat.icon className="h-6 w-6 text-white" />
-      </motion.div>
-      <div className="ml-4 flex-1">
-        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
-          {stat.name}
-        </p>
-        <motion.p
-          className="text-2xl font-bold text-gray-900 dark:text-gray-100"
-          initial={{ scale: 0 }}
-          animate={{ scale: 1 }}
-          transition={{ delay: 0.2 * (index + 2), type: "spring", bounce: 0.4 }}
-        >
-          {stat.value}
-        </motion.p>
-      </div>
-    </div>
-    <div className="mt-4 flex items-center justify-between">
+// OPTIMIZED STAT CARD COMPONENT WITH INTELLIGENT MEMOIZATION
+const StatCard = createOptimizedComponent(
+  ({ stat, index }: { stat: any; index: number }) => (
+    <OptimizedMotion
+      className="bg-white dark:bg-surface-800 rounded-2xl p-6 shadow-lg border border-surface-100 dark:border-surface-700 card-hover"
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.1 * (index + 2) }}
+    >
       <div className="flex items-center">
-        <span className={`text-sm font-medium inline-flex items-center px-2 py-1 rounded-full ${
-          stat.changeType === 'increase'
-            ? 'text-servio-green-700 bg-servio-green-100'
-            : 'text-servio-red-700 bg-servio-red-100'
-        }`}>
-          {stat.change}
+        <motion.div
+          className={`p-3 rounded-xl ${stat.color || 'bg-primary-500'}`}
+          whileHover={{ scale: 1.1, rotate: 5 }}
+          transition={{ type: "spring", stiffness: 400, damping: 10 }}
+        >
+          <stat.icon className="h-6 w-6 text-white" />
+        </motion.div>
+        <div className="ml-4 flex-1">
+          <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
+            {stat.name}
+          </p>
+          <motion.p
+            className="text-2xl font-bold text-gray-900 dark:text-gray-100"
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            transition={{ delay: 0.2 * (index + 2), type: "spring", bounce: 0.4 }}
+          >
+            {stat.value}
+          </motion.p>
+        </div>
+      </div>
+      <div className="mt-4 flex items-center justify-between">
+        <div className="flex items-center">
+          <span className={`text-sm font-medium inline-flex items-center px-2 py-1 rounded-full ${
+            stat.changeType === 'increase'
+              ? 'text-servio-green-700 bg-servio-green-100'
+              : 'text-servio-red-700 bg-servio-red-100'
+          }`}>
+            {stat.change}
+          </span>
+        </div>
+        <span className="text-xs text-gray-500">
+          from yesterday
         </span>
       </div>
-      <span className="text-xs text-gray-500">
-        from yesterday
-      </span>
-    </div>
-  </motion.div>
-))
+    </OptimizedMotion>
+  ),
+  ['stat', 'index'] // Only re-render when these props change
+)
 
 StatCard.displayName = 'StatCard'
 
@@ -85,17 +86,21 @@ const SkeletonCard = memo(() => (
 
 SkeletonCard.displayName = 'SkeletonCard'
 
-const DashboardIndex = memo(() => {
+const DashboardIndex = createOptimizedComponent(() => {
   const { user, isManagerOrOwner } = useUser()
   const socket = useSocket()
-  const [activeOrders, setActiveOrders] = useState(0)
-  const [recentOrders, setRecentOrders] = useState<any[]>([])
-  const [pendingTasks, setPendingTasks] = useState(0)
-  const [todaySales, setTodaySales] = useState(0)
-  const [isFetching, setIsFetching] = useState(true)
+  
+  // Use batched updates to reduce re-renders
+  const [dashboardState, updateDashboardState] = useBatchedUpdates({
+    activeOrders: 0,
+    recentOrders: [] as any[],
+    pendingTasks: 0,
+    todaySales: 0,
+    isFetching: true
+  })
 
-  const fetchStats = async () => {
-    setIsFetching(true)
+  const fetchStats = useCallback(async () => {
+    updateDashboardState({ isFetching: true })
     try {
       const [ordersRes, summaryRes, tasksRes] = await Promise.all([
         api.get('/api/orders', { params: { limit: 5 } }),
@@ -103,38 +108,42 @@ const DashboardIndex = memo(() => {
         api.get('/api/tasks/stats')
       ])
       
-      setRecentOrders(ordersRes.data.data.orders)
-      setActiveOrders(summaryRes.data.data.activeOrders)
-      setTodaySales(summaryRes.data.data.completedTodaySales || 0) // adjusted field
-      setPendingTasks(tasksRes.data.data.pending)
+      updateDashboardState({
+        recentOrders: ordersRes.data.data.orders,
+        activeOrders: summaryRes.data.data.activeOrders,
+        todaySales: summaryRes.data.data.completedTodaySales || 0,
+        pendingTasks: tasksRes.data.data.pending,
+        isFetching: false
+      })
     } catch (err) {
       console.error('Failed to fetch dashboard stats', err)
       toast.error('Failed to load dashboard stats. Please retry.')
-    } finally {
-      setIsFetching(false)
+      updateDashboardState({ isFetching: false })
     }
-  }
+  }, [updateDashboardState])
 
   useEffect(() => {
     fetchStats()
 
     if (socket) {
-      socket.on('order:new', (order) => {
+      const handleNewOrder = (order: any) => {
         toast.success(`New order received! Total: $${order.totalAmount}`)
         fetchStats()
-      })
+      }
+      
+      socket.on('order:new', handleNewOrder)
+      
+      return () => {
+        socket.off('order:new', handleNewOrder)
+      }
     }
+  }, [socket, fetchStats])
 
-    return () => {
-      if (socket) socket.off('order:new')
-    }
-  }, [socket])
-
-  // STATS DATA FOR PERFORMANCE
+  // MEMOIZED STATS DATA FOR PERFORMANCE
   const stats = useMemo(() => [
     {
       name: 'Active Orders',
-      value: activeOrders.toString(),
+      value: dashboardState.activeOrders.toString(),
       change: '+2.5%',
       changeType: 'increase' as const,
       icon: ShoppingCart,
@@ -150,7 +159,7 @@ const DashboardIndex = memo(() => {
     },
     {
       name: 'Pending Tasks',
-      value: pendingTasks.toString(),
+      value: dashboardState.pendingTasks.toString(),
       change: '-3',
       changeType: 'decrease' as const,
       icon: CheckSquare,
@@ -158,13 +167,13 @@ const DashboardIndex = memo(() => {
     },
     {
       name: 'Today\'s Sales',
-      value: `$${todaySales.toFixed(2)}`,
+      value: `$${dashboardState.todaySales.toFixed(2)}`,
       change: '+12.5%',
       changeType: 'increase' as const,
       icon: TrendingUp,
       color: 'bg-servio-green-500'
     }
-  ], [activeOrders, pendingTasks, todaySales])
+  ], [dashboardState.activeOrders, dashboardState.pendingTasks, dashboardState.todaySales])
 
   // MEMOIZED QUICK ACTIONS FOR PERFORMANCE
   const quickActions = useMemo(() => [
@@ -199,7 +208,7 @@ const DashboardIndex = memo(() => {
         <meta name="description" content="Restaurant operations dashboard" />
       </Head>
 
-      <DashboardLayout>
+      <LayoutDynamic.DashboardLayout>
         <div className="space-y-6">
           {/* Welcome Section */}
           <motion.div
@@ -356,15 +365,24 @@ const DashboardIndex = memo(() => {
 
           {/* Stats Grid - Optimized with Memoized Components */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 stats-grid">
-            {isFetching
+            {dashboardState.isFetching
               ? Array.from({ length: 4 }).map((_, idx) => <SkeletonCard key={`skeleton-${idx}`} />)
               : stats.map((stat, index) => (
                   <StatCard key={stat.name} stat={stat} index={index} />
                 ))}
           </div>
 
-          {/* Recent Activity */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Recent Activity - Lazy loaded for better performance */}
+          <LazyComponent 
+            rootMargin="100px" 
+            fallback={
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <SkeletonCard />
+                <SkeletonCard />
+              </div>
+            }
+          >
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <motion.div
               className="bg-white dark:bg-surface-800 rounded-2xl p-6 shadow-lg border border-surface-100 dark:border-surface-700"
               initial={{ opacity: 0, x: -20 }}
@@ -389,7 +407,7 @@ const DashboardIndex = memo(() => {
               </div>
               
               <div className="space-y-3">
-                {recentOrders.length === 0 ? (
+                {dashboardState.recentOrders.length === 0 ? (
                   <motion.div 
                     className="text-center py-12"
                     initial={{ opacity: 0, scale: 0.9 }}
@@ -403,7 +421,7 @@ const DashboardIndex = memo(() => {
                     <p className="text-sm text-surface-400 dark:text-surface-500 mt-1">Orders will appear here as they come in</p>
                   </motion.div>
                 ) : (
-                  recentOrders.map((order, index) => (
+                  dashboardState.recentOrders.map((order, index) => (
                     <motion.div
                       key={order.id}
                       className="group flex items-center justify-between p-4 rounded-2xl bg-gradient-to-r from-surface-50 to-surface-100/50 dark:from-surface-700/50 dark:to-surface-600/50 hover:from-primary-50 hover:to-primary-100/50 dark:hover:from-primary-900/20 dark:hover:to-primary-800/20 transition-all duration-300 cursor-pointer border border-surface-200/50 dark:border-surface-600/50 hover:border-primary-200 dark:hover:border-primary-800 hover:shadow-lg"
@@ -537,9 +555,10 @@ const DashboardIndex = memo(() => {
                 ))}
               </div>
             </motion.div>
-          </div>
+            </div>
+          </LazyComponent>
         </div>
-      </DashboardLayout>
+      </LayoutDynamic.DashboardLayout>
     </>
   )
 })

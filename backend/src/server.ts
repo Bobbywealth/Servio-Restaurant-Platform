@@ -199,18 +199,21 @@ app.use(helmet({
 
 app.use(cors(corsOptions));
 
-// LIGHTNING FAST COMPRESSION
+// ENHANCED COMPRESSION (using existing proven compression + our optimizations)
 app.use(compression({
   level: 9, // Maximum compression
-  threshold: 512, // Compress even small responses
+  threshold: 256, // Compress smaller responses 
   memLevel: 8, // Use more memory for better compression
   chunkSize: 32 * 1024, // 32KB chunks
   filter: (req, res) => {
     if (req.headers['x-no-compression']) return false;
-    // Compress JSON, text, and JavaScript responses
     return compression.filter(req, res);
   }
 }));
+
+// Apply response optimization middleware
+const { ultraOptimization } = require('./middleware/responseOptimization');
+app.use(...ultraOptimization);
 
 // OPTIMIZED LOGGING (less verbose in production)
 const morganFormat = process.env.NODE_ENV === 'production' ? 'combined' : 'dev';

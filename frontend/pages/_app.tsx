@@ -6,6 +6,7 @@ import { ThemeProvider } from '../contexts/ThemeContext';
 import { TourProvider } from '../contexts/TourContext';
 import { Toaster } from 'react-hot-toast';
 import { getPerformanceMonitor } from '../lib/performance';
+import { preloadCriticalResources, setupSmartPrefetching } from '../lib/dynamic-loader';
 import SplashScreen from '../components/ui/SplashScreen';
 import '../styles/globals.css';
 
@@ -68,6 +69,12 @@ function MyApp({ Component, pageProps, router }: AppProps) {
     if (typeof window !== 'undefined') {
       performanceMonitor = getPerformanceMonitor();
       
+      // Preload critical resources for faster rendering
+      preloadCriticalResources();
+      
+      // Setup smart prefetching for better navigation
+      setupSmartPrefetching(router);
+      
       // Track page views
       const handleRouteChange = (url: string) => {
         performanceMonitor?.mark('route-change-start');
@@ -91,6 +98,16 @@ function MyApp({ Component, pageProps, router }: AppProps) {
 
       // Track initial page load
       handleRouteChange(router.asPath);
+
+      // Prefetch critical routes after initial load
+      setTimeout(() => {
+        const criticalRoutes = ['/dashboard', '/dashboard/orders', '/dashboard/assistant'];
+        criticalRoutes.forEach(route => {
+          if (router.asPath !== route) {
+            router.prefetch(route);
+          }
+        });
+      }, 1000);
 
       return () => {
         router.events.off('routeChangeComplete', handleRouteChange);
@@ -150,9 +167,28 @@ function MyApp({ Component, pageProps, router }: AppProps) {
         <link rel="manifest" href="/manifest.json" />
         <link rel="apple-touch-icon" href="/icons/servio-icon-192.svg" />
         
-        {/* Performance hints */}
-        <link rel="preconnect" href={process.env.NEXT_PUBLIC_API_URL} />
+        {/* Advanced performance hints and resource optimization */}
+        <link rel="preconnect" href={process.env.NEXT_PUBLIC_API_URL} crossOrigin="anonymous" />
         <link rel="dns-prefetch" href={process.env.NEXT_PUBLIC_API_URL} />
+        <link rel="preconnect" href="https://fonts.googleapis.com" crossOrigin="anonymous" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link rel="dns-prefetch" href="https://www.googletagmanager.com" />
+        <link rel="dns-prefetch" href="https://www.google-analytics.com" />
+        
+        {/* Critical resource hints */}
+        <link rel="prefetch" href="/images/servio_logo_transparent_tight.png" />
+        <link rel="prefetch" href="/icons/servio-icon-192.svg" />
+        
+        {/* Performance meta tags */}
+        <meta name="format-detection" content="telephone=no" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+        <meta name="apple-mobile-web-app-title" content="Servio" />
+        
+        {/* Optimize rendering */}
+        <meta name="color-scheme" content="light dark" />
+        <meta name="supported-color-schemes" content="light dark" />
         
         {/* Production analytics */}
         {process.env.NODE_ENV === 'production' && (
