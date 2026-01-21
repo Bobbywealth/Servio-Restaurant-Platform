@@ -97,4 +97,10 @@ router.post('/fix-vapi-mapping', asyncHandler(async (req: Request, res: Response
   res.json({ success: true, message: 'No Vapi settings found on platform-admin-org' });
 }));
 
+router.post('/seed-menu', asyncHandler(async (req: Request, res: Response) => {
+  const { seedMenuItems } = await import('../scripts/seed-menu-items');
+  await seedMenuItems();
+  res.json({ success: true, message: 'Menu items seeded successfully for demo-restaurant-1' });
+}));
+
 export default router;

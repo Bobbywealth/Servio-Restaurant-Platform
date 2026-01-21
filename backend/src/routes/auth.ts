@@ -8,47 +8,7 @@ import { logger } from '../utils/logger';
 
 const router = Router();
 
-// DEBUG: Simple test route to verify auth router mounting
-router.get('/test-basic', (req, res) => {
-  res.json({ 
-    success: true, 
-    message: 'Auth router is working!',
-    timestamp: new Date().toISOString()
-  });
-});
-
-router.post('/test-post', (req, res) => {
-  res.json({ 
-    success: true, 
-    message: 'Auth POST endpoint is working!',
-    body: req.body,
-    timestamp: new Date().toISOString()
-  });
-});
-
-// DEBUG: Test with asyncHandler to see if it's the issue
-router.get('/test-async', asyncHandler(async (req: Request, res: Response) => {
-  res.json({ 
-    success: true, 
-    message: 'Async handler test works!',
-    timestamp: new Date().toISOString()
-  });
-}));
-
-// DEBUG: Test login directly (simplified)
-router.post('/login-test', (req: Request, res: Response) => {
-  res.json({ 
-    success: true, 
-    message: 'Login test endpoint works!',
-    body: req.body,
-    timestamp: new Date().toISOString()
-  });
-});
-
 const REFRESH_TOKEN_TTL_DAYS = Number(process.env.REFRESH_TOKEN_TTL_DAYS ?? 30);
-
-// Log route registration
-logger.info('Auth routes: login-test registered');
 
 function safeUser(row: any) {
   return {
@@ -102,18 +62,6 @@ router.post(
     });
   })
 );
-
-// DEBUG: Test route after signup
-router.get('/after-signup', (req: Request, res: Response) => {
-  res.json({ success: true, message: 'Route after signup works!' });
-});
-
-// DEBUG: POST with asyncHandler right after signup
-router.post('/test-async-post', asyncHandler(async (req: Request, res: Response) => {
-  res.json({ success: true, message: 'POST async after signup works!', body: req.body });
-}));
-
-logger.info('Auth routes: after-signup registered');
 
 router.post(
   '/login',
@@ -170,47 +118,6 @@ router.post(
     });
   })
 );
-
-// DEBUG: Test after login
-router.get('/after-login', (req: Request, res: Response) => {
-  res.json({ success: true, message: 'Route after login works!' });
-});
-
-// DEBUG: Duplicate login with different name
-router.post('/signin', asyncHandler(async (req: Request, res: Response) => {
-  const { email, password } = req.body ?? {};
-  if (!email || !password) {
-    throw new UnauthorizedError('Email and password are required');
-  }
-  const db = DatabaseService.getInstance().getDatabase();
-  const user = await db.get<any>(
-    'SELECT * FROM users WHERE LOWER(email) = ? AND is_active = TRUE', 
-    [String(email).trim().toLowerCase()]
-  );
-  if (!user || !user.password_hash) {
-    throw new UnauthorizedError('Invalid email or password');
-  }
-  const ok = await bcrypt.compare(String(password), String(user.password_hash));
-  if (!ok) throw new UnauthorizedError('Invalid email or password');
-  
-  const sessionId = uuidv4();
-  const refreshToken = uuidv4();
-  const refreshTokenHash = await bcrypt.hash(refreshToken, 10);
-  const expiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000).toISOString();
-  await db.run(
-    'INSERT INTO auth_sessions (id, user_id, refresh_token_hash, expires_at) VALUES (?, ?, ?, ?)',
-    [sessionId, user.id, refreshTokenHash, expiresAt]
-  );
-  const accessToken = issueAccessToken({ 
-    sub: user.id, 
-    restaurantId: user.restaurant_id, 
-    sid: sessionId 
-  });
-  res.json({
-    success: true,
-    data: { user: safeUser(user), accessToken, refreshToken }
-  });
-}));
 
 /**
  * POST /api/auth/pin-login
@@ -421,14 +328,6 @@ router.get(
     });
   })
 );
-
-// Log all registered routes for debugging
-logger.info('Auth router routes:', {
-  routes: router.stack.map((r: any) => ({
-    path: r.route?.path,
-    methods: r.route?.methods
-  })).filter((r: any) => r.path)
-});
 
 export default router;
 

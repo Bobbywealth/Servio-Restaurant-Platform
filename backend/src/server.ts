@@ -141,16 +141,6 @@ async function initializeServer() {
     // Admin routes (platform-admin role required)
     app.use('/api/admin', requireAuth, adminRoutes);
     
-    // Debug: Add a test auth route to verify mounting
-    app.get('/api/auth/test', (req, res) => {
-      res.json({ message: 'Auth routes are mounted correctly' });
-    });
-    
-    // Debug: Test direct route without auth prefix
-    app.get('/debug-route', (req, res) => {
-      res.json({ message: 'Direct route works' });
-    });
-
     // Protected routes with appropriate rate limiting
     app.use('/api/assistant', requireAuth, heavyOperationRateLimiter, assistantRoutes);
     app.use('/api/assistant-monitoring', requireAuth, apiRateLimiter, assistantMonitoringRoutes);

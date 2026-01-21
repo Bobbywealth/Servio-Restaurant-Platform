@@ -70,9 +70,9 @@ router.get('/waiting-times', requireAuth, requirePermission('orders:read'), asyn
  */
 router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) => {
   const { slug } = req.params;
-  const { items, customerName, customerPhone, customerEmail } = req.body;
+  const { items, customerName, customerPhone, customerEmail, paymentOption } = req.body;
   const orderService = getService<OrderService>('orderService');
-  const created = await orderService.createPublicOrder({ slug, items, customerName, customerPhone, customerEmail });
+  const created = await orderService.createPublicOrder({ slug, items, customerName, customerPhone, customerEmail, paymentOption });
 
   // Notify dashboard via Socket.IO
   const io = req.app.get('socketio');

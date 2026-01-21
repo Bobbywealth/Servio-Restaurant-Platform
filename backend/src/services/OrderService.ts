@@ -112,6 +112,7 @@ export class OrderService {
     customerName?: string;
     customerPhone?: string;
     customerEmail?: string;
+    paymentOption?: 'pay_now' | 'pay_on_arrival';
   }): Promise<{ orderId: string; restaurantId: string; totalAmount: number; status: string }> {
     const { slug, items } = params;
     if (!items || !Array.isArray(items) || items.length === 0) {
@@ -130,6 +131,10 @@ export class OrderService {
       totalAmount += Number(item.price) * Number(item.quantity);
     }
 
+    // Minimal v1: represent pay-on-arrival using payment_status.
+    // (A future migration can add payment_method separately.)
+    const paymentStatus = params.paymentOption === 'pay_on_arrival' ? 'pay_on_arrival' : 'unpaid';
+
     // Some environments may not have an 'items' column on orders. Try it first, then fall back.
     try {
       await db.run(
@@ -137,9 +142,9 @@ export class OrderService {
           INSERT INTO orders (
             id, restaurant_id, channel, status, total_amount, payment_status,
             customer_name, customer_phone, source, items, created_at, updated_at
-          ) VALUES (?, ?, 'website', 'received', ?, 'unpaid', ?, ?, 'website', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          ) VALUES (?, ?, 'website', 'received', ?, ?, ?, ?, 'website', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         `,
-        [orderId, restaurantId, totalAmount, params.customerName || null, params.customerPhone || null, JSON.stringify(items)]
+        [orderId, restaurantId, totalAmount, paymentStatus, params.customerName || null, params.customerPhone || null, JSON.stringify(items)]
       );
     } catch (err: any) {
       const message = String(err?.message || err || '');
@@ -149,9 +154,9 @@ export class OrderService {
           INSERT INTO orders (
             id, restaurant_id, channel, status, total_amount, payment_status,
             customer_name, customer_phone, source, created_at, updated_at
-          ) VALUES (?, ?, 'website', 'received', ?, 'unpaid', ?, ?, 'website', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          ) VALUES (?, ?, 'website', 'received', ?, ?, ?, ?, 'website', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         `,
-        [orderId, restaurantId, totalAmount, params.customerName || null, params.customerPhone || null]
+        [orderId, restaurantId, totalAmount, paymentStatus, params.customerName || null, params.customerPhone || null]
       );
     }
 

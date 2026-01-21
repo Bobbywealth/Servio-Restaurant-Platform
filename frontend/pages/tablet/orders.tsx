@@ -272,9 +272,16 @@ export default function TabletOrdersPage() {
   const [activeModalOrder, setActiveModalOrder] = React.useState<Order | null>(null)
   const [prepTimeMinutes, setPrepTimeMinutes] = React.useState<number>(15)
   const [actingOrderId, setActingOrderId] = React.useState<string | null>(null)
+  const [nowTick, setNowTick] = React.useState<number>(() => Date.now())
 
   const canReadOrders = hasPermission('orders:read')
   const canWriteOrders = hasPermission('orders:write')
+
+  // Tick once per second for countdown timers
+  React.useEffect(() => {
+    const t = window.setInterval(() => setNowTick(Date.now()), 1000)
+    return () => window.clearInterval(t)
+  }, [])
 
   const loadReceiptCfg = React.useCallback(async () => {
     if (!user?.restaurantId) return
@@ -323,6 +330,72 @@ export default function TabletOrdersPage() {
     return () => window.removeEventListener('pointerdown', onFirstGesture as any)
   }, [])
 
+  // Loud alarm loop (keeps playing while there are actionable orders)
+  const alarmRef = React.useRef<{
+    ctx: AudioContext
+    osc: OscillatorNode
+    gain: GainNode
+  } | null>(null)
+
+  const stopAlarm = React.useCallback(() => {
+    const a = alarmRef.current
+    if (!a) return
+    try {
+      a.gain.gain.setValueAtTime(0.0001, a.ctx.currentTime)
+      a.osc.stop()
+    } catch {}
+    try {
+      a.ctx.close()
+    } catch {}
+    alarmRef.current = null
+  }, [])
+
+  const startAlarm = React.useCallback(() => {
+    if (!soundEnabled) return
+    if (alarmRef.current) return
+    try {
+      const AudioCtx = (window as any).AudioContext || (window as any).webkitAudioContext
+      if (!AudioCtx) return
+      const ctx: AudioContext = new AudioCtx()
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.type = 'square'
+      osc.frequency.value = 1100 // sharp alarm tone
+      gain.gain.value = 0.0001
+      osc.connect(gain)
+      gain.connect(ctx.destination)
+      osc.start()
+
+      // Pulse volume continuously (very loud)
+      const pulse = () => {
+        const t = ctx.currentTime
+        gain.gain.cancelScheduledValues(t)
+        gain.gain.setValueAtTime(0.0001, t)
+        gain.gain.exponentialRampToValueAtTime(0.85, t + 0.02)
+        gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.25)
+      }
+
+      // Schedule pulses forever using an interval; stopAlarm() closes ctx.
+      const id = window.setInterval(() => {
+        try {
+          pulse()
+        } catch {}
+      }, 350)
+
+      // Tie interval lifecycle to ctx
+      const originalClose = ctx.close.bind(ctx)
+      ;(ctx as any).close = async () => {
+        window.clearInterval(id)
+        return originalClose()
+      }
+
+      alarmRef.current = { ctx, osc, gain }
+      pulse()
+    } catch {
+      // ignore
+    }
+  }, [soundEnabled])
+
   const playNewOrderSound = React.useCallback(() => {
     if (!soundEnabled) return
     try {
@@ -350,6 +423,47 @@ export default function TabletOrdersPage() {
     }
   }, [soundEnabled])
 
+  const startOfToday = React.useMemo(() => {
+    const d = new Date(nowTick)
+    d.setHours(0, 0, 0, 0)
+    return d.getTime()
+  }, [nowTick])
+
+  const todaysOrders = React.useMemo(() => {
+    return orders.filter((o) => {
+      const ts = o.createdAt ? new Date(o.createdAt).getTime() : 0
+      return ts >= startOfToday
+    })
+  }, [orders, startOfToday])
+
+  const actionableOrders = React.useMemo(() => {
+    return todaysOrders.filter((o) => String(o.status || '').toLowerCase() === 'received')
+  }, [todaysOrders])
+
+  const missedOrderIds = React.useMemo(() => {
+    const limitMs = 4 * 60 * 1000
+    const set = new Set<string>()
+    for (const o of actionableOrders) {
+      const createdMs = o.createdAt ? new Date(o.createdAt).getTime() : 0
+      if (createdMs && nowTick - createdMs >= limitMs) set.add(o.id)
+    }
+    return set
+  }, [actionableOrders, nowTick])
+
+  // Keep alarm running while any order is awaiting action (even if "missed")
+  React.useEffect(() => {
+    if (!soundEnabled) return
+    if (actionableOrders.length > 0) startAlarm()
+    else stopAlarm()
+  }, [actionableOrders.length, soundEnabled, startAlarm, stopAlarm])
+
+  // Always cleanup alarm on unmount (navigation away)
+  React.useEffect(() => {
+    return () => {
+      stopAlarm()
+    }
+  }, [stopAlarm])
+
   // Live updates: beep + refresh when new order arrives
   React.useEffect(() => {
     if (!socket || !user?.restaurantId) return
@@ -358,6 +472,7 @@ export default function TabletOrdersPage() {
     socket.joinRestaurantRoom(user.restaurantId)
 
     const onNew = (_payload: any) => {
+      // Short chime + then the loud alarm will persist until accepted/declined.
       playNewOrderSound()
       fetchOrders()
     }
@@ -444,6 +559,17 @@ export default function TabletOrdersPage() {
     }
   }
 
+  const timeLeftText = (order: Order) => {
+    const createdMs = order.createdAt ? new Date(order.createdAt).getTime() : 0
+    if (!createdMs) return '—'
+    const limit = 4 * 60
+    const elapsed = Math.floor((nowTick - createdMs) / 1000)
+    const left = Math.max(0, limit - elapsed)
+    const mm = String(Math.floor(left / 60)).padStart(1, '0')
+    const ss = String(left % 60).padStart(2, '0')
+    return `${mm}:${ss}`
+  }
+
   return (
     <TabletLayout title="Online Orders" onRefresh={fetchOrders}>
       {!canReadOrders ? (
@@ -464,6 +590,19 @@ export default function TabletOrdersPage() {
             </div>
           )}
 
+          {actionableOrders.length > 0 && (
+            <div className="mb-4 bg-orange-500/15 border border-orange-500/30 text-orange-100 rounded-2xl p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div className="font-extrabold">
+                  {actionableOrders.length} order{actionableOrders.length === 1 ? '' : 's'} need action
+                </div>
+                <div className="text-sm text-orange-100/80">
+                  Answer within <span className="font-extrabold">4:00</span> or it becomes <span className="font-extrabold">MISSED</span>
+                </div>
+              </div>
+            </div>
+          )}
+
           {error && (
             <div className="mb-4 bg-red-500/15 border border-red-500/30 text-red-200 rounded-2xl p-4">
               {error}
@@ -471,7 +610,7 @@ export default function TabletOrdersPage() {
           )}
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {orders.map((o) => {
+            {todaysOrders.map((o) => {
               const created = o.createdAt ? new Date(o.createdAt) : null
               const itemCount = Array.isArray(o.orderItems)
                 ? o.orderItems.length
@@ -481,6 +620,7 @@ export default function TabletOrdersPage() {
               const idLabel = o.externalId || o.id
               const status = String(o.status || '')
               const isNew = String(o.status || '').toLowerCase() === 'received'
+              const isMissed = isNew && missedOrderIds.has(o.id)
               const isActing = actingOrderId === o.id
               const itemLines = Array.isArray(o.orderItems) ? o.orderItems : []
               return (
@@ -495,8 +635,17 @@ export default function TabletOrdersPage() {
                         </span>
                       </div>
                     </div>
-                    <div className={`shrink-0 px-3 py-1.5 rounded-full border text-sm font-bold ${statusPill(status)}`}>
-                      {status || '—'}
+                    <div className="shrink-0 flex flex-col items-end gap-2">
+                      <div className={`px-3 py-1.5 rounded-full border text-sm font-bold ${statusPill(status)}`}>
+                        {status || '—'}
+                      </div>
+                      {isNew && (
+                        <div className={`px-3 py-1 rounded-full border text-xs font-extrabold ${
+                          isMissed ? 'bg-red-500/20 text-red-100 border-red-500/30' : 'bg-orange-500/20 text-orange-100 border-orange-500/30'
+                        }`}>
+                          {isMissed ? 'MISSED' : `TIME LEFT ${timeLeftText(o)}`}
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -602,7 +751,7 @@ export default function TabletOrdersPage() {
               )
             })}
 
-            {orders.length === 0 && (
+            {todaysOrders.length === 0 && (
               <div className="bg-white/5 border border-white/10 rounded-2xl p-6 text-white/70">
                 {loading ? 'Loading orders…' : 'No online orders yet.'}
               </div>

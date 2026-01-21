@@ -2,7 +2,7 @@ import React from 'react'
 import Head from 'next/head'
 import { useRouter } from 'next/router'
 import { useUser } from '../../contexts/UserContext'
-import { LogOut, RefreshCw, Sparkles } from 'lucide-react'
+import { LogOut, RefreshCw, Sparkles, Mic } from 'lucide-react'
 
 export default function TabletLayout({
   title,
@@ -72,6 +72,14 @@ export default function TabletLayout({
                   <span className="text-sm font-semibold">Refresh</span>
                 </button>
               )}
+              <button
+                onClick={() => router.push('/tablet/assistant')}
+                className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/15 active:bg-white/20 transition-colors inline-flex items-center gap-2 border border-white/10"
+                title="Assistant"
+              >
+                <Mic className="w-4 h-4" />
+                <span className="text-sm font-semibold hidden sm:inline">Assistant</span>
+              </button>
               <button
                 onClick={() => {
                   logout()
