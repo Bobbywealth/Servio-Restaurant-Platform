@@ -109,4 +109,4 @@ ON menu_items(restaurant_id, category_id, is_available);
 
 -- Composite index for inventory with SKU lookup
 CREATE INDEX IF NOT EXISTS idx_inventory_sku_restaurant
-ON inventory_items(restaurant_id, sku, is_active);
+ON inventory_items(restaurant_id, sku);

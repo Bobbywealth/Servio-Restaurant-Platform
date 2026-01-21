@@ -42,7 +42,7 @@ const roleNames = {
 }
 
 export function AccountSwitcher({ className = '' }: AccountSwitcherProps) {
-  const { user, availableAccounts, switchAccount, isLoading } = useUser()
+  const { user, availableAccounts, switchAccount, logout, isLoading } = useUser()
   const [isOpen, setIsOpen] = useState(false)
   const [switchingTo, setSwitchingTo] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -187,6 +187,18 @@ export function AccountSwitcher({ className = '' }: AccountSwitcherProps) {
                   ))}
                 </div>
               )}
+
+              <div className="mt-4 pt-3 border-t border-surface-200 dark:border-surface-700">
+                <button
+                  onClick={logout}
+                  className="w-full flex items-center space-x-3 p-2 rounded-lg text-left text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/10 transition-all duration-200"
+                >
+                  <div className="p-1.5 rounded bg-red-100 dark:bg-red-900/30">
+                    <LogOut className="w-3 h-3" />
+                  </div>
+                  <span className="font-medium text-sm">Sign Out</span>
+                </button>
+              </div>
             </div>
           </motion.div>
         )}
