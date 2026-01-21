@@ -175,7 +175,7 @@ export class VapiService {
           result = await VoiceOrderingService.getInstance().getMenuItem(parameters.id, restaurantId);
           break;
         case 'quoteOrder':
-          result = VoiceOrderingService.getInstance().validateQuote(parameters);
+          result = await VoiceOrderingService.getInstance().validateQuote(parameters);
           break;
         case 'createOrder':
           result = await VoiceOrderingService.getInstance().createOrder(parameters);
