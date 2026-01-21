@@ -10,17 +10,24 @@ const redis = new Redis({
   port: parseInt(process.env.REDIS_PORT || '6379'),
   password: process.env.REDIS_PASSWORD || undefined,
   db: 0,
-  maxRetriesPerRequest: null, // Unlimited retries in background
+  maxRetriesPerRequest: 3, // Don't block forever
   enableReadyCheck: true,
-  enableOfflineQueue: true,
+  enableOfflineQueue: false, // FAIL FAST if Redis is down
   retryStrategy: (times) => {
-    const delay = Math.min(times * 100, 5000); // Wait up to 5s
+    // Stop retrying after 3 attempts if we can't connect at all
+    if (times > 3) return null;
+    const delay = Math.min(times * 100, 2000);
     return delay;
   }
 });
 
 redis.on('error', (err) => {
-  logger.error('Redis client error for rate limiting:', err);
+  // Only log full error if it's not a connection refusal to reduce spam
+  if (err.message && err.message.includes('ECONNREFUSED')) {
+    logger.warn('Redis connection refused for rate limiting - falling back to fail-open mode');
+  } else {
+    logger.error('Redis client error for rate limiting:', err);
+  }
 });
 
 redis.on('connect', () => {
@@ -76,10 +83,22 @@ const skipRateLimit = (req: Request): boolean => {
   return false;
 };
 
-// Create Redis stores
+// Create Redis stores with fail-safe mechanism
 const createRedisStore = (prefix: string) => {
   return new RedisStore({
-    sendCommand: (...args: string[]) => redis.call(args[0], ...args.slice(1)) as any,
+    sendCommand: async (...args: string[]) => {
+      // Fail-safe: if Redis is not ready, return a "neutral" response 
+      // to let the request proceed instead of hanging
+      if (redis.status !== 'ready') {
+        return null; 
+      }
+      try {
+        return await redis.call(args[0], ...args.slice(1));
+      } catch (error) {
+        logger.warn(`Redis rate limit error for ${prefix}, allowing request:`, error);
+        return null;
+      }
+    },
     prefix
   });
 };
