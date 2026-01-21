@@ -1,4 +1,4 @@
-import { body, param, query, validationResult, ValidationChain } from 'express-validator';
+import { body, param, query, validationResult } from 'express-validator';
 import { Request, Response, NextFunction } from 'express';
 import sanitizeHtml from 'sanitize-html';
 import { logger } from '../utils/logger';
@@ -54,10 +54,11 @@ export const sanitizeString = (value: any): string => {
  */
 export const sanitizeHTML = (value: any): string => {
   if (typeof value !== 'string') return '';
-  return DOMPurify.sanitize(value, {
-    ALLOWED_TAGS: ['b', 'i', 'em', 'strong', 'p', 'br', 'ul', 'ol', 'li'],
-    ALLOWED_ATTR: []
-  });
+  // Server-side sanitizer (avoid DOMPurify dependency / browser globals)
+  return sanitizeHtml(value, {
+    allowedTags: ['b', 'i', 'em', 'strong', 'p', 'br', 'ul', 'ol', 'li'],
+    allowedAttributes: {}
+  }).trim();
 };
 
 /**
@@ -266,7 +267,7 @@ export const validateUserRegistration = [
 export const preventSQLInjection = (req: Request, res: Response, next: NextFunction) => {
   const sqlInjectionPatterns = [
     /(\b(SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|EXEC|EXECUTE|UNION|DECLARE)\b)/gi,
-    /(;|\-\-|\/\*|\*\/|xp_|sp_)/gi,
+    /(;|--|\/\*|\*\/|xp_|sp_)/gi,
     /('|(\\')|(--)|(%27)|(;)|(0x))/gi
   ];
 
