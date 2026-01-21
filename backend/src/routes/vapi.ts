@@ -7,21 +7,40 @@ const vapiService = new VapiService();
 
 // Webhook endpoint for Vapi
 router.post('/webhook', async (req: Request, res: Response) => {
+  const startTime = Date.now();
   try {
     const payload: VapiWebhookPayload = req.body;
     
-    // Log incoming webhook for debugging
-    logger.info('Vapi webhook received:', {
-      type: payload.message.type,
-      callId: payload.message.call?.id,
-      customerNumber: payload.message.call?.customer?.number
+    // STRUCTURED LOGGING - Entry point
+    logger.info('🔔 Vapi webhook received', {
+      event_type: payload.message.type,
+      call_id: payload.message.call?.id,
+      phone_number_id: payload.message.call?.phoneNumberId,
+      customer_number: payload.message.call?.customer?.number,
+      function_name: payload.message.functionCall?.name,
+      function_params: payload.message.functionCall?.parameters,
+      timestamp: new Date().toISOString()
     });
 
     const response = await vapiService.handleWebhook(payload);
+    const duration = Date.now() - startTime;
+    
+    logger.info('✅ Vapi webhook completed', {
+      call_id: payload.message.call?.id,
+      event_type: payload.message.type,
+      duration_ms: duration,
+      response_preview: typeof response.result === 'string' 
+        ? response.result.substring(0, 100) 
+        : JSON.stringify(response.result).substring(0, 100)
+    });
     
     res.json(response);
   } catch (error) {
-    logger.error('Vapi webhook error:', error);
+    logger.error('❌ Vapi webhook error', { 
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+      duration_ms: Date.now() - startTime
+    });
     res.status(500).json({ 
       error: 'Internal server error',
       result: 'I apologize, but I\'m experiencing technical difficulties. Please try again or hold for a human representative.'

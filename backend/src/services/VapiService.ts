@@ -160,8 +160,18 @@ export class VapiService {
     const userId = this.getPhoneUserId(message.call?.customer?.number);
     const restaurantId = message.restaurantId;
 
+    // STRUCTURED LOGGING - Function call details
+    logger.info('🔧 Vapi function call', {
+      tool_name: name,
+      parameters: parameters,
+      restaurant_id: restaurantId,
+      user_id: userId,
+      call_id: message.call?.id
+    });
+
     try {
       let result;
+      const toolStartTime = Date.now();
 
       // Handle phone-specific functions
       switch (name) {
@@ -170,15 +180,35 @@ export class VapiService {
           break;
         case 'searchMenu':
           result = await VoiceOrderingService.getInstance().searchMenu(parameters.q || '', restaurantId);
+          logger.info('🔍 searchMenu result', { 
+            query: parameters.q, 
+            restaurant_id: restaurantId,
+            items_found: Array.isArray(result) ? result.length : 0
+          });
           break;
         case 'getMenuItem':
           result = await VoiceOrderingService.getInstance().getMenuItem(parameters.id, restaurantId);
+          logger.info('📋 getMenuItem result', {
+            item_id: parameters.id,
+            restaurant_id: restaurantId,
+            found: result !== null
+          });
           break;
         case 'quoteOrder':
-          result = await VoiceOrderingService.getInstance().validateQuote(parameters);
+          result = await VoiceOrderingService.getInstance().validateQuote(parameters, restaurantId);
+          logger.info('💰 quoteOrder result', {
+            valid: result.valid,
+            total: result.total,
+            errors: result.errors
+          });
           break;
         case 'createOrder':
-          result = await VoiceOrderingService.getInstance().createOrder(parameters);
+          result = await VoiceOrderingService.getInstance().createOrder(parameters, restaurantId);
+          logger.info('🛒 createOrder result', {
+            order_id: result.orderId,
+            status: result.status,
+            total: result.total
+          });
           break;
         case 'check_order_status':
           result = await this.handleCheckOrderStatus(parameters, userId, restaurantId);
@@ -196,6 +226,13 @@ export class VapiService {
           result = await (this.assistantService as any).executeTool(mockToolCall, userId);
       }
       
+      const toolDuration = Date.now() - toolStartTime;
+      logger.info('✅ Function call completed', {
+        tool_name: name,
+        duration_ms: toolDuration,
+        result_type: typeof result
+      });
+      
       if (result.status === 'error') {
         return {
           result: `I'm sorry, ${result.error}. Is there something else I can help you with?`
@@ -206,9 +243,16 @@ export class VapiService {
       const voiceResponse = this.formatActionResultForVoice(result);
       
       return { result: voiceResponse };
+
       
     } catch (error) {
-      logger.error('Function call failed:', error);
+      logger.error('❌ Function call failed', {
+        tool_name: name,
+        parameters,
+        restaurant_id: restaurantId,
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
       return {
         result: "I'm sorry, I wasn't able to complete that action. What else can I help you with?"
       };
@@ -416,18 +460,26 @@ export class VapiService {
       const { orderId, phoneNumber } = parameters;
       const db = DatabaseService.getInstance().getDatabase();
       
-      // Use passed restaurantId or fallback to env
-      const targetRestaurantId = restaurantId || process.env.VAPI_RESTAURANT_ID || 'sasheys-kitchen-union';
+      // Require explicit restaurantId - no fallback to hardcoded values
+      if (!restaurantId) {
+        logger.error('❌ check_order_status called without restaurantId');
+        return {
+          type: 'check_order_status',
+          status: 'error',
+          description: 'Unable to look up order. Please hold while we connect you to someone who can help.',
+          error: 'Missing restaurantId'
+        };
+      }
 
       let query: string;
       let params: any[];
 
       if (orderId) {
         query = 'SELECT * FROM orders WHERE id LIKE ? AND restaurant_id = ?';
-        params = [`%${orderId}%`, targetRestaurantId];
+        params = [`%${orderId}%`, restaurantId];
       } else if (phoneNumber) {
         query = 'SELECT * FROM orders WHERE customer_phone = ? AND restaurant_id = ? ORDER BY created_at DESC LIMIT 3';
-        params = [phoneNumber, targetRestaurantId];
+        params = [phoneNumber, restaurantId];
       } else {
         return {
           type: 'check_order_status',

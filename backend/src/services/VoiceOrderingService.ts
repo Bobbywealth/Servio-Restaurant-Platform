@@ -80,12 +80,42 @@ export class VoiceOrderingService {
   /**
    * Search menu - now uses LIVE database with real-time availability
    */
-  public async searchMenu(query: string, restaurantId: string = 'demo-restaurant-1') {
+  public async searchMenu(query: string, restaurantId: string) {
     try {
       const db = DatabaseService.getInstance().getDatabase();
-      const q = `%${query.toLowerCase()}%`;
       
-      // Query live menu from database - ONLY available items
+      // If no query or very short query, return top available items
+      if (!query || query.trim().length < 2) {
+        logger.info('Empty/short search query, returning top available items', { restaurant_id: restaurantId });
+        const topItems = await db.all(`
+          SELECT 
+            mi.id,
+            mi.name,
+            mi.description,
+            mi.price,
+            mc.name as category,
+            mi.is_available
+          FROM menu_items mi
+          LEFT JOIN menu_categories mc ON mi.category_id = mc.id
+          WHERE mi.restaurant_id = ?
+            AND mi.is_available = TRUE
+          ORDER BY mi.sort_order ASC, mi.name ASC
+          LIMIT 10
+        `, [restaurantId]);
+        
+        return topItems.map((item: any) => ({
+          id: item.id,
+          name: item.name,
+          price: parseFloat(item.price),
+          description: item.description || '',
+          category: item.category || 'Other'
+        }));
+      }
+      
+      // Use fuzzy matching for better results
+      const q = `%${query.toLowerCase().trim()}%`;
+      
+      // Query live menu from database - ONLY available items with relevance ranking
       const items = await db.all(`
         SELECT 
           mi.id,
@@ -103,11 +133,21 @@ export class VoiceOrderingService {
             OR LOWER(mi.description) LIKE ?
             OR LOWER(mc.name) LIKE ?
           )
-        ORDER BY mi.name
+        ORDER BY 
+          CASE 
+            WHEN LOWER(mi.name) = LOWER(?) THEN 1
+            WHEN LOWER(mi.name) LIKE ? THEN 2
+            ELSE 3
+          END,
+          mi.name ASC
         LIMIT 20
-      `, [restaurantId, q, q, q]);
+      `, [restaurantId, q, q, q, query.toLowerCase(), `${query.toLowerCase()}%`]);
 
-      logger.info(`Found ${items.length} available menu items for query: ${query}`);
+      logger.info(`searchMenu: found ${items.length} items`, { 
+        query, 
+        restaurant_id: restaurantId,
+        items_found: items.length 
+      });
 
       return items.map((item: any) => ({
         id: item.id,
@@ -117,7 +157,10 @@ export class VoiceOrderingService {
         category: item.category || 'Other'
       }));
     } catch (error) {
-      logger.error('Failed to search menu from database:', error);
+      logger.error('‼️ DATABASE ERROR - Falling back to static JSON menu', { 
+        error: error instanceof Error ? error.message : String(error),
+        restaurant_id: restaurantId 
+      });
       // Fallback to static menu if database fails
       return this.searchMenuFallback(query);
     }
@@ -126,7 +169,7 @@ export class VoiceOrderingService {
   /**
    * Get specific menu item - now from LIVE database
    */
-  public async getMenuItem(id: string, restaurantId: string = 'demo-restaurant-1') {
+  public async getMenuItem(id: string, restaurantId: string) {
     try {
       const db = DatabaseService.getInstance().getDatabase();
       
@@ -154,18 +197,83 @@ export class VoiceOrderingService {
         return null; // Don't offer unavailable items
       }
 
+      // Load modifiers from database
+      const modifierGroups = await this.loadModifiersForItem(id, restaurantId);
+
       return {
         id: item.id,
         name: item.name,
         basePrice: parseFloat(item.price),
         description: item.description || '',
         category: item.category || 'Other',
-        modifierGroups: [], // TODO: Load modifiers from database
+        modifierGroups, // Now populated from DB
         tags: []
       };
     } catch (error) {
-      logger.error('Failed to get menu item from database:', error);
+      logger.error('‼️ DATABASE ERROR - Falling back to static JSON for getMenuItem', { 
+        error: error instanceof Error ? error.message : String(error),
+        item_id: id,
+        restaurant_id: restaurantId 
+      });
       return this.getMenuItemFallback(id);
+    }
+  }
+
+  /**
+   * Load modifiers for a menu item from database
+   */
+  private async loadModifiersForItem(itemId: string, restaurantId: string): Promise<any[]> {
+    try {
+      const db = DatabaseService.getInstance().getDatabase();
+      
+      // Get modifier groups for this menu item
+      const groups = await db.all(`
+        SELECT 
+          mg.id,
+          mg.name,
+          mg.min_selection,
+          mg.max_selection,
+          mg.is_required
+        FROM modifier_groups mg
+        INNER JOIN menu_item_modifiers mim ON mim.modifier_group_id = mg.id
+        WHERE mim.menu_item_id = ?
+          AND mg.restaurant_id = ?
+          AND mg.is_active = TRUE
+        ORDER BY mg.sort_order ASC, mg.name ASC
+      `, [itemId, restaurantId]);
+      
+      // Load options for each group
+      const modifierGroups = await Promise.all(groups.map(async (group: any) => {
+        const options = await db.all(`
+          SELECT 
+            id,
+            name,
+            price_modifier as priceDelta,
+            is_available
+          FROM modifier_options
+          WHERE modifier_group_id = ?
+            AND is_available = TRUE
+          ORDER BY sort_order ASC, name ASC
+        `, [group.id]);
+        
+        return {
+          id: group.id,
+          name: group.name,
+          minSelection: group.min_selection,
+          maxSelection: group.max_selection,
+          isRequired: group.is_required,
+          options: options.map((opt: any) => ({
+            id: opt.id,
+            name: opt.name,
+            priceDelta: parseFloat(opt.priceDelta || 0)
+          }))
+        };
+      }));
+      
+      return modifierGroups;
+    } catch (error) {
+      logger.error('Failed to load modifiers for item', { item_id: itemId, error });
+      return []; // Return empty array on error, don't break order flow
     }
   }
 
@@ -230,13 +338,13 @@ export class VoiceOrderingService {
     return null;
   }
 
-  public async validateQuote(input: any) {
+  public async validateQuote(input: any, restaurantId: string) {
     const { items } = input;
     const errors: string[] = [];
     let subtotal = 0;
 
     const validatedItems = await Promise.all(items.map(async (inputItem: any) => {
-      const menuItem = await this.getMenuItem(inputItem.itemId);
+      const menuItem = await this.getMenuItem(inputItem.itemId, restaurantId);
       if (!menuItem) {
         errors.push(`Item not found: ${inputItem.itemId}`);
         return null;
@@ -316,13 +424,23 @@ export class VoiceOrderingService {
     };
   }
 
-  public async createOrder(input: any) {
-    const quote = await this.validateQuote(input);
+  public async createOrder(input: any, restaurantId: string) {
+    // Validate restaurantId is provided
+    if (!restaurantId) {
+      logger.error('❌ createOrder called without restaurantId');
+      return { 
+        success: false, 
+        errors: ['Unable to identify restaurant location. Please hold for assistance.'] 
+      };
+    }
+
+    const quote = await this.validateQuote(input, restaurantId);
     if (!quote.valid) return { success: false, errors: quote.errors };
 
     const db = DatabaseService.getInstance().getDatabase();
     const orderId = uuidv4();
-    const restaurantId = process.env.VAPI_RESTAURANT_ID || 'sasheys-kitchen-union';
+    
+    logger.info('Creating order', { restaurant_id: restaurantId, order_id: orderId });
 
     await db.run(`
       INSERT INTO orders (
@@ -337,7 +455,7 @@ export class VoiceOrderingService {
     ]);
 
     for (const item of (quote.items as any[])) {
-      const menuItem = await this.getMenuItem(item.itemId);
+      const menuItem = await this.getMenuItem(item.itemId, restaurantId);
       await db.run(`
         INSERT INTO order_items (
           id, order_id, item_id, item_name_snapshot, qty, unit_price_snapshot, modifiers_json, created_at
