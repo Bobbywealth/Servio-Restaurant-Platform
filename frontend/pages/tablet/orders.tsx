@@ -283,6 +283,7 @@ export default function TabletOrdersPage() {
   const [selectedOrder, setSelectedOrder] = React.useState<Order | null>(null)
   const [orderDetails, setOrderDetails] = React.useState<any>(null)
   const [loadingDetails, setLoadingDetails] = React.useState(false)
+  const [creatingTestOrder, setCreatingTestOrder] = React.useState(false)
 
   const canReadOrders = hasPermission('orders:read')
   const canWriteOrders = hasPermission('orders:write')
@@ -657,6 +658,45 @@ export default function TabletOrdersPage() {
     setOrderDetails(null)
   }
 
+  const createTestOrder = async () => {
+    if (!canWriteOrders) return
+    setCreatingTestOrder(true)
+    setError(null)
+    try {
+      const testOrderData = {
+        externalId: `TEST-${Date.now()}`,
+        channel: 'test',
+        customerName: 'Test Customer',
+        customerPhone: '(555) 123-4567',
+        totalAmount: 29.97,
+        items: [
+          {
+            name: 'BBQ Bacon Burger',
+            quantity: 1,
+            price: 14.99
+          },
+          {
+            name: 'Loaded Nachos',
+            quantity: 1,
+            price: 8.99
+          },
+          {
+            name: 'Strawberry Shake',
+            quantity: 1,
+            price: 5.99
+          }
+        ]
+      }
+
+      await api.post('/api/orders', testOrderData)
+      await fetchOrders()
+    } catch (e: any) {
+      setError(e?.response?.data?.error?.message || e?.message || 'Failed to create test order')
+    } finally {
+      setCreatingTestOrder(false)
+    }
+  }
+
   return (
     <TabletLayout title="Online Orders" onRefresh={fetchOrders}>
       {!canReadOrders ? (
@@ -665,8 +705,19 @@ export default function TabletOrdersPage() {
         </div>
       ) : (
         <>
-          {restaurantSlug && (
-            <div className="mb-4 flex justify-end">
+          <div className="mb-4 flex justify-end gap-3">
+            {canWriteOrders && (
+              <button
+                onClick={createTestOrder}
+                disabled={creatingTestOrder}
+                className="px-4 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold inline-flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Create a test order to verify tablet functionality"
+              >
+                <BadgeCheck className={`w-5 h-5 ${creatingTestOrder ? 'animate-spin' : ''}`} />
+                {creatingTestOrder ? 'Creating...' : 'Create Test Order'}
+              </button>
+            )}
+            {restaurantSlug && (
               <a
                 href={`/r/${restaurantSlug}`}
                 target="_blank"
@@ -678,8 +729,8 @@ export default function TabletOrdersPage() {
                 Preview & Test Ordering
                 <ExternalLink className="w-4 h-4" />
               </a>
-            </div>
-          )}
+            )}
+          </div>
 
           {!soundEnabled && (
             <div className="mb-4 bg-white/5 border border-white/10 rounded-2xl p-4 flex items-center justify-between">

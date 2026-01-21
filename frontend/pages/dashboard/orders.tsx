@@ -71,6 +71,7 @@ export default function OrdersPage() {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
   const [orderDetails, setOrderDetails] = useState<any>(null)
   const [loadingDetails, setLoadingDetails] = useState(false)
+  const [creatingTestOrder, setCreatingTestOrder] = useState(false)
 
   const canUpdateOrders = hasPermission('orders:write')
 
@@ -186,6 +187,50 @@ export default function OrdersPage() {
     setOrderDetails(null)
   }
 
+  const createTestOrder = async () => {
+    if (!canUpdateOrders) return
+    setCreatingTestOrder(true)
+    setError(null)
+    try {
+      const testOrderData = {
+        externalId: `TEST-${Date.now()}`,
+        channel: 'test',
+        customerName: 'Test Customer',
+        customerPhone: '(555) 123-4567',
+        totalAmount: 25.99,
+        items: [
+          {
+            name: 'Cheeseburger',
+            quantity: 1,
+            price: 12.99
+          },
+          {
+            name: 'French Fries',
+            quantity: 1,
+            price: 5.99
+          },
+          {
+            name: 'Coca Cola',
+            quantity: 1,
+            price: 2.99
+          },
+          {
+            name: 'Apple Pie',
+            quantity: 1,
+            price: 4.99
+          }
+        ]
+      }
+
+      await api.post('/api/orders', testOrderData)
+      await fetchData()
+    } catch (e: any) {
+      setError(e?.response?.data?.error?.message || e?.message || 'Failed to create test order')
+    } finally {
+      setCreatingTestOrder(false)
+    }
+  }
+
   return (
     <>
       <Head>
@@ -207,6 +252,17 @@ export default function OrdersPage() {
             </div>
 
             <div className="flex gap-3">
+              {canUpdateOrders && (
+                <button
+                  className="btn-primary inline-flex items-center bg-blue-600 hover:bg-blue-700 text-white"
+                  onClick={createTestOrder}
+                  disabled={creatingTestOrder}
+                  title="Create a test order to verify tablet functionality"
+                >
+                  <ClipboardList className={`w-4 h-4 mr-2 ${creatingTestOrder ? 'animate-spin' : ''}`} />
+                  {creatingTestOrder ? 'Creating...' : 'Create Test Order'}
+                </button>
+              )}
               {restaurantSlug && (
                 <a
                   href={`/r/${restaurantSlug}`}
