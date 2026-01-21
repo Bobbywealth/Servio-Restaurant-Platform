@@ -30,6 +30,7 @@ type ReceiptSettings = {
   printMode: 'browser' | 'agent' | 'bluetooth'
   agentUrl: string
   agentPrinter: { host: string; port: number } | null
+  autoPrint: boolean
 }
 
 type AlertSettings = {
@@ -64,7 +65,8 @@ export default function TabletSettingsPage() {
     footerText: 'Thank you!',
     printMode: 'browser',
     agentUrl: 'http://localhost:8787',
-    agentPrinter: null
+    agentPrinter: null,
+    autoPrint: false
   })
 
   // Alert Settings
@@ -270,6 +272,28 @@ export default function TabletSettingsPage() {
                           <option value="agent">LAN Printer (via Print Agent)</option>
                           <option value="bluetooth">Bluetooth (Android only)</option>
                         </select>
+                      </div>
+
+                      <div className="bg-green-500/15 border border-green-500/30 rounded-xl p-4">
+                        <label className="flex items-center gap-3">
+                          <input
+                            type="checkbox"
+                            checked={receiptSettings.autoPrint}
+                            onChange={(e) => setReceiptSettings({...receiptSettings, autoPrint: e.target.checked})}
+                            className="w-5 h-5 rounded"
+                          />
+                          <div>
+                            <div className="text-green-200 font-bold text-lg">🖨️ Auto Print New Orders</div>
+                            <div className="text-green-300/70 text-sm">
+                              Automatically print tickets when orders arrive - no manual clicking needed! Perfect for busy kitchens.
+                            </div>
+                            {receiptSettings.autoPrint && (
+                              <div className="mt-2 text-xs text-green-200 bg-green-500/20 rounded-lg px-2 py-1 inline-block">
+                                ✅ Auto-print enabled - tickets print on order arrival
+                              </div>
+                            )}
+                          </div>
+                        </label>
                       </div>
 
                       {receiptSettings.printMode === 'agent' && (
