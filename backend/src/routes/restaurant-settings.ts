@@ -16,6 +16,17 @@ function safeJsonParse<T>(value: any, fallback: T): T {
   }
 }
 
+function slugify(input: string) {
+  const base = String(input || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9-]/g, '')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return base || 'restaurant';
+}
+
 function defaultReceiptSettings() {
   return {
     paperSize: '80mm' as '80mm' | '58mm',
@@ -47,6 +58,83 @@ function defaultMenuSettings() {
     showLogo: true
   };
 }
+
+/**
+ * GET /api/restaurants/:restaurantId/slug
+ * Get public ordering slug for a restaurant
+ */
+router.get('/:restaurantId/slug', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+  const { restaurantId } = req.params;
+  const db = DatabaseService.getInstance().getDatabase();
+
+  if (req.user?.restaurantId !== restaurantId && req.user?.role !== 'platform-admin') {
+    return res.status(403).json({ error: 'Unauthorized' });
+  }
+
+  const restaurant = await db.get('SELECT id, slug FROM restaurants WHERE id = ?', [restaurantId]);
+  if (!restaurant) {
+    return res.status(404).json({ error: 'Restaurant not found' });
+  }
+
+  res.json({
+    success: true,
+    data: {
+      slug: restaurant.slug
+    }
+  });
+}));
+
+/**
+ * PUT /api/restaurants/:restaurantId/slug
+ * Update public ordering slug
+ */
+router.put('/:restaurantId/slug', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+  const { restaurantId } = req.params;
+  const { slug } = req.body ?? {};
+  const db = DatabaseService.getInstance().getDatabase();
+
+  if (req.user?.restaurantId !== restaurantId && req.user?.role !== 'platform-admin') {
+    return res.status(403).json({ error: 'Unauthorized' });
+  }
+
+  const restaurant = await db.get('SELECT id, slug FROM restaurants WHERE id = ?', [restaurantId]);
+  if (!restaurant) {
+    return res.status(404).json({ error: 'Restaurant not found' });
+  }
+
+  if (!slug || !String(slug).trim()) {
+    return res.status(400).json({ error: 'Slug is required' });
+  }
+
+  const nextSlug = slugify(String(slug)).slice(0, 64);
+  const existing = await db.get('SELECT id FROM restaurants WHERE slug = ? AND id <> ? LIMIT 1', [nextSlug, restaurantId]);
+  if (existing?.id) {
+    return res.status(409).json({ error: 'That public slug is already taken. Please choose another.' });
+  }
+
+  if (nextSlug !== restaurant.slug) {
+    await db.run(
+      'UPDATE restaurants SET slug = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      [nextSlug, restaurantId]
+    );
+  }
+
+  await DatabaseService.getInstance().logAudit(
+    restaurantId,
+    req.user?.id || 'system',
+    'update_restaurant_slug',
+    'restaurant',
+    restaurantId,
+    { slug: nextSlug }
+  );
+
+  res.json({
+    success: true,
+    data: {
+      slug: nextSlug
+    }
+  });
+}));
 
 /**
  * Get restaurant Vapi settings

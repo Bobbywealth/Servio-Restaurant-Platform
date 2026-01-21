@@ -187,12 +187,12 @@ const MenuManagement: React.FC = () => {
 
   // Load restaurant slug for public ordering link
   useEffect(() => {
-    if (!user?.id) return;
+    if (!user?.restaurantId) return;
     let cancelled = false;
 
     const run = async () => {
       try {
-        const resp = await api.get('/api/restaurant/profile');
+        const resp = await api.get(`/api/restaurants/${user.restaurantId}/slug`);
         const slug = resp.data?.data?.slug as string | undefined;
         if (cancelled) return;
         if (slug) {
@@ -218,7 +218,7 @@ const MenuManagement: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [user?.id]);
+  }, [user?.restaurantId]);
 
   const copyPublicLink = async () => {
     if (!publicOrderUrl) return;
@@ -250,9 +250,13 @@ const MenuManagement: React.FC = () => {
       toast.error('Slug is required (e.g., sausage-kitchen)');
       return;
     }
+    if (!user?.restaurantId) {
+      toast.error('No restaurant is assigned to this account');
+      return;
+    }
     setSavingSlug(true);
     try {
-      const resp = await api.put('/api/restaurant/profile', { slug: next });
+      const resp = await api.put(`/api/restaurants/${user.restaurantId}/slug`, { slug: next });
       const saved = resp.data?.data?.slug || next;
       setRestaurantSlug(saved);
       setSlugDraft(saved);
