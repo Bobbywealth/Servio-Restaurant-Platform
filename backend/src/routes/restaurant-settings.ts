@@ -27,7 +27,15 @@ function defaultReceiptSettings() {
     showCustomerName: true,
     showCustomerPhone: true,
     showChannel: true,
-    footerText: 'Thank you!'
+    footerText: 'Thank you!',
+
+    // Printing destination
+    // - browser: uses OS print dialog (AirPrint / system printers)
+    // - agent: uses a local LAN print agent (recommended for TCP/9100 printers)
+    // - bluetooth: uses Web Bluetooth (Android/Chrome only; not supported on iOS Safari)
+    printMode: 'browser' as 'browser' | 'agent' | 'bluetooth',
+    agentUrl: 'http://localhost:8787',
+    agentPrinter: null as null | { name?: string; host: string; port?: number; type?: string }
   };
 }
 
@@ -148,7 +156,10 @@ router.put('/:restaurantId/receipt', requireAuth, asyncHandler(async (req: Reque
     showCustomerName: req.body.showCustomerName ?? currentReceipt.showCustomerName,
     showCustomerPhone: req.body.showCustomerPhone ?? currentReceipt.showCustomerPhone,
     showChannel: req.body.showChannel ?? currentReceipt.showChannel,
-    footerText: req.body.footerText ?? currentReceipt.footerText
+    footerText: req.body.footerText ?? currentReceipt.footerText,
+    printMode: req.body.printMode ?? currentReceipt.printMode,
+    agentUrl: req.body.agentUrl ?? currentReceipt.agentUrl,
+    agentPrinter: req.body.agentPrinter ?? currentReceipt.agentPrinter
   };
 
   currentSettings.receipt = nextReceipt;

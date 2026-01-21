@@ -103,6 +103,13 @@ router.post(
   })
 );
 
+// DEBUG: Test route after signup
+router.get('/after-signup', (req: Request, res: Response) => {
+  res.json({ success: true, message: 'Route after signup works!' });
+});
+
+logger.info('Auth routes: after-signup registered');
+
 router.post(
   '/login',
   asyncHandler(async (req: Request, res: Response) => {
