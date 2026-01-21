@@ -2,6 +2,7 @@ import Head from 'next/head';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import clsx from 'clsx';
 import { CheckCircle2, Clock, RefreshCcw, Soup, Truck, Utensils } from 'lucide-react';
+import { useSocket } from '../../lib/socket';
 
 type OrderItem = {
   id?: string;
@@ -141,6 +142,7 @@ function ChannelIcon(props: { channel?: string | null }) {
 }
 
 export default function TabletOrdersPage() {
+  const socket = useSocket();
   const [orders, setOrders] = useState<Order[]>([]);
   const [filter, setFilter] = useState<'active' | 'received' | 'preparing' | 'ready' | 'completed'>('active');
   const [loading, setLoading] = useState(true);
@@ -172,6 +174,10 @@ export default function TabletOrdersPage() {
     setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, status: nextStatus } : o)));
     try {
       await apiPost(`/orders/${encodeURIComponent(orderId)}/status`, { status: nextStatus });
+      // Notify other clients via socket
+      if (socket) {
+        socket.emit('order:status_changed', { orderId, status: nextStatus, timestamp: new Date() });
+      }
     } catch (e: unknown) {
       const message =
         e instanceof Error ? e.message : typeof e === 'string' ? e : 'Failed to update order status.';
@@ -187,11 +193,28 @@ export default function TabletOrdersPage() {
     refresh();
     const t = window.setInterval(() => {
       // Avoid piling up refreshes if the tab is backgrounded / paused.
-      if (Date.now() - lastRefreshAt.current < 8000) return;
+      if (Date.now() - lastRefreshAt.current < 15000) return;
       refresh();
-    }, 12000);
+    }, 20000); // Polling as fallback, but less frequent since we have sockets
     return () => window.clearInterval(t);
   }, []);
+
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleNewNotification = (data: any) => {
+      if (data.notification.type === 'order.created_web' || 
+          data.notification.type === 'order.created_vapi' ||
+          data.notification.type === 'order.status_changed') {
+        refresh();
+      }
+    };
+
+    socket.on('notifications.new', handleNewNotification);
+    return () => {
+      socket.off('notifications.new', handleNewNotification);
+    };
+  }, [socket]);
 
   useEffect(() => {
     setNow(Date.now());

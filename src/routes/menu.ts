@@ -126,7 +126,7 @@ router.post('/categories', asyncHandler(async (req: Request, res: Response) => {
 }));
 
 router.put('/categories/:id', asyncHandler(async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const { name, description, sortOrder, isActive } = req.body;
   const db = DatabaseService.getInstance().getDatabase();
   const restaurantId = req.user?.restaurantId;
@@ -157,7 +157,7 @@ router.put('/categories/:id', asyncHandler(async (req: Request, res: Response) =
 }));
 
 router.delete('/categories/:id', asyncHandler(async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const db = DatabaseService.getInstance().getDatabase();
   const restaurantId = req.user?.restaurantId;
   if (!restaurantId) throw new UnauthorizedError();
@@ -288,7 +288,7 @@ router.post('/items', upload.array('images', 5), asyncHandler(async (req: Reques
  * Update a menu item
  */
 router.put('/items/:id', upload.array('images', 5), asyncHandler(async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const {
     name,
     description,
@@ -812,7 +812,7 @@ router.post('/modifier-groups', asyncHandler(async (req: Request, res: Response)
  * Get options for a modifier group
  */
 router.get('/modifier-groups/:id/options', asyncHandler(async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const db = DatabaseService.getInstance().getDatabase();
 
   const options = await db.all(`
@@ -832,7 +832,7 @@ router.get('/modifier-groups/:id/options', asyncHandler(async (req: Request, res
  * Add option to a modifier group
  */
 router.post('/modifier-groups/:id/options', asyncHandler(async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const { name, description, priceModifier = 0 } = req.body;
   const db = DatabaseService.getInstance().getDatabase();
 
@@ -874,7 +874,7 @@ router.post('/modifier-groups/:id/options', asyncHandler(async (req: Request, re
  * Get modifiers assigned to a menu item
  */
 router.get('/items/:id/modifiers', asyncHandler(async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const db = DatabaseService.getInstance().getDatabase();
 
   const modifiers = await db.all(`
@@ -918,7 +918,7 @@ router.get('/items/:id/modifiers', asyncHandler(async (req: Request, res: Respon
  * Assign modifier groups to a menu item
  */
 router.post('/items/:id/modifiers', asyncHandler(async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const { modifierGroupIds } = req.body;
   const db = DatabaseService.getInstance().getDatabase();
 

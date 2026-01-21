@@ -68,7 +68,7 @@ export default function AdminOrderDetailsPage() {
   const handleAccept = async () => {
     setIsSubmitting(true)
     try {
-      await api.post(`/api/orders/${id}/accept`, { prepTimeMinutes: prepTime })
+      await api.post(`/api/voice/orders/${id}/accept`, { prepTimeMinutes: prepTime })
       setSuccessMessage("Accepted + SMS sent")
       fetchOrder()
     } catch (error) {

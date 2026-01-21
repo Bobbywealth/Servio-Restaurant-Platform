@@ -77,7 +77,7 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
  * Get a specific order by ID
  */
 router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const db = DatabaseService.getInstance().getDatabase();
 
   const order = await db.get('SELECT * FROM orders WHERE id = ?', [id]);
@@ -105,7 +105,7 @@ router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
  * Update order status
  */
 router.post('/:id/status', asyncHandler(async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const { status, userId } = req.body;
 
   const validStatuses = ['received', 'preparing', 'ready', 'completed', 'cancelled'];

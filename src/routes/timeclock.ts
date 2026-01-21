@@ -574,7 +574,7 @@ router.get('/entries', asyncHandler(async (req: Request, res: Response) => {
  * Edit a time entry (manager only)
  */
 router.put('/entries/:id', asyncHandler(async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const {
     clockInTime,
     clockOutTime,

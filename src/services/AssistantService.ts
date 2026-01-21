@@ -6,16 +6,6 @@ import { DatabaseService } from './DatabaseService';
 import { logger } from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
 
-// Tool interfaces
-interface ToolCall {
-  id: string;
-  type: 'function';
-  function: {
-    name: string;
-    arguments: string;
-  };
-}
-
 interface AssistantResponse {
   transcript?: string;
   response: string;
@@ -423,7 +413,19 @@ Use the available tools to perform actions. Always be helpful and professional.`
     ];
   }
 
-  private async executeTool(toolCall: ToolCall, userId: string): Promise<AssistantResponse['actions'][0]> {
+  private async executeTool(
+    toolCall: OpenAI.Chat.Completions.ChatCompletionMessageToolCall,
+    userId: string
+  ): Promise<AssistantResponse['actions'][0]> {
+    if (toolCall.type !== 'function' || !('function' in toolCall)) {
+      return {
+        type: 'tool_call',
+        status: 'error',
+        description: 'Unsupported tool call type',
+        error: `Unsupported tool call type: ${String((toolCall as any)?.type)}`
+      };
+    }
+
     const { name, arguments: args } = toolCall.function;
 
     try {

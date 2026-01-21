@@ -63,6 +63,29 @@ export default function OrdersPage() {
 
   const canUpdateOrders = hasPermission('orders', 'update')
 
+  const createTestOrder = async () => {
+    setIsLoading(true)
+    setError(null)
+    try {
+      await api.post('/api/orders', {
+        externalId: `TEST-${Math.floor(Math.random() * 10000000000000)}`,
+        channel: 'test',
+        items: [
+          { name: 'Test Burger', quantity: 1, price: 12.99 },
+          { name: 'Test Fries', quantity: 1, price: 3.99 }
+        ],
+        customerName: 'Test Customer',
+        customerPhone: '(555) 123-4567',
+        totalAmount: 16.98
+      })
+      await fetchData()
+    } catch (e: any) {
+      setError(e?.response?.data?.error?.message || e?.message || 'Failed to create test order')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   const channels = useMemo(() => {
     const set = new Set<string>()
     orders.forEach(o => {
@@ -102,6 +125,23 @@ export default function OrdersPage() {
     fetchData()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter, channelFilter])
+
+  useEffect(() => {
+    if (!socket) return
+
+    const handleNewNotification = (data: any) => {
+      if (data.notification.type === 'order.created_web' || 
+          data.notification.type === 'order.created_vapi' ||
+          data.notification.type === 'order.status_changed') {
+        fetchData()
+      }
+    }
+
+    socket.on('notifications.new', handleNewNotification)
+    return () => {
+      socket.off('notifications.new', handleNewNotification)
+    }
+  }, [socket, hasPermission])
 
   const updateOrderStatus = async (orderId: string, status: OrderStatus) => {
     if (!canUpdateOrders) return
@@ -146,15 +186,26 @@ export default function OrdersPage() {
               </p>
             </div>
 
-            <button
-              className="btn-secondary inline-flex items-center"
-              onClick={fetchData}
-              disabled={isLoading}
-              title="Refresh"
-            >
-              <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-              Refresh
-            </button>
+            <div className="flex gap-3">
+              <button
+                className="btn-primary inline-flex items-center"
+                onClick={createTestOrder}
+                disabled={isLoading}
+              >
+                <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+                Create Test Order
+              </button>
+              
+              <button
+                className="btn-secondary inline-flex items-center"
+                onClick={fetchData}
+                disabled={isLoading}
+                title="Refresh"
+              >
+                <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+                Refresh
+              </button>
+            </div>
           </div>
 
           {error && (

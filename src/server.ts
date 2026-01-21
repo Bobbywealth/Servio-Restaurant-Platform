@@ -68,23 +68,6 @@ async function initializeServer() {
     // API Routes
     app.use('/api/auth', authRoutes);
     
-    // Vapi webhook routes (no auth required for external webhooks)
-    app.use('/api/vapi', vapiRoutes);
-    app.use('/api', voiceRoutes); // Mount voice ordering APIs under /api
-    
-    // Admin routes (platform-admin role required)
-    app.use('/api/admin', adminRoutes);
-    
-    // Debug: Add a test auth route to verify mounting
-    app.get('/api/auth/test', (req, res) => {
-      res.json({ message: 'Auth routes are mounted correctly' });
-    });
-    
-    // Debug: Test direct route without auth prefix
-    app.get('/debug-route', (req, res) => {
-      res.json({ message: 'Direct route works' });
-    });
-
     // Protected routes
     app.use('/api/assistant', requireAuth, assistantRoutes);
     app.use('/api/orders', requireAuth, ordersRoutes);
@@ -100,6 +83,11 @@ async function initializeServer() {
     app.use('/api/integrations', requireAuth, integrationsRoutes);
     app.use('/api/notifications', requireAuth, notificationsRoutes);
     app.use('/api/voice-hub', voiceHubRoutes);
+
+    // Vapi and Voice routes (no auth or special auth)
+    app.use('/api/vapi', vapiRoutes);
+    app.use('/api', voiceRoutes); // Mount voice ordering APIs under /api
+
 
     // 404 handler (must be last)
     app.use((req, res, next) => {

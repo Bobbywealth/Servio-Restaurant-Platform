@@ -66,13 +66,24 @@ router.get('/profile', asyncHandler(async (req: Request, res: Response) => {
     });
   }
 
+  // Safe JSON parsing helper
+  const safeJsonParse = (str: string, fallback: any = {}) => {
+    if (!str) return fallback;
+    try {
+      return JSON.parse(str);
+    } catch (e) {
+      logger.warn(`Failed to parse JSON: ${str.substring(0, 50)}...`);
+      return fallback;
+    }
+  };
+
   // Parse JSON fields
   const formattedRestaurant = {
     ...restaurant,
-    address: JSON.parse(restaurant.address || '{}'),
-    social_links: JSON.parse(restaurant.social_links || '{}'),
-    operating_hours: JSON.parse(restaurant.operating_hours || '{}'),
-    settings: JSON.parse(restaurant.settings || '{}'),
+    address: safeJsonParse(restaurant.address, {}),
+    social_links: safeJsonParse(restaurant.social_links, {}),
+    operating_hours: safeJsonParse(restaurant.operating_hours, {}),
+    settings: safeJsonParse(restaurant.settings, {}),
     online_ordering_enabled: Boolean(restaurant.online_ordering_enabled),
     delivery_enabled: Boolean(restaurant.delivery_enabled),
     pickup_enabled: Boolean(restaurant.pickup_enabled),
@@ -284,14 +295,24 @@ router.put('/profile', upload.fields([
 
   logger.info(`Restaurant profile updated: ${name || existingRestaurant.name}`);
 
+  // Safe JSON parsing helper
+  const safeJsonParse = (str: string, fallback: any = {}) => {
+    if (!str) return fallback;
+    try {
+      return JSON.parse(str);
+    } catch (e) {
+      return fallback;
+    }
+  };
+
   return res.json({
     success: true,
     data: {
       ...updatedRestaurant,
-      address: JSON.parse(updatedRestaurant.address || '{}'),
-      social_links: JSON.parse(updatedRestaurant.social_links || '{}'),
-      operating_hours: JSON.parse(updatedRestaurant.operating_hours || '{}'),
-      settings: JSON.parse(updatedRestaurant.settings || '{}')
+      address: safeJsonParse(updatedRestaurant.address, {}),
+      social_links: safeJsonParse(updatedRestaurant.social_links, {}),
+      operating_hours: safeJsonParse(updatedRestaurant.operating_hours, {}),
+      settings: safeJsonParse(updatedRestaurant.settings, {})
     }
   });
 }));
@@ -602,7 +623,7 @@ router.post('/links', asyncHandler(async (req: Request, res: Response) => {
  * Update a restaurant link
  */
 router.put('/links/:id', asyncHandler(async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const {
     name,
     description,
@@ -707,7 +728,7 @@ router.put('/links/:id', asyncHandler(async (req: Request, res: Response) => {
  * Delete a restaurant link
  */
 router.delete('/links/:id', asyncHandler(async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const db = DatabaseService.getInstance().getDatabase();
 
   const link = await db.get('SELECT * FROM restaurant_links WHERE id = ?', [id]);
@@ -750,7 +771,7 @@ router.delete('/links/:id', asyncHandler(async (req: Request, res: Response) => 
  * Track link click
  */
 router.post('/links/:id/click', asyncHandler(async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const db = DatabaseService.getInstance().getDatabase();
 
   const link = await db.get('SELECT * FROM restaurant_links WHERE id = ?', [id]);

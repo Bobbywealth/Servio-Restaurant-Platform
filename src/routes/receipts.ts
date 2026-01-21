@@ -75,7 +75,7 @@ router.post('/create-upload', requireAuth, asyncHandler(async (req: Request, res
  * Marks receipt as uploaded and stores final metadata
  */
 router.post('/:id/confirm-upload', requireAuth, asyncHandler(async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const { supplierName, totalAmount } = req.body;
   const user = req.user!;
 
@@ -181,7 +181,7 @@ router.get('/list', requireAuth, asyncHandler(async (req: Request, res: Response
  * Get detailed receipt info with a fresh download URL
  */
 router.get('/:id', requireAuth, asyncHandler(async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const user = req.user!;
 
   const db = DatabaseService.getInstance().getDatabase();
@@ -215,7 +215,7 @@ router.get('/:id', requireAuth, asyncHandler(async (req: Request, res: Response)
  * Get all line items for a receipt
  */
 router.get('/:id/items', requireAuth, asyncHandler(async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const user = req.user!;
 
   const db = DatabaseService.getInstance().getDatabase();
@@ -244,7 +244,7 @@ router.get('/:id/items', requireAuth, asyncHandler(async (req: Request, res: Res
  * Add a manual line item to a receipt
  */
 router.post('/:id/items', requireAuth, asyncHandler(async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const { description, quantity, unitCost, inventoryItemId } = req.body;
   const user = req.user!;
 
@@ -274,7 +274,7 @@ router.post('/:id/items', requireAuth, asyncHandler(async (req: Request, res: Re
  * Apply matched line items to inventory
  */
 router.post('/:id/apply', requireAuth, asyncHandler(async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const user = req.user!;
   const db = DatabaseService.getInstance().getDatabase();
   const dbService = DatabaseService.getInstance();

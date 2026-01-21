@@ -97,7 +97,7 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
  * Mark a task as completed
  */
 router.post('/:id/complete', asyncHandler(async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const { userId } = req.body;
 
   const db = DatabaseService.getInstance().getDatabase();
@@ -158,7 +158,7 @@ router.post('/:id/complete', asyncHandler(async (req: Request, res: Response) =>
  * Mark a task as in progress
  */
 router.post('/:id/start', asyncHandler(async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const { userId } = req.body;
 
   const db = DatabaseService.getInstance().getDatabase();
