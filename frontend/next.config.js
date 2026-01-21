@@ -1,6 +1,5 @@
 /** @type {import('next').NextConfig} */
 const path = require('path');
-const { BundleAnalyzerPlugin } = require('webpack-bundle-analyzer');
 
 const nextConfig = {
   reactStrictMode: true,
@@ -148,15 +147,20 @@ const nextConfig = {
       // Minimize bundles
       config.optimization.minimize = true
       
-      // Bundle analyzer in production analysis mode
+      // Bundle analyzer in production analysis mode (optional dependency)
       if (process.env.ANALYZE === 'true') {
-        config.plugins.push(
-          new BundleAnalyzerPlugin({
-            analyzerMode: 'static',
-            openAnalyzer: false,
-            reportFilename: 'bundle-report.html',
-          })
-        );
+        try {
+          const { BundleAnalyzerPlugin } = require('webpack-bundle-analyzer');
+          config.plugins.push(
+            new BundleAnalyzerPlugin({
+              analyzerMode: 'static',
+              openAnalyzer: false,
+              reportFilename: 'bundle-report.html',
+            })
+          );
+        } catch (e) {
+          console.warn('webpack-bundle-analyzer not installed. Skipping bundle analysis.');
+        }
       }
     }
 
