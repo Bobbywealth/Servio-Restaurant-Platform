@@ -4,7 +4,8 @@ import React from 'react'
 import TabletLayout from '../../components/Layout/TabletLayout'
 import { api } from '../../lib/api'
 import { useUser } from '../../contexts/UserContext'
-import { Printer, Clock, ShoppingBag, BadgeCheck } from 'lucide-react'
+import { useSocket } from '../../lib/socket'
+import { Printer, Clock, ShoppingBag, BadgeCheck, CheckCircle2, XCircle, Timer, Volume2 } from 'lucide-react'
 
 type OrderStatus = 'received' | 'preparing' | 'ready' | 'completed' | 'cancelled' | string
 
@@ -24,6 +25,9 @@ type Order = {
   customerPhone?: string | null
   totalAmount?: number | null
   createdAt?: string | null
+  prepTimeMinutes?: number | null
+  acceptedAt?: string | null
+  acceptedByUserId?: string | null
   orderItems?: OrderItem[] | null
   items?: any[] | null
 }
@@ -170,13 +174,19 @@ function escapeHtml(s: string) {
 
 export default function TabletOrdersPage() {
   const { user, hasPermission } = useUser()
+  const socket = useSocket()
 
   const [orders, setOrders] = React.useState<Order[]>([])
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [receiptCfg, setReceiptCfg] = React.useState<{ receipt: ReceiptSettings; restaurant: ReceiptMeta } | null>(null)
+  const [soundEnabled, setSoundEnabled] = React.useState(false)
+  const [activeModalOrder, setActiveModalOrder] = React.useState<Order | null>(null)
+  const [prepTimeMinutes, setPrepTimeMinutes] = React.useState<number>(15)
+  const [actingOrderId, setActingOrderId] = React.useState<string | null>(null)
 
   const canReadOrders = hasPermission('orders:read')
+  const canWriteOrders = hasPermission('orders:write')
 
   const loadReceiptCfg = React.useCallback(async () => {
     if (!user?.restaurantId) return
@@ -218,6 +228,58 @@ export default function TabletOrdersPage() {
     loadReceiptCfg()
   }, [loadReceiptCfg])
 
+  // Enable sound only after a user gesture (mobile browser policy)
+  React.useEffect(() => {
+    const onFirstGesture = () => setSoundEnabled(true)
+    window.addEventListener('pointerdown', onFirstGesture, { once: true })
+    return () => window.removeEventListener('pointerdown', onFirstGesture as any)
+  }, [])
+
+  const playNewOrderSound = React.useCallback(() => {
+    if (!soundEnabled) return
+    try {
+      const AudioCtx = (window as any).AudioContext || (window as any).webkitAudioContext
+      if (!AudioCtx) return
+      const ctx = new AudioCtx()
+      const o = ctx.createOscillator()
+      const g = ctx.createGain()
+      o.type = 'sine'
+      o.frequency.value = 880
+      g.gain.value = 0.0001
+      o.connect(g)
+      g.connect(ctx.destination)
+      const now = ctx.currentTime
+      g.gain.setValueAtTime(0.0001, now)
+      g.gain.exponentialRampToValueAtTime(0.25, now + 0.02)
+      g.gain.exponentialRampToValueAtTime(0.0001, now + 0.18)
+      o.start(now)
+      o.stop(now + 0.2)
+      o.onended = () => {
+        try { ctx.close() } catch {}
+      }
+    } catch {
+      // ignore
+    }
+  }, [soundEnabled])
+
+  // Live updates: beep + refresh when new order arrives
+  React.useEffect(() => {
+    if (!socket || !user?.restaurantId) return
+
+    // Ensure we're in the restaurant room (socket manager also does this on connect).
+    socket.joinRestaurantRoom(user.restaurantId)
+
+    const onNew = (_payload: any) => {
+      playNewOrderSound()
+      fetchOrders()
+    }
+    socket.on('order:new', onNew as any)
+
+    return () => {
+      socket.off('order:new', onNew as any)
+    }
+  }, [socket, user?.restaurantId, fetchOrders, playNewOrderSound])
+
   const handlePrint = async (orderId: string) => {
     try {
       const detail = await api.get(`/api/orders/${orderId}`)
@@ -247,6 +309,41 @@ export default function TabletOrdersPage() {
     }
   }
 
+  const openAccept = (order: Order) => {
+    setActiveModalOrder(order)
+    setPrepTimeMinutes(Number(order.prepTimeMinutes ?? 15))
+  }
+
+  const acceptOrder = async () => {
+    if (!activeModalOrder) return
+    setError(null)
+    setActingOrderId(activeModalOrder.id)
+    try {
+      await api.post(`/api/orders/${activeModalOrder.id}/accept`, {
+        prepTimeMinutes
+      })
+      setActiveModalOrder(null)
+      await fetchOrders()
+    } catch (e: any) {
+      setError(e?.response?.data?.error?.message || e?.message || 'Failed to accept order')
+    } finally {
+      setActingOrderId(null)
+    }
+  }
+
+  const declineOrder = async (orderId: string) => {
+    setError(null)
+    setActingOrderId(orderId)
+    try {
+      await api.post(`/api/orders/${orderId}/status`, { status: 'cancelled' })
+      await fetchOrders()
+    } catch (e: any) {
+      setError(e?.response?.data?.error?.message || e?.message || 'Failed to decline order')
+    } finally {
+      setActingOrderId(null)
+    }
+  }
+
   return (
     <TabletLayout title="Online Orders" onRefresh={fetchOrders}>
       {!canReadOrders ? (
@@ -255,6 +352,18 @@ export default function TabletOrdersPage() {
         </div>
       ) : (
         <>
+          {!soundEnabled && (
+            <div className="mb-4 bg-white/5 border border-white/10 rounded-2xl p-4 flex items-center justify-between">
+              <div className="text-white/70 text-sm">
+                Tap anywhere once to enable the <span className="text-white font-semibold">new order sound</span>.
+              </div>
+              <div className="px-3 py-2 rounded-xl bg-white/10 border border-white/10 inline-flex items-center gap-2 text-sm font-bold text-white/80">
+                <Volume2 className="w-4 h-4" />
+                Sound
+              </div>
+            </div>
+          )}
+
           {error && (
             <div className="mb-4 bg-red-500/15 border border-red-500/30 text-red-200 rounded-2xl p-4">
               {error}
@@ -271,6 +380,8 @@ export default function TabletOrdersPage() {
                   : 0
               const idLabel = o.externalId || o.id
               const status = String(o.status || '')
+              const isNew = String(o.status || '').toLowerCase() === 'received'
+              const isActing = actingOrderId === o.id
               return (
                 <div key={o.id} className="bg-white/5 border border-white/10 rounded-2xl p-4">
                   <div className="flex items-start justify-between gap-3">
@@ -301,6 +412,12 @@ export default function TabletOrdersPage() {
                         <ShoppingBag className="w-4 h-4" />
                         {itemCount} items
                       </div>
+                      {o.prepTimeMinutes != null && (
+                        <div className="text-sm text-white/70 mt-1 inline-flex items-center gap-2">
+                          <Timer className="w-4 h-4" />
+                          Ready in {Number(o.prepTimeMinutes)} min
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -321,6 +438,35 @@ export default function TabletOrdersPage() {
                       <span className="hidden sm:inline">{loading ? 'Loading…' : 'Sync'}</span>
                     </button>
                   </div>
+
+                  {canWriteOrders && (
+                    <div className="mt-3 grid grid-cols-2 gap-2">
+                      <button
+                        disabled={!isNew || isActing}
+                        onClick={() => openAccept(o)}
+                        className={`px-4 py-3 rounded-xl font-extrabold inline-flex items-center justify-center gap-2 border transition-colors ${
+                          isNew
+                            ? 'bg-emerald-500/15 hover:bg-emerald-500/25 border-emerald-500/25 text-emerald-100'
+                            : 'bg-white/5 border-white/10 text-white/40'
+                        }`}
+                      >
+                        <CheckCircle2 className="w-5 h-5" />
+                        Accept
+                      </button>
+                      <button
+                        disabled={!isNew || isActing}
+                        onClick={() => declineOrder(o.id)}
+                        className={`px-4 py-3 rounded-xl font-extrabold inline-flex items-center justify-center gap-2 border transition-colors ${
+                          isNew
+                            ? 'bg-red-500/15 hover:bg-red-500/25 border-red-500/25 text-red-100'
+                            : 'bg-white/5 border-white/10 text-white/40'
+                        }`}
+                      >
+                        <XCircle className="w-5 h-5" />
+                        Decline
+                      </button>
+                    </div>
+                  )}
                 </div>
               )
             })}
@@ -331,6 +477,64 @@ export default function TabletOrdersPage() {
               </div>
             )}
           </div>
+
+          {/* Accept modal */}
+          {activeModalOrder && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70">
+              <div className="w-full max-w-md bg-gray-950 border border-white/10 rounded-2xl p-5">
+                <div className="text-white/60 text-sm">Accept order</div>
+                <div className="text-xl font-extrabold mt-1">{activeModalOrder.externalId || activeModalOrder.id}</div>
+                <div className="text-white/70 text-sm mt-2">
+                  How long until it’s ready?
+                </div>
+
+                <div className="mt-4 grid grid-cols-4 gap-2">
+                  {[10, 15, 20, 30].map((m) => (
+                    <button
+                      key={m}
+                      onClick={() => setPrepTimeMinutes(m)}
+                      className={`px-3 py-3 rounded-xl font-extrabold border transition-colors ${
+                        prepTimeMinutes === m
+                          ? 'bg-white text-gray-950 border-white'
+                          : 'bg-white/10 hover:bg-white/15 border-white/10 text-white'
+                      }`}
+                    >
+                      {m}m
+                    </button>
+                  ))}
+                </div>
+
+                <div className="mt-3">
+                  <label className="text-sm font-semibold text-white/80">Custom minutes</label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={240}
+                    value={prepTimeMinutes}
+                    onChange={(e) => setPrepTimeMinutes(Number(e.target.value))}
+                    className="mt-2 w-full bg-gray-900 border border-white/10 rounded-xl px-4 py-3 text-white text-lg outline-none focus:ring-2 focus:ring-teal-500/40"
+                  />
+                </div>
+
+                <div className="mt-5 flex gap-2">
+                  <button
+                    onClick={() => setActiveModalOrder(null)}
+                    className="flex-1 px-4 py-3 rounded-xl bg-white/10 hover:bg-white/15 border border-white/10 font-extrabold"
+                    disabled={actingOrderId === activeModalOrder.id}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={acceptOrder}
+                    className="flex-1 px-4 py-3 rounded-xl bg-gradient-to-r from-teal-600 to-orange-500 hover:from-teal-700 hover:to-orange-600 font-extrabold"
+                    disabled={actingOrderId === activeModalOrder.id}
+                  >
+                    {actingOrderId === activeModalOrder.id ? 'Accepting…' : 'Accept'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </>
       )}
     </TabletLayout>

@@ -35,7 +35,20 @@ router.get('/test-async', asyncHandler(async (req: Request, res: Response) => {
   });
 }));
 
+// DEBUG: Test login directly (simplified)
+router.post('/login-test', (req: Request, res: Response) => {
+  res.json({ 
+    success: true, 
+    message: 'Login test endpoint works!',
+    body: req.body,
+    timestamp: new Date().toISOString()
+  });
+});
+
 const REFRESH_TOKEN_TTL_DAYS = Number(process.env.REFRESH_TOKEN_TTL_DAYS ?? 30);
+
+// Log route registration
+logger.info('Auth routes: login-test registered');
 
 function safeUser(row: any) {
   return {
@@ -355,6 +368,14 @@ router.get(
     });
   })
 );
+
+// Log all registered routes for debugging
+logger.info('Auth router routes:', {
+  routes: router.stack.map((r: any) => ({
+    path: r.route?.path,
+    methods: r.route?.methods
+  })).filter((r: any) => r.path)
+});
 
 export default router;
 
