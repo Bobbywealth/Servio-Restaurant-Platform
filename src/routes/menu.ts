@@ -47,7 +47,7 @@ router.get('/public/:slug', asyncHandler(async (req: Request, res: Response) => 
   const { slug } = req.params;
   const db = DatabaseService.getInstance().getDatabase();
 
-  const restaurant = await db.get('SELECT id, name, settings FROM restaurants WHERE slug = ? AND is_active = TRUE', [slug]);
+  const restaurant = await db.get('SELECT id, name, settings, logo_url, cover_image_url, address, phone, description FROM restaurants WHERE slug = ? AND is_active = TRUE', [slug]);
   if (!restaurant) {
     return res.status(404).json({ success: false, error: { message: 'Restaurant not found' } });
   }
@@ -63,7 +63,15 @@ router.get('/public/:slug', asyncHandler(async (req: Request, res: Response) => 
   res.json({
     success: true,
     data: {
-      restaurant: { name: restaurant.name, settings: JSON.parse(restaurant.settings || '{}') },
+      restaurant: { 
+        name: restaurant.name, 
+        settings: JSON.parse(restaurant.settings || '{}'),
+        logo_url: restaurant.logo_url,
+        cover_image_url: restaurant.cover_image_url,
+        address: JSON.parse(restaurant.address || '{}'),
+        phone: restaurant.phone,
+        description: restaurant.description
+      },
       items
     }
   });

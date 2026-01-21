@@ -833,7 +833,7 @@ export default function RestaurantProfile() {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
-                      Cover Image
+                      Header / Hero Image
                     </label>
                     <div
                       {...getCoverProps()}
@@ -843,14 +843,14 @@ export default function RestaurantProfile() {
                       {profile?.cover_image_url ? (
                         <img
                           src={profile.cover_image_url}
-                          alt="Restaurant cover"
+                          alt="Restaurant header"
                           className="w-full h-32 object-cover rounded-lg mb-3"
                         />
                       ) : (
                         <ImageIcon className="h-12 w-12 text-gray-400 mx-auto mb-3" />
                       )}
                       <p className="text-sm text-gray-600 dark:text-gray-400">
-                        Click or drag to upload cover image
+                        Click or drag to upload header image
                       </p>
                     </div>
                   </div>

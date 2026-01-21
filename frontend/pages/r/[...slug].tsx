@@ -28,6 +28,11 @@ interface MenuItem {
 interface RestaurantInfo {
   name: string;
   settings: any;
+  logo_url?: string;
+  cover_image_url?: string;
+  address?: any;
+  phone?: string;
+  description?: string;
 }
 
 interface CartItem extends MenuItem {
@@ -127,13 +132,44 @@ export default function PublicProfile() {
         <title>{restaurant.name} - Online Ordering</title>
       </Head>
 
-      <div className="bg-white shadow-sm border-b">
-        <div className="max-w-4xl mx-auto px-4 py-6">
-          <h1 className="text-3xl font-bold text-gray-900">{restaurant.name}</h1>
-          <div className="flex flex-wrap gap-4 mt-3 text-sm text-gray-500">
-            <span className="flex items-center"><Clock className="w-4 h-4 mr-1" /> Pickup in 20-30 mins</span>
-            <span className="flex items-center"><MapPin className="w-4 h-4 mr-1" /> New York, NY</span>
+      {/* Hero Section with Cover Image */}
+      <div className="relative h-48 md:h-64 bg-gray-200 overflow-hidden">
+        {restaurant.cover_image_url ? (
+          <img 
+            src={restaurant.cover_image_url} 
+            alt={restaurant.name} 
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <div className="w-full h-full bg-gradient-to-r from-blue-600 to-indigo-700 flex items-center justify-center">
+            <h1 className="text-4xl font-bold text-white opacity-20">{restaurant.name}</h1>
           </div>
+        )}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+        <div className="absolute bottom-0 left-0 right-0 p-6 text-white max-w-4xl mx-auto w-full">
+          <div className="flex items-end gap-4">
+            {restaurant.logo_url && (
+              <div className="w-20 h-20 bg-white rounded-2xl p-1 shadow-lg shrink-0">
+                <img src={restaurant.logo_url} alt="Logo" className="w-full h-full object-contain rounded-xl" />
+              </div>
+            )}
+            <div className="mb-2">
+              <h1 className="text-3xl font-bold">{restaurant.name}</h1>
+              <p className="text-white/80 text-sm line-clamp-1 mt-1">{restaurant.description}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-white shadow-sm border-b sticky top-0 z-10">
+        <div className="max-w-4xl mx-auto px-4 py-4 flex flex-wrap gap-4 text-sm text-gray-600">
+          <span className="flex items-center"><Clock className="w-4 h-4 mr-1 text-blue-600" /> Pickup in 20-30 mins</span>
+          {restaurant.address?.city && (
+            <span className="flex items-center"><MapPin className="w-4 h-4 mr-1 text-blue-600" /> {restaurant.address.city}, {restaurant.address.state}</span>
+          )}
+          {restaurant.phone && (
+            <span className="flex items-center"><Phone className="w-4 h-4 mr-1 text-blue-600" /> {restaurant.phone}</span>
+          )}
         </div>
       </div>
 
