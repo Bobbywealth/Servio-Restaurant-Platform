@@ -378,7 +378,7 @@ export class VapiService {
   private async handleGetMenuInfo(parameters: any, userId: string): Promise<any> {
     try {
       const voiceService = VoiceOrderingService.getInstance();
-      const items = voiceService.searchMenu(parameters.itemName || parameters.category || '');
+      const items = await voiceService.searchMenu(parameters.itemName || parameters.category || '');
 
       if (items.length === 0) {
         return {
@@ -389,7 +389,7 @@ export class VapiService {
         };
       }
 
-      const itemList = items.slice(0, 5).map(item => 
+      const itemList = items.slice(0, 5).map((item: any) => 
         `${item.name} for ${item.price} dollars`
       ).join(', ');
 
