@@ -70,7 +70,7 @@
     "socket.io": "^4.7.4",
     "sqlite": "^5.1.1",
     "sqlite3": "^5.1.7",
-    "twilio": "^5.11.2",
+    "twilio": "^5.11.1",
     "typescript": "^5.3.3",
     "uuid": "^9.0.1",
     "winston": "^3.11.0",
