@@ -18,6 +18,7 @@ import {
 
 type Channel = 'email' | 'sms' | 'voice';
 type SendMode = 'now' | 'schedule';
+type Audience = 'all' | 'email' | 'sms' | 'vip' | 'new';
 
 type Customer = {
   id: string;
@@ -56,16 +57,18 @@ function getApiBase() {
   return process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001/api';
 }
 
-function getAuthHeaders() {
-  if (typeof window === 'undefined') return {};
+function makeJsonHeaders(): Headers {
+  const headers = new Headers({ 'Content-Type': 'application/json' });
+  if (typeof window === 'undefined') return headers;
   const token = window.localStorage.getItem('token') || window.localStorage.getItem('authToken');
-  if (!token) return {};
-  return { Authorization: `Bearer ${token}` };
+  if (!token) return headers;
+  headers.set('Authorization', `Bearer ${token}`);
+  return headers;
 }
 
 async function apiGet<T>(path: string): Promise<T> {
   const res = await fetch(`${getApiBase()}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() }
+    headers: makeJsonHeaders()
   });
   if (!res.ok) throw new Error(`GET ${path} failed (${res.status})`);
   return (await res.json()) as T;
@@ -74,7 +77,7 @@ async function apiGet<T>(path: string): Promise<T> {
 async function apiPost<T>(path: string, body: unknown): Promise<T> {
   const res = await fetch(`${getApiBase()}${path}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+    headers: makeJsonHeaders(),
     body: JSON.stringify(body)
   });
   if (!res.ok) {
@@ -177,7 +180,7 @@ export default function MarketingPage() {
   const [topTab, setTopTab] = useState<'new' | 'history' | 'groups' | 'templates' | 'inbox' | 'automation'>('new');
   const [channel, setChannel] = useState<Channel>('email');
   const [sendMode, setSendMode] = useState<SendMode>('now');
-  const [audience, setAudience] = useState<'all' | 'email' | 'sms' | 'vip' | 'new'>('all');
+  const [audience, setAudience] = useState<Audience>('all');
   const [scheduledAt, setScheduledAt] = useState<string>(toLocalDateTimeValue(new Date(Date.now() + 60 * 60 * 1000)));
   const [subject, setSubject] = useState('');
   const [message, setMessage] = useState('');
@@ -199,7 +202,7 @@ export default function MarketingPage() {
         if (!mounted) return;
         setAnalytics(a.data || null);
         setCustomers(Array.isArray(c.data) ? c.data : []);
-      } catch (e) {
+      } catch {
         if (!mounted) return;
         // If auth isn’t set up in the browser yet, keep UI usable with graceful fallback.
         setAnalytics(null);
@@ -339,11 +342,13 @@ export default function MarketingPage() {
 
       setStatus({ tone: 'ok', text: 'Campaign launched (or scheduled) successfully.' });
       setTopTab('history');
-    } catch (e: any) {
+    } catch (e: unknown) {
+      const message =
+        e instanceof Error ? e.message : typeof e === 'string' ? e : '';
       setStatus({
         tone: 'err',
         text:
-          e?.message ||
+          message ||
           'Failed to launch campaign. Check API base URL and authentication.'
       });
     } finally {
@@ -483,7 +488,7 @@ export default function MarketingPage() {
                       </FieldLabel>
                       <select
                         value={audience}
-                        onChange={(e) => setAudience(e.target.value as any)}
+                        onChange={(e) => setAudience(e.target.value as Audience)}
                         className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                       >
                         <option value="all">All Customers (Leads + Clients)</option>
