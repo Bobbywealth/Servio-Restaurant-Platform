@@ -32,13 +32,18 @@ type OrdersResponse = {
 };
 
 function getApiBase() {
-  return process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3002/api';
+  const url = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3002';
+  return url.endsWith('/api') ? url : `${url}/api`;
 }
 
 function makeJsonHeaders(): Headers {
   const headers = new Headers({ 'Content-Type': 'application/json' });
   if (typeof window === 'undefined') return headers;
-  const token = window.localStorage.getItem('token') || window.localStorage.getItem('authToken');
+  // Use same token keys as UserContext
+  const token = 
+    window.localStorage.getItem('servio_access_token') || 
+    window.localStorage.getItem('accessToken') ||
+    window.localStorage.getItem('token');
   if (!token) return headers;
   headers.set('Authorization', `Bearer ${token}`);
   return headers;
@@ -165,6 +170,12 @@ export default function TabletLightPage() {
             className="bg-white/10 hover:bg-white/20 p-3 rounded-full transition-colors"
           >
             <RefreshCcw className={clsx("h-6 w-6", loading && "animate-spin")} />
+          </button>
+          <button 
+            onClick={() => window.location.href = '/tablet/orders'}
+            className="bg-white/10 hover:bg-white/20 px-4 py-2 rounded-lg text-sm font-bold transition-colors"
+          >
+            DARK VIEW
           </button>
         </div>
       </div>

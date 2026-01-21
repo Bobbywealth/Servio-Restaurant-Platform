@@ -212,7 +212,7 @@ export default function OrdersPage() {
             <div className="card border-servio-red-200 dark:border-servio-red-800">
               <div className="status-error">{error}</div>
               <p className="mt-2 text-sm text-surface-600 dark:text-surface-400">
-                Make sure the backend is running at <code className="px-1 py-0.5 bg-surface-100 dark:bg-surface-800 rounded">http://localhost:3002</code>.
+                Please check your internet connection or contact support if the issue persists.
               </p>
             </div>
           )}

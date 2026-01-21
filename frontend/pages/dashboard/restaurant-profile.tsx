@@ -362,6 +362,7 @@ export default function RestaurantProfile() {
   // Profile form state
   const [profileData, setProfileData] = useState({
     name: '',
+    slug: '',
     description: '',
     cuisineType: '',
     priceRange: '',
@@ -412,6 +413,7 @@ export default function RestaurantProfile() {
         setProfile(data.data);
         setProfileData({
           name: data.data.name || '',
+          slug: data.data.slug || '',
           description: data.data.description || '',
           cuisineType: data.data.cuisine_type || '',
           priceRange: data.data.price_range || '',
@@ -713,6 +715,19 @@ export default function RestaurantProfile() {
                       onChange={(e) => setProfileData({ ...profileData, name: e.target.value })}
                       className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                       placeholder="Your Restaurant Name"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Public URL Slug (servio.com/r/slug)
+                    </label>
+                    <input
+                      type="text"
+                      value={profileData.slug}
+                      onChange={(e) => setProfileData({ ...profileData, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-') })}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                      placeholder="restaurant-name"
                     />
                   </div>
 

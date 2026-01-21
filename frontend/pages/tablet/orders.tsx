@@ -33,13 +33,18 @@ type OrdersResponse = {
 };
 
 function getApiBase() {
-  return process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3002/api';
+  const url = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3002';
+  return url.endsWith('/api') ? url : `${url}/api`;
 }
 
 function makeJsonHeaders(): Headers {
   const headers = new Headers({ 'Content-Type': 'application/json' });
   if (typeof window === 'undefined') return headers;
-  const token = window.localStorage.getItem('token') || window.localStorage.getItem('authToken');
+  // Use same token keys as UserContext
+  const token = 
+    window.localStorage.getItem('servio_access_token') || 
+    window.localStorage.getItem('accessToken') ||
+    window.localStorage.getItem('token');
   if (!token) return headers;
   headers.set('Authorization', `Bearer ${token}`);
   return headers;
@@ -274,6 +279,14 @@ export default function TabletOrdersPage() {
               >
                 <RefreshCcw className="h-5 w-5" />
                 Refresh
+              </button>
+
+              <button
+                type="button"
+                onClick={() => window.location.href = '/tablet/light'}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white border border-slate-200 px-4 py-3 text-base font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition-colors"
+              >
+                Light View
               </button>
             </div>
 

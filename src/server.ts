@@ -70,9 +70,20 @@ async function initializeServer() {
     
     // Protected routes
     app.use('/api/assistant', requireAuth, assistantRoutes);
-    app.use('/api/orders', requireAuth, ordersRoutes);
+    // Orders routes: /public/* is public, others require auth
+    app.use('/api/orders', (req, res, next) => {
+      if (req.path.startsWith('/public')) return next();
+      return requireAuth(req, res, next);
+    }, ordersRoutes);
+
     app.use('/api/inventory', requireAuth, inventoryRoutes);
-    app.use('/api/menu', requireAuth, menuRoutes);
+    
+    // Menu routes: /public/* is public, others require auth
+    app.use('/api/menu', (req, res, next) => {
+      if (req.path.startsWith('/public')) return next();
+      return requireAuth(req, res, next);
+    }, menuRoutes);
+
     app.use('/api/tasks', requireAuth, tasksRoutes);
     app.use('/api/sync', requireAuth, syncRoutes);
     app.use('/api/receipts', requireAuth, receiptsRoutes);
