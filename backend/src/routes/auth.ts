@@ -8,6 +8,24 @@ import { logger } from '../utils/logger';
 
 const router = Router();
 
+// DEBUG: Simple test route to verify auth router mounting
+router.get('/test-basic', (req, res) => {
+  res.json({ 
+    success: true, 
+    message: 'Auth router is working!',
+    timestamp: new Date().toISOString()
+  });
+});
+
+router.post('/test-post', (req, res) => {
+  res.json({ 
+    success: true, 
+    message: 'Auth POST endpoint is working!',
+    body: req.body,
+    timestamp: new Date().toISOString()
+  });
+});
+
 const REFRESH_TOKEN_TTL_DAYS = Number(process.env.REFRESH_TOKEN_TTL_DAYS ?? 30);
 
 function safeUser(row: any) {
