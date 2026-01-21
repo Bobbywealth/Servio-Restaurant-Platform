@@ -81,6 +81,14 @@ export default function TabletLayout({
                 <span className="text-sm font-semibold hidden sm:inline">Assistant</span>
               </button>
               <button
+                onClick={() => router.push('/tablet/settings')}
+                className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/15 active:bg-white/20 transition-colors inline-flex items-center gap-2 border border-white/10"
+                title="Settings"
+              >
+                <Settings className="w-4 h-4" />
+                <span className="text-sm font-semibold hidden sm:inline">Settings</span>
+              </button>
+              <button
                 onClick={() => {
                   logout()
                   router.replace('/tablet/login')
