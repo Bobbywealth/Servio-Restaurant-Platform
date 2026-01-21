@@ -76,17 +76,21 @@ const skipRateLimit = (req: Request): boolean => {
   return false;
 };
 
+// Create Redis stores
+const createRedisStore = (prefix: string) => {
+  return new (RedisStore as any)({
+    client: redis,
+    prefix
+  });
+};
+
 // Global rate limiter - 100 requests per 15 minutes
 export const globalRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100,
   standardHeaders: true,
   legacyHeaders: false,
-  store: new RedisStore({
-    // @ts-expect-error - rate-limit-redis types are outdated
-    client: redis,
-    prefix: 'rl:global:'
-  }),
+  store: createRedisStore('rl:global:'),
   keyGenerator: generateKey,
   handler: rateLimitHandler,
   skip: skipRateLimit
@@ -98,11 +102,7 @@ export const authRateLimiter = rateLimit({
   max: 5,
   standardHeaders: true,
   legacyHeaders: false,
-  store: new RedisStore({
-    // @ts-expect-error - rate-limit-redis types are outdated
-    client: redis,
-    prefix: 'rl:auth:'
-  }),
+  store: createRedisStore('rl:auth:'),
   keyGenerator: generateKey,
   handler: rateLimitHandler,
   skip: skipRateLimit
@@ -114,11 +114,7 @@ export const apiRateLimiter = rateLimit({
   max: 60,
   standardHeaders: true,
   legacyHeaders: false,
-  store: new RedisStore({
-    // @ts-expect-error - rate-limit-redis types are outdated
-    client: redis,
-    prefix: 'rl:api:'
-  }),
+  store: createRedisStore('rl:api:'),
   keyGenerator: generateKey,
   handler: rateLimitHandler,
   skip: skipRateLimit
@@ -130,11 +126,7 @@ export const heavyOperationRateLimiter = rateLimit({
   max: 20,
   standardHeaders: true,
   legacyHeaders: false,
-  store: new RedisStore({
-    // @ts-expect-error - rate-limit-redis types are outdated
-    client: redis,
-    prefix: 'rl:heavy:'
-  }),
+  store: createRedisStore('rl:heavy:'),
   keyGenerator: generateKey,
   handler: rateLimitHandler,
   skip: skipRateLimit
@@ -146,11 +138,7 @@ export const uploadRateLimiter = rateLimit({
   max: 10,
   standardHeaders: true,
   legacyHeaders: false,
-  store: new RedisStore({
-    // @ts-expect-error - rate-limit-redis types are outdated
-    client: redis,
-    prefix: 'rl:upload:'
-  }),
+  store: createRedisStore('rl:upload:'),
   keyGenerator: generateKey,
   handler: rateLimitHandler,
   skip: skipRateLimit
@@ -162,11 +150,7 @@ export const webhookRateLimiter = rateLimit({
   max: 100,
   standardHeaders: true,
   legacyHeaders: false,
-  store: new RedisStore({
-    // @ts-expect-error - rate-limit-redis types are outdated
-    client: redis,
-    prefix: 'rl:webhook:'
-  }),
+  store: createRedisStore('rl:webhook:'),
   keyGenerator: (req) => {
     // For webhooks, use IP only (no user context)
     return `rate-limit:webhook:${req.ip || 'unknown'}`;

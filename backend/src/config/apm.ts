@@ -48,7 +48,7 @@ export const initializeSentry = (app: Express): void => {
       profilesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
 
       // Error filtering
-      beforeSend(event, hint) {
+      beforeSend(event: any, hint: any) {
         // Filter out certain errors
         const error = hint.originalException as Error;
         
@@ -75,7 +75,7 @@ export const initializeSentry = (app: Express): void => {
       },
 
       // Breadcrumbs filtering
-      beforeBreadcrumb(breadcrumb, hint) {
+      beforeBreadcrumb(breadcrumb: any, hint: any) {
         // Don't log query strings with sensitive data
         if (breadcrumb.category === 'http' && breadcrumb.data?.url) {
           breadcrumb.data.url = breadcrumb.data.url.split('?')[0];
@@ -157,7 +157,7 @@ export const captureException = (error: Error, context?: Record<string, any>): v
     return;
   }
 
-  Sentry.withScope((scope) => {
+  Sentry.withScope((scope: any) => {
     if (context) {
       Object.keys(context).forEach((key) => {
         scope.setContext(key, context[key]);
@@ -176,7 +176,7 @@ export const captureMessage = (message: string, level: Sentry.SeverityLevel = 'i
     return;
   }
 
-  Sentry.withScope((scope) => {
+  Sentry.withScope((scope: any) => {
     scope.setLevel(level);
     if (context) {
       Object.keys(context).forEach((key) => {
