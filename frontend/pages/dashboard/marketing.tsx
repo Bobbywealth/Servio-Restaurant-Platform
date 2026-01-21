@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import { useUser } from '../../contexts/UserContext';
+import { api } from '../../lib/api';
 import toast from 'react-hot-toast';
 
 interface Customer {
@@ -623,16 +624,20 @@ export default function Marketing() {
   const [showCustomerForm, setShowCustomerForm] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [importingCustomers, setImportingCustomers] = useState(false);
+  const [lastImportSummary, setLastImportSummary] = useState<{
+    fileName: string;
+    totalRows: number;
+    inserted: number;
+    updated: number;
+    skipped: number;
+    errorCount: number;
+  } | null>(null);
 
   const fetchAnalytics = useCallback(async () => {
     try {
-      const response = await fetch('/api/marketing/analytics', {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-      });
-      const data = await response.json();
-      if (data.success) {
-        setAnalytics(data.data);
-      }
+      const resp = await api.get('/api/marketing/analytics');
+      if (resp.data?.success) setAnalytics(resp.data.data);
     } catch (error) {
       console.error('Error fetching analytics:', error);
     }
@@ -640,13 +645,8 @@ export default function Marketing() {
 
   const fetchCustomers = useCallback(async () => {
     try {
-      const response = await fetch('/api/marketing/customers', {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-      });
-      const data = await response.json();
-      if (data.success) {
-        setCustomers(data.data);
-      }
+      const resp = await api.get('/api/marketing/customers');
+      if (resp.data?.success) setCustomers(resp.data.data);
     } catch (error) {
       console.error('Error fetching customers:', error);
     }
@@ -654,13 +654,8 @@ export default function Marketing() {
 
   const fetchCampaigns = useCallback(async () => {
     try {
-      const response = await fetch('/api/marketing/campaigns', {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-      });
-      const data = await response.json();
-      if (data.success) {
-        setCampaigns(data.data);
-      }
+      const resp = await api.get('/api/marketing/campaigns');
+      if (resp.data?.success) setCampaigns(resp.data.data);
     } catch (error) {
       console.error('Error fetching campaigns:', error);
     }
@@ -677,17 +672,9 @@ export default function Marketing() {
 
   const handleSaveCampaign = async (formData: any) => {
     try {
-      const response = await fetch('/api/marketing/campaigns', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify(formData)
-      });
-
-      const data = await response.json();
-      if (data.success) {
+      const resp = await api.post('/api/marketing/campaigns', formData);
+      const data = resp.data;
+      if (data?.success) {
         toast.success('Campaign created successfully');
         setShowCampaignForm(false);
         await fetchCampaigns();
@@ -704,13 +691,9 @@ export default function Marketing() {
     if (!confirm('Are you sure you want to send this campaign?')) return;
 
     try {
-      const response = await fetch(`/api/marketing/campaigns/${campaignId}/send`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-      });
-
-      const data = await response.json();
-      if (data.success) {
+      const resp = await api.post(`/api/marketing/campaigns/${campaignId}/send`);
+      const data = resp.data;
+      if (data?.success) {
         toast.success('Campaign queued for sending');
         await fetchCampaigns();
       } else {
@@ -724,17 +707,9 @@ export default function Marketing() {
 
   const handleSaveCustomer = async (formData: any) => {
     try {
-      const response = await fetch('/api/marketing/customers', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify(formData)
-      });
-
-      const data = await response.json();
-      if (data.success) {
+      const resp = await api.post('/api/marketing/customers', formData);
+      const data = resp.data;
+      if (data?.success) {
         toast.success(editingCustomer ? 'Customer updated' : 'Customer added');
         setShowCustomerForm(false);
         setEditingCustomer(null);
@@ -745,6 +720,70 @@ export default function Marketing() {
     } catch (error) {
       console.error('Error saving customer:', error);
       toast.error('Failed to save customer');
+    }
+  };
+
+  const handleDownloadCustomerTemplate = () => {
+    const csv = [
+      ['name', 'email', 'phone', 'tags', 'opt_in_sms', 'opt_in_email'].join(','),
+      ['Jane Doe', 'jane@example.com', '+15551234567', '"vip,birthday"', 'true', 'true'].join(','),
+      ['John Smith', 'john@example.com', '+15557654321', '"newsletter"', 'false', 'true'].join(',')
+    ].join('\n');
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'servio_customers_template.csv';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImportCustomersFile = async (file: File) => {
+    setImportingCustomers(true);
+    setLastImportSummary(null);
+    const toastId = toast.loading('Importing customers...');
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      const resp = await api.post('/api/marketing/customers/import', form, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      const data = resp.data;
+      if (!data?.success) {
+        toast.error(data?.error?.message || 'Import failed', { id: toastId });
+        return;
+      }
+
+      const summary = data.data;
+      setLastImportSummary({
+        fileName: summary.fileName,
+        totalRows: summary.totalRows,
+        inserted: summary.inserted,
+        updated: summary.updated,
+        skipped: summary.skipped,
+        errorCount: (summary.errors || []).length
+      });
+
+      const errorCount = (summary.errors || []).length;
+      if (errorCount > 0) {
+        console.warn('Customer import errors:', summary.errors);
+        toast.success(
+          `Imported: ${summary.inserted} new, ${summary.updated} updated (${errorCount} row errors)`,
+          { id: toastId }
+        );
+      } else {
+        toast.success(`Imported: ${summary.inserted} new, ${summary.updated} updated`, { id: toastId });
+      }
+
+      await Promise.all([fetchCustomers(), fetchAnalytics()]);
+    } catch (error: any) {
+      console.error('Customer import failed:', error);
+      toast.error(error?.response?.data?.error?.message || 'Import failed', { id: toastId });
+    } finally {
+      setImportingCustomers(false);
     }
   };
 
@@ -929,14 +968,62 @@ export default function Marketing() {
                     />
                   </div>
                 </div>
-                <button
-                  onClick={() => setShowCustomerForm(true)}
-                  className="flex items-center space-x-2 bg-primary-500 text-white px-4 py-2 rounded-lg hover:bg-primary-600 transition-colors"
-                >
-                  <Plus className="h-4 w-4" />
-                  <span>Add Customer</span>
-                </button>
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={handleDownloadCustomerTemplate}
+                    className="flex items-center space-x-2 bg-gray-100 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-200 transition-colors dark:bg-gray-700 dark:text-gray-100 dark:hover:bg-gray-600"
+                  >
+                    <Download className="h-4 w-4" />
+                    <span>Template</span>
+                  </button>
+
+                  <label
+                    className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors cursor-pointer ${
+                      importingCustomers
+                        ? 'bg-gray-200 text-gray-500 dark:bg-gray-700 dark:text-gray-400 cursor-not-allowed'
+                        : 'bg-white border border-gray-300 text-gray-800 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100 dark:hover:bg-gray-700'
+                    }`}
+                  >
+                    <Upload className="h-4 w-4" />
+                    <span>{importingCustomers ? 'Importing...' : 'Upload Customers'}</span>
+                    <input
+                      type="file"
+                      accept=".csv,.xlsx,.xls"
+                      className="hidden"
+                      disabled={importingCustomers}
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        e.target.value = '';
+                        if (f) handleImportCustomersFile(f);
+                      }}
+                    />
+                  </label>
+
+                  <button
+                    onClick={() => setShowCustomerForm(true)}
+                    className="flex items-center space-x-2 bg-primary-500 text-white px-4 py-2 rounded-lg hover:bg-primary-600 transition-colors"
+                  >
+                    <Plus className="h-4 w-4" />
+                    <span>Add Customer</span>
+                  </button>
+                </div>
               </div>
+
+              {lastImportSummary && (
+                <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                        Last import: {lastImportSummary.fileName}
+                      </p>
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                        Rows: {lastImportSummary.totalRows} • New: {lastImportSummary.inserted} • Updated: {lastImportSummary.updated} • Skipped: {lastImportSummary.skipped}
+                        {lastImportSummary.errorCount > 0 ? ` • Errors: ${lastImportSummary.errorCount}` : ''}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {filteredCustomers.map((customer) => (

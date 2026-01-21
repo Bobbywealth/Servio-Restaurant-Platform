@@ -23,19 +23,36 @@ function normalizeToVapiWebhookPayload(body: any): VapiWebhookPayload | null {
   if (body?.message?.type) return body as VapiWebhookPayload;
 
   // Common tool payload shapes (best-effort).
+  // Vapi can post a single toolCall, or an array of toolCalls (sometimes nested under message).
+  const toolCall =
+    body?.toolCall ||
+    (Array.isArray(body?.toolCalls) ? body.toolCalls[0] : undefined) ||
+    body?.message?.toolCall ||
+    (Array.isArray(body?.message?.toolCalls) ? body.message.toolCalls[0] : undefined);
+
   const name =
     body?.message?.functionCall?.name ||
     body?.functionCall?.name ||
+    body?.toolName ||
     body?.name ||
-    body?.toolCall?.function?.name ||
+    toolCall?.function?.name ||
+    toolCall?.name ||
     body?.function?.name;
+
+  const toolArgsRaw =
+    toolCall?.function?.arguments ??
+    toolCall?.arguments ??
+    body?.function?.arguments ??
+    body?.arguments;
+
+  const toolArgsParsed =
+    typeof toolArgsRaw === 'string' ? safeJsonParse(toolArgsRaw) : toolArgsRaw;
 
   const parameters =
     body?.message?.functionCall?.parameters ||
     body?.functionCall?.parameters ||
     body?.parameters ||
-    safeJsonParse(body?.toolCall?.function?.arguments) ||
-    safeJsonParse(body?.function?.arguments) ||
+    toolArgsParsed ||
     // Some tools might post fields directly
     (typeof body?.q === 'string' ? { q: body.q } : undefined) ||
     {};

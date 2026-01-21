@@ -5,8 +5,29 @@ import { logger } from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
 import twilio from 'twilio';
 import nodemailer from 'nodemailer';
+import multer from 'multer';
 
 const router = Router();
+
+// Configure multer for customer list uploads (CSV/XLSX)
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+  fileFilter: (_req, file, cb) => {
+    const name = (file.originalname || '').toLowerCase();
+    const isCsv =
+      file.mimetype === 'text/csv' ||
+      file.mimetype === 'application/csv' ||
+      name.endsWith('.csv');
+    const isExcel =
+      file.mimetype.includes('excel') ||
+      file.mimetype.includes('spreadsheetml') ||
+      name.endsWith('.xlsx') ||
+      name.endsWith('.xls');
+    if (isCsv || isExcel) return cb(null, true);
+    cb(new Error('Only CSV or Excel (.xlsx/.xls) files are allowed'));
+  }
+});
 
 // Initialize Twilio client (use environment variables in production)
 let twilioClient: any = null;
@@ -193,6 +214,248 @@ router.post('/customers', asyncHandler(async (req: Request, res: Response) => {
     { name, email, phone, optInSms, optInEmail }
   );
 }));
+
+/**
+ * POST /api/marketing/customers/import
+ * Bulk import customers from CSV/XLSX.
+ *
+ * Expected columns (case-insensitive):
+ * - name
+ * - email
+ * - phone
+ * - tags (comma-separated or JSON array)
+ * - opt_in_sms / optInSms
+ * - opt_in_email / optInEmail
+ */
+router.post(
+  '/customers/import',
+  upload.single('file'),
+  asyncHandler(async (req: Request, res: Response) => {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'File is required' }
+      });
+    }
+
+    const db = DatabaseService.getInstance().getDatabase();
+    const restaurantId = req.user?.restaurantId;
+
+    const fileName = req.file.originalname || 'upload';
+    const lowerName = fileName.toLowerCase();
+    const fileType =
+      req.file.mimetype.includes('excel') ||
+      req.file.mimetype.includes('spreadsheetml') ||
+      lowerName.endsWith('.xlsx') ||
+      lowerName.endsWith('.xls')
+        ? 'excel'
+        : 'csv';
+
+    let rows: any[] = [];
+
+    if (fileType === 'excel') {
+      const XLSX = require('xlsx');
+      const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+      rows = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+    } else {
+      const csv = require('csv-parser');
+      const { Readable } = require('stream');
+      await new Promise<void>((resolve, reject) => {
+        const data: any[] = [];
+        Readable.from(req.file!.buffer)
+          .pipe(csv())
+          .on('data', (r: any) => data.push(r))
+          .on('end', () => {
+            rows = data;
+            resolve();
+          })
+          .on('error', reject);
+      });
+    }
+
+    const toBool = (v: any): boolean | undefined => {
+      if (v === undefined || v === null) return undefined;
+      const s = String(v).trim().toLowerCase();
+      if (s === '') return undefined;
+      if (['true', '1', 'yes', 'y', 'on', 'opted in', 'opt-in', 'optin'].includes(s)) return true;
+      if (['false', '0', 'no', 'n', 'off', 'opted out', 'opt-out', 'optout'].includes(s)) return false;
+      return undefined;
+    };
+
+    const getAny = (row: any, keys: string[]) => {
+      const normalized: Record<string, any> = {};
+      for (const k of Object.keys(row || {})) {
+        normalized[String(k).trim().toLowerCase()] = (row as any)[k];
+      }
+      for (const key of keys) {
+        const val = normalized[key.toLowerCase()];
+        if (val !== undefined) return val;
+      }
+      return undefined;
+    };
+
+    const parseTags = (v: any): string[] | undefined => {
+      if (v === undefined || v === null) return undefined;
+      const raw = String(v).trim();
+      if (!raw) return undefined;
+      // JSON array support: ["vip","birthday"]
+      if (raw.startsWith('[') && raw.endsWith(']')) {
+        try {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            return parsed.map((t) => String(t).trim()).filter(Boolean);
+          }
+        } catch {
+          // fall through to delimited
+        }
+      }
+      return raw
+        .split(/[;,]/g)
+        .map((t) => t.trim())
+        .filter(Boolean);
+    };
+
+    let inserted = 0;
+    let updated = 0;
+    let skipped = 0;
+    const errors: Array<{ row: number; error: string; data?: any }> = [];
+
+    // Performance: wrap in transaction
+    await db.run('BEGIN');
+    try {
+      for (let i = 0; i < rows.length; i++) {
+        const rawRow = rows[i] || {};
+        try {
+          const name = String(getAny(rawRow, ['name', 'full_name', 'customer_name']) ?? '').trim();
+          const email = String(getAny(rawRow, ['email', 'email_address']) ?? '').trim();
+          const phone = String(getAny(rawRow, ['phone', 'phone_number', 'mobile']) ?? '').trim();
+
+          const optInSms =
+            toBool(getAny(rawRow, ['opt_in_sms', 'optinsms', 'sms_opt_in', 'sms']) as any);
+          const optInEmail =
+            toBool(getAny(rawRow, ['opt_in_email', 'optinemail', 'email_opt_in', 'email_marketing']) as any);
+
+          const tags = parseTags(getAny(rawRow, ['tags', 'tag']) as any);
+
+          if (!name && !email && !phone) {
+            skipped++;
+            continue;
+          }
+
+          let existingCustomer: any = null;
+          if (email) {
+            existingCustomer = await db.get(
+              'SELECT * FROM customers WHERE restaurant_id = ? AND email = ?',
+              [restaurantId, email]
+            );
+          }
+          if (!existingCustomer && phone) {
+            existingCustomer = await db.get(
+              'SELECT * FROM customers WHERE restaurant_id = ? AND phone = ?',
+              [restaurantId, phone]
+            );
+          }
+
+          if (existingCustomer) {
+            const existingTags = (() => {
+              try {
+                return JSON.parse(existingCustomer.tags || '[]');
+              } catch {
+                return [];
+              }
+            })();
+            const mergedTags =
+              tags && Array.isArray(tags)
+                ? Array.from(new Set([...(existingTags || []), ...tags].map((t: any) => String(t).trim()).filter(Boolean)))
+                : undefined;
+
+            await db.run(
+              `
+              UPDATE customers
+              SET
+                name = COALESCE(?, name),
+                email = COALESCE(?, email),
+                phone = COALESCE(?, phone),
+                tags = COALESCE(?, tags),
+                opt_in_sms = COALESCE(?, opt_in_sms),
+                opt_in_email = COALESCE(?, opt_in_email),
+                updated_at = CURRENT_TIMESTAMP
+              WHERE id = ?
+            `,
+              [
+                name || null,
+                email || null,
+                phone || null,
+                mergedTags ? JSON.stringify(mergedTags) : null,
+                optInSms === undefined ? null : optInSms ? true : false,
+                optInEmail === undefined ? null : optInEmail ? true : false,
+                existingCustomer.id
+              ]
+            );
+            updated++;
+          } else {
+            const customerId = uuidv4();
+            await db.run(
+              `
+              INSERT INTO customers (
+                id, restaurant_id, name, email, phone, preferences, tags,
+                opt_in_sms, opt_in_email, total_orders, total_spent
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0)
+            `,
+              [
+                customerId,
+                restaurantId,
+                name || null,
+                email || null,
+                phone || null,
+                JSON.stringify({}),
+                JSON.stringify(tags || []),
+                optInSms ? true : false,
+                optInEmail ? true : false
+              ]
+            );
+            inserted++;
+          }
+        } catch (err: any) {
+          errors.push({
+            row: i + 2, // + header row for typical files
+            error: err?.message || 'Unknown error',
+            data: rawRow
+          });
+        }
+      }
+
+      await db.run('COMMIT');
+    } catch (e) {
+      await db.run('ROLLBACK');
+      throw e;
+    }
+
+    await DatabaseService.getInstance().logAudit(
+      restaurantId!,
+      req.user?.id || 'system',
+      'customer_import',
+      'customer',
+      null,
+      { fileName, fileType, inserted, updated, skipped, errorCount: errors.length }
+    );
+
+    res.json({
+      success: true,
+      data: {
+        fileName,
+        fileType,
+        totalRows: rows.length,
+        inserted,
+        updated,
+        skipped,
+        errors
+      }
+    });
+  })
+);
 
 // ============================================================================
 // CAMPAIGN MANAGEMENT
