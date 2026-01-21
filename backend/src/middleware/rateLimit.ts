@@ -78,8 +78,8 @@ const skipRateLimit = (req: Request): boolean => {
 
 // Create Redis stores
 const createRedisStore = (prefix: string) => {
-  return new (RedisStore as any)({
-    client: redis,
+  return new RedisStore({
+    sendCommand: (...args: string[]) => redis.call(args[0], ...args.slice(1)) as any,
     prefix
   });
 };
