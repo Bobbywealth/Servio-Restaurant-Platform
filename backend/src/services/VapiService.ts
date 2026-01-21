@@ -7,7 +7,7 @@ import { eventBus } from '../events/bus';
 
 export interface VapiWebhookPayload {
   message: {
-    type: 'assistant-request' | 'function-call' | 'hang' | 'speech-update' | 'transcript' | 'end-of-call-report';
+    type: 'assistant-request' | 'function-call' | 'hang' | 'speech-update' | 'conversation-update' | 'transcript' | 'end-of-call-report';
     call?: {
       id: string;
       orgId: string;
@@ -97,6 +97,16 @@ export class VapiService {
           // Log transcript for analytics
           await this.logTranscript(message);
           return { result: 'transcript logged' };
+          
+        case 'conversation-update':
+          // Log conversation updates for monitoring
+          await this.handleConversationUpdate(message);
+          return { result: 'conversation update processed' };
+          
+        case 'speech-update':
+          // Log speech recognition updates
+          await this.handleSpeechUpdate(message);
+          return { result: 'speech update processed' };
           
         default:
           logger.info(`Unhandled webhook type: ${message.type}`);
@@ -340,6 +350,54 @@ export class VapiService {
     logger.info(`Call ${callId} transcript:`, transcript);
     
     // Could store in database for analytics if needed
+  }
+
+  private async handleConversationUpdate(message: any): Promise<void> {
+    const callId = message.call?.id;
+    const customerNumber = message.call?.customer?.number;
+    const restaurantId = message.restaurantId;
+
+    // Log conversation state changes for monitoring
+    logger.debug('📞 Conversation update received', {
+      callId,
+      customerNumber,
+      restaurantId,
+      status: message.call?.status,
+      timestamp: new Date().toISOString()
+    });
+
+    // Store conversation milestones in database for analytics
+    if (message.call?.status) {
+      await DatabaseService.getInstance().logAudit(
+        restaurantId,
+        null,
+        'phone_conversation_update',
+        'call',
+        callId,
+        { 
+          status: message.call.status,
+          customerNumber,
+          timestamp: new Date().toISOString()
+        }
+      );
+    }
+  }
+
+  private async handleSpeechUpdate(message: any): Promise<void> {
+    const callId = message.call?.id;
+    const customerNumber = message.call?.customer?.number;
+    const restaurantId = message.restaurantId;
+
+    // Log speech recognition events for quality monitoring
+    logger.debug('🗣️ Speech update received', {
+      callId,
+      customerNumber,
+      restaurantId,
+      timestamp: new Date().toISOString()
+    });
+
+    // Could store speech quality metrics or interim transcripts if needed
+    // This helps with voice AI optimization and debugging
   }
 
   private getPhoneUserId(phoneNumber?: string): string {
@@ -640,26 +698,45 @@ export class VapiService {
     - Sides: Fried Plantains ($4.50), Rice & Peas ($5.99), Mac and Cheese ($6.50).
     - Beverages: Ting, D&G Kola Champagne, Homemade Ginger Beer, Homemade Sorrel.
 
-    YOUR CALL FLOW:
-    1. Greet the customer warmly (e.g., "Hi! Welcome to Sashey's Kitchen...").
-    2. Get their first name.
-    3. Take the order. If they ask what's good, recommend the Oxtail or Jerk Chicken.
-    4. For any "Dinner", you MUST ask for their side choice:
-       - Rice choice (Rice & Peas OR White Rice)
-       - Cabbage (Yes or No)
-       - Spice level (Mild, Medium, or Spicy)
-    5. Confirm their phone number.
-    6. Get their last name initial.
-    7. Ask if it is for pickup or delivery.
-    8. If pickup, ask for the pickup time.
-    9. Confirm the full order and total.
-    10. Upsell a drink (like Ting or Ginger Beer).
-    11. Close the call.
+    CRITICAL MODIFIER REQUIREMENTS - YOU MUST ASK FOR THESE:
 
-    IMPORTANT PHONE CALL GUIDELINES:
-    - Keep responses concise and conversational.
-    - If the store is closed, do not take orders.
-    - ALWAYS check the live menu using searchMenu if they ask for something not listed above.
+    FOR ALL DINNERS (any item with "Dinner" in the name):
+    - Rice Choice: "Would you like Rice & Peas or White Rice?"
+    - Cabbage: "Would you like cabbage with that?"
+    - Spice Level: "How spicy would you like it - Mild, Medium, or Spicy?"
+
+    FOR WINGS:
+    - Size: "What size wings - Small, Medium, or Large?"
+    - Sauce: "What sauce would you like - Jerk, BBQ, or Plain?"
+
+    FOR ACKEE & SALTFISH:
+    - Callaloo: "Would you like to add callaloo for an extra $3?"
+
+    FOR FISH DINNERS:
+    - Style: "Would you like that Escovitch style or Brown Stewed?"
+
+    YOUR REQUIRED ORDER FLOW:
+    1. Greet warmly: "Hi! Welcome to Sashey's Kitchen. I'm Servio, your AI assistant. What can I get started for you today?"
+    2. Get their first name
+    3. Take their order - use searchMenu if needed
+    4. FOR EVERY ITEM: Ask ALL required modifiers listed above (DO NOT SKIP)
+    5. Quote the order using quoteOrder function
+    6. Confirm with customer: "So that's [full order details] for $[total]. Is that correct?"
+    7. Get phone number: "What's your phone number for the order?"
+    8. Get last initial: "And your last initial?"
+    9. Order type: "Is this for pickup or delivery?"
+    10. If pickup: "What time would you like to pick it up?"
+    11. Place order using createOrder function
+    12. Confirm: "Perfect! Your order number is [number]. Total is $[amount]. We'll have it ready in about 20-25 minutes."
+    13. Upsell: "Would you like to add a drink like Ting or our homemade Ginger Beer?"
+    14. Close: "Thank you for calling Sashey's Kitchen! We'll see you soon."
+
+    CRITICAL RULES:
+    - NEVER skip required modifiers - the kitchen needs these details
+    - ALWAYS use quoteOrder before createOrder to validate
+    - ALWAYS confirm the complete order and price before placing
+    - If validation fails, ask for missing information
+    - Keep responses under 2 sentences for better voice experience
     `;
   }
 }
