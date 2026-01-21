@@ -404,4 +404,103 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
   });
 }));
 
+/**
+ * GET /api/orders/history/stats
+ * Get aggregated statistics for historical orders
+ */
+router.get('/history/stats', asyncHandler(async (req: Request, res: Response) => {
+  const { dateFrom, dateTo } = req.query;
+  const db = DatabaseService.getInstance().getDatabase();
+  const restaurantId = req.user?.restaurantId;
+
+  const stats = await db.get(`
+    SELECT 
+      COUNT(*) as total_orders,
+      SUM(total_amount) as total_revenue,
+      AVG(total_amount) as avg_order_value,
+      COUNT(DISTINCT customer_id) as unique_customers
+    FROM orders
+    WHERE restaurant_id = ?
+      AND created_at >= ?
+      AND created_at <= ?
+  `, [restaurantId, dateFrom, dateTo]);
+
+  res.json({
+    success: true,
+    data: {
+      totalOrders: stats.total_orders || 0,
+      totalRevenue: stats.total_revenue || 0,
+      avgOrderValue: stats.avg_order_value || 0,
+      uniqueCustomers: stats.unique_customers || 0
+    }
+  });
+}));
+
+/**
+ * GET /api/orders/history
+ * Get historical orders with filters and pagination
+ */
+router.get('/history', asyncHandler(async (req: Request, res: Response) => {
+  const { 
+    dateFrom, 
+    dateTo, 
+    status, 
+    channel, 
+    limit = 20, 
+    offset = 0 
+  } = req.query;
+  const db = DatabaseService.getInstance().getDatabase();
+  const restaurantId = req.user?.restaurantId;
+
+  const where: string[] = ['restaurant_id = ?'];
+  const params: any[] = [restaurantId];
+
+  if (dateFrom) {
+    where.push('created_at >= ?');
+    params.push(dateFrom);
+  }
+  if (dateTo) {
+    where.push('created_at <= ?');
+    params.push(dateTo);
+  }
+  if (status && status !== 'all') {
+    where.push('status = ?');
+    params.push(status);
+  }
+  if (channel && channel !== 'all') {
+    where.push('channel = ?');
+    params.push(channel);
+  }
+
+  const orders = await db.all(`
+    SELECT * FROM orders
+    WHERE ${where.join(' AND ')}
+    ORDER BY created_at DESC
+    LIMIT ? OFFSET ?
+  `, [...params, Number(limit), Number(offset)]);
+
+  const total = await db.get(`
+    SELECT COUNT(*) as count FROM orders
+    WHERE ${where.join(' AND ')}
+  `, params);
+
+  const formattedOrders = orders.map((order: any) => ({
+    ...order,
+    items: JSON.parse(order.items || '[]')
+  }));
+
+  res.json({
+    success: true,
+    data: {
+      orders: formattedOrders,
+      pagination: {
+        total: total.count,
+        limit: Number(limit),
+        offset: Number(offset),
+        hasMore: total.count > Number(offset) + orders.length
+      }
+    }
+  });
+}));
+
 export default router;

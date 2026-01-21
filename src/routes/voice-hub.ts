@@ -191,5 +191,126 @@ router.get('/incoming-calls', async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * GET /api/voice-hub/stats
+ * Get aggregated statistics for the voice hub
+ */
+router.get('/stats', async (req: Request, res: Response) => {
+  try {
+    const { dateRange = 'today' } = req.query as Record<string, string>;
+    const restaurantId = (req as any).user?.restaurantId;
+    if (!restaurantId) return res.status(400).json({ success: false, error: 'Restaurant ID required' });
+
+    const db = DatabaseService.getInstance().getDatabase();
+    const { startDate, endDate } = getDateFilter(dateRange as DateRange);
+
+    const stats = await db.get(`
+      SELECT 
+        COUNT(*) as total_calls,
+        SUM(CASE WHEN transcript IS NOT NULL AND transcript != '' THEN 1 ELSE 0 END) as transcribed_calls,
+        COUNT(DISTINCT from_phone) as unique_callers
+      FROM call_logs
+      WHERE restaurant_id = ? 
+        AND created_at >= ? 
+        AND created_at <= ?
+    `, [restaurantId, startDate.toISOString(), endDate.toISOString()]);
+
+    // Also get matched orders count
+    const matchedOrders = await db.get(`
+      SELECT COUNT(*) as count
+      FROM orders
+      WHERE restaurant_id = ? 
+        AND call_id IS NOT NULL
+        AND created_at >= ? 
+        AND created_at <= ?
+    `, [restaurantId, startDate.toISOString(), endDate.toISOString()]);
+
+    res.json({
+      success: true,
+      data: {
+        totalCalls: stats.total_calls || 0,
+        transcribedCalls: stats.transcribed_calls || 0,
+        uniqueCallers: stats.unique_callers || 0,
+        matchedOrders: matchedOrders.count || 0,
+        successRate: stats.total_calls ? Math.round((matchedOrders.count / stats.total_calls) * 100) : 0
+      }
+    });
+  } catch (error) {
+    logger.error('Error fetching voice hub stats:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch voice hub stats' });
+  }
+});
+
+/**
+ * GET /api/voice-hub/calls
+ * Get detailed call logs with filters
+ */
+router.get('/calls', async (req: Request, res: Response) => {
+  try {
+    const {
+      dateRange = 'today',
+      statusFilter = 'all',
+      search = '',
+      page = '1',
+      limit = '50'
+    } = req.query as Record<string, string>;
+
+    const restaurantId = (req as any).user?.restaurantId;
+    if (!restaurantId) return res.status(400).json({ success: false, error: 'Restaurant ID required' });
+
+    const db = DatabaseService.getInstance().getDatabase();
+    const { startDate, endDate } = getDateFilter(dateRange as DateRange);
+
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.min(200, Math.max(1, parseInt(limit, 10) || 50));
+    const offset = (pageNum - 1) * limitNum;
+
+    const where: string[] = ['restaurant_id = ?'];
+    const params: any[] = [restaurantId];
+
+    if (dateRange !== 'all') {
+      where.push('created_at >= ? AND created_at <= ?');
+      params.push(startDate.toISOString(), endDate.toISOString());
+    }
+
+    if (search) {
+      where.push('(from_phone LIKE ? OR transcript LIKE ? OR call_id LIKE ?)');
+      const p = `%${search}%`;
+      params.push(p, p, p);
+    }
+
+    const calls = await db.all(`
+      SELECT * FROM call_logs
+      WHERE ${where.join(' AND ')}
+      ORDER BY created_at DESC
+      LIMIT ? OFFSET ?
+    `, [...params, limitNum, offset]);
+
+    const total = await db.get(`
+      SELECT COUNT(*) as count FROM call_logs
+      WHERE ${where.join(' AND ')}
+    `, params);
+
+    res.json({
+      success: true,
+      data: {
+        calls: calls.map(c => ({
+          ...c,
+          summary: c.summary_json ? JSON.parse(c.summary_json) : {}
+        })),
+        pagination: {
+          total: total.count,
+          page: pageNum,
+          limit: limitNum,
+          hasMore: total.count > offset + calls.length
+        }
+      }
+    });
+  } catch (error) {
+    logger.error('Error fetching voice hub calls:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch voice hub calls' });
+  }
+});
+
 export default router;
 
