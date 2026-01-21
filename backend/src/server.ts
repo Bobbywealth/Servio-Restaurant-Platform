@@ -119,6 +119,10 @@ async function initializeServer() {
     app.use('/health', healthRoutes);
     app.use('/api/health', healthRoutes);
     
+    // Setup routes (temporary, for production initialization)
+    const { default: setupRoutes } = await import('./routes/setup');
+    app.use('/api/setup', setupRoutes);
+    
     // SQL injection prevention (global)
     app.use(preventSQLInjection);
     
