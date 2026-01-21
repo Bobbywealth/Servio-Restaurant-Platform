@@ -36,6 +36,17 @@ const ensureUploadsDir = async (subdir: string = '') => {
   return uploadsPath;
 };
 
+function slugify(input: string) {
+  const base = String(input || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9-]/g, '')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return base || 'restaurant';
+}
+
 // ============================================================================
 // RESTAURANT PROFILE MANAGEMENT
 // ============================================================================
@@ -145,6 +156,7 @@ router.put('/profile', upload.fields([
   { name: 'coverImage', maxCount: 1 }
 ]), asyncHandler(async (req: Request, res: Response) => {
   const {
+    slug,
     name,
     description,
     cuisineType,
@@ -215,6 +227,23 @@ router.put('/profile', upload.fields([
   // Build update query
   const updateFields: string[] = [];
   const updateValues: any[] = [];
+
+  if (slug !== undefined) {
+    const nextSlug = slugify(String(slug)).slice(0, 64);
+    // Enforce uniqueness
+    const existing = await db.get<any>(
+      'SELECT id FROM restaurants WHERE slug = ? AND id <> ? LIMIT 1',
+      [nextSlug, restaurantId]
+    );
+    if (existing?.id) {
+      return res.status(409).json({
+        success: false,
+        error: { message: 'That public slug is already taken. Please choose another.' }
+      });
+    }
+    updateFields.push('slug = ?');
+    updateValues.push(nextSlug);
+  }
 
   if (name !== undefined) {
     updateFields.push('name = ?');

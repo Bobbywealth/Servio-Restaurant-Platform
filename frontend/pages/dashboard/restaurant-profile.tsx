@@ -363,6 +363,7 @@ export default function RestaurantProfile() {
   // Profile form state
   const [profileData, setProfileData] = useState({
     name: '',
+    slug: '',
     description: '',
     cuisineType: '',
     priceRange: '',
@@ -411,6 +412,7 @@ export default function RestaurantProfile() {
         setProfile(data.data);
         setProfileData({
           name: data.data.name || '',
+          slug: data.data.slug || '',
           description: data.data.description || '',
           cuisineType: data.data.cuisine_type || '',
           priceRange: data.data.price_range || '',
@@ -669,6 +671,27 @@ export default function RestaurantProfile() {
                       className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                       placeholder="Your Restaurant Name"
                     />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Public Ordering Slug
+                    </label>
+                    <input
+                      type="text"
+                      value={(profileData as any).slug || ''}
+                      onChange={(e) => setProfileData({ ...(profileData as any), slug: e.target.value } as any)}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 font-mono"
+                      placeholder="e.g., sausage-kitchen"
+                    />
+                    <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                      Customer ordering link:
+                      <span className="ml-2 font-mono text-gray-700 dark:text-gray-200">
+                        {typeof window !== 'undefined' && (profileData as any).slug
+                          ? `${window.location.origin}/r/${(profileData as any).slug}`
+                          : `/r/${(profileData as any).slug || 'your-slug'}`}
+                      </span>
+                    </div>
                   </div>
 
                   <div>

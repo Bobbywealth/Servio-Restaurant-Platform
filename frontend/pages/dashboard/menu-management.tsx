@@ -184,12 +184,12 @@ const MenuManagement: React.FC = () => {
 
   // Load restaurant slug for public ordering link
   useEffect(() => {
-    if (!user?.restaurantId) return;
+    if (!user?.id) return;
     let cancelled = false;
 
     const run = async () => {
       try {
-        const resp = await api.get(`/api/restaurants/${user.restaurantId}`);
+        const resp = await api.get('/api/restaurant/profile');
         const slug = resp.data?.data?.slug as string | undefined;
         if (cancelled) return;
         if (slug) {
@@ -212,7 +212,7 @@ const MenuManagement: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [user?.restaurantId]);
+  }, [user?.id]);
 
   const copyPublicLink = async () => {
     if (!publicOrderUrl) return;

@@ -84,9 +84,9 @@ export default function OrdersPage() {
   }, [orders])
 
   const fetchRestaurantSlug = async () => {
-    if (!user?.restaurantId) return
+    if (!user?.id) return
     try {
-      const response = await api.get(`/api/restaurants/${user.restaurantId}`)
+      const response = await api.get('/api/restaurant/profile')
       const slug = response.data?.data?.slug
       if (slug) {
         setRestaurantSlug(slug)
@@ -130,7 +130,7 @@ export default function OrdersPage() {
 
   useEffect(() => {
     fetchRestaurantSlug()
-  }, [user?.restaurantId])
+  }, [user?.id])
 
   useEffect(() => {
     if (!socket || !user?.restaurantId || !hasPermission('orders:read')) return

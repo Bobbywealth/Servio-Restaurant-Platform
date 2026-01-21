@@ -344,9 +344,8 @@ export default function TabletOrdersPage() {
   }, [debugEnabled, socket])
 
   const fetchRestaurantSlug = React.useCallback(async () => {
-    if (!user?.restaurantId) return
     try {
-      const response = await api.get(`/api/restaurants/${user.restaurantId}`)
+      const response = await api.get('/api/restaurant/profile')
       const slug = response.data?.data?.slug
       if (slug) {
         setRestaurantSlug(slug)
@@ -354,7 +353,7 @@ export default function TabletOrdersPage() {
     } catch (e: any) {
       console.warn('Failed to fetch restaurant slug:', e.message)
     }
-  }, [user?.restaurantId])
+  }, [user?.id])
 
   const fetchOrders = React.useCallback(async () => {
     if (!canReadOrders) return
@@ -748,6 +747,45 @@ export default function TabletOrdersPage() {
     setCreatingTestOrder(true)
     setError(null)
     try {
+      if (!restaurantSlug) {
+        throw new Error('Restaurant slug not set. Set your public ordering slug in Restaurant Profile first.')
+      }
+
+      // Prefer creating a real "website" order using the public endpoint,
+      // so it mirrors actual customer ordering behavior.
+      const menuResp = await api.get(`/api/menu/public/${restaurantSlug}`)
+      const publicItems = (menuResp.data?.data?.items || []) as any[]
+      const pick = publicItems.slice(0, 3)
+
+      if (pick.length > 0) {
+        const payloadItems = pick.map((it, idx) => ({
+          id: String(it.id),
+          name: String(it.name || `Item ${idx + 1}`),
+          quantity: 1,
+          price: Number(it.price || 0)
+        }))
+        const resp = await api.post(`/api/orders/public/${restaurantSlug}`, {
+          items: payloadItems,
+          customerName: 'Test Customer',
+          customerPhone: '(555) 123-4567',
+          paymentOption: 'pay_on_arrival'
+        })
+
+        const createdId =
+          resp?.data?.data?.orderId ||
+          resp?.data?.orderId ||
+          null
+        await fetchOrders()
+        if (createdId) {
+          setSelectedOrderId(String(createdId))
+          setMobileView('details')
+        }
+        setNotice('Test (website) order created')
+        window.setTimeout(() => setNotice(null), 3500)
+        return
+      }
+
+      // Fallback: create an integration order if menu is empty.
       const testOrderData = {
         externalId: `TEST-${Date.now()}`,
         channel: 'test',
