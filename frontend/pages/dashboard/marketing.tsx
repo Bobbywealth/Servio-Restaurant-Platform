@@ -1,674 +1,1032 @@
+import React, { useState, useEffect, useCallback } from 'react';
 import Head from 'next/head';
-import type { ReactNode } from 'react';
-import { useEffect, useMemo, useState } from 'react';
-import clsx from 'clsx';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
-  BadgeCheck,
-  CalendarClock,
-  LayoutGrid,
+  Users,
   Mail,
-  MessageSquareText,
-  PhoneCall,
+  MessageSquare,
   Plus,
-  Rocket,
-  ScrollText,
-  Sparkles,
-  Users
+  Send,
+  Calendar,
+  Target,
+  TrendingUp,
+  Filter,
+  Search,
+  Edit3,
+  Eye,
+  CheckCircle,
+  XCircle,
+  Clock,
+  BarChart3,
+  PieChart,
+  Phone,
+  AtSign,
+  Tag,
+  Download,
+  Upload,
+  Settings
 } from 'lucide-react';
+import DashboardLayout from '../../components/Layout/DashboardLayout';
+import { useUser } from '../../contexts/UserContext';
+import toast from 'react-hot-toast';
 
-type Channel = 'email' | 'sms' | 'voice';
-type SendMode = 'now' | 'schedule';
-type Audience = 'all' | 'email' | 'sms' | 'vip' | 'new';
-
-type Customer = {
+interface Customer {
   id: string;
-  name: string | null;
-  email: string | null;
-  phone: string | null;
+  name: string;
+  email: string;
+  phone: string;
+  preferences: any;
+  tags: string[];
+  total_orders: number;
+  total_spent: number;
+  last_order_date: string;
   opt_in_sms: boolean;
   opt_in_email: boolean;
-  created_at?: string | null;
-  tags?: string[] | null;
-};
+  created_at: string;
+}
 
-type MarketingAnalytics = {
-  customers?: {
-    total_customers?: number;
-    sms_subscribers?: number;
-    email_subscribers?: number;
+interface Campaign {
+  id: string;
+  name: string;
+  type: 'sms' | 'email';
+  status: 'draft' | 'scheduled' | 'sending' | 'sent' | 'failed';
+  message: string;
+  subject?: string;
+  target_criteria: any;
+  scheduled_at: string;
+  sent_at?: string;
+  total_recipients: number;
+  successful_sends: number;
+  failed_sends: number;
+  created_at: string;
+}
+
+interface MarketingAnalytics {
+  timeframe: string;
+  customers: {
+    total_customers: number;
+    sms_subscribers: number;
+    email_subscribers: number;
+    new_customers: number;
   };
+  campaigns: {
+    total_campaigns: number;
+    sent_campaigns: number;
+    recent_campaigns: number;
+  };
+  sends: {
+    total_sends: number;
+    successful_sends: number;
+    failed_sends: number;
+    sms_sent: number;
+    emails_sent: number;
+  };
+  recent_activity: any[];
+}
+
+const StatCard = ({ icon: Icon, title, value, change, changeType, color }: {
+  icon: any;
+  title: string;
+  value: string;
+  change?: string;
+  changeType?: 'increase' | 'decrease';
+  color: string;
+}) => (
+  <motion.div
+    initial={{ opacity: 0, y: 20 }}
+    animate={{ opacity: 1, y: 0 }}
+    className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6"
+  >
+    <div className="flex items-center justify-between">
+      <div>
+        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">{title}</p>
+        <p className="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-1">{value}</p>
+        {change && (
+          <p className={`text-sm mt-1 ${
+            changeType === 'increase' ? 'text-green-600' : 'text-red-600'
+          }`}>
+            {change} from last period
+          </p>
+        )}
+      </div>
+      <div className={`p-3 rounded-lg ${color}`}>
+        <Icon className="h-6 w-6 text-white" />
+      </div>
+    </div>
+  </motion.div>
+);
+
+const CustomerCard = ({ customer, onEdit }: {
+  customer: Customer;
+  onEdit: (customer: Customer) => void;
+}) => (
+  <motion.div
+    initial={{ opacity: 0, y: 20 }}
+    animate={{ opacity: 1, y: 0 }}
+    className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 hover:shadow-lg transition-all"
+  >
+    <div className="flex items-start justify-between">
+      <div className="flex-1">
+        <div className="flex items-center space-x-2">
+          <h3 className="font-medium text-gray-900 dark:text-gray-100">{customer.name}</h3>
+          <div className="flex items-center space-x-1">
+            {customer.opt_in_sms && (
+              <span className="text-xs bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 px-2 py-1 rounded-full">
+                SMS
+              </span>
+            )}
+            {customer.opt_in_email && (
+              <span className="text-xs bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 px-2 py-1 rounded-full">
+                Email
+              </span>
+            )}
+          </div>
+        </div>
+        <div className="mt-2 space-y-1">
+          {customer.email && (
+            <div className="flex items-center text-sm text-gray-600 dark:text-gray-400">
+              <AtSign className="h-3 w-3 mr-1" />
+              {customer.email}
+            </div>
+          )}
+          {customer.phone && (
+            <div className="flex items-center text-sm text-gray-600 dark:text-gray-400">
+              <Phone className="h-3 w-3 mr-1" />
+              {customer.phone}
+            </div>
+          )}
+        </div>
+        <div className="mt-3 flex items-center justify-between text-sm">
+          <span className="text-gray-600 dark:text-gray-400">
+            {customer.total_orders} orders • ${customer.total_spent.toFixed(2)} spent
+          </span>
+          {customer.tags.length > 0 && (
+            <div className="flex items-center space-x-1">
+              <Tag className="h-3 w-3 text-gray-400" />
+              <span className="text-xs text-gray-500">{customer.tags.length} tags</span>
+            </div>
+          )}
+        </div>
+      </div>
+      <button
+        onClick={() => onEdit(customer)}
+        className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
+      >
+        <Edit3 className="h-4 w-4" />
+      </button>
+    </div>
+  </motion.div>
+);
+
+const CampaignCard = ({ campaign, onView, onSend }: {
+  campaign: Campaign;
+  onView: (campaign: Campaign) => void;
+  onSend: (id: string) => void;
+}) => {
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'sent': return 'text-green-600 bg-green-100 dark:bg-green-900 dark:text-green-200';
+      case 'sending': return 'text-blue-600 bg-blue-100 dark:bg-blue-900 dark:text-blue-200';
+      case 'failed': return 'text-red-600 bg-red-100 dark:bg-red-900 dark:text-red-200';
+      case 'scheduled': return 'text-orange-600 bg-orange-100 dark:bg-orange-900 dark:text-orange-200';
+      default: return 'text-gray-600 bg-gray-100 dark:bg-gray-700 dark:text-gray-300';
+    }
+  };
+
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case 'sent': return CheckCircle;
+      case 'sending': return Clock;
+      case 'failed': return XCircle;
+      case 'scheduled': return Calendar;
+      default: return Edit3;
+    }
+  };
+
+  const StatusIcon = getStatusIcon(campaign.status);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 hover:shadow-lg transition-all"
+    >
+      <div className="flex items-start justify-between">
+        <div className="flex-1">
+          <div className="flex items-center space-x-3">
+            <div className={`p-2 rounded-lg ${
+              campaign.type === 'sms' ? 'bg-green-100 dark:bg-green-900' : 'bg-blue-100 dark:bg-blue-900'
+            }`}>
+              {campaign.type === 'sms' ? (
+                <MessageSquare className="h-4 w-4 text-green-600 dark:text-green-400" />
+              ) : (
+                <Mail className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+              )}
+            </div>
+            <div>
+              <h3 className="font-medium text-gray-900 dark:text-gray-100">{campaign.name}</h3>
+              <div className="flex items-center space-x-2 mt-1">
+                <span className={`text-xs px-2 py-1 rounded-full ${getStatusColor(campaign.status)}`}>
+                  {campaign.status.charAt(0).toUpperCase() + campaign.status.slice(1)}
+                </span>
+                <span className="text-sm text-gray-500 dark:text-gray-400">
+                  {campaign.total_recipients} recipients
+                </span>
+              </div>
+            </div>
+          </div>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mt-3 line-clamp-2">
+            {campaign.message}
+          </p>
+          {campaign.status === 'sent' && (
+            <div className="mt-3 flex items-center space-x-4 text-sm">
+              <span className="text-green-600">
+                ✓ {campaign.successful_sends} sent
+              </span>
+              {campaign.failed_sends > 0 && (
+                <span className="text-red-600">
+                  ✗ {campaign.failed_sends} failed
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={() => onView(campaign)}
+            className="p-2 text-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-colors"
+          >
+            <Eye className="h-4 w-4" />
+          </button>
+          {(campaign.status === 'draft' || campaign.status === 'scheduled') && (
+            <button
+              onClick={() => onSend(campaign.id)}
+              className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
+            >
+              <Send className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+      </div>
+    </motion.div>
+  );
 };
 
-function formatCompact(n: number) {
-  return new Intl.NumberFormat(undefined, { notation: 'compact' }).format(n);
-}
-
-function toLocalDateTimeValue(d: Date) {
-  const pad = (v: number) => String(v).padStart(2, '0');
-  const yyyy = d.getFullYear();
-  const mm = pad(d.getMonth() + 1);
-  const dd = pad(d.getDate());
-  const hh = pad(d.getHours());
-  const mi = pad(d.getMinutes());
-  return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
-}
-
-function getApiBase() {
-  return process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001/api';
-}
-
-function makeJsonHeaders(): Headers {
-  const headers = new Headers({ 'Content-Type': 'application/json' });
-  if (typeof window === 'undefined') return headers;
-  const token = window.localStorage.getItem('token') || window.localStorage.getItem('authToken');
-  if (!token) return headers;
-  headers.set('Authorization', `Bearer ${token}`);
-  return headers;
-}
-
-async function apiGet<T>(path: string): Promise<T> {
-  const res = await fetch(`${getApiBase()}${path}`, {
-    headers: makeJsonHeaders()
+const CampaignForm = ({ onSave, onCancel }: {
+  onSave: (data: any) => void;
+  onCancel: () => void;
+}) => {
+  const [formData, setFormData] = useState({
+    name: '',
+    type: 'sms' as 'sms' | 'email',
+    message: '',
+    subject: '',
+    targetCriteria: {},
+    scheduleAt: ''
   });
-  if (!res.ok) throw new Error(`GET ${path} failed (${res.status})`);
-  return (await res.json()) as T;
-}
 
-async function apiPost<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(`${getApiBase()}${path}`, {
-    method: 'POST',
-    headers: makeJsonHeaders(),
-    body: JSON.stringify(body)
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.name.trim() || !formData.message.trim()) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+    if (formData.type === 'email' && !formData.subject.trim()) {
+      toast.error('Email subject is required');
+      return;
+    }
+    onSave(formData);
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.95 }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50"
+    >
+      <div className="bg-white dark:bg-gray-800 rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="p-6">
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-6">
+            Create Marketing Campaign
+          </h2>
+
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Campaign Name *
+              </label>
+              <input
+                type="text"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                placeholder="e.g., Weekend Special Promotion"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Campaign Type *
+              </label>
+              <div className="flex space-x-4">
+                <label className="flex items-center">
+                  <input
+                    type="radio"
+                    value="sms"
+                    checked={formData.type === 'sms'}
+                    onChange={(e) => setFormData({ ...formData, type: e.target.value as 'sms' | 'email' })}
+                    className="mr-2"
+                  />
+                  <MessageSquare className="h-4 w-4 mr-1" />
+                  SMS
+                </label>
+                <label className="flex items-center">
+                  <input
+                    type="radio"
+                    value="email"
+                    checked={formData.type === 'email'}
+                    onChange={(e) => setFormData({ ...formData, type: e.target.value as 'sms' | 'email' })}
+                    className="mr-2"
+                  />
+                  <Mail className="h-4 w-4 mr-1" />
+                  Email
+                </label>
+              </div>
+            </div>
+
+            {formData.type === 'email' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Email Subject *
+                </label>
+                <input
+                  type="text"
+                  value={formData.subject}
+                  onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                  placeholder="e.g., Special Weekend Offer Just for You!"
+                />
+              </div>
+            )}
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Message *
+              </label>
+              <textarea
+                value={formData.message}
+                onChange={(e) => setFormData({ ...formData, message: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                placeholder={
+                  formData.type === 'sms' 
+                    ? 'Keep it short and sweet! (160 characters max)'
+                    : 'Write your email message here...'
+                }
+                rows={formData.type === 'sms' ? 3 : 6}
+              />
+              {formData.type === 'sms' && (
+                <p className={`text-sm mt-1 ${
+                  formData.message.length > 160 ? 'text-red-600' : 'text-gray-500'
+                }`}>
+                  {formData.message.length}/160 characters
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Schedule (Optional)
+              </label>
+              <input
+                type="datetime-local"
+                value={formData.scheduleAt}
+                onChange={(e) => setFormData({ ...formData, scheduleAt: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                min={new Date().toISOString().slice(0, 16)}
+              />
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                Leave empty to send immediately
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end space-x-4 pt-6 border-t border-gray-200 dark:border-gray-700">
+              <button
+                type="button"
+                onClick={onCancel}
+                className="px-6 py-2 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-6 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors flex items-center space-x-2"
+              >
+                <Send className="h-4 w-4" />
+                <span>Create Campaign</span>
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </motion.div>
+  );
+};
+
+const CustomerForm = ({ customer, onSave, onCancel }: {
+  customer?: Customer;
+  onSave: (data: any) => void;
+  onCancel: () => void;
+}) => {
+  const [formData, setFormData] = useState({
+    name: customer?.name || '',
+    email: customer?.email || '',
+    phone: customer?.phone || '',
+    tags: customer?.tags || [],
+    optInSms: customer?.opt_in_sms || false,
+    optInEmail: customer?.opt_in_email || false
   });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`POST ${path} failed (${res.status}): ${text}`);
-  }
-  return (await res.json()) as T;
-}
 
-function Card(props: { className?: string; children: ReactNode }) {
-  return (
-    <div className={clsx('rounded-2xl border border-slate-200 bg-white shadow-soft', props.className)}>
-      {props.children}
-    </div>
-  );
-}
+  const [newTag, setNewTag] = useState('');
 
-function Pill(props: { icon?: ReactNode; children: ReactNode; tone?: 'blue' | 'slate' | 'amber' }) {
-  const tone = props.tone || 'slate';
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.name && !formData.email && !formData.phone) {
+      toast.error('Please provide at least name, email, or phone number');
+      return;
+    }
+    onSave(formData);
+  };
+
+  const addTag = () => {
+    if (newTag.trim() && !formData.tags.includes(newTag.trim())) {
+      setFormData({ ...formData, tags: [...formData.tags, newTag.trim()] });
+      setNewTag('');
+    }
+  };
+
+  const removeTag = (tagToRemove: string) => {
+    setFormData({ ...formData, tags: formData.tags.filter(tag => tag !== tagToRemove) });
+  };
+
   return (
-    <span
-      className={clsx(
-        'inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold',
-        tone === 'blue' && 'bg-blue-50 text-blue-700 ring-1 ring-blue-100',
-        tone === 'slate' && 'bg-slate-100 text-slate-700 ring-1 ring-slate-200',
-        tone === 'amber' && 'bg-amber-50 text-amber-700 ring-1 ring-amber-100'
-      )}
+    <motion.div
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.95 }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50"
     >
-      {props.icon}
-      {props.children}
-    </span>
+      <div className="bg-white dark:bg-gray-800 rounded-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+        <div className="p-6">
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-6">
+            {customer ? 'Edit Customer' : 'Add Customer'}
+          </h2>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Name
+              </label>
+              <input
+                type="text"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                placeholder="Customer name"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Email
+              </label>
+              <input
+                type="email"
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                placeholder="customer@email.com"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Phone
+              </label>
+              <input
+                type="tel"
+                value={formData.phone}
+                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                placeholder="+1 (555) 123-4567"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Tags
+              </label>
+              <div className="flex space-x-2 mb-2">
+                <input
+                  type="text"
+                  value={newTag}
+                  onChange={(e) => setNewTag(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addTag())}
+                  className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                  placeholder="Add a tag"
+                />
+                <button
+                  type="button"
+                  onClick={addTag}
+                  className="px-3 py-2 bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500"
+                >
+                  Add
+                </button>
+              </div>
+              {formData.tags.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {formData.tags.map((tag, index) => (
+                    <span
+                      key={index}
+                      className="bg-primary-100 text-primary-800 dark:bg-primary-900 dark:text-primary-200 px-2 py-1 rounded-full text-sm flex items-center space-x-1"
+                    >
+                      <span>{tag}</span>
+                      <button
+                        type="button"
+                        onClick={() => removeTag(tag)}
+                        className="text-primary-600 hover:text-primary-800 dark:text-primary-400 dark:hover:text-primary-200"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-3">
+              <h4 className="font-medium text-gray-900 dark:text-gray-100">Marketing Preferences</h4>
+              <div className="space-y-2">
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={formData.optInSms}
+                    onChange={(e) => setFormData({ ...formData, optInSms: e.target.checked })}
+                    className="mr-2"
+                  />
+                  <MessageSquare className="h-4 w-4 mr-1" />
+                  Opt-in to SMS marketing
+                </label>
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={formData.optInEmail}
+                    onChange={(e) => setFormData({ ...formData, optInEmail: e.target.checked })}
+                    className="mr-2"
+                  />
+                  <Mail className="h-4 w-4 mr-1" />
+                  Opt-in to Email marketing
+                </label>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end space-x-4 pt-6 border-t border-gray-200 dark:border-gray-700">
+              <button
+                type="button"
+                onClick={onCancel}
+                className="px-6 py-2 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-6 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
+              >
+                {customer ? 'Update' : 'Add'} Customer
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </motion.div>
   );
-}
+};
 
-function Button(props: {
-  children: ReactNode;
-  onClick?: () => void;
-  disabled?: boolean;
-  variant?: 'primary' | 'secondary' | 'ghost';
-  className?: string;
-  type?: 'button' | 'submit';
-}) {
-  const variant = props.variant || 'secondary';
-  return (
-    <button
-      type={props.type || 'button'}
-      disabled={props.disabled}
-      onClick={props.onClick}
-      className={clsx(
-        'inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition',
-        'focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-60 disabled:cursor-not-allowed',
-        variant === 'primary' && 'bg-blue-600 text-white shadow-sm hover:bg-blue-700',
-        variant === 'secondary' && 'bg-white text-slate-900 ring-1 ring-slate-200 hover:bg-slate-50',
-        variant === 'ghost' && 'bg-transparent text-slate-700 hover:bg-slate-100',
-        props.className
-      )}
-    >
-      {props.children}
-    </button>
-  );
-}
-
-function Segmented(props: {
-  value: string;
-  onChange: (v: string) => void;
-  items: { value: string; label: string; icon?: ReactNode; disabled?: boolean }[];
-}) {
-  return (
-    <div className="inline-flex rounded-2xl bg-slate-100 p-1 ring-1 ring-slate-200">
-      {props.items.map((it) => (
-        <button
-          key={it.value}
-          type="button"
-          disabled={it.disabled}
-          onClick={() => props.onChange(it.value)}
-          className={clsx(
-            'inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold transition',
-            it.disabled ? 'cursor-not-allowed opacity-50' : 'hover:bg-white/60',
-            props.value === it.value ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600'
-          )}
-        >
-          {it.icon}
-          {it.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function FieldLabel(props: { children: ReactNode; hint?: string }) {
-  return (
-    <div className="flex items-end justify-between gap-3">
-      <div className="text-xs font-bold tracking-wide text-slate-500 uppercase">{props.children}</div>
-      {props.hint ? <div className="text-xs text-slate-500">{props.hint}</div> : null}
-    </div>
-  );
-}
-
-export default function MarketingPage() {
-  const [topTab, setTopTab] = useState<'new' | 'history' | 'groups' | 'templates' | 'inbox' | 'automation'>('new');
-  const [channel, setChannel] = useState<Channel>('email');
-  const [sendMode, setSendMode] = useState<SendMode>('now');
-  const [audience, setAudience] = useState<Audience>('all');
-  const [scheduledAt, setScheduledAt] = useState<string>(toLocalDateTimeValue(new Date(Date.now() + 60 * 60 * 1000)));
-  const [subject, setSubject] = useState('');
-  const [message, setMessage] = useState('');
-  const [sender, setSender] = useState('business@marketingteam.app');
-  const [status, setStatus] = useState<{ tone: 'ok' | 'warn' | 'err'; text: string } | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  const [customers, setCustomers] = useState<Customer[]>([]);
+export default function Marketing() {
+  const { user } = useUser();
+  const [activeTab, setActiveTab] = useState('overview');
   const [analytics, setAnalytics] = useState<MarketingAnalytics | null>(null);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showCampaignForm, setShowCampaignForm] = useState(false);
+  const [showCustomerForm, setShowCustomerForm] = useState(false);
+  const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
 
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        const [a, c] = await Promise.all([
-          apiGet<{ success: boolean; data: MarketingAnalytics }>('/marketing/analytics?timeframe=30d'),
-          apiGet<{ success: boolean; data: Customer[] }>('/marketing/customers')
-        ]);
-        if (!mounted) return;
-        setAnalytics(a.data || null);
-        setCustomers(Array.isArray(c.data) ? c.data : []);
-      } catch {
-        if (!mounted) return;
-        // If auth isn’t set up in the browser yet, keep UI usable with graceful fallback.
-        setAnalytics(null);
-        setCustomers([]);
+  const fetchAnalytics = useCallback(async () => {
+    try {
+      const response = await fetch('/api/marketing/analytics', {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      const data = await response.json();
+      if (data.success) {
+        setAnalytics(data.data);
       }
-    })();
-    return () => {
-      mounted = false;
-    };
+    } catch (error) {
+      console.error('Error fetching analytics:', error);
+    }
   }, []);
 
-  const reachableCounts = useMemo(() => {
-    const total = customers.length;
-    const emailReach = customers.filter((c) => Boolean(c.opt_in_email && c.email)).length;
-    const smsReach = customers.filter((c) => Boolean(c.opt_in_sms && c.phone)).length;
-    return { total, emailReach, smsReach };
-  }, [customers]);
-
-  const audienceLabel = useMemo(() => {
-    switch (audience) {
-      case 'all':
-        return 'All Customers (Leads + Clients)';
-      case 'email':
-        return 'Email Subscribers';
-      case 'sms':
-        return 'SMS Subscribers';
-      case 'vip':
-        return 'VIP Customers';
-      case 'new':
-        return 'New Customers (30 days)';
-    }
-  }, [audience]);
-
-  const effectiveReach = useMemo(() => {
-    // Primary: use live customer reach if available.
-    if (customers.length) {
-      if (channel === 'email') return reachableCounts.emailReach;
-      if (channel === 'sms') return reachableCounts.smsReach;
-      return 0;
-    }
-    // Fallback: use analytics counts if available.
-    const a = analytics?.customers;
-    if (a) {
-      if (channel === 'email') return Number(a.email_subscribers || 0);
-      if (channel === 'sms') return Number(a.sms_subscribers || 0);
-    }
-    return 0;
-  }, [analytics, channel, customers.length, reachableCounts]);
-
-  const scheduleText = useMemo(() => {
-    if (sendMode === 'now') return 'Now (Instant)';
+  const fetchCustomers = useCallback(async () => {
     try {
-      const d = new Date(scheduledAt);
-      return d.toLocaleString();
-    } catch {
-      return 'Scheduled';
+      const response = await fetch('/api/marketing/customers', {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      const data = await response.json();
+      if (data.success) {
+        setCustomers(data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching customers:', error);
     }
-  }, [sendMode, scheduledAt]);
+  }, []);
 
-  const isEmail = channel === 'email';
-  const isSms = channel === 'sms';
+  const fetchCampaigns = useCallback(async () => {
+    try {
+      const response = await fetch('/api/marketing/campaigns', {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+      const data = await response.json();
+      if (data.success) {
+        setCampaigns(data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching campaigns:', error);
+    }
+  }, []);
 
   useEffect(() => {
-    // Keep sender contextually sensible.
-    if (isSms) setSender(process.env.NEXT_PUBLIC_TWILIO_FROM || '+1 (555) 010-0200');
-    if (isEmail) setSender(process.env.NEXT_PUBLIC_EMAIL_FROM || 'business@marketingteam.app');
-  }, [isEmail, isSms]);
-
-  const finalCheckText = useMemo(() => {
-    const n = effectiveReach;
-    if (channel === 'voice') return 'AI Voice campaigns are coming soon.';
-    if (sendMode === 'now') return `You are about to send a mass ${channel === 'email' ? 'email' : 'SMS'} to ${n} people. This action cannot be reversed once started.`;
-    return `This campaign will be queued to send on your schedule to ${n} people.`;
-  }, [channel, effectiveReach, sendMode]);
-
-  const canLaunch = useMemo(() => {
-    if (channel === 'voice') return false;
-    if (!message.trim()) return false;
-    if (isEmail && !subject.trim()) return false;
-    if (sendMode === 'schedule' && !scheduledAt) return false;
-    return true;
-  }, [channel, isEmail, message, scheduledAt, sendMode, subject]);
-
-  async function onGenerate() {
-    const base = isEmail ? 'Exciting updates from Servio' : 'Quick update from Servio';
-    if (isEmail && !subject.trim()) setSubject(base);
-
-    const snippet =
-      channel === 'email'
-        ? `<p>Hey there — quick note from your favorite spot.</p>
-<p><strong>Today only:</strong> enjoy a limited-time special and skip the line with online ordering.</p>
-<p>See you soon,<br/>Team Servio</p>`
-        : `Today only: limited-time special at Servio. Order online and skip the line. Reply STOP to opt out.`;
-
-    if (!message.trim()) setMessage(snippet);
-    setStatus({ tone: 'ok', text: 'Draft generated. Tweak it to match your vibe.' });
-  }
-
-  function applyQuickTemplate(template: 'welcome') {
-    if (template === 'welcome') {
-      setSubject('Welcome to Servio — here’s a little something');
-      setMessage(
-        `<p>Welcome! We’re glad you’re here.</p>
-<p>As a thank-you, enjoy <strong>10% off</strong> your next order this week.</p>
-<p>Use code: <strong>WELCOME10</strong></p>`
-      );
-      setStatus({ tone: 'ok', text: 'Template applied.' });
-    }
-  }
-
-  async function launchCampaign() {
-    setStatus(null);
-    setLoading(true);
-    try {
-      const now = new Date();
-      const scheduleAtIso =
-        sendMode === 'schedule'
-          ? new Date(scheduledAt).toISOString()
-          : now.toISOString();
-
-      const tags =
-        audience === 'vip' ? ['vip'] : audience === 'new' ? ['new'] : [];
-
-      const nameBase =
-        (isEmail ? subject : message).trim().slice(0, 48) || 'Campaign';
-
-      const payload = {
-        name: nameBase,
-        type: channel === 'sms' ? 'sms' : 'email',
-        message,
-        subject: isEmail ? subject : undefined,
-        targetCriteria: tags.length ? { tags } : {},
-        scheduleAt: scheduleAtIso
-      };
-
-      await apiPost('/marketing/campaigns', payload);
-
-      setStatus({ tone: 'ok', text: 'Campaign launched (or scheduled) successfully.' });
-      setTopTab('history');
-    } catch (e: unknown) {
-      const message =
-        e instanceof Error ? e.message : typeof e === 'string' ? e : '';
-      setStatus({
-        tone: 'err',
-        text:
-          message ||
-          'Failed to launch campaign. Check API base URL and authentication.'
-      });
-    } finally {
+    const loadData = async () => {
+      setLoading(true);
+      await Promise.all([fetchAnalytics(), fetchCustomers(), fetchCampaigns()]);
       setLoading(false);
+    };
+    loadData();
+  }, [fetchAnalytics, fetchCustomers, fetchCampaigns]);
+
+  const handleSaveCampaign = async (formData: any) => {
+    try {
+      const response = await fetch('/api/marketing/campaigns', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify(formData)
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        toast.success('Campaign created successfully');
+        setShowCampaignForm(false);
+        await fetchCampaigns();
+      } else {
+        toast.error(data.error?.message || 'Failed to create campaign');
+      }
+    } catch (error) {
+      console.error('Error creating campaign:', error);
+      toast.error('Failed to create campaign');
     }
+  };
+
+  const handleSendCampaign = async (campaignId: string) => {
+    if (!confirm('Are you sure you want to send this campaign?')) return;
+
+    try {
+      const response = await fetch(`/api/marketing/campaigns/${campaignId}/send`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        toast.success('Campaign queued for sending');
+        await fetchCampaigns();
+      } else {
+        toast.error(data.error?.message || 'Failed to send campaign');
+      }
+    } catch (error) {
+      console.error('Error sending campaign:', error);
+      toast.error('Failed to send campaign');
+    }
+  };
+
+  const handleSaveCustomer = async (formData: any) => {
+    try {
+      const response = await fetch('/api/marketing/customers', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify(formData)
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        toast.success(editingCustomer ? 'Customer updated' : 'Customer added');
+        setShowCustomerForm(false);
+        setEditingCustomer(null);
+        await fetchCustomers();
+      } else {
+        toast.error(data.error?.message || 'Failed to save customer');
+      }
+    } catch (error) {
+      console.error('Error saving customer:', error);
+      toast.error('Failed to save customer');
+    }
+  };
+
+  const filteredCustomers = customers.filter(customer =>
+    customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    customer.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    customer.phone?.includes(searchTerm)
+  );
+
+  const tabs = [
+    { id: 'overview', name: 'Overview', icon: BarChart3 },
+    { id: 'customers', name: 'Customers', icon: Users },
+    { id: 'campaigns', name: 'Campaigns', icon: Send },
+  ];
+
+  if (loading) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center min-h-96">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary-500"></div>
+        </div>
+      </DashboardLayout>
+    );
   }
 
   return (
     <>
       <Head>
-        <title>Marketing Center • Servio</title>
+        <title>Marketing Dashboard - Servio</title>
       </Head>
 
-      <div className="min-h-screen">
-        <div className="bg-white border-b border-slate-200">
-          <div className="mx-auto max-w-7xl px-6 py-6">
-            <div className="relative overflow-hidden rounded-3xl border border-slate-200 bg-gradient-to-br from-white via-white to-blue-50 p-6 shadow-soft">
-              <div className="pointer-events-none absolute inset-0 bg-grid opacity-40" />
-              <div className="relative flex items-start justify-between gap-6">
-                <div>
-                  <div className="inline-flex items-center gap-3">
-                    <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-sm">
-                      <Rocket className="h-5 w-5" />
-                    </span>
-                    <h1 className="text-3xl font-semibold tracking-tight text-slate-900">Marketing Center</h1>
-                  </div>
-                  <p className="mt-2 max-w-2xl text-slate-600">
-                    Broadcast mass communications to your audience — beautifully, safely, and fast.
-                  </p>
-                </div>
-
-                <Card className="w-full max-w-xs">
-                  <div className="p-4 flex items-center justify-between">
-                    <div>
-                      <div className="text-[11px] font-bold tracking-widest text-slate-500 uppercase">Total Reach</div>
-                      <div className="mt-1 text-3xl font-semibold tracking-tight text-slate-900">
-                        {formatCompact(effectiveReach)}
-                      </div>
-                    </div>
-                    <div className="h-10 w-10 rounded-2xl bg-slate-100 text-slate-700 flex items-center justify-center ring-1 ring-slate-200">
-                      <Users className="h-5 w-5" />
-                    </div>
-                  </div>
-                </Card>
-              </div>
-
-              <div className="relative mt-6 flex flex-wrap items-center gap-2">
-                <NavPill
-                  active={topTab === 'new'}
-                  onClick={() => setTopTab('new')}
-                  icon={<Plus className="h-4 w-4" />}
-                  label="New Campaign"
-                />
-                <NavPill
-                  active={topTab === 'history'}
-                  onClick={() => setTopTab('history')}
-                  icon={<ScrollText className="h-4 w-4" />}
-                  label="History & Status"
-                />
-                <NavPill
-                  active={topTab === 'groups'}
-                  onClick={() => setTopTab('groups')}
-                  icon={<Users className="h-4 w-4" />}
-                  label="Groups"
-                />
-                <NavPill
-                  active={topTab === 'templates'}
-                  onClick={() => setTopTab('templates')}
-                  icon={<LayoutGrid className="h-4 w-4" />}
-                  label="Templates"
-                />
-                <NavPill
-                  active={topTab === 'inbox'}
-                  onClick={() => setTopTab('inbox')}
-                  icon={<MessageSquareText className="h-4 w-4" />}
-                  label="SMS Inbox"
-                />
-                <NavPill
-                  active={topTab === 'automation'}
-                  onClick={() => setTopTab('automation')}
-                  icon={<CalendarClock className="h-4 w-4" />}
-                  label="Automated Series"
-                />
-              </div>
+      <DashboardLayout>
+        <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">
+                Marketing Dashboard
+              </h1>
+              <p className="text-gray-600 dark:text-gray-400 mt-1">
+                Manage your customer relationships and marketing campaigns
+              </p>
             </div>
           </div>
-        </div>
 
-        <div className="mx-auto max-w-7xl px-6 py-8">
-          {topTab !== 'new' ? (
-            <Card className="p-6">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <div className="text-sm font-semibold text-slate-900">Coming soon</div>
-                  <div className="mt-1 text-sm text-slate-600">
-                    This section is wired into the navigation, but the full feature UI can be built next.
-                  </div>
-                </div>
-                <Pill tone="blue" icon={<BadgeCheck className="h-4 w-4" />}>
-                  Wired up
-                </Pill>
-              </div>
-            </Card>
-          ) : (
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-              <Card className="lg:col-span-8">
-                <div className="border-b border-slate-200 p-5">
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-3">
-                      <span className="inline-flex h-9 w-9 items-center justify-center rounded-2xl bg-blue-50 text-blue-700 ring-1 ring-blue-100">
-                        <BadgeCheck className="h-5 w-5" />
-                      </span>
-                      <div>
-                        <div className="text-lg font-semibold text-slate-900">Campaign Details</div>
-                        <div className="text-sm text-slate-600">Choose a channel, audience, and message.</div>
-                      </div>
-                    </div>
-
-                    <Segmented
-                      value={channel}
-                      onChange={(v) => setChannel(v as Channel)}
-                      items={[
-                        { value: 'email', label: 'Email', icon: <Mail className="h-4 w-4" /> },
-                        { value: 'sms', label: 'SMS', icon: <MessageSquareText className="h-4 w-4" /> },
-                        // WhatsApp/Telegram intentionally removed per requirements.
-                        { value: 'voice', label: 'AI Voice', icon: <PhoneCall className="h-4 w-4" />, disabled: true }
-                      ]}
-                    />
-                  </div>
-                </div>
-
-                <div className="p-5">
-                  <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-                    <div>
-                      <FieldLabel hint={`${formatCompact(effectiveReach)} reachable`}>
-                        Select Audience
-                      </FieldLabel>
-                      <select
-                        value={audience}
-                        onChange={(e) => setAudience(e.target.value as Audience)}
-                        className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      >
-                        <option value="all">All Customers (Leads + Clients)</option>
-                        <option value="email">Email Subscribers</option>
-                        <option value="sms">SMS Subscribers</option>
-                        <option value="vip">VIP Customers</option>
-                        <option value="new">New Customers (30 days)</option>
-                      </select>
-                      <div className="mt-2 text-xs text-slate-500">
-                        Audience filters can be expanded; current send honors opt-in for the selected channel.
-                      </div>
-                    </div>
-
-                    <div>
-                      <FieldLabel>Sender Account</FieldLabel>
-                      <div className="mt-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-semibold text-slate-700">
-                        {sender}
-                      </div>
-                    </div>
-
-                    <div>
-                      <FieldLabel>Send Mode</FieldLabel>
-                      <select
-                        value={sendMode}
-                        onChange={(e) => setSendMode(e.target.value as SendMode)}
-                        className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      >
-                        <option value="now">Send Now</option>
-                        <option value="schedule">Schedule</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <FieldLabel>Scheduled For</FieldLabel>
-                      <input
-                        type="datetime-local"
-                        disabled={sendMode !== 'schedule'}
-                        value={scheduledAt}
-                        onChange={(e) => setScheduledAt(e.target.value)}
-                        className={clsx(
-                          'mt-2 w-full rounded-xl border px-3 py-2.5 text-sm font-semibold shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500',
-                          sendMode !== 'schedule'
-                            ? 'border-slate-200 bg-slate-50 text-slate-400'
-                            : 'border-slate-200 bg-white text-slate-900'
-                        )}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="mt-6 flex items-center justify-between gap-4">
-                    <div className="space-y-2">
-                      <FieldLabel>Quick Templates</FieldLabel>
-                      <div className="flex flex-wrap gap-2">
-                        <Button onClick={() => applyQuickTemplate('welcome')} variant="secondary" className="px-3 py-2 text-xs rounded-lg">
-                          WELCOME EMAIL
-                        </Button>
-                      </div>
-                    </div>
-                    <Button onClick={onGenerate} variant="secondary">
-                      <Sparkles className="h-4 w-4 text-blue-600" />
-                      Generate with AI
-                    </Button>
-                  </div>
-
-                  {isEmail ? (
-                    <div className="mt-6">
-                      <FieldLabel>Email Subject</FieldLabel>
-                      <input
-                        value={subject}
-                        onChange={(e) => setSubject(e.target.value)}
-                        placeholder="Exciting updates from Servio…"
-                        className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                    </div>
-                  ) : null}
-
-                  <div className="mt-6">
-                    <FieldLabel hint={isSms ? 'Keep it short. Links are ok.' : 'HTML supported.'}>
-                      Message Content
-                    </FieldLabel>
-                    <textarea
-                      value={message}
-                      onChange={(e) => setMessage(e.target.value)}
-                      placeholder={isEmail ? 'Write your premium marketing email here (HTML supported)…' : 'Write your SMS message…'}
-                      rows={10}
-                      className="mt-2 w-full resize-y rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-
-                  {status ? (
-                    <div
-                      className={clsx(
-                        'mt-5 rounded-xl border px-4 py-3 text-sm',
-                        status.tone === 'ok' && 'border-emerald-200 bg-emerald-50 text-emerald-900',
-                        status.tone === 'warn' && 'border-amber-200 bg-amber-50 text-amber-900',
-                        status.tone === 'err' && 'border-rose-200 bg-rose-50 text-rose-900'
-                      )}
-                    >
-                      {status.text}
-                    </div>
-                  ) : null}
-                </div>
-              </Card>
-
-              <Card className="lg:col-span-4 h-fit lg:sticky lg:top-6">
-                <div className="border-b border-slate-200 p-5">
-                  <div className="text-lg font-semibold text-slate-900">Campaign Summary</div>
-                </div>
-
-                <div className="p-5 space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className="text-sm font-semibold text-slate-700">Channel</div>
-                    <Pill tone="blue">
-                      {channel === 'email' ? 'EMAIL' : channel === 'sms' ? 'SMS' : 'AI VOICE'}
-                    </Pill>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div className="text-sm font-semibold text-slate-700">
-                      Recipients
-                      <div className="text-[11px] font-medium text-slate-500">People reachable</div>
-                    </div>
-                    <div className="text-xl font-semibold tracking-tight text-slate-900">{effectiveReach}</div>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div className="text-sm font-semibold text-slate-700">Schedule</div>
-                    <div className="text-sm font-semibold text-slate-900">{scheduleText}</div>
-                  </div>
-
-                  <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
-                    <div className="flex items-start gap-3">
-                      <span className="mt-0.5 inline-flex h-7 w-7 items-center justify-center rounded-xl bg-amber-100 text-amber-800">
-                        <Sparkles className="h-4 w-4" />
-                      </span>
-                      <div>
-                        <div className="text-[11px] font-extrabold tracking-widest text-amber-700 uppercase">Final Check</div>
-                        <div className="mt-1 text-sm text-amber-900">{finalCheckText}</div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <Button
-                    variant="primary"
-                    disabled={!canLaunch || loading}
-                    onClick={launchCampaign}
-                    className="w-full py-3 rounded-2xl text-base"
+          {/* Tab Navigation */}
+          <div className="border-b border-gray-200 dark:border-gray-700">
+            <nav className="flex space-x-8">
+              {tabs.map((tab) => {
+                const Icon = tab.icon;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`flex items-center space-x-2 py-2 px-1 border-b-2 font-medium text-sm transition-colors ${
+                      activeTab === tab.id
+                        ? 'border-primary-500 text-primary-600 dark:text-primary-400'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                    }`}
                   >
-                    <Rocket className="h-5 w-5" />
-                    {loading ? 'Launching…' : 'Launch Campaign'}
-                  </Button>
+                    <Icon className="h-4 w-4" />
+                    <span>{tab.name}</span>
+                  </button>
+                );
+              })}
+            </nav>
+          </div>
 
-                  <div className="text-xs text-slate-500">
-                    Audience selected: <span className="font-semibold text-slate-700">{audienceLabel}</span>
+          {/* Overview Tab */}
+          {activeTab === 'overview' && analytics && (
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <StatCard
+                  icon={Users}
+                  title="Total Customers"
+                  value={analytics.customers.total_customers.toString()}
+                  change={`+${analytics.customers.new_customers}`}
+                  changeType="increase"
+                  color="bg-blue-500"
+                />
+                <StatCard
+                  icon={MessageSquare}
+                  title="SMS Subscribers"
+                  value={analytics.customers.sms_subscribers.toString()}
+                  color="bg-green-500"
+                />
+                <StatCard
+                  icon={Mail}
+                  title="Email Subscribers"
+                  value={analytics.customers.email_subscribers.toString()}
+                  color="bg-purple-500"
+                />
+                <StatCard
+                  icon={Send}
+                  title="Campaigns Sent"
+                  value={analytics.campaigns.sent_campaigns.toString()}
+                  change={`+${analytics.campaigns.recent_campaigns}`}
+                  changeType="increase"
+                  color="bg-orange-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
+                    Recent Activity
+                  </h3>
+                  <div className="space-y-3">
+                    {analytics.recent_activity.length > 0 ? (
+                      analytics.recent_activity.map((activity: any, index: number) => (
+                        <div key={index} className="flex items-center space-x-3 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                          <div className={`p-2 rounded-lg ${
+                            activity.type === 'sms' ? 'bg-green-100 dark:bg-green-900' : 'bg-blue-100 dark:bg-blue-900'
+                          }`}>
+                            {activity.type === 'sms' ? (
+                              <MessageSquare className="h-4 w-4 text-green-600 dark:text-green-400" />
+                            ) : (
+                              <Mail className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                            )}
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                              {activity.type.toUpperCase()} to {activity.recipient}
+                            </p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                              Status: {activity.status}
+                            </p>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-gray-500 dark:text-gray-400">No recent activity</p>
+                    )}
                   </div>
                 </div>
-              </Card>
+
+                <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
+                    Send Statistics
+                  </h3>
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-600 dark:text-gray-400">Total Sends</span>
+                      <span className="font-semibold">{analytics.sends.total_sends}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-green-600">Successful</span>
+                      <span className="font-semibold text-green-600">{analytics.sends.successful_sends}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-red-600">Failed</span>
+                      <span className="font-semibold text-red-600">{analytics.sends.failed_sends}</span>
+                    </div>
+                    <div className="pt-4 border-t border-gray-200 dark:border-gray-600">
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-sm text-gray-600 dark:text-gray-400">SMS Sent</span>
+                        <span className="font-semibold">{analytics.sends.sms_sent}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm text-gray-600 dark:text-gray-400">Emails Sent</span>
+                        <span className="font-semibold">{analytics.sends.emails_sent}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
+
+          {/* Customers Tab */}
+          {activeTab === 'customers' && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-4">
+                  <div className="relative">
+                    <Search className="h-5 w-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="Search customers..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 w-64"
+                    />
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowCustomerForm(true)}
+                  className="flex items-center space-x-2 bg-primary-500 text-white px-4 py-2 rounded-lg hover:bg-primary-600 transition-colors"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span>Add Customer</span>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {filteredCustomers.map((customer) => (
+                  <CustomerCard
+                    key={customer.id}
+                    customer={customer}
+                    onEdit={(customer) => {
+                      setEditingCustomer(customer);
+                      setShowCustomerForm(true);
+                    }}
+                  />
+                ))}
+              </div>
+
+              {filteredCustomers.length === 0 && (
+                <div className="text-center py-12">
+                  <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-500 dark:text-gray-400">
+                    {customers.length === 0 ? 'No customers yet. Add your first customer!' : 'No customers match your search.'}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Campaigns Tab */}
+          {activeTab === 'campaigns' && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+                  Marketing Campaigns
+                </h2>
+                <button
+                  onClick={() => setShowCampaignForm(true)}
+                  className="flex items-center space-x-2 bg-primary-500 text-white px-4 py-2 rounded-lg hover:bg-primary-600 transition-colors"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span>Create Campaign</span>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {campaigns.map((campaign) => (
+                  <CampaignCard
+                    key={campaign.id}
+                    campaign={campaign}
+                    onView={(campaign) => {
+                      // TODO: Implement campaign view modal
+                      console.log('View campaign:', campaign);
+                    }}
+                    onSend={handleSendCampaign}
+                  />
+                ))}
+              </div>
+
+              {campaigns.length === 0 && (
+                <div className="text-center py-12">
+                  <Send className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-500 dark:text-gray-400">
+                    No campaigns yet. Create your first marketing campaign!
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Forms */}
+          <AnimatePresence>
+            {showCampaignForm && (
+              <CampaignForm
+                onSave={handleSaveCampaign}
+                onCancel={() => setShowCampaignForm(false)}
+              />
+            )}
+          </AnimatePresence>
+
+          <AnimatePresence>
+            {showCustomerForm && (
+              <CustomerForm
+                customer={editingCustomer || undefined}
+                onSave={handleSaveCustomer}
+                onCancel={() => {
+                  setShowCustomerForm(false);
+                  setEditingCustomer(null);
+                }}
+              />
+            )}
+          </AnimatePresence>
         </div>
-      </div>
+      </DashboardLayout>
     </>
   );
 }
-
-function NavPill(props: { active: boolean; onClick: () => void; icon: ReactNode; label: string }) {
-  return (
-    <button
-      type="button"
-      onClick={props.onClick}
-      className={clsx(
-        'inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold transition ring-1',
-        props.active
-          ? 'bg-white text-slate-900 ring-slate-200 shadow-sm'
-          : 'bg-white/60 text-slate-700 ring-slate-200 hover:bg-white'
-      )}
-    >
-      {props.icon}
-      {props.label}
-    </button>
-  );
-}
-

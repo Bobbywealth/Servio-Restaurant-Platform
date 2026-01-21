@@ -191,7 +191,6 @@ export default function TabletOrdersPage() {
       refresh();
     }, 12000);
     return () => window.clearInterval(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {

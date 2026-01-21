@@ -1,0 +1,77 @@
+{
+  "name": "Servio Restaurant OS",
+  "short_name": "Servio",
+  "description": "Premium restaurant operating system for voice-first operations.",
+  "start_url": "/login",
+  "display": "standalone",
+  "background_color": "#F9FAFB",
+  "theme_color": "#14B8A6",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "lang": "en",
+  "dir": "ltr",
+  "categories": ["business", "productivity", "food"],
+  "icons": [
+    {
+      "src": "/icons/servio-icon-192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/servio-icon-512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/servio-icon-maskable.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Voice Assistant",
+      "short_name": "Assistant",
+      "description": "Talk to Servio AI assistant",
+      "url": "/dashboard/assistant",
+      "icons": [
+        {
+          "src": "/icons/servio-icon-192.svg",
+          "sizes": "192x192",
+          "type": "image/svg+xml"
+        }
+      ]
+    },
+    {
+      "name": "Orders",
+      "short_name": "Orders",
+      "description": "View and manage orders",
+      "url": "/dashboard/orders",
+      "icons": [
+        {
+          "src": "/icons/servio-icon-192.svg",
+          "sizes": "192x192",
+          "type": "image/svg+xml"
+        }
+      ]
+    },
+    {
+      "name": "Dashboard",
+      "short_name": "Dashboard",
+      "description": "Restaurant dashboard",
+      "url": "/dashboard",
+      "icons": [
+        {
+          "src": "/icons/servio-icon-192.svg",
+          "sizes": "192x192",
+          "type": "image/svg+xml"
+        }
+      ]
+    }
+  ],
+  "related_applications": [],
+  "prefer_related_applications": false
+}
