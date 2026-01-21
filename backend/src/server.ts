@@ -43,6 +43,9 @@ import { containerMiddleware } from './middleware/container';
 const app = express();
 const server = createServer(app);
 
+// Ensure req.ip works correctly behind Render / proxies
+app.set('trust proxy', 1);
+
 // Initialize Sentry APM (must be first)
 initializeSentry(app);
 
