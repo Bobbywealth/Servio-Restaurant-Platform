@@ -25,12 +25,14 @@ export interface VapiWebhookPayload {
       name: string;
       parameters: Record<string, any>;
     };
+    toolCallId?: string; // Added for function tool responses
     endedReason?: 'assistant-error' | 'pipeline-error-openai-llm-failed' | 'db-error' | 'assistant-not-found' | 'license-check-failed' | 'pipeline-error-voice-model-failed' | 'assistant-not-invalid' | 'assistant-request-failed' | 'unknown-error' | 'vonage-disconnected' | 'vonage-failed-to-connect-call' | 'phone-call-provider-bypass-enabled-but-no-call-received' | 'vapid-not-found' | 'assistant-ended-call' | 'customer-ended-call' | 'customer-did-not-answer' | 'customer-did-not-give-microphone-permission' | 'assistant-said-end-call-phrase' | 'customer-was-idle' | 'reached-max-duration' | 'reached-max-function-calls' | 'exceeded-max-duration' | 'cancelled' | 'pipeline-error-exceeded-tokens' | 'sip-gateway-failed-to-connect-call' | 'twilio-failed-to-connect-call' | 'assistant-said-message-with-end-call-enabled' | 'silence-timed-out';
   };
 }
 
 export interface VapiResponse {
   result?: string | Record<string, any>;
+  results?: Array<{ toolCallId: string; result: string | Record<string, any> }>; // For function tool responses
   error?: string;
   forwardToNumber?: string;
 }
@@ -183,6 +185,7 @@ export class VapiService {
     }
 
     const { name, parameters } = message.functionCall;
+    const toolCallId = message.toolCallId; // Capture toolCallId for function tool responses
     const userId = this.getPhoneUserId(message.call?.customer?.number);
     const restaurantId = message.restaurantId;
 
@@ -190,6 +193,7 @@ export class VapiService {
     logger.info('🔧 Vapi function call', {
       tool_name: name,
       parameters: parameters,
+      tool_call_id: toolCallId,
       restaurant_id: restaurantId,
       user_id: userId,
       call_id: message.call?.id
@@ -269,14 +273,22 @@ export class VapiService {
       });
       
       if (result.status === 'error') {
-        return {
-          result: `I'm sorry, ${result.error}. Is there something else I can help you with?`
-        };
+        const errorMsg = `I'm sorry, ${result.error}. Is there something else I can help you with?`;
+        // Return in correct format for function tools
+        if (toolCallId) {
+          return { results: [{ toolCallId, result: errorMsg }] };
+        }
+        return { result: errorMsg };
       }
 
       // Format the result for voice response
       const voiceResponse = this.formatActionResultForVoice(result);
       
+      // Return in correct format for function tools (with toolCallId) vs regular webhooks
+      if (toolCallId) {
+        logger.info('📤 Returning function tool response', { toolCallId, response_length: voiceResponse?.length });
+        return { results: [{ toolCallId, result: voiceResponse }] };
+      }
       return { result: voiceResponse };
 
       
@@ -284,13 +296,16 @@ export class VapiService {
       logger.error('❌ Function call failed', {
         tool_name: name,
         parameters,
+        tool_call_id: toolCallId,
         restaurant_id: restaurantId,
         error: error instanceof Error ? error.message : String(error),
         stack: error instanceof Error ? error.stack : undefined
       });
-      return {
-        result: "I'm sorry, I wasn't able to complete that action. What else can I help you with?"
-      };
+      const errorMsg = "I'm sorry, I wasn't able to complete that action. What else can I help you with?";
+      if (toolCallId) {
+        return { results: [{ toolCallId, result: errorMsg }] };
+      }
+      return { result: errorMsg };
     }
   }
 

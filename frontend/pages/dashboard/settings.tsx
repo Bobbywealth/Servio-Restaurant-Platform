@@ -21,7 +21,8 @@ import {
   UserCog,
   Mail,
   Calendar,
-  Phone
+  Phone,
+  Printer
 } from 'lucide-react'
 
 const DashboardLayout = dynamic(() => import('../../components/Layout/DashboardLayout'), {
@@ -79,10 +80,46 @@ export default function SettingsPage() {
     phoneNumber: ''
   })
 
+  type ReceiptSettings = {
+    paperSize: '80mm' | '58mm'
+    headerTitle: string
+    headerSubtitle: string
+    showLogo: boolean
+    showOrderId: boolean
+    showPlacedAt: boolean
+    showCustomerName: boolean
+    showCustomerPhone: boolean
+    showChannel: boolean
+    footerText: string
+  }
+
+  const [receiptMeta, setReceiptMeta] = useState<any>(null)
+  const [isLoadingReceipt, setIsLoadingReceipt] = useState(false)
+  const [isSavingReceipt, setIsSavingReceipt] = useState(false)
+  const [receiptFormData, setReceiptFormData] = useState<ReceiptSettings>({
+    paperSize: '80mm',
+    headerTitle: '',
+    headerSubtitle: 'Online Order',
+    showLogo: true,
+    showOrderId: true,
+    showPlacedAt: true,
+    showCustomerName: true,
+    showCustomerPhone: true,
+    showChannel: true,
+    footerText: 'Thank you!'
+  })
+
   // Load Vapi settings when phone tab is active
   useEffect(() => {
     if (activeTab === 'phone' && user?.restaurantId) {
       loadVapiSettings()
+    }
+  }, [activeTab, user?.restaurantId])
+
+  // Load receipt settings when printing tab is active
+  useEffect(() => {
+    if (activeTab === 'printing' && user?.restaurantId) {
+      loadReceiptSettings()
     }
   }, [activeTab, user?.restaurantId])
 
@@ -123,6 +160,37 @@ export default function SettingsPage() {
     }
   }
 
+  const loadReceiptSettings = async () => {
+    if (!user?.restaurantId) return
+    setIsLoadingReceipt(true)
+    try {
+      const resp = await api.get(`/api/restaurants/${user.restaurantId}/receipt`)
+      const data = resp.data?.data
+      setReceiptMeta(data?.restaurant || null)
+      if (data?.receipt) {
+        setReceiptFormData((prev) => ({ ...prev, ...data.receipt }))
+      }
+    } catch (err: any) {
+      console.error('Failed to load receipt settings:', err)
+    } finally {
+      setIsLoadingReceipt(false)
+    }
+  }
+
+  const saveReceiptSettings = async () => {
+    if (!user?.restaurantId) return
+    setIsSavingReceipt(true)
+    try {
+      await api.put(`/api/restaurants/${user.restaurantId}/receipt`, receiptFormData)
+      alert('Receipt / printing settings saved successfully!')
+      await loadReceiptSettings()
+    } catch (err: any) {
+      alert(getErrorMessage(err, 'Failed to save receipt settings'))
+    } finally {
+      setIsSavingReceipt(false)
+    }
+  }
+
   const testVapiConnection = async () => {
     if (!user?.restaurantId) return
     
@@ -142,6 +210,7 @@ export default function SettingsPage() {
     { id: 'account', name: 'Account', icon: User },
     { id: 'general', name: 'General', icon: SettingsIcon },
     { id: 'phone', name: 'Phone System', icon: Phone },
+    { id: 'printing', name: 'Receipt / Printing', icon: Printer },
     { id: 'notifications', name: 'Notifications', icon: Bell },
     { id: 'security', name: 'Security', icon: Shield },
     { id: 'display', name: 'Display', icon: Palette },
@@ -625,6 +694,187 @@ export default function SettingsPage() {
                 <li>Configure webhook URL in Vapi: <code className="text-xs bg-surface-200 dark:bg-surface-900 px-2 py-1 rounded">{process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/vapi/webhook</code></li>
                 <li>Enable the phone system and test!</li>
               </ol>
+            </div>
+          </div>
+        )
+      
+      case 'printing':
+        if (isLoadingReceipt) {
+          return <div className="text-center py-8">Loading receipt / printing settings...</div>
+        }
+
+        const previewWidth = receiptFormData.paperSize === '58mm' ? 240 : 320
+        const restaurantName = receiptMeta?.name || 'Restaurant'
+        const logoUrl = receiptMeta?.logoUrl as string | null | undefined
+        const sample = {
+          id: 'order_123',
+          externalId: 'WEB-1001',
+          status: 'received',
+          createdAt: new Date().toISOString(),
+          customerName: 'Jane Doe',
+          customerPhone: '+1 (555) 123-4567',
+          channel: 'website',
+          totalAmount: 29.97,
+          items: [
+            { quantity: 1, name: 'Jerk Chicken Plate', notes: '' },
+            { quantity: 2, name: 'Patties', notes: 'Extra spicy' }
+          ]
+        }
+
+        return (
+          <div className="space-y-6">
+            <div className="bg-surface-50 dark:bg-surface-800 rounded-lg p-4 border border-surface-200 dark:border-surface-700">
+              <h3 className="text-sm font-medium text-surface-900 dark:text-surface-100 mb-1">Receipt / Ticket Layout</h3>
+              <p className="text-xs text-surface-600 dark:text-surface-400">
+                Customize what prints when you tap “Print” on the tablet orders screen.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-surface-900 dark:text-surface-100 mb-2">
+                      Paper Size
+                    </label>
+                    <select
+                      className="input-field"
+                      value={receiptFormData.paperSize}
+                      onChange={(e) => setReceiptFormData({ ...receiptFormData, paperSize: e.target.value as any })}
+                    >
+                      <option value="80mm">80mm (standard)</option>
+                      <option value="58mm">58mm (compact)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-surface-900 dark:text-surface-100 mb-2">
+                      Header Title
+                    </label>
+                    <input
+                      className="input-field"
+                      value={receiptFormData.headerTitle}
+                      onChange={(e) => setReceiptFormData({ ...receiptFormData, headerTitle: e.target.value })}
+                      placeholder={restaurantName}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-surface-900 dark:text-surface-100 mb-2">
+                    Header Subtitle
+                  </label>
+                  <input
+                    className="input-field"
+                    value={receiptFormData.headerSubtitle}
+                    onChange={(e) => setReceiptFormData({ ...receiptFormData, headerSubtitle: e.target.value })}
+                    placeholder="Online Order"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {[
+                    { key: 'showLogo', label: 'Show Logo' },
+                    { key: 'showOrderId', label: 'Show Order ID' },
+                    { key: 'showPlacedAt', label: 'Show Placed Time' },
+                    { key: 'showCustomerName', label: 'Show Customer Name' },
+                    { key: 'showCustomerPhone', label: 'Show Customer Phone' },
+                    { key: 'showChannel', label: 'Show Channel' }
+                  ].map((t) => (
+                    <label key={t.key} className="flex items-center gap-3 py-2">
+                      <input
+                        type="checkbox"
+                        checked={(receiptFormData as any)[t.key]}
+                        onChange={(e) => setReceiptFormData({ ...receiptFormData, [t.key]: e.target.checked } as any)}
+                        className="w-4 h-4"
+                      />
+                      <span className="text-sm text-surface-800 dark:text-surface-200 font-medium">{t.label}</span>
+                    </label>
+                  ))}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-surface-900 dark:text-surface-100 mb-2">
+                    Footer Text
+                  </label>
+                  <input
+                    className="input-field"
+                    value={receiptFormData.footerText}
+                    onChange={(e) => setReceiptFormData({ ...receiptFormData, footerText: e.target.value })}
+                    placeholder="Thank you!"
+                  />
+                </div>
+
+                <div className="pt-2">
+                  <motion.button
+                    onClick={saveReceiptSettings}
+                    disabled={isSavingReceipt}
+                    className="btn-primary inline-flex items-center space-x-2"
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                  >
+                    {isSavingReceipt ? (
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <Save className="w-4 h-4" />
+                    )}
+                    <span>{isSavingReceipt ? 'Saving...' : 'Save Receipt Settings'}</span>
+                  </motion.button>
+                </div>
+              </div>
+
+              <div>
+                <div className="text-sm font-semibold text-surface-900 dark:text-surface-100 mb-3">Live Preview</div>
+                <div className="bg-surface-50 dark:bg-surface-900 border border-surface-200 dark:border-surface-700 rounded-xl p-4 overflow-auto">
+                  <div
+                    className="bg-white text-black rounded-lg shadow-sm mx-auto"
+                    style={{ width: previewWidth, padding: 10, fontFamily: 'ui-sans-serif, system-ui' }}
+                  >
+                    <div style={{ borderBottom: '1px dashed #111', paddingBottom: 8, marginBottom: 8 }}>
+                      {receiptFormData.showLogo && logoUrl ? (
+                        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 6 }}>
+                          <img src={logoUrl} alt="Logo" style={{ maxHeight: 48, maxWidth: '100%', objectFit: 'contain' }} />
+                        </div>
+                      ) : null}
+                      <div style={{ fontSize: 16, fontWeight: 800, textAlign: 'center' }}>
+                        {(receiptFormData.headerTitle || restaurantName) as any}
+                      </div>
+                      {receiptFormData.headerSubtitle ? (
+                        <div style={{ fontSize: 12, textAlign: 'center', marginTop: 2 }}>{receiptFormData.headerSubtitle}</div>
+                      ) : null}
+                      <div style={{ fontSize: 12, marginTop: 6 }}>
+                        {receiptFormData.showOrderId ? <div>Order: {sample.externalId}</div> : null}
+                        <div>Status: {sample.status}</div>
+                        {receiptFormData.showPlacedAt ? <div>Placed: {new Date(sample.createdAt).toLocaleString()}</div> : null}
+                        {receiptFormData.showCustomerName ? <div>Customer: {sample.customerName}</div> : null}
+                        {receiptFormData.showCustomerPhone ? <div>Phone: {sample.customerPhone}</div> : null}
+                        {receiptFormData.showChannel ? <div>Channel: {sample.channel}</div> : null}
+                      </div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                        Items
+                      </div>
+                      <div style={{ marginTop: 6 }}>
+                        {sample.items.map((it: any, idx: number) => (
+                          <div key={idx} style={{ display: 'flex', gap: 10, margin: '8px 0' }}>
+                            <div style={{ width: 36, fontWeight: 800 }}>{it.quantity}x</div>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontWeight: 700 }}>{it.name}</div>
+                              {it.notes ? <div style={{ fontSize: 12, color: '#333' }}>{it.notes}</div> : null}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div style={{ borderTop: '1px dashed #111', marginTop: 10, paddingTop: 8, fontSize: 12 }}>
+                      Total: <strong>${Number(sample.totalAmount).toFixed(2)}</strong>
+                      {receiptFormData.footerText ? (
+                        <div style={{ marginTop: 6, textAlign: 'center' }}>{receiptFormData.footerText}</div>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         )

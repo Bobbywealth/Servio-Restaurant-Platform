@@ -15,12 +15,45 @@ function safeJsonParse(value: unknown): any | undefined {
 }
 
 /**
- * Vapi can hit this endpoint in two ways:
+ * Vapi can hit this endpoint in several ways:
  * 1) Standard webhook event payloads: { message: { type, call?, functionCall? ... } }
- * 2) "Tool" apiRequest payloads (shape varies). In that case, we normalize into (1).
+ * 2) Function tool payloads: { message: { type: "tool-calls", toolCallList: [...] } }
+ * 3) "Tool" apiRequest payloads (shape varies). In that case, we normalize into (1).
  */
 function normalizeToVapiWebhookPayload(body: any): VapiWebhookPayload | null {
-  if (body?.message?.type) return body as VapiWebhookPayload;
+  // Handle standard webhooks that already have a message.type
+  // BUT intercept "tool-calls" type which needs special handling
+  if (body?.message?.type === 'tool-calls' && Array.isArray(body?.message?.toolCallList)) {
+    // This is Vapi's "function" tool format - extract the first tool call
+    const toolCall = body.message.toolCallList[0];
+    if (toolCall?.function?.name) {
+      const argsRaw = toolCall.function.arguments;
+      const args = typeof argsRaw === 'string' ? safeJsonParse(argsRaw) : argsRaw;
+      
+      logger.info('🔧 Normalized tool-calls payload', {
+        tool_name: toolCall.function.name,
+        tool_id: toolCall.id,
+        args
+      });
+      
+      return {
+        message: {
+          type: 'function-call',
+          call: body.message.call,
+          functionCall: {
+            name: toolCall.function.name,
+            parameters: args || {}
+          },
+          toolCallId: toolCall.id
+        }
+      };
+    }
+  }
+  
+  // Standard webhook payload - pass through
+  if (body?.message?.type && body.message.type !== 'tool-calls') {
+    return body as VapiWebhookPayload;
+  }
 
   // Common tool payload shapes (best-effort).
   // Vapi can post a single toolCall, or an array of toolCalls (sometimes nested under message).
@@ -28,7 +61,9 @@ function normalizeToVapiWebhookPayload(body: any): VapiWebhookPayload | null {
     body?.toolCall ||
     (Array.isArray(body?.toolCalls) ? body.toolCalls[0] : undefined) ||
     body?.message?.toolCall ||
-    (Array.isArray(body?.message?.toolCalls) ? body.message.toolCalls[0] : undefined);
+    (Array.isArray(body?.message?.toolCalls) ? body.message.toolCalls[0] : undefined) ||
+    (Array.isArray(body?.message?.toolCallList) ? body.message.toolCallList[0] : undefined) ||
+    (Array.isArray(body?.toolCallList) ? body.toolCallList[0] : undefined);
 
   const name =
     body?.message?.functionCall?.name ||
@@ -79,7 +114,8 @@ function normalizeToVapiWebhookPayload(body: any): VapiWebhookPayload | null {
     message: {
       type: 'function-call',
       call,
-      functionCall: { name, parameters }
+      functionCall: { name, parameters },
+      toolCallId: toolCall?.id
     }
   };
 }

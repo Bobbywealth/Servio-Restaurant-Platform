@@ -137,6 +137,67 @@ router.post(
   })
 );
 
+/**
+ * POST /api/auth/pin-login
+ * Tablet-friendly login via restaurant slug + user PIN.
+ *
+ * Notes:
+ * - Pins are not globally unique, so restaurantSlug is required.
+ * - Uses the same session + token flow as email/password login.
+ */
+router.post(
+  '/pin-login',
+  asyncHandler(async (req: Request, res: Response) => {
+    const { restaurantSlug, pin } = req.body ?? {};
+    if (!restaurantSlug || !pin) {
+      throw new UnauthorizedError('restaurantSlug and pin are required');
+    }
+
+    const db = DatabaseService.getInstance().getDatabase();
+    const slug = String(restaurantSlug).trim().toLowerCase();
+    const normalizedPin = String(pin).trim();
+
+    const restaurant = await db.get<any>('SELECT id FROM restaurants WHERE LOWER(slug) = ? AND is_active = TRUE', [slug]);
+    if (!restaurant?.id) {
+      throw new UnauthorizedError('Invalid restaurant or PIN');
+    }
+
+    const user = await db.get<any>(
+      'SELECT * FROM users WHERE restaurant_id = ? AND pin = ? AND is_active = TRUE',
+      [restaurant.id, normalizedPin]
+    );
+
+    if (!user) {
+      throw new UnauthorizedError('Invalid restaurant or PIN');
+    }
+
+    const sessionId = uuidv4();
+    const refreshToken = uuidv4();
+    const refreshTokenHash = await bcrypt.hash(refreshToken, 10);
+    const expiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000).toISOString();
+
+    await db.run(
+      'INSERT INTO auth_sessions (id, user_id, refresh_token_hash, expires_at) VALUES (?, ?, ?, ?)',
+      [sessionId, user.id, refreshTokenHash, expiresAt]
+    );
+
+    const accessToken = issueAccessToken({
+      sub: user.id,
+      restaurantId: user.restaurant_id,
+      sid: sessionId
+    });
+
+    res.json({
+      success: true,
+      data: {
+        user: safeUser(user),
+        accessToken,
+        refreshToken
+      }
+    });
+  })
+);
+
 router.post(
   '/refresh',
   asyncHandler(async (req: Request, res: Response) => {

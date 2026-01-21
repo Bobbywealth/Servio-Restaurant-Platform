@@ -126,10 +126,10 @@ export class OrderService {
     await db.run(
       `
         INSERT INTO orders (
-          id, restaurant_id, channel, status, total_amount, payment_status, created_at, updated_at
-        ) VALUES (?, ?, 'website', 'NEW', ?, 'unpaid', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          id, restaurant_id, channel, status, total_amount, payment_status, customer_name, customer_phone, source, created_at, updated_at
+        ) VALUES (?, ?, 'website', 'received', ?, 'unpaid', ?, ?, 'website', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       `,
-      [orderId, restaurantId, totalAmount]
+      [orderId, restaurantId, totalAmount, params.customerName || null, params.customerPhone || null]
     );
 
     for (const item of items) {
@@ -160,7 +160,7 @@ export class OrderService {
     // Invalidate order lists for this restaurant
     await this.cache.invalidate(CacheKeyBuilder.orderPatterns(restaurantId).join('|'));
 
-    return { orderId, restaurantId, totalAmount, status: 'NEW' };
+    return { orderId, restaurantId, totalAmount, status: 'received' };
   }
 
   async createIntegrationOrder(params: {

@@ -22,7 +22,14 @@ interface Order {
   customer_name?: string
   customer_phone?: string
   total_amount?: number
+  // Older integrations may store items JSON on orders.items, while website orders live in order_items.
   items?: OrderItem[]
+  orderItems?: Array<{
+    name?: string | null
+    quantity?: number | null
+    unitPrice?: number | null
+    notes?: string | null
+  }>
   created_at?: string
   updated_at?: string
 }
@@ -272,7 +279,11 @@ export default function OrdersPage() {
                         {o.channel || '—'}
                       </td>
                       <td className="py-3 px-2 text-surface-700 dark:text-surface-300">
-                        {Array.isArray(o.items) ? o.items.length : 0}
+                        {Array.isArray(o.orderItems)
+                          ? o.orderItems.length
+                          : Array.isArray(o.items)
+                            ? o.items.length
+                            : 0}
                       </td>
                       <td className="py-3 px-2 text-surface-700 dark:text-surface-300">
                         {typeof o.total_amount === 'number' ? `$${o.total_amount.toFixed(2)}` : '—'}
