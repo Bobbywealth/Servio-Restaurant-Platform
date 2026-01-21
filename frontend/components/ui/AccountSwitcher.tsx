@@ -10,7 +10,8 @@ import {
   Settings,
   CheckCircle,
   Loader2,
-  AlertCircle
+  AlertCircle,
+  LogOut
 } from 'lucide-react'
 
 interface AccountSwitcherProps {
