@@ -134,22 +134,6 @@ export default function LoginPage() {
       >
         <div className="bg-gray-800/95 rounded-2xl shadow-[0_25px_60px_-35px_rgba(0,0,0,0.8)] border border-gray-700 p-8 md:p-10 backdrop-blur">
           <div className="flex flex-col items-center mb-10">
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ duration: 0.5, delay: 0.2 }}
-              className="mb-8"
-            >
-              <div className="relative group">
-                <div className="absolute -inset-4 bg-gradient-to-r from-teal-500/20 to-orange-500/20 rounded-full blur-2xl group-hover:opacity-100 opacity-60 transition-opacity duration-500" />
-                <img 
-                  src="/images/servio_logo_transparent_tight.png" 
-                  alt="Servio Logo" 
-                  className="h-16 w-auto relative z-10 brightness-0 invert" 
-                />
-              </div>
-            </motion.div>
-            
             <h1 className="text-3xl font-extrabold tracking-tight text-white">
               Welcome back
             </h1>
