@@ -23,6 +23,14 @@ out/
 **/.next/
 **/out/
 
+# Backend build output
+dist/
+**/dist/
+
+# Playwright output
+frontend/playwright-report/
+frontend/test-results/
+
 # Local-only folders accidentally generated/copied
 backend/
 print-agent/
