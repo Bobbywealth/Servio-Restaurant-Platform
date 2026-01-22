@@ -8,6 +8,7 @@ import { PrintReceipt } from '../../components/PrintReceipt';
 import type { ReceiptPaperWidth, ReceiptOrder, ReceiptRestaurant } from '../../utils/receiptGenerator';
 import { generateReceiptHtml } from '../../utils/receiptGenerator';
 import { api } from '../../lib/api';
+import { generateEscPosReceipt, printViaRawBT, type ReceiptData } from '../../utils/escpos';
 
 type OrderItem = {
   id?: string;
@@ -124,7 +125,7 @@ export default function TabletOrdersPage() {
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
   const [autoPrintEnabled, setAutoPrintEnabled] = useState<boolean>(false);
   const [paperWidth, setPaperWidth] = useState<ReceiptPaperWidth>('80mm');
-  const [printMode, setPrintMode] = useState<'bluetooth' | 'system' | 'bridge'>('system');
+  const [printMode, setPrintMode] = useState<'bluetooth' | 'system' | 'bridge' | 'rawbt'>('system');
   const [lastPrintResult, setLastPrintResult] = useState<{ status: 'success' | 'error'; message?: string } | null>(null);
   const [autoPrintPendingId, setAutoPrintPendingId] = useState<string | null>(null);
   const lastAutoPromptedId = useRef<string | null>(null);
@@ -158,7 +159,7 @@ export default function TabletOrdersPage() {
     setPaperWidth(paper);
 
     const storedMode = typeof window !== 'undefined' ? window.localStorage.getItem('servio_print_mode') : null;
-    if (storedMode === 'bluetooth' || storedMode === 'bridge' || storedMode === 'system') {
+    if (storedMode === 'bluetooth' || storedMode === 'bridge' || storedMode === 'system' || storedMode === 'rawbt') {
       setPrintMode(storedMode);
     }
 
@@ -212,15 +213,7 @@ export default function TabletOrdersPage() {
   async function printOrder(orderId: string, opts?: { markAsPrinted?: boolean }) {
     setPrintingOrderId(orderId);
     try {
-      if (printMode !== 'system') {
-        const message = printMode === 'bluetooth'
-          ? 'Bluetooth mode is not available for this device'
-          : 'Print Bridge mode is not configured';
-        setLastPrintResult({ status: 'error', message });
-        window.localStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'error', message }));
-        return;
-      }
-
+      // Fetch order details
       const full = await apiGet<{ success: boolean; data?: any }>(`/api/orders/${encodeURIComponent(orderId)}`);
       const order = (full?.data || full) as ReceiptOrder;
 
@@ -231,29 +224,90 @@ export default function TabletOrdersPage() {
         restaurant = restaurantProfile;
       }
 
-      const html = generateReceiptHtml({
-        restaurant: restaurant || null,
-        order: order as ReceiptOrder,
-        paperWidth
-      });
+      if (printMode === 'rawbt') {
+        // RawBT auto-print mode - no dialogs!
+        const items = (order.items || []).map((it: any) => ({
+          name: it.name || 'Item',
+          quantity: it.quantity || 1,
+          price: it.unit_price || it.price || 0,
+          modifiers: it.modifiers || []
+        }));
 
-      setReceiptHtml(html);
+        const orderAny = order as any;
+        const receiptData: ReceiptData = {
+          restaurantName: restaurant?.name || undefined,
+          restaurantPhone: restaurant?.phone || undefined,
+          restaurantAddress: restaurant?.address || undefined,
+          orderId: order.id,
+          orderNumber: orderAny.external_id?.slice(-4).toUpperCase() || order.id.slice(-4).toUpperCase(),
+          customerName: order.customer_name || undefined,
+          customerPhone: orderAny.customer_phone || undefined,
+          orderType: orderAny.order_type || undefined,
+          items,
+          subtotal: orderAny.subtotal || undefined,
+          tax: orderAny.tax || undefined,
+          total: order.total_amount || 0,
+          pickupTime: orderAny.pickup_time || undefined,
+          createdAt: order.created_at || undefined,
+          specialInstructions: orderAny.special_instructions || undefined
+        };
 
-      // Wait for receipt DOM to render before invoking print
-      await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+        const escPosData = generateEscPosReceipt(receiptData, paperWidth);
+        const success = printViaRawBT(escPosData);
 
-      window.print();
-
-      if (opts?.markAsPrinted !== false) {
-        setPrintedOrders((prev) => {
-          const next = new Set(prev);
-          next.add(orderId);
-          printedOrdersRef.current = next;
-          return next;
-        });
+        if (success) {
+          if (opts?.markAsPrinted !== false) {
+            setPrintedOrders((prev) => {
+              const next = new Set(prev);
+              next.add(orderId);
+              printedOrdersRef.current = next;
+              return next;
+            });
+          }
+          setLastPrintResult({ status: 'success' });
+          window.localStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'success' }));
+        } else {
+          setLastPrintResult({ status: 'error', message: 'RawBT not available. Is the app installed?' });
+          window.localStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'error', message: 'RawBT not available' }));
+        }
+        return;
       }
-      setLastPrintResult({ status: 'success' });
-      window.localStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'success' }));
+
+      if (printMode === 'system') {
+        // System print mode - uses Android print dialog
+        const html = generateReceiptHtml({
+          restaurant: restaurant || null,
+          order: order as ReceiptOrder,
+          paperWidth
+        });
+
+        setReceiptHtml(html);
+
+        // Wait for receipt DOM to render before invoking print
+        await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+
+        window.print();
+
+        if (opts?.markAsPrinted !== false) {
+          setPrintedOrders((prev) => {
+            const next = new Set(prev);
+            next.add(orderId);
+            printedOrdersRef.current = next;
+            return next;
+          });
+        }
+        setLastPrintResult({ status: 'success' });
+        window.localStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'success' }));
+        return;
+      }
+
+      // Bluetooth or Bridge mode - not fully implemented
+      const message = printMode === 'bluetooth'
+        ? 'WebBluetooth mode requires BLE printer. Try RawBT or System Print instead.'
+        : 'Print Bridge mode is not configured';
+      setLastPrintResult({ status: 'error', message });
+      window.localStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'error', message }));
+
     } catch (e) {
       console.error('Print failed', e);
       const message = e instanceof Error ? e.message : 'Print failed';

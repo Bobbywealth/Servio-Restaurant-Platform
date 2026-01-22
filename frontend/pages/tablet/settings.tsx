@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState, useRef } from 'react';
 import { useRouter } from 'next/router';
 import { ArrowLeft, Bluetooth, CheckCircle2, Printer, Settings2, XCircle, Loader2 } from 'lucide-react';
 
-type PrintMode = 'bluetooth' | 'system' | 'bridge';
+type PrintMode = 'bluetooth' | 'system' | 'bridge' | 'rawbt';
 type PrintResult = { status: 'success' | 'error'; message?: string } | null;
 type BluetoothConnectionStatus = 'connected' | 'connecting' | 'disconnected' | 'error';
 
@@ -32,7 +32,7 @@ export default function TabletSettings() {
     setAutoPrintEnabled(storedAuto === 'true');
 
     const storedMode = window.localStorage.getItem('servio_print_mode');
-    if (storedMode === 'bluetooth' || storedMode === 'system' || storedMode === 'bridge') {
+    if (storedMode === 'bluetooth' || storedMode === 'system' || storedMode === 'bridge' || storedMode === 'rawbt') {
       setPrintMode(storedMode);
     }
 
@@ -202,19 +202,48 @@ export default function TabletSettings() {
         <section className="bg-white rounded-2xl shadow-lg p-6 space-y-4">
           <h2 className="text-lg font-black">Print Mode</h2>
           <div className="grid gap-3">
-            <label className="flex items-center gap-3">
-              <input type="radio" checked={printMode === 'bluetooth'} onChange={() => savePrintMode('bluetooth')} />
-              <span className="font-bold">Bluetooth ESC/POS (Rongta)</span>
+            <label className="flex items-center gap-3 p-3 rounded-xl border-2 border-transparent hover:bg-slate-50 cursor-pointer has-[:checked]:border-blue-500 has-[:checked]:bg-blue-50">
+              <input type="radio" checked={printMode === 'rawbt'} onChange={() => savePrintMode('rawbt')} className="w-5 h-5" />
+              <div>
+                <span className="font-bold block">RawBT Auto-Print (Recommended)</span>
+                <span className="text-sm text-slate-500">Prints directly to Bluetooth printer - no dialogs!</span>
+              </div>
             </label>
-            <label className="flex items-center gap-3">
-              <input type="radio" checked={printMode === 'system'} onChange={() => savePrintMode('system')} />
-              <span className="font-bold">System Print dialog</span>
+            <label className="flex items-center gap-3 p-3 rounded-xl border-2 border-transparent hover:bg-slate-50 cursor-pointer has-[:checked]:border-blue-500 has-[:checked]:bg-blue-50">
+              <input type="radio" checked={printMode === 'system'} onChange={() => savePrintMode('system')} className="w-5 h-5" />
+              <div>
+                <span className="font-bold block">System Print Dialog</span>
+                <span className="text-sm text-slate-500">Uses Android print dialog - requires selecting printer each time</span>
+              </div>
             </label>
-            <label className="flex items-center gap-3">
-              <input type="radio" checked={printMode === 'bridge'} onChange={() => savePrintMode('bridge')} />
-              <span className="font-bold">Print Bridge (LAN/USB)</span>
+            <label className="flex items-center gap-3 p-3 rounded-xl border-2 border-transparent hover:bg-slate-50 cursor-pointer has-[:checked]:border-blue-500 has-[:checked]:bg-blue-50">
+              <input type="radio" checked={printMode === 'bluetooth'} onChange={() => savePrintMode('bluetooth')} className="w-5 h-5" />
+              <div>
+                <span className="font-bold block">WebBluetooth ESC/POS</span>
+                <span className="text-sm text-slate-500">For BLE printers only (most thermal printers won't work)</span>
+              </div>
+            </label>
+            <label className="flex items-center gap-3 p-3 rounded-xl border-2 border-transparent hover:bg-slate-50 cursor-pointer has-[:checked]:border-blue-500 has-[:checked]:bg-blue-50">
+              <input type="radio" checked={printMode === 'bridge'} onChange={() => savePrintMode('bridge')} className="w-5 h-5" />
+              <div>
+                <span className="font-bold block">Print Bridge (LAN/USB)</span>
+                <span className="text-sm text-slate-500">For network or USB connected printers via bridge service</span>
+              </div>
             </label>
           </div>
+          {printMode === 'rawbt' && (
+            <div className="text-sm text-blue-700 bg-blue-50 border border-blue-200 p-3 rounded-xl">
+              <strong>Requires RawBT app:</strong> Install "RawBT Printer" from the Play Store, then select your Bluetooth printer in RawBT's settings.
+              <a 
+                href="https://play.google.com/store/apps/details?id=ru.a402d.rawbtprinter" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="block mt-2 text-blue-600 underline"
+              >
+                Download RawBT from Play Store →
+              </a>
+            </div>
+          )}
           {printMode === 'bluetooth' && bluetoothHelp ? (
             <div className="text-sm text-amber-600 bg-amber-50 border border-amber-200 p-3 rounded-xl">
               {bluetoothHelp}
@@ -310,7 +339,9 @@ export default function TabletSettings() {
                       : 'No printer paired')
                   : printMode === 'system' 
                     ? 'Uses system print dialog'
-                    : 'Uses Print Bridge service'}
+                    : printMode === 'rawbt'
+                      ? 'Auto-prints via RawBT app'
+                      : 'Uses Print Bridge service'}
               </div>
             </div>
             {printMode === 'bluetooth' && (
