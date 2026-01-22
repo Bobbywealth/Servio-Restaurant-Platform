@@ -364,9 +364,7 @@ export default function RestaurantProfile() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const token =
-      localStorage.getItem('servio_access_token') ||
-      localStorage.getItem('accessToken');
+    const token = localStorage.getItem('servio_access_token');
     if (!token) {
       router.replace('/login');
     }
@@ -484,9 +482,7 @@ export default function RestaurantProfile() {
   useEffect(() => {
     const loadData = async () => {
       if (typeof window !== 'undefined') {
-        const token =
-          localStorage.getItem('servio_access_token') ||
-          localStorage.getItem('accessToken');
+        const token = localStorage.getItem('servio_access_token');
         if (!token) {
           setLoading(false);
           return;

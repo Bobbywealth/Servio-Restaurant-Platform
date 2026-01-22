@@ -1,11 +1,13 @@
 import Head from 'next/head';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter } from 'next/router';
 import clsx from 'clsx';
 import { CheckCircle2, RefreshCcw, ArrowRight, ChevronDown, User, Printer, Settings2 } from 'lucide-react';
 import { useSocket } from '../../lib/socket';
 import { PrintReceipt } from '../../components/PrintReceipt';
 import type { ReceiptPaperWidth, ReceiptOrder, ReceiptRestaurant } from '../../utils/receiptGenerator';
 import { generateReceiptHtml } from '../../utils/receiptGenerator';
+import { api } from '../../lib/api';
 
 type OrderItem = {
   id?: string;
@@ -40,41 +42,14 @@ type OrdersResponse = {
   error?: { message?: string };
 };
 
-function getApiBase() {
-  const url = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3002';
-  return url.endsWith('/api') ? url : `${url}/api`;
-}
-
-function makeJsonHeaders(): Headers {
-  const headers = new Headers({ 'Content-Type': 'application/json' });
-  if (typeof window === 'undefined') return headers;
-  // Use same token keys as UserContext
-  const token = 
-    window.localStorage.getItem('servio_access_token') || 
-    window.localStorage.getItem('accessToken') ||
-    window.localStorage.getItem('token');
-  if (!token) return headers;
-  headers.set('Authorization', `Bearer ${token}`);
-  return headers;
-}
-
 async function apiGet<T>(path: string): Promise<T> {
-  const res = await fetch(`${getApiBase()}${path}`, { headers: makeJsonHeaders() });
-  if (!res.ok) throw new Error(`GET ${path} failed (${res.status})`);
-  return (await res.json()) as T;
+  const res = await api.get(path);
+  return res.data as T;
 }
 
 async function apiPost<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(`${getApiBase()}${path}`, {
-    method: 'POST',
-    headers: makeJsonHeaders(),
-    body: JSON.stringify(body)
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`POST ${path} failed (${res.status}): ${text}`);
-  }
-  return (await res.json()) as T;
+  const res = await api.post(path, body);
+  return res.data as T;
 }
 
 function shortId(id: string) {
@@ -134,6 +109,7 @@ function beep() {
 
 
 export default function TabletOrdersPage() {
+  const router = useRouter();
   const socket = useSocket();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
@@ -152,6 +128,15 @@ export default function TabletOrdersPage() {
   const lastRefreshAt = useRef<number>(0);
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const token = window.localStorage.getItem('servio_access_token');
+    if (!token) {
+      setLoading(false);
+      router.replace('/login');
+    }
+  }, [router]);
+
+  useEffect(() => {
     // Init print settings from env + localStorage
     const envAuto = (process.env.NEXT_PUBLIC_AUTO_PRINT_ENABLED || '').toLowerCase();
     const defaultAuto = envAuto === '' ? true : envAuto === 'true' || envAuto === '1' || envAuto === 'yes';
@@ -168,7 +153,11 @@ export default function TabletOrdersPage() {
 
   async function refresh() {
     try {
-      const json = await apiGet<OrdersResponse>('/orders?limit=50&offset=0');
+      if (typeof window !== 'undefined' && !window.localStorage.getItem('servio_access_token')) {
+        setLoading(false);
+        return;
+      }
+      const json = await apiGet<OrdersResponse>('/api/orders?limit=50&offset=0');
       const list = Array.isArray(json?.data?.orders) ? json.data!.orders! : [];
       setOrders(list);
       lastRefreshAt.current = Date.now();
@@ -181,7 +170,10 @@ export default function TabletOrdersPage() {
 
   async function fetchRestaurantProfile() {
     try {
-      const json = await apiGet<{ success: boolean; data?: any }>('/restaurant/profile');
+      if (typeof window !== 'undefined' && !window.localStorage.getItem('servio_access_token')) {
+        return;
+      }
+      const json = await apiGet<{ success: boolean; data?: any }>('/api/restaurant/profile');
       if (json?.success && json.data) {
         setRestaurantProfile({
           name: json.data.name,
@@ -199,7 +191,7 @@ export default function TabletOrdersPage() {
   async function printOrder(orderId: string, opts?: { markAsPrinted?: boolean }) {
     setPrintingOrderId(orderId);
     try {
-      const full = await apiGet<{ success: boolean; data?: any }>(`/orders/${encodeURIComponent(orderId)}`);
+      const full = await apiGet<{ success: boolean; data?: any }>(`/api/orders/${encodeURIComponent(orderId)}`);
       const order = (full?.data || full) as ReceiptOrder;
 
       // Ensure we have restaurant info
@@ -243,7 +235,7 @@ export default function TabletOrdersPage() {
     setBusyId(orderId);
     setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, status: nextStatus } : o)));
     try {
-      await apiPost(`/orders/${encodeURIComponent(orderId)}/status`, { status: nextStatus });
+      await apiPost(`/api/orders/${encodeURIComponent(orderId)}/status`, { status: nextStatus });
       if (socket) {
         socket.emit('order:status_changed', { orderId, status: nextStatus, timestamp: new Date() });
       }

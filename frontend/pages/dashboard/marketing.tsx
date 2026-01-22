@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Head from 'next/head';
+import { useRouter } from 'next/router';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Users,
@@ -29,6 +30,7 @@ import {
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import { useUser } from '../../contexts/UserContext';
 import toast from 'react-hot-toast';
+import { api } from '../../lib/api';
 
 interface Customer {
   id: string;
@@ -614,6 +616,7 @@ const CustomerForm = ({ customer, onSave, onCancel }: {
 
 export default function Marketing() {
   const { user } = useUser();
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState('overview');
   const [analytics, setAnalytics] = useState<MarketingAnalytics | null>(null);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -624,12 +627,18 @@ export default function Marketing() {
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const token = localStorage.getItem('servio_access_token');
+    if (!token) {
+      router.replace('/login');
+    }
+  }, [router]);
+
   const fetchAnalytics = useCallback(async () => {
     try {
-      const response = await fetch('/api/marketing/analytics', {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-      });
-      const data = await response.json();
+      const response = await api.get('/api/marketing/analytics');
+      const data = response.data;
       if (data.success) {
         setAnalytics(data.data);
       }
@@ -640,10 +649,8 @@ export default function Marketing() {
 
   const fetchCustomers = useCallback(async () => {
     try {
-      const response = await fetch('/api/marketing/customers', {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-      });
-      const data = await response.json();
+      const response = await api.get('/api/marketing/customers');
+      const data = response.data;
       if (data.success) {
         setCustomers(data.data);
       }
@@ -654,10 +661,8 @@ export default function Marketing() {
 
   const fetchCampaigns = useCallback(async () => {
     try {
-      const response = await fetch('/api/marketing/campaigns', {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-      });
-      const data = await response.json();
+      const response = await api.get('/api/marketing/campaigns');
+      const data = response.data;
       if (data.success) {
         setCampaigns(data.data);
       }
@@ -668,6 +673,13 @@ export default function Marketing() {
 
   useEffect(() => {
     const loadData = async () => {
+      if (typeof window !== 'undefined') {
+        const token = localStorage.getItem('servio_access_token');
+        if (!token) {
+          setLoading(false);
+          return;
+        }
+      }
       setLoading(true);
       await Promise.all([fetchAnalytics(), fetchCustomers(), fetchCampaigns()]);
       setLoading(false);
@@ -677,16 +689,8 @@ export default function Marketing() {
 
   const handleSaveCampaign = async (formData: any) => {
     try {
-      const response = await fetch('/api/marketing/campaigns', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify(formData)
-      });
-
-      const data = await response.json();
+      const response = await api.post('/api/marketing/campaigns', formData);
+      const data = response.data;
       if (data.success) {
         toast.success('Campaign created successfully');
         setShowCampaignForm(false);
@@ -704,12 +708,8 @@ export default function Marketing() {
     if (!confirm('Are you sure you want to send this campaign?')) return;
 
     try {
-      const response = await fetch(`/api/marketing/campaigns/${campaignId}/send`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-      });
-
-      const data = await response.json();
+      const response = await api.post(`/api/marketing/campaigns/${campaignId}/send`);
+      const data = response.data;
       if (data.success) {
         toast.success('Campaign queued for sending');
         await fetchCampaigns();
@@ -724,16 +724,8 @@ export default function Marketing() {
 
   const handleSaveCustomer = async (formData: any) => {
     try {
-      const response = await fetch('/api/marketing/customers', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify(formData)
-      });
-
-      const data = await response.json();
+      const response = await api.post('/api/marketing/customers', formData);
+      const data = response.data;
       if (data.success) {
         toast.success(editingCustomer ? 'Customer updated' : 'Customer added');
         setShowCustomerForm(false);
