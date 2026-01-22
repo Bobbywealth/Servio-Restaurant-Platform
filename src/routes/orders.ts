@@ -343,7 +343,7 @@ router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) =>
     await db.run(`
       INSERT INTO orders (
         id, restaurant_id, channel, status, total_amount, payment_status, created_at, updated_at
-      ) VALUES (?, ?, 'website', 'NEW', ?, 'unpaid', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      ) VALUES (?, ?, 'website', 'received', ?, 'unpaid', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     `, [orderId, restaurantId, totalAmount]);
 
     // Create order items
@@ -401,7 +401,7 @@ router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) =>
 
   return res.status(201).json({
     success: true,
-    data: { orderId, status: 'NEW' }
+    data: { orderId, status: 'received' }
   });
 }));
 router.get('/waiting-times', asyncHandler(async (req: Request, res: Response) => {
