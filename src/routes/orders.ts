@@ -327,20 +327,19 @@ router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) =>
     return res.status(400).json({ success: false, error: { message: 'Items are required' } });
   }
 
-  try {
-    const orderId = uuidv4();
-
-    // Calculate total and validate items (simplified for v1 fast build)
-    let totalAmount = 0;
-    for (const item of parsedItems) {
-      const price = Number(item?.price ?? 0);
-      const quantity = Number(item?.quantity ?? 0);
-      if (!Number.isFinite(price) || !Number.isFinite(quantity) || quantity <= 0) {
-        return res.status(400).json({ success: false, error: { message: 'Invalid items' } });
-      }
-      totalAmount += price * quantity;
+  const orderId = uuidv4();
+  // Calculate total and validate items (simplified for v1 fast build)
+  let totalAmount = 0;
+  for (const item of parsedItems) {
+    const price = Number(item?.price ?? 0);
+    const quantity = Number(item?.quantity ?? 0);
+    if (!Number.isFinite(price) || !Number.isFinite(quantity) || quantity <= 0) {
+      return res.status(400).json({ success: false, error: { message: 'Invalid items' } });
     }
+    totalAmount += price * quantity;
+  }
 
+  try {
     await db.run(`
       INSERT INTO orders (
         id, restaurant_id, channel, status, total_amount, payment_status, created_at, updated_at
@@ -355,6 +354,20 @@ router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) =>
       `, [uuidv4(), orderId, item.id, item.name, item.quantity, item.price]);
     }
 
+  } catch (error) {
+    logger.error(
+      `[orders.public] db_error ${JSON.stringify({
+        requestId,
+        slug,
+        restaurantId,
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      })}`
+    );
+    return res.status(500).json({ success: false, error: { message: 'Failed to create order' } });
+  }
+
+  try {
     // Notify dashboard via Socket.IO
     const io = req.app.get('socketio');
     if (io) {
@@ -375,22 +388,21 @@ router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) =>
     });
 
     await DatabaseService.getInstance().logAudit(restaurantId, null, 'create_public_order', 'order', orderId, { totalAmount });
-
-    return res.status(201).json({
-      success: true,
-      data: { orderId, status: 'NEW' }
-    });
   } catch (error) {
-    logger.error(
-      `[orders.public] error ${JSON.stringify({
+    logger.warn(
+      `[orders.public] post_create_warning ${JSON.stringify({
         requestId,
         slug,
         restaurantId,
         message: error instanceof Error ? error.message : String(error)
       })}`
     );
-    return res.status(500).json({ success: false, error: { message: 'Failed to create order' } });
   }
+
+  return res.status(201).json({
+    success: true,
+    data: { orderId, status: 'NEW' }
+  });
 }));
 router.get('/waiting-times', asyncHandler(async (req: Request, res: Response) => {
   const db = DatabaseService.getInstance().getDatabase();
