@@ -108,13 +108,14 @@ router.post('/process-text', asyncHandler(async (req: Request, res: Response) =>
  * GET /api/assistant/status
  * Get assistant service status and configuration
  */
-router.get('/status', asyncHandler(async (req: Request, res: Response) => {
+  router.get('/status', asyncHandler(async (req: Request, res: Response) => {
+  const hasOpenAI = !!process.env.OPENAI_API_KEY;
   const status = {
     service: 'online',
     features: {
-      speechToText: process.env.OPENAI_API_KEY ? 'available' : 'unavailable',
-      textToSpeech: process.env.OPENAI_API_KEY || process.env.ELEVENLABS_API_KEY ? 'available' : 'unavailable',
-      llm: process.env.OPENAI_API_KEY ? 'available' : 'unavailable'
+      speechToText: hasOpenAI ? 'available' : 'unavailable',
+      textToSpeech: hasOpenAI || process.env.ELEVENLABS_API_KEY ? 'available' : 'unavailable',
+      llm: hasOpenAI ? 'available' : 'unavailable'
     },
     capabilities: [
       'Order management',

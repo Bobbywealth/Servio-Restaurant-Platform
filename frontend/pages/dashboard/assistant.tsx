@@ -9,6 +9,7 @@ import ChatInput, { QuickSuggestions } from '../../components/Assistant/ChatInpu
 import { useUser } from '../../contexts/UserContext'
 import { api } from '../../lib/api'
 import { WakeWordService, isWakeWordSupported, getDefaultWakeWordConfig } from '../../lib/WakeWordService'
+import { logger } from '../../utils/logger'
 
 interface AssistantState {
   isRecording: boolean
@@ -70,6 +71,7 @@ export default function AssistantPage() {
   // Max retries for auto-restart
   const restartRetryCountRef = useRef(0)
   const MAX_RESTART_RETRIES = 3
+  const [isAutoRestartPaused, setIsAutoRestartPaused] = useState(false)
 
   // Conversation window for Always Listening (30 seconds after saying "Servio")
   const conversationWindowRef = useRef<NodeJS.Timeout | null>(null)
@@ -284,7 +286,9 @@ export default function AssistantPage() {
       formData.append('userId', user?.id || 'anonymous')
 
       console.log('Sending audio to backend...');
-      // Send to backend for processing
+      // Log processing started
+      logger.info(`Assistant audio processing started: ${audioBlob.size} bytes`);
+      
       const response = await api.post(`/api/assistant/process-audio`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data'
@@ -293,6 +297,10 @@ export default function AssistantPage() {
 
       const payload = response.data?.data || response.data
       console.log('Backend response received:', payload);
+      
+      // Log processing completed
+      logger.info(`Assistant audio processing completed: "${payload.transcript?.substring(0, 50)}${payload.transcript?.length > 50 ? '...' : ''}" in ${payload.processingTime}ms`);
+      
       const { transcript, response: assistantResponse, actions, audioUrl } = payload
 
       // **ALWAYS LISTENING: Check for wake word in transcript**
@@ -405,11 +413,21 @@ export default function AssistantPage() {
       // Play assistant response audio
       if (audioUrl) {
         await playAudio(audioUrl)
+      } else if (assistantResponse) {
+        // TTS failed or was skipped - show subtle indicator
+        addMessage({
+          type: 'system',
+          content: '🔊 Audio playback unavailable for this response.',
+          metadata: { action: { type: 'tts_skipped', status: 'completed' } }
+        })
       }
 
     } catch (error) {
       console.error('Failed to process recording:', error)
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      
+      // Log failure
+      logger.error(`Assistant audio processing failed: ${errorMessage}`);
       
       addMessage({
         type: 'system',
@@ -437,17 +455,30 @@ export default function AssistantPage() {
           console.log(`?? Checking restart conditions: alwaysListening=${stateRef.current.alwaysListening}, isRecording=${stateRef.current.isRecording}, isProcessing=${stateRef.current.isProcessing}, isSpeaking=${stateRef.current.isSpeaking}`);
           if (stateRef.current.alwaysListening && !stateRef.current.isRecording && !stateRef.current.isProcessing && !stateRef.current.isSpeaking) {
             console.log('? Auto-restarting recording after audio processing (Always Listening mode)');
+            restartRetryCountRef.current = 0;
+            setIsAutoRestartPaused(false);
             startRecordingRef.current?.();
           } else {
             console.log('?? Cannot restart yet, scheduling retry...');
             // Retry after audio finishes
-            if (retryRestartTimeoutRef.current) clearTimeout(retryRestartTimeoutRef.current)
-            retryRestartTimeoutRef.current = setTimeout(() => {
-              if (stateRef.current.alwaysListening && !stateRef.current.isRecording && !stateRef.current.isProcessing) {
-                console.log('? Retry: Auto-restarting recording (Always Listening mode)');
-                startRecordingRef.current?.();
-              }
-            }, 1000);
+            if (restartRetryCountRef.current < MAX_RESTART_RETRIES) {
+              restartRetryCountRef.current++;
+              if (retryRestartTimeoutRef.current) clearTimeout(retryRestartTimeoutRef.current)
+              retryRestartTimeoutRef.current = setTimeout(() => {
+                if (stateRef.current.alwaysListening && !stateRef.current.isRecording && !stateRef.current.isProcessing) {
+                  console.log('? Retry: Auto-restarting recording (Always Listening mode)');
+                  startRecordingRef.current?.();
+                }
+              }, 1000 * restartRetryCountRef.current); // Exponential backoff
+            } else {
+              console.warn('❌ Max auto-restart retries reached. Pausing always listening.');
+              setIsAutoRestartPaused(true);
+              addMessageRef.current?.({
+                type: 'system',
+                content: '⚠️ Always listening paused due to multiple restart failures. Click mic to resume.',
+                metadata: { action: { type: 'always_listening_paused', status: 'error' } }
+              });
+            }
           }
         }, 800); // Slightly longer delay
       }
@@ -548,7 +579,7 @@ export default function AssistantPage() {
   }, [stopAudio])
 
   const startRecording = useCallback(() => {
-    if (!mediaRecorder || state.isProcessing) return
+    if (!mediaRecorder || state.isProcessing || isAutoRestartPaused) return
     if (mediaRecorder.state !== 'inactive') return
 
     audioChunksRef.current = []
@@ -572,6 +603,9 @@ export default function AssistantPage() {
         }
       }, 5000); // Auto-stop after 5 seconds (simpler and more performant)
     }
+    
+    // Log recording start
+    logger.info(`Assistant recording started (alwaysListening: ${stateRef.current.alwaysListening})`);
   }, [mediaRecorder, state.isProcessing])
 
   const stopRecording = useCallback(() => {
@@ -623,6 +657,9 @@ export default function AssistantPage() {
 
     try {
       console.log('Sending text command to backend...');
+      // Log command sent
+      logger.info(`Assistant text command sent: "${command.substring(0, 50)}${command.length > 50 ? '...' : ''}"`);
+      
       const response = await api.post(`/api/assistant/process-text`, {
         text: command,
         userId: user?.id || 'anonymous'
@@ -630,6 +667,10 @@ export default function AssistantPage() {
 
       const payload = response.data?.data || response.data
       console.log('Backend response received:', payload);
+      
+      // Log processing completed
+      logger.info(`Assistant text processing completed in ${payload.processingTime}ms`);
+      
       const { response: assistantResponse, actions, audioUrl } = payload
 
       // Add assistant response
@@ -663,11 +704,22 @@ export default function AssistantPage() {
       // Play response audio
       if (audioUrl) {
         await playAudio(audioUrl)
+      } else if (assistantResponse) {
+        // TTS failed or was skipped
+        addMessage({
+          type: 'system',
+          content: '🔊 Audio playback unavailable for this response.',
+          metadata: { action: { type: 'tts_skipped', status: 'completed' } }
+        })
       }
 
     } catch (error) {
       console.error('Failed to process command:', error)
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      
+      // Log failure
+      logger.error(`Assistant text processing failed: ${errorMessage}`);
+      
       const isNetworkError = errorMessage.includes('network') || errorMessage.includes('fetch')
       const isTimeoutError = errorMessage.includes('timeout')
       

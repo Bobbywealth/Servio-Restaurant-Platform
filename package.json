@@ -12,11 +12,12 @@
     "build": "tsc && mkdir -p dist/database && cp -r src/database/migrations dist/database/",
     "start": "node dist/server.js",
     "start:worker": "node dist/worker.js",
-    "seed:demo": "tsx src/scripts/seed-demo-users.ts",
-    "bootstrap:restaurant": "tsx src/scripts/bootstrap-restaurant.ts",
-    "purge:demo": "tsx src/scripts/purge-demo-data.ts",
+    "typecheck": "tsc --noEmit",
     "lint": "eslint src --ext .ts,.js",
-    "test": "jest --passWithNoTests"
+    "test": "jest --passWithNoTests",
+    "test:integration": "jest --testPathPattern=integration",
+    "test:e2e": "cd frontend && npx playwright test",
+    "seed:demo": "tsx src/scripts/seed-demo-users.ts",
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.972.0",

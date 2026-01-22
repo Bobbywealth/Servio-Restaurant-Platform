@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { DatabaseService } from '../services/DatabaseService';
-import { asyncHandler, NotFoundError, UnauthorizedError } from '../middleware/errorHandler';
+import { asyncHandler, UnauthorizedError } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
 import multer from 'multer';
 import sharp from 'sharp';

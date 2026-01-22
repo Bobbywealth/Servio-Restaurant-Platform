@@ -51,7 +51,7 @@ router.get('/search', asyncHandler(async (req: Request, res: Response) => {
  * Record inventory received
  */
 router.post('/receive', asyncHandler(async (req: Request, res: Response) => {
-  const { items, userId } = req.body;
+  const { items } = req.body;
 
   if (!items || !Array.isArray(items) || items.length === 0) {
     return res.status(400).json({
@@ -116,7 +116,7 @@ router.post('/receive', asyncHandler(async (req: Request, res: Response) => {
  * Adjust inventory quantities
  */
 router.post('/adjust', asyncHandler(async (req: Request, res: Response) => {
-  const { itemId, quantity, reason, userId } = req.body;
+  const { itemId, quantity, reason } = req.body;
 
   if (!itemId || quantity === undefined || !reason) {
     return res.status(400).json({

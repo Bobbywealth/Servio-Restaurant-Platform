@@ -474,7 +474,10 @@ Use the available tools to perform actions. Always be helpful and professional.`
       if (requiredPermission) {
         const hasPerm = await this.userHasPermission(userId, requiredPermission);
         if (!hasPerm) {
-          logger.warn(`User ${userId} attempted to use tool ${name} without permission ${requiredPermission}`);
+          logger.warn(`🚫 User ${userId} denied access to tool ${name} (requires ${requiredPermission})`);
+          await DatabaseService.getInstance().logAudit(
+            'system', userId, 'tool_denied', 'assistant_tool', name, { requiredPermission }
+          );
           return {
             type: name,
             status: 'error',
