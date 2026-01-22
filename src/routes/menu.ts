@@ -2,11 +2,11 @@ import { Router, Request, Response } from 'express';
 import { DatabaseService } from '../services/DatabaseService';
 import { asyncHandler, NotFoundError, UnauthorizedError } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
+import { ensureUploadsDir } from '../utils/uploads';
 import multer from 'multer';
 import sharp from 'sharp';
 import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
-import fs from 'fs/promises';
 
 const router = Router();
 
@@ -23,17 +23,6 @@ const upload = multer({
     }
   }
 });
-
-// Ensure uploads directory exists
-const ensureUploadsDir = async () => {
-  const uploadsPath = path.join(process.cwd(), 'uploads', 'menu');
-  try {
-    await fs.access(uploadsPath);
-  } catch {
-    await fs.mkdir(uploadsPath, { recursive: true });
-  }
-  return uploadsPath;
-};
 
 // ============================================================================
 // PUBLIC ORDERING ENDPOINTS
@@ -218,7 +207,7 @@ router.post('/items', upload.array('images', 5), asyncHandler(async (req: Reques
 
   const restaurantId = req.user?.restaurantId;
   const itemId = uuidv4();
-  const uploadsPath = await ensureUploadsDir();
+  const uploadsPath = await ensureUploadsDir('menu');
 
   // Process uploaded images
   const images: string[] = [];
@@ -325,7 +314,7 @@ router.put('/items/:id', upload.array('images', 5), asyncHandler(async (req: Req
   let images = existingImages ? JSON.parse(existingImages) : [];
   
   if (req.files && Array.isArray(req.files)) {
-    const uploadsPath = await ensureUploadsDir();
+    const uploadsPath = await ensureUploadsDir('menu');
     
     for (const file of req.files) {
       const fileName = `${id}-${uuidv4()}.webp`;

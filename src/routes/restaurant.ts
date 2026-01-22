@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { DatabaseService } from '../services/DatabaseService';
 import { asyncHandler } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
+import { ensureUploadsDir, getUploadsPath } from '../utils/uploads';
 import { v4 as uuidv4 } from 'uuid';
 import multer from 'multer';
 import sharp from 'sharp';
@@ -24,17 +25,6 @@ const upload = multer({
     }
   }
 });
-
-// Ensure uploads directory exists
-const ensureUploadsDir = async (subdir: string = '') => {
-  const uploadsPath = path.join(process.cwd(), 'uploads', 'restaurants', subdir);
-  try {
-    await fs.access(uploadsPath);
-  } catch {
-    await fs.mkdir(uploadsPath, { recursive: true });
-  }
-  return uploadsPath;
-};
 
 // ============================================================================
 // RESTAURANT PROFILE MANAGEMENT
@@ -71,7 +61,7 @@ router.get('/profile', asyncHandler(async (req: Request, res: Response) => {
     if (!str) return fallback;
     try {
       return JSON.parse(str);
-    } catch (e) {
+    } catch (_e) {
       logger.warn(`Failed to parse JSON: ${str.substring(0, 50)}...`);
       return fallback;
     }
@@ -141,8 +131,9 @@ router.put('/profile', upload.fields([
   let coverImageUrl = existingRestaurant.cover_image_url;
 
   if (req.files) {
-    const files = req.files as { [fieldname: string]: Express.Multer.File[] };
-    const uploadsPath = await ensureUploadsDir();
+    type UploadedFile = { buffer: Buffer; mimetype: string; originalname: string };
+    const files = req.files as Record<string, UploadedFile[]>;
+    const uploadsPath = await ensureUploadsDir('restaurants');
 
     // Process logo upload
     if (files.logo && files.logo[0]) {
@@ -300,7 +291,7 @@ router.put('/profile', upload.fields([
     if (!str) return fallback;
     try {
       return JSON.parse(str);
-    } catch (e) {
+    } catch (_e) {
       return fallback;
     }
   };
@@ -563,7 +554,7 @@ router.post('/links', asyncHandler(async (req: Request, res: Response) => {
   const baseUrl = process.env.BASE_URL || 'https://servio.com';
   const fullUrl = `${baseUrl}/r/${restaurantId}/${urlPath}`;
   
-  const qrCodePath = await ensureUploadsDir('qr-codes');
+  const qrCodePath = await ensureUploadsDir('restaurants', 'qr-codes');
   const qrFileName = `qr-${linkId}.png`;
   const qrFilePath = path.join(qrCodePath, qrFileName);
   
@@ -741,12 +732,12 @@ router.delete('/links/:id', asyncHandler(async (req: Request, res: Response) => 
 
   await db.run('DELETE FROM restaurant_links WHERE id = ?', [id]);
 
-  // Clean up QR code file
+  // Clean up QR code file (use UPLOADS_DIR for correct path)
   if (link.qr_code_url) {
-    const qrFilePath = path.join(process.cwd(), 'uploads', 'restaurants', 'qr-codes', path.basename(link.qr_code_url));
+    const qrFilePath = getUploadsPath('restaurants', 'qr-codes', path.basename(link.qr_code_url));
     try {
       await fs.unlink(qrFilePath);
-    } catch (error) {
+    } catch (_error) {
       logger.warn(`Failed to delete QR code file: ${qrFilePath}`);
     }
   }
