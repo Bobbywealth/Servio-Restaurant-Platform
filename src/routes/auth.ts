@@ -7,7 +7,9 @@ import { issueAccessToken, requireAuth } from '../middleware/auth';
 
 const router = Router();
 
-const REFRESH_TOKEN_TTL_DAYS = Number(process.env.REFRESH_TOKEN_TTL_DAYS ?? 30);
+// Rolling refresh window (kiosk-style): every successful refresh pushes expires_at out by this many days.
+// Default to 45 days to match kiosk expectation; can be overridden by env.
+const REFRESH_TOKEN_TTL_DAYS = Number(process.env.REFRESH_TOKEN_TTL_DAYS ?? 45);
 
 function safeUser(row: any) {
   return {
@@ -71,6 +73,20 @@ router.post(
     }
 
     const normalizedEmail = String(email).trim().toLowerCase();
+
+    // Never allow demo accounts in production.
+    if (process.env.NODE_ENV === 'production') {
+      const isDemo =
+        normalizedEmail.endsWith('@demo.servio') ||
+        normalizedEmail === 'admin@servio.com' ||
+        normalizedEmail === 'owner@demo.servio' ||
+        normalizedEmail === 'manager@demo.servio' ||
+        normalizedEmail === 'staff@demo.servio';
+      if (isDemo) {
+        throw new UnauthorizedError('Demo accounts are disabled in production');
+      }
+    }
+
     const db = DatabaseService.getInstance().getDatabase();
     const user = await db.get<any>(
       'SELECT * FROM users WHERE LOWER(email) = ? AND (is_active = 1 OR is_active = TRUE)', 
@@ -129,6 +145,14 @@ router.post(
 
       const user = await db.get<any>('SELECT * FROM users WHERE id = ? AND is_active = TRUE', [s.user_id]);
       if (!user) throw new UnauthorizedError('User not found or inactive');
+
+      // Rolling refresh: extend this session's expiry on use.
+      const newExpiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000).toISOString();
+      try {
+        await db.run('UPDATE auth_sessions SET expires_at = ? WHERE id = ?', [newExpiresAt, s.id]);
+      } catch {
+        // Non-fatal: if DB update fails, still return a new access token.
+      }
 
       const accessToken = issueAccessToken({ 
         sub: user.id, 

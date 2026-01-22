@@ -21,7 +21,8 @@ router.get('/menu/search', vapiAuth_1.requireVapiAuth, (0, errorHandler_1.asyncH
     res.json(service.searchMenu(String(q || '')));
 }));
 router.get('/menu/items/:id', vapiAuth_1.requireVapiAuth, (0, errorHandler_1.asyncHandler)(async (req, res) => {
-    const item = service.getMenuItem(req.params.id);
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const item = service.getMenuItem(id);
     if (!item)
         return res.status(404).json({ error: 'Item not found' });
     res.json(item);
@@ -43,7 +44,8 @@ router.post('/orders', vapiAuth_1.requireVapiAuth, (0, errorHandler_1.asyncHandl
 // 5) Accept Order
 router.post('/orders/:id/accept', auth_1.requireAuth, (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const { prepTimeMinutes } = req.body;
-    const result = await service.acceptOrder(req.params.id, prepTimeMinutes, req.user.id);
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const result = await service.acceptOrder(id, prepTimeMinutes, req.user.id);
     res.json(result);
 }));
 // 6) Cancel / Complete

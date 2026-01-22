@@ -361,8 +361,31 @@ export class DatabaseService {
   private async seedData(): Promise<void> {
     const db = this.getDatabase();
 
+    const isProd = process.env.NODE_ENV === 'production';
+    if (isProd) {
+      logger.info('Skipping demo seed data (production mode).');
+      return;
+    }
+
     logger.info('Ensuring demo users exist with valid credentials...');
     const restaurantId = 'demo-restaurant-1';
+    const platformRestaurantId = 'platform-admin-org';
+
+    // Create platform admin "org" (local/dev only)
+    await db.run(
+      `INSERT INTO restaurants (
+        id, name, slug, settings, operating_hours, timezone, closed_message
+      ) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO NOTHING`,
+      [
+        platformRestaurantId,
+        'Servio Platform Admin',
+        'platform-admin',
+        JSON.stringify({ currency: 'USD' }),
+        JSON.stringify({}),
+        'America/New_York',
+        '—'
+      ]
+    );
     
     // Create demo restaurant if it doesn't exist
     await db.run(
@@ -388,6 +411,26 @@ export class DatabaseService {
 
     // Sample users
     const users = [
+      {
+        id: 'admin-1',
+        restaurant_id: platformRestaurantId,
+        name: 'System Admin',
+        email: 'admin@servio.com',
+        password: 'admin123',
+        pin: '9999',
+        role: 'admin',
+        permissions: JSON.stringify(['*'])
+      },
+      {
+        id: 'owner-1',
+        restaurant_id: restaurantId,
+        name: 'Demo Owner',
+        email: 'owner@demo.servio',
+        password: 'password',
+        pin: '3333',
+        role: 'owner',
+        permissions: JSON.stringify(['*'])
+      },
       {
         id: 'user-1',
         restaurant_id: restaurantId,

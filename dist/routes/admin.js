@@ -121,7 +121,7 @@ router.get('/restaurants', async (req, res) => {
  */
 router.get('/restaurants/:id', async (req, res) => {
     try {
-        const { id } = req.params;
+        const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
         const db = await DatabaseService_1.DatabaseService.getInstance().getDatabase();
         // Get restaurant overview
         const restaurant = await db.get(`
@@ -172,7 +172,7 @@ router.get('/restaurants/:id', async (req, res) => {
  */
 router.get('/restaurants/:id/orders', async (req, res) => {
     try {
-        const { id } = req.params;
+        const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
         const { page = 1, limit = 50, status = 'all', days = 30 } = req.query;
         const offset = (Number(page) - 1) * Number(limit);
         const db = await DatabaseService_1.DatabaseService.getInstance().getDatabase();
@@ -233,7 +233,7 @@ router.get('/restaurants/:id/orders', async (req, res) => {
  */
 router.get('/restaurants/:id/voice-activity', async (req, res) => {
     try {
-        const { id } = req.params;
+        const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
         const { page = 1, limit = 50, days = 30 } = req.query;
         const offset = (Number(page) - 1) * Number(limit);
         const db = await DatabaseService_1.DatabaseService.getInstance().getDatabase();
@@ -279,7 +279,7 @@ router.get('/restaurants/:id/voice-activity', async (req, res) => {
  */
 router.get('/restaurants/:id/inventory-transactions', async (req, res) => {
     try {
-        const { id } = req.params;
+        const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
         const { page = 1, limit = 50, days = 30 } = req.query;
         const offset = (Number(page) - 1) * Number(limit);
         const db = await DatabaseService_1.DatabaseService.getInstance().getDatabase();
@@ -326,7 +326,7 @@ router.get('/restaurants/:id/inventory-transactions', async (req, res) => {
  */
 router.get('/restaurants/:id/timeclock', async (req, res) => {
     try {
-        const { id } = req.params;
+        const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
         const { page = 1, limit = 50, days = 30 } = req.query;
         const offset = (Number(page) - 1) * Number(limit);
         const db = await DatabaseService_1.DatabaseService.getInstance().getDatabase();
@@ -372,7 +372,7 @@ router.get('/restaurants/:id/timeclock', async (req, res) => {
  */
 router.get('/restaurants/:id/audit-logs', async (req, res) => {
     try {
-        const { id } = req.params;
+        const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
         const { page = 1, limit = 50, days = 30, action = 'all' } = req.query;
         const offset = (Number(page) - 1) * Number(limit);
         const db = await DatabaseService_1.DatabaseService.getInstance().getDatabase();

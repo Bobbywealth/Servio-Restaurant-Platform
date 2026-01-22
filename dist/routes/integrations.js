@@ -64,7 +64,7 @@ router.get('/', (0, errorHandler_1.asyncHandler)(async (req, res) => {
  * Get a specific integration
  */
 router.get('/:id', (0, errorHandler_1.asyncHandler)(async (req, res) => {
-    const { id } = req.params;
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
     const integration = await db.get('SELECT * FROM integrations WHERE id = ?', [id]);
     if (!integration) {
@@ -143,7 +143,7 @@ router.post('/', (0, errorHandler_1.asyncHandler)(async (req, res) => {
  * Update an integration
  */
 router.put('/:id', (0, errorHandler_1.asyncHandler)(async (req, res) => {
-    const { id } = req.params;
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const updates = req.body;
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
     // Check if integration exists
@@ -196,7 +196,7 @@ router.put('/:id', (0, errorHandler_1.asyncHandler)(async (req, res) => {
  * Toggle integration status (active/inactive)
  */
 router.post('/:id/toggle', (0, errorHandler_1.asyncHandler)(async (req, res) => {
-    const { id } = req.params;
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
     const integration = await db.get('SELECT * FROM integrations WHERE id = ?', [id]);
     if (!integration) {
@@ -220,7 +220,7 @@ router.post('/:id/toggle', (0, errorHandler_1.asyncHandler)(async (req, res) => 
  * Trigger a manual sync for an integration
  */
 router.post('/:id/sync', (0, errorHandler_1.asyncHandler)(async (req, res) => {
-    const { id } = req.params;
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
     const integration = await db.get('SELECT * FROM integrations WHERE id = ?', [id]);
     if (!integration) {
@@ -250,7 +250,7 @@ router.post('/:id/sync', (0, errorHandler_1.asyncHandler)(async (req, res) => {
  * Delete an integration
  */
 router.delete('/:id', (0, errorHandler_1.asyncHandler)(async (req, res) => {
-    const { id } = req.params;
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
     const integration = await db.get('SELECT * FROM integrations WHERE id = ?', [id]);
     if (!integration) {
@@ -265,7 +265,7 @@ router.delete('/:id', (0, errorHandler_1.asyncHandler)(async (req, res) => {
  * Test integration connectivity
  */
 router.post('/:id/test', (0, errorHandler_1.asyncHandler)(async (req, res) => {
-    const { id } = req.params;
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
     const integration = await db.get('SELECT * FROM integrations WHERE id = ?', [id]);
     if (!integration) {

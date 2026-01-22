@@ -65,13 +65,25 @@ router.get('/profile', (0, errorHandler_1.asyncHandler)(async (req, res) => {
             error: { message: 'Restaurant not found' }
         });
     }
+    // Safe JSON parsing helper
+    const safeJsonParse = (str, fallback = {}) => {
+        if (!str)
+            return fallback;
+        try {
+            return JSON.parse(str);
+        }
+        catch (e) {
+            logger_1.logger.warn(`Failed to parse JSON: ${str.substring(0, 50)}...`);
+            return fallback;
+        }
+    };
     // Parse JSON fields
     const formattedRestaurant = {
         ...restaurant,
-        address: JSON.parse(restaurant.address || '{}'),
-        social_links: JSON.parse(restaurant.social_links || '{}'),
-        operating_hours: JSON.parse(restaurant.operating_hours || '{}'),
-        settings: JSON.parse(restaurant.settings || '{}'),
+        address: safeJsonParse(restaurant.address, {}),
+        social_links: safeJsonParse(restaurant.social_links, {}),
+        operating_hours: safeJsonParse(restaurant.operating_hours, {}),
+        settings: safeJsonParse(restaurant.settings, {}),
         online_ordering_enabled: Boolean(restaurant.online_ordering_enabled),
         delivery_enabled: Boolean(restaurant.delivery_enabled),
         pickup_enabled: Boolean(restaurant.pickup_enabled),
@@ -234,14 +246,25 @@ router.put('/profile', upload.fields([
   `, [restaurantId]);
     await DatabaseService_1.DatabaseService.getInstance().logAudit(restaurantId, req.user?.id || 'system', 'update_restaurant_profile', 'restaurant', restaurantId, { name, description, cuisineType });
     logger_1.logger.info(`Restaurant profile updated: ${name || existingRestaurant.name}`);
+    // Safe JSON parsing helper
+    const safeJsonParse = (str, fallback = {}) => {
+        if (!str)
+            return fallback;
+        try {
+            return JSON.parse(str);
+        }
+        catch (e) {
+            return fallback;
+        }
+    };
     return res.json({
         success: true,
         data: {
             ...updatedRestaurant,
-            address: JSON.parse(updatedRestaurant.address || '{}'),
-            social_links: JSON.parse(updatedRestaurant.social_links || '{}'),
-            operating_hours: JSON.parse(updatedRestaurant.operating_hours || '{}'),
-            settings: JSON.parse(updatedRestaurant.settings || '{}')
+            address: safeJsonParse(updatedRestaurant.address, {}),
+            social_links: safeJsonParse(updatedRestaurant.social_links, {}),
+            operating_hours: safeJsonParse(updatedRestaurant.operating_hours, {}),
+            settings: safeJsonParse(updatedRestaurant.settings, {})
         }
     });
 }));
@@ -483,7 +506,7 @@ router.post('/links', (0, errorHandler_1.asyncHandler)(async (req, res) => {
  * Update a restaurant link
  */
 router.put('/links/:id', (0, errorHandler_1.asyncHandler)(async (req, res) => {
-    const { id } = req.params;
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const { name, description, urlPath, targetUrl, linkType, isActive, customStyling } = req.body;
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
     const existingLink = await db.get('SELECT * FROM restaurant_links WHERE id = ?', [id]);
@@ -558,7 +581,7 @@ router.put('/links/:id', (0, errorHandler_1.asyncHandler)(async (req, res) => {
  * Delete a restaurant link
  */
 router.delete('/links/:id', (0, errorHandler_1.asyncHandler)(async (req, res) => {
-    const { id } = req.params;
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
     const link = await db.get('SELECT * FROM restaurant_links WHERE id = ?', [id]);
     if (!link) {
@@ -589,7 +612,7 @@ router.delete('/links/:id', (0, errorHandler_1.asyncHandler)(async (req, res) =>
  * Track link click
  */
 router.post('/links/:id/click', (0, errorHandler_1.asyncHandler)(async (req, res) => {
-    const { id } = req.params;
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
     const link = await db.get('SELECT * FROM restaurant_links WHERE id = ?', [id]);
     if (!link) {

@@ -27,6 +27,9 @@ type Order = {
   special_instructions?: string | null;
   total_amount?: number | null;
   subtotal?: number | null;
+  prep_time_minutes?: number | null;
+  accepted_at?: string | null;
+  accepted_by_user_id?: string | null;
   created_at?: string | null;
   items?: OrderItem[];
 };
@@ -58,18 +61,59 @@ function makeJsonHeaders(): Headers {
   return headers;
 }
 
+async function tryRefreshAccessToken(): Promise<string | null> {
+  if (typeof window === 'undefined') return null;
+  const refreshToken = window.localStorage.getItem('servio_refresh_token');
+  if (!refreshToken) return null;
+
+  try {
+    const res = await fetch(`${getApiBase()}/auth/refresh`, {
+      method: 'POST',
+      headers: new Headers({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ refreshToken })
+    });
+    if (!res.ok) return null;
+    const json = (await res.json()) as any;
+    const newAccessToken = json?.data?.accessToken as string | undefined;
+    const user = json?.data?.user;
+    if (newAccessToken) window.localStorage.setItem('servio_access_token', newAccessToken);
+    if (user) window.localStorage.setItem('servio_user', JSON.stringify(user));
+    return newAccessToken || null;
+  } catch {
+    return null;
+  }
+}
+
 async function apiGet<T>(path: string): Promise<T> {
-  const res = await fetch(`${getApiBase()}${path}`, { headers: makeJsonHeaders() });
+  const url = `${getApiBase()}${path}`;
+  let res = await fetch(url, { headers: makeJsonHeaders() });
+  if (res.status === 401) {
+    const refreshed = await tryRefreshAccessToken();
+    if (refreshed) {
+      res = await fetch(url, { headers: makeJsonHeaders() });
+    }
+  }
   if (!res.ok) throw new Error(`GET ${path} failed (${res.status})`);
   return (await res.json()) as T;
 }
 
 async function apiPost<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(`${getApiBase()}${path}`, {
+  const url = `${getApiBase()}${path}`;
+  let res = await fetch(url, {
     method: 'POST',
     headers: makeJsonHeaders(),
     body: JSON.stringify(body)
   });
+  if (res.status === 401) {
+    const refreshed = await tryRefreshAccessToken();
+    if (refreshed) {
+      res = await fetch(url, {
+        method: 'POST',
+        headers: makeJsonHeaders(),
+        body: JSON.stringify(body)
+      });
+    }
+  }
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     throw new Error(`POST ${path} failed (${res.status}): ${text}`);
@@ -109,27 +153,84 @@ function normalizeStatus(s: string | null | undefined) {
   return lower;
 }
 
+let sharedAudioCtx: AudioContext | null = null;
+let lastAlertSoundAtMs = 0;
+
 function beep() {
-  // Small in-browser beep; no asset files required.
+  // Loud stereo "panning" alert sound (no assets required).
   try {
+    const now = Date.now();
+    // Prevent accidental rapid-fire stacking.
+    if (now - lastAlertSoundAtMs < 400) return;
+    lastAlertSoundAtMs = now;
+
     const AudioContext = (window as any).AudioContext || (window as any).webkitAudioContext;
     if (!AudioContext) return;
-    const ctx = new AudioContext();
-    const o = ctx.createOscillator();
+    const ctx = sharedAudioCtx ?? (sharedAudioCtx = new AudioContext());
+    // Some browsers start suspended until a user gesture happened.
+    if (ctx.state === 'suspended') {
+      // best-effort resume, don't block if it fails
+      ctx.resume().catch(() => {});
+    }
+
+    const t0 = ctx.currentTime + 0.01;
+    const duration = 0.9;
+
+    const pan = ctx.createStereoPanner();
+    // Sweep left -> right -> left for a "panning" effect.
+    pan.pan.setValueAtTime(-1, t0);
+    pan.pan.linearRampToValueAtTime(1, t0 + duration * 0.5);
+    pan.pan.linearRampToValueAtTime(-1, t0 + duration);
+
     const g = ctx.createGain();
-    o.type = 'sine';
-    o.frequency.value = 880;
-    g.gain.value = 0.05;
-    o.connect(g);
-    g.connect(ctx.destination);
-    o.start();
-    window.setTimeout(() => {
-      o.stop();
-      ctx.close?.().catch(() => {});
-    }, 120);
+    // "Loud" but not painful; adjust here if needed.
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.linearRampToValueAtTime(0.32, t0 + 0.03);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + duration);
+
+    const o1 = ctx.createOscillator();
+    o1.type = 'square';
+    o1.frequency.setValueAtTime(880, t0);
+
+    const o2 = ctx.createOscillator();
+    o2.type = 'square';
+    o2.frequency.setValueAtTime(1320, t0);
+
+    o1.connect(g);
+    o2.connect(g);
+    g.connect(pan);
+    pan.connect(ctx.destination);
+
+    o1.start(t0);
+    o2.start(t0);
+    o1.stop(t0 + duration);
+    o2.stop(t0 + duration);
+
+    o2.onended = () => {
+      try {
+        o1.disconnect();
+        o2.disconnect();
+        g.disconnect();
+        pan.disconnect();
+      } catch {
+        // ignore
+      }
+    };
   } catch {
     // ignore
   }
+}
+
+function isWebsiteOrder(o: Order) {
+  const c = (o.channel || '').toLowerCase();
+  return c.includes('web') || c.includes('website') || c === 'online';
+}
+
+function formatCountdown(ms: number) {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  const mm = String(Math.floor(s / 60)).padStart(2, '0');
+  const ss = String(s % 60).padStart(2, '0');
+  return `${mm}:${ss}`;
 }
 
 
@@ -144,12 +245,55 @@ export default function TabletOrdersPage() {
   const [autoPrintEnabled, setAutoPrintEnabled] = useState<boolean>(true);
   const [paperWidth, setPaperWidth] = useState<ReceiptPaperWidth>('80mm');
   const [printingOrderId, setPrintingOrderId] = useState<string | null>(null);
+  const [printCopies, setPrintCopies] = useState<number>(2);
+  const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   const [printedOrders, setPrintedOrders] = useState<Set<string>>(() => new Set());
   const printedOrdersRef = useRef<Set<string>>(new Set());
   const hasInitializedPrintedRef = useRef(false);
   const [restaurantProfile, setRestaurantProfile] = useState<ReceiptRestaurant | null>(null);
   const [receiptHtml, setReceiptHtml] = useState<string | null>(null);
   const lastRefreshAt = useRef<number>(0);
+  const [alertOrderId, setAlertOrderId] = useState<string | null>(null);
+  const [alertUntilMs, setAlertUntilMs] = useState<number | null>(null);
+  const alertIntervalRef = useRef<number | null>(null);
+  const alertTimeoutRef = useRef<number | null>(null);
+  const alertQueueRef = useRef<string[]>([]);
+  const [prepMinutesByOrderId, setPrepMinutesByOrderId] = useState<Record<string, number>>({});
+
+  function stopAlert() {
+    if (alertIntervalRef.current) window.clearInterval(alertIntervalRef.current);
+    if (alertTimeoutRef.current) window.clearTimeout(alertTimeoutRef.current);
+    alertIntervalRef.current = null;
+    alertTimeoutRef.current = null;
+    setAlertOrderId(null);
+    setAlertUntilMs(null);
+  }
+
+  function startAlert(orderId: string) {
+    const MIN_ALERT_MS = 4 * 60 * 1000;
+    stopAlert();
+    const until = Date.now() + MIN_ALERT_MS;
+    setAlertOrderId(orderId);
+    setAlertUntilMs(until);
+
+    // Immediately beep once, then repeat.
+    if (soundEnabled) beep();
+    alertIntervalRef.current = window.setInterval(() => {
+      if (!soundEnabled) return;
+      beep();
+      try {
+        // Android devices may vibrate if allowed
+        (navigator as any).vibrate?.(200);
+      } catch {
+        // ignore
+      }
+    }, 2500);
+
+    alertTimeoutRef.current = window.setTimeout(() => {
+      // Ensure minimum 4 minutes of alerting even if no action taken.
+      stopAlert();
+    }, MIN_ALERT_MS);
+  }
 
   useEffect(() => {
     // Init print settings from env + localStorage
@@ -164,6 +308,14 @@ export default function TabletOrdersPage() {
     const storedPaper = typeof window !== 'undefined' ? window.localStorage.getItem('servio_thermal_paper_width') : null;
     const paper: ReceiptPaperWidth = storedPaper === '58mm' ? '58mm' : storedPaper === '80mm' ? '80mm' : defaultPaper;
     setPaperWidth(paper);
+
+    // Additional tablet settings
+    const storedCopies = typeof window !== 'undefined' ? window.localStorage.getItem('servio_print_copies') : null;
+    const copiesNum = Number(storedCopies ?? 2);
+    setPrintCopies(Number.isFinite(copiesNum) && copiesNum > 0 ? Math.floor(copiesNum) : 2);
+
+    const storedSound = typeof window !== 'undefined' ? window.localStorage.getItem('servio_kds_sound_enabled') : null;
+    setSoundEnabled(storedSound === null ? true : storedSound === 'true');
   }, []);
 
   async function refresh() {
@@ -242,6 +394,11 @@ export default function TabletOrdersPage() {
   async function setStatus(orderId: string, nextStatus: string) {
     setBusyId(orderId);
     setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, status: nextStatus } : o)));
+    // If this order was alerting (website "needs decision"), stop the sound once it's handled.
+    if (alertOrderId === orderId && normalizeStatus(nextStatus) !== 'received') {
+      alertQueueRef.current = alertQueueRef.current.filter((id) => id !== orderId);
+      stopAlert();
+    }
     try {
       await apiPost(`/orders/${encodeURIComponent(orderId)}/status`, { status: nextStatus });
       if (socket) {
@@ -317,9 +474,80 @@ export default function TabletOrdersPage() {
 
     // Print newest first (end of list is newest because sorted DESC on server; still defensive)
     const newest = toAutoPrint[0];
-    beep();
+    if (soundEnabled) beep();
     printOrder(newest.id, { markAsPrinted: true });
-  }, [autoPrintEnabled, filtered, loading]);
+  }, [autoPrintEnabled, filtered, loading, soundEnabled]);
+
+  // Website order alert + accept/decline workflow
+  useEffect(() => {
+    if (loading) return;
+
+    const pendingWebsite = filtered
+      .filter((o) => isWebsiteOrder(o))
+      .filter((o) => normalizeStatus(o.status) === 'received')
+      .filter((o) => !o.accepted_at);
+
+    // Enqueue any unseen orders
+    for (const o of pendingWebsite) {
+      if (!alertQueueRef.current.includes(o.id) && o.id !== alertOrderId) {
+        alertQueueRef.current.push(o.id);
+      }
+    }
+
+    // Start next alert if none active
+    if (!alertOrderId && alertQueueRef.current.length > 0) {
+      startAlert(alertQueueRef.current[0]);
+    }
+  }, [alertOrderId, filtered, loading, soundEnabled]);
+
+  // Stop alert sound as soon as the alerting order is accepted/handled (even if from another device).
+  useEffect(() => {
+    if (!alertOrderId) return;
+    const o = orders.find((x) => x.id === alertOrderId);
+    // If it disappeared, or it no longer needs a decision, stop the alert immediately.
+    const needsDecision =
+      !!o && isWebsiteOrder(o) && normalizeStatus(o.status) === 'received' && !o.accepted_at;
+    if (!needsDecision) {
+      alertQueueRef.current = alertQueueRef.current.filter((id) => id !== alertOrderId);
+      stopAlert();
+    }
+  }, [alertOrderId, orders]);
+
+  async function kitchenAccept(orderId: string) {
+    const prep = prepMinutesByOrderId[orderId];
+    if (!prep || prep <= 0) {
+      setError('Select a prep time before accepting.');
+      return;
+    }
+    setError(null);
+    setBusyId(orderId);
+    try {
+      await apiPost(`/orders/${encodeURIComponent(orderId)}/kitchen/accept`, { prepTimeMinutes: prep });
+      // Stop alerting this order
+      alertQueueRef.current = alertQueueRef.current.filter((id) => id !== orderId);
+      if (alertOrderId === orderId) stopAlert();
+      await refresh();
+    } catch (e: any) {
+      setError(e?.message || 'Failed to accept order');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function kitchenDecline(orderId: string) {
+    setError(null);
+    setBusyId(orderId);
+    try {
+      await apiPost(`/orders/${encodeURIComponent(orderId)}/kitchen/decline`, {});
+      alertQueueRef.current = alertQueueRef.current.filter((id) => id !== orderId);
+      if (alertOrderId === orderId) stopAlert();
+      await refresh();
+    } catch (e: any) {
+      setError(e?.message || 'Failed to decline order');
+    } finally {
+      setBusyId(null);
+    }
+  }
 
   return (
     <div className="min-h-screen bg-white text-black font-sans">
@@ -330,7 +558,7 @@ export default function TabletOrdersPage() {
 
       {/* Print-only receipt (duplicate copies) */}
       <div id="print-root" className="print-only">
-        {receiptHtml ? <PrintReceipt receiptHtml={receiptHtml} copies={2} paperWidth={paperWidth} /> : null}
+        {receiptHtml ? <PrintReceipt receiptHtml={receiptHtml} copies={printCopies} paperWidth={paperWidth} /> : null}
       </div>
 
       {/* Header */}
@@ -358,6 +586,14 @@ export default function TabletOrdersPage() {
           </div>
           <button
             type="button"
+            onClick={() => (window.location.href = '/tablet/settings')}
+            className="bg-white/10 hover:bg-white/20 p-3 rounded-full transition-colors"
+            title="Tablet settings"
+          >
+            <Settings2 className="h-6 w-6" />
+          </button>
+          <button
+            type="button"
             onClick={() => {
               const next = !autoPrintEnabled;
               setAutoPrintEnabled(next);
@@ -369,8 +605,7 @@ export default function TabletOrdersPage() {
             )}
             title="Toggle auto-print"
           >
-            <Settings2 className="h-5 w-5" />
-            {autoPrintEnabled ? 'AUTO PRINT ON' : 'AUTO PRINT OFF'}
+            AUTO PRINT
           </button>
           <button 
             onClick={refresh}
@@ -382,6 +617,12 @@ export default function TabletOrdersPage() {
       </div>
 
       <div className="no-print p-4 sm:p-6">
+        {error ? (
+          <div className="mb-4 rounded-2xl border-2 border-servio-orange-300 bg-servio-orange-50 px-5 py-3 text-sm font-bold text-servio-orange-900">
+            {error}
+          </div>
+        ) : null}
+
         {filtered.length === 0 && !loading ? (
           <div className="flex flex-col items-center justify-center py-32 text-slate-400">
             <CheckCircle2 className="h-24 w-24 mb-6 opacity-20" />
@@ -397,13 +638,23 @@ export default function TabletOrdersPage() {
               const isReady = status === 'ready';
               const timeStr = formatTimeAgo(o.created_at, now);
               const isExpanded = expandedOrderId === o.id;
+              const website = isWebsiteOrder(o);
+              const needsDecision = website && isNew && !o.accepted_at;
+              const isAlerting = alertOrderId === o.id && alertUntilMs !== null;
+              const alertRemaining = isAlerting ? Math.max(0, alertUntilMs! - Date.now()) : 0;
 
               return (
                 <div 
                   key={o.id} 
                   className={clsx(
                     "flex flex-col rounded-[2rem] border-[4px] bg-white overflow-hidden shadow-2xl transition-all",
-                    isNew ? "border-blue-600 ring-8 ring-blue-50" : "border-black",
+                    needsDecision
+                      ? "border-servio-orange-500 ring-8 ring-servio-orange-100"
+                      : isPreparing
+                        ? "border-servio-green-600"
+                        : isNew
+                          ? "border-blue-600 ring-8 ring-blue-50"
+                          : "border-black",
                     isReady && "opacity-50 grayscale"
                   )}
                 >
@@ -411,7 +662,13 @@ export default function TabletOrdersPage() {
                   <div 
                     className={clsx(
                       "px-6 py-4 flex items-center justify-between border-b-[4px] cursor-pointer",
-                      isNew ? "bg-blue-600 text-white border-blue-600" : "bg-black text-white border-black"
+                      needsDecision
+                        ? "bg-servio-orange-600 text-white border-servio-orange-600"
+                        : isPreparing
+                          ? "bg-servio-green-700 text-white border-servio-green-800"
+                          : isNew
+                            ? "bg-blue-600 text-white border-blue-600"
+                            : "bg-black text-white border-black"
                     )}
                     onClick={() => setExpandedOrderId(isExpanded ? null : o.id)}
                   >
@@ -419,6 +676,9 @@ export default function TabletOrdersPage() {
                       <span className="text-xs font-black uppercase tracking-widest opacity-70">Order</span>
                       <span className="text-4xl font-black font-mono leading-none tracking-tighter">
                         #{o.external_id ? o.external_id.slice(-4).toUpperCase() : o.id.slice(-4).toUpperCase()}
+                      </span>
+                      <span className="mt-1 text-xs font-black uppercase tracking-widest opacity-80">
+                        {(o.customer_name || 'Guest').toString()}
                       </span>
                     </div>
                     <div className="flex items-center gap-3">
@@ -462,6 +722,18 @@ export default function TabletOrdersPage() {
                         {o.channel || 'POS'}
                       </div>
                     </div>
+                    {needsDecision ? (
+                      <div className="mt-2 flex items-center justify-between gap-3">
+                        <div className="text-xs font-black uppercase tracking-widest text-servio-orange-700">
+                          Website order needs acceptance
+                        </div>
+                        {isAlerting ? (
+                          <div className="rounded-full bg-servio-orange-600 px-3 py-1 text-xs font-black text-white">
+                            ALERT {formatCountdown(alertRemaining)}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </div>
 
                   {/* Items List */}
@@ -526,7 +798,56 @@ export default function TabletOrdersPage() {
 
                   {/* Action Button */}
                   <div className="p-4 bg-slate-100 mt-auto">
-                    {isNew && (
+                    {needsDecision ? (
+                      <div className="space-y-3">
+                        <div className="text-xs font-black uppercase tracking-widest text-slate-700">
+                          Prep time
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {[5, 10, 15, 20, 30, 45].map((m) => (
+                            <button
+                              key={m}
+                              type="button"
+                              onClick={() =>
+                                setPrepMinutesByOrderId((prev) => ({
+                                  ...prev,
+                                  [o.id]: m
+                                }))
+                              }
+                              className={clsx(
+                                'rounded-2xl px-4 py-3 text-base font-black border-2 transition-colors',
+                                (prepMinutesByOrderId[o.id] ?? 0) === m
+                                  ? 'bg-black text-white border-black'
+                                  : 'bg-white text-black border-slate-300 hover:bg-slate-50'
+                              )}
+                            >
+                              {m}m
+                            </button>
+                          ))}
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <button
+                            type="button"
+                            disabled={busyId === o.id}
+                            onClick={() => kitchenDecline(o.id)}
+                            className="h-16 rounded-2xl bg-slate-300 hover:bg-slate-400 text-slate-900 font-black uppercase tracking-widest disabled:opacity-50"
+                          >
+                            Decline
+                          </button>
+                          <button
+                            type="button"
+                            disabled={busyId === o.id}
+                            onClick={() => kitchenAccept(o.id)}
+                            className="h-16 rounded-2xl bg-servio-green-600 hover:bg-servio-green-700 text-white font-black uppercase tracking-widest disabled:opacity-50"
+                          >
+                            Accept
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {isNew && !needsDecision && (
                       <button
                         disabled={busyId === o.id}
                         onClick={() => setStatus(o.id, 'preparing')}

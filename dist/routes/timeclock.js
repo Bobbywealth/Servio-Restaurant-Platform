@@ -56,9 +56,9 @@ router.post('/clock-in', (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const clockInTime = new Date().toISOString();
     await db.run(`
     INSERT INTO time_entries (
-      id, user_id, clock_in_time, position, break_minutes
-    ) VALUES (?, ?, ?, ?, ?)
-  `, [entryId, user.id, clockInTime, position || null, 0]);
+      id, restaurant_id, user_id, clock_in_time, position, break_minutes
+    ) VALUES (?, ?, ?, ?, ?, ?)
+  `, [entryId, user.restaurant_id, user.id, clockInTime, position || null, 0]);
     // Log the action
     await DatabaseService_1.DatabaseService.getInstance().logAudit(user.restaurant_id, user.id, 'clock_in', 'time_entry', entryId, { position, clockInTime });
     await bus_1.eventBus.emit('staff.clock_in', {
@@ -470,7 +470,7 @@ router.get('/entries', (0, errorHandler_1.asyncHandler)(async (req, res) => {
  * Edit a time entry (manager only)
  */
 router.put('/entries/:id', (0, errorHandler_1.asyncHandler)(async (req, res) => {
-    const { id } = req.params;
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const { clockInTime, clockOutTime, breakMinutes, position, notes, editedBy } = req.body;
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
     // Get existing entry

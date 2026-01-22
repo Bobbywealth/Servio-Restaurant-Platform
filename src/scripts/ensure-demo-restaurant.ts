@@ -7,6 +7,10 @@ async function ensureDemoRestaurant() {
   console.log('🏢 Ensuring demo restaurant exists...');
   
   try {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('Refusing to create demo restaurant in production');
+    }
+
     // Initialize database connection
     await DatabaseService.initialize();
     const dbService = DatabaseService.getInstance();

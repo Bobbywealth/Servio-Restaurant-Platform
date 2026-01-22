@@ -61,6 +61,20 @@ class SocketManager {
     this.connect()
   }
 
+  private shouldShowToasts(): boolean {
+    // Avoid toast overlays on tablet/kiosk pages.
+    try {
+      if (typeof window === 'undefined') return true
+      const path = window.location?.pathname || ''
+      if (path.startsWith('/tablet')) return false
+      const override = window.localStorage.getItem('servio_socket_toasts_enabled')
+      if (override === null) return true
+      return override === 'true'
+    } catch {
+      return true
+    }
+  }
+
   connect(): void {
     if (this.socket?.connected) {
       return
@@ -94,7 +108,7 @@ class SocketManager {
       this.reconnectAttempts = 0
       this.notifyConnectionListeners(true)
 
-      showToast.success('Connected to Servio')
+      if (this.shouldShowToasts()) showToast.success('Connected to Servio')
 
       // Join user room if authenticated
       const user = this.getUserFromStorage()
@@ -113,7 +127,7 @@ class SocketManager {
         this.socket?.connect()
       }
 
-      showToast.warning('Disconnected from Servio')
+      if (this.shouldShowToasts()) showToast.warning('Disconnected from Servio')
     })
 
     this.socket.on('connect_error', (error) => {
@@ -121,29 +135,30 @@ class SocketManager {
       this.reconnectAttempts++
 
       if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-        showToast.error('Unable to connect to Servio. Please refresh the page.')
+        if (this.shouldShowToasts()) showToast.error('Unable to connect to Servio. Please refresh the page.')
       }
     })
 
     this.socket.on('reconnect', (attemptNumber) => {
       console.log('🔌 Socket reconnected after', attemptNumber, 'attempts')
-      showToast.success('Reconnected to Servio')
+      if (this.shouldShowToasts()) showToast.success('Reconnected to Servio')
     })
 
     this.socket.on('reconnect_attempt', (attemptNumber) => {
       console.log('🔌 Reconnection attempt', attemptNumber)
-      showToast.info(`Reconnecting... (${attemptNumber}/${this.maxReconnectAttempts})`)
+      if (this.shouldShowToasts()) showToast.info(`Reconnecting... (${attemptNumber}/${this.maxReconnectAttempts})`)
     })
 
     this.socket.on('reconnect_failed', () => {
       console.error('🔌 Socket reconnection failed')
-      showToast.error('Failed to reconnect to Servio. Please refresh the page.')
+      if (this.shouldShowToasts()) showToast.error('Failed to reconnect to Servio. Please refresh the page.')
     })
 
     // System events
     this.socket.on('system:notification', (data) => {
       const { type, message, priority } = data
 
+      if (!this.shouldShowToasts()) return
       switch (priority) {
         case 'high':
           showToast.error(message)
@@ -157,7 +172,7 @@ class SocketManager {
     })
 
     this.socket.on('system:alert', (data) => {
-      showToast.warning(data.message)
+      if (this.shouldShowToasts()) showToast.warning(data.message)
     })
   }
 

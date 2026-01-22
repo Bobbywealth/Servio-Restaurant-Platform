@@ -9,7 +9,7 @@ const router = (0, express_1.Router)();
  * Get sync job status by ID
  */
 router.get('/jobs/:id', (0, errorHandler_1.asyncHandler)(async (req, res) => {
-    const { id } = req.params;
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
     const job = await db.get('SELECT * FROM sync_jobs WHERE id = ?', [id]);
     if (!job) {

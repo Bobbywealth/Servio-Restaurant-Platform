@@ -97,24 +97,21 @@ async function initializeServer() {
         const { default: notificationsRoutes } = await Promise.resolve().then(() => __importStar(require('./routes/notifications')));
         // API Routes
         app.use('/api/auth', authRoutes);
-        // Vapi webhook routes (no auth required for external webhooks)
-        app.use('/api/vapi', vapiRoutes);
-        app.use('/api', voiceRoutes); // Mount voice ordering APIs under /api
-        // Admin routes (platform-admin role required)
-        app.use('/api/admin', adminRoutes);
-        // Debug: Add a test auth route to verify mounting
-        app.get('/api/auth/test', (req, res) => {
-            res.json({ message: 'Auth routes are mounted correctly' });
-        });
-        // Debug: Test direct route without auth prefix
-        app.get('/debug-route', (req, res) => {
-            res.json({ message: 'Direct route works' });
-        });
         // Protected routes
         app.use('/api/assistant', auth_1.requireAuth, assistantRoutes);
-        app.use('/api/orders', auth_1.requireAuth, ordersRoutes);
+        // Orders routes: /public/* is public, others require auth
+        app.use('/api/orders', (req, res, next) => {
+            if (req.path.startsWith('/public'))
+                return next();
+            return (0, auth_1.requireAuth)(req, res, next);
+        }, ordersRoutes);
         app.use('/api/inventory', auth_1.requireAuth, inventoryRoutes);
-        app.use('/api/menu', auth_1.requireAuth, menuRoutes);
+        // Menu routes: /public/* is public, others require auth
+        app.use('/api/menu', (req, res, next) => {
+            if (req.path.startsWith('/public'))
+                return next();
+            return (0, auth_1.requireAuth)(req, res, next);
+        }, menuRoutes);
         app.use('/api/tasks', auth_1.requireAuth, tasksRoutes);
         app.use('/api/sync', auth_1.requireAuth, syncRoutes);
         app.use('/api/receipts', auth_1.requireAuth, receiptsRoutes);
@@ -125,6 +122,9 @@ async function initializeServer() {
         app.use('/api/integrations', auth_1.requireAuth, integrationsRoutes);
         app.use('/api/notifications', auth_1.requireAuth, notificationsRoutes);
         app.use('/api/voice-hub', voiceHubRoutes);
+        // Vapi and Voice routes (no auth or special auth)
+        app.use('/api/vapi', vapiRoutes);
+        app.use('/api/voice', voiceRoutes); // Voice ordering APIs - fixed from catch-all
         // 404 handler (must be last)
         app.use((req, res, next) => {
             // If something already started the response, don't overwrite it with a 404.

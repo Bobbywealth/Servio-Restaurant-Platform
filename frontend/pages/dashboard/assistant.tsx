@@ -60,6 +60,17 @@ export default function AssistantPage() {
   const recordingAnalyserRef = useRef<AnalyserNode | null>(null)
   const recordingAnimationRef = useRef<number | null>(null)
   
+  // Timeout refs for cleanup
+  const autoRestartTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const processAudioTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const textCommandTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const retryRestartTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const autoStopTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  
+  // Max retries for auto-restart
+  const restartRetryCountRef = useRef(0)
+  const MAX_RESTART_RETRIES = 3
+
   // Conversation window for Always Listening (30 seconds after saying "Servio")
   const conversationWindowRef = useRef<NodeJS.Timeout | null>(null)
   const inConversationWindowRef = useRef(false)
@@ -117,6 +128,8 @@ export default function AssistantPage() {
 
     const audio = new Audio(url)
     audio.crossOrigin = 'anonymous'
+    audio.volume = 1.0 // Max volume for clarity
+    audio.preload = 'auto'
     audioRef.current = audio
 
     // Check if we're in the browser before accessing window
@@ -158,7 +171,21 @@ export default function AssistantPage() {
     analyserRef.current = analyser
     mediaSourceRef.current = source
 
-    source.connect(analyser)
+    // Add gain node for volume boost and compression for clarity
+    const gainNode = audioContext.createGain()
+    gainNode.gain.value = 1.5 // 50% volume boost for better audibility
+
+    // Add dynamics compressor for consistent volume
+    const compressor = audioContext.createDynamicsCompressor()
+    compressor.threshold.value = -24
+    compressor.knee.value = 30
+    compressor.ratio.value = 12
+    compressor.attack.value = 0.003
+    compressor.release.value = 0.25
+
+    source.connect(compressor)
+    compressor.connect(gainNode)
+    gainNode.connect(analyser)
     analyser.connect(audioContext.destination)
 
     const data = new Uint8Array(analyser.fftSize)
@@ -172,8 +199,8 @@ export default function AssistantPage() {
         sum += v * v
       }
       const rms = Math.sqrt(sum / data.length)
-      // Boost and clamp for more visible mouth movement
-      const boosted = Math.min(1, rms * 6)
+      // Boost and clamp for more visible mouth movement (increased for better animation)
+      const boosted = Math.min(1, rms * 8)
       setTalkIntensity(boosted)
       rafRef.current = requestAnimationFrame(tick)
     }
@@ -200,11 +227,12 @@ export default function AssistantPage() {
       
       // Auto-restart recording after audio finishes in Always Listening mode
       if (stateRef.current.alwaysListening) {
-        console.log('📍 Audio ended - scheduling restart...');
-        setTimeout(() => {
-          console.log(`📍 Audio end restart check: alwaysListening=${stateRef.current.alwaysListening}, isRecording=${stateRef.current.isRecording}, isProcessing=${stateRef.current.isProcessing}`);
+        console.log('?? Audio ended - scheduling restart...');
+        if (autoRestartTimeoutRef.current) clearTimeout(autoRestartTimeoutRef.current)
+        autoRestartTimeoutRef.current = setTimeout(() => {
+          console.log(`?? Audio end restart check: alwaysListening=${stateRef.current.alwaysListening}, isRecording=${stateRef.current.isRecording}, isProcessing=${stateRef.current.isProcessing}`);
           if (stateRef.current.alwaysListening && !stateRef.current.isRecording && !stateRef.current.isProcessing) {
-            console.log('✅ Auto-restarting recording after audio playback (Always Listening mode)');
+            console.log('? Auto-restarting recording after audio playback (Always Listening mode)');
             startRecordingRef.current?.();
           }
         }, 800);
@@ -241,7 +269,8 @@ export default function AssistantPage() {
       
       // In Always Listening mode, restart immediately if no audio
       if (stateRef.current.alwaysListening) {
-        setTimeout(() => startRecordingRef.current?.(), 500);
+        if (autoRestartTimeoutRef.current) clearTimeout(autoRestartTimeoutRef.current)
+        autoRestartTimeoutRef.current = setTimeout(() => startRecordingRef.current?.(), 500);
       }
       return
     }
@@ -276,27 +305,28 @@ export default function AssistantPage() {
         // Check if we're in an active conversation window
         const inConversationWindow = inConversationWindowRef.current;
         
-        console.log(`🔍 Transcript: "${transcript}" | Has wake word: ${hasWakeWord} | In window: ${inConversationWindow}`);
+        console.log(`?? Transcript: "${transcript}" | Has wake word: ${hasWakeWord} | In window: ${inConversationWindow}`);
         
         if (!hasWakeWord && !inConversationWindow) {
-          console.log(`⏭️ IGNORING - No wake word and not in conversation window`);
+          console.log(`?? IGNORING - No wake word and not in conversation window`);
           addMessageRef.current?.({
             type: 'system',
-            content: `🔇 Ignored: "${transcript.substring(0, 50)}..." (say "Servio" to start)`,
+            content: `?? Ignored: "${transcript.substring(0, 50)}..." (say "Servio" to start)`,
             metadata: { action: { type: 'ignored', status: 'completed' } }
           });
           // Don't process - just restart listening
           setState(prev => ({ ...prev, isProcessing: false }));
           audioChunksRef.current = [];
-          setTimeout(() => {
-            console.log('🔄 Restarting recording after ignoring...');
+          if (autoRestartTimeoutRef.current) clearTimeout(autoRestartTimeoutRef.current)
+          autoRestartTimeoutRef.current = setTimeout(() => {
+            console.log('?? Restarting recording after ignoring...');
             startRecordingRef.current?.();
           }, 500);
           return;
         }
         
         if (hasWakeWord) {
-          console.log(`✅ Wake word detected - starting conversation window (30s)`);
+          console.log(`? Wake word detected - starting conversation window (30s)`);
           // Start/restart conversation window
           if (conversationWindowRef.current) {
             clearTimeout(conversationWindowRef.current);
@@ -305,28 +335,28 @@ export default function AssistantPage() {
           setState(prev => ({ ...prev, inConversationWindow: true }));
           
           conversationWindowRef.current = setTimeout(() => {
-            console.log('⏱️ Conversation window expired - wake word required again');
+            console.log('?? Conversation window expired - wake word required again');
             inConversationWindowRef.current = false;
             setState(prev => ({ ...prev, inConversationWindow: false }));
             addMessageRef.current?.({
               type: 'system',
-              content: '⏱️ Conversation paused. Say "Servio" to continue.',
+              content: '?? Conversation paused. Say "Servio" to continue.',
               metadata: { action: { type: 'conversation_window', status: 'completed' } }
             });
           }, CONVERSATION_WINDOW_DURATION);
         } else if (inConversationWindow) {
-          console.log(`💬 In conversation window - processing without wake word: "${transcript}"`);
+          console.log(`?? In conversation window - processing without wake word: "${transcript}"`);
           // Reset the conversation window timer (extends the window)
           if (conversationWindowRef.current) {
             clearTimeout(conversationWindowRef.current);
           }
           conversationWindowRef.current = setTimeout(() => {
-            console.log('⏱️ Conversation window expired');
+            console.log('?? Conversation window expired');
             inConversationWindowRef.current = false;
             setState(prev => ({ ...prev, inConversationWindow: false }));
             addMessageRef.current?.({
               type: 'system',
-              content: '⏱️ Conversation paused. Say "Servio" to continue.',
+              content: '?? Conversation paused. Say "Servio" to continue.',
               metadata: { action: { type: 'conversation_window', status: 'completed' } }
             });
           }, CONVERSATION_WINDOW_DURATION);
@@ -383,7 +413,7 @@ export default function AssistantPage() {
       
       addMessage({
         type: 'system',
-        content: `🎤 Failed to process audio: ${errorMessage}. Try speaking more clearly or use text input instead.`,
+        content: `?? Failed to process audio: ${errorMessage}. Try speaking more clearly or use text input instead.`,
         metadata: {
           action: {
             type: 'error',
@@ -401,18 +431,20 @@ export default function AssistantPage() {
       
       // Auto-restart recording if in Always Listening mode
       if (stateRef.current.alwaysListening) {
-        console.log('📍 Scheduling auto-restart after audio processing...');
-        setTimeout(() => {
-          console.log(`📍 Checking restart conditions: alwaysListening=${stateRef.current.alwaysListening}, isRecording=${stateRef.current.isRecording}, isProcessing=${stateRef.current.isProcessing}, isSpeaking=${stateRef.current.isSpeaking}`);
+        console.log('?? Scheduling auto-restart after audio processing...');
+        if (autoRestartTimeoutRef.current) clearTimeout(autoRestartTimeoutRef.current)
+        autoRestartTimeoutRef.current = setTimeout(() => {
+          console.log(`?? Checking restart conditions: alwaysListening=${stateRef.current.alwaysListening}, isRecording=${stateRef.current.isRecording}, isProcessing=${stateRef.current.isProcessing}, isSpeaking=${stateRef.current.isSpeaking}`);
           if (stateRef.current.alwaysListening && !stateRef.current.isRecording && !stateRef.current.isProcessing && !stateRef.current.isSpeaking) {
-            console.log('✅ Auto-restarting recording after audio processing (Always Listening mode)');
+            console.log('? Auto-restarting recording after audio processing (Always Listening mode)');
             startRecordingRef.current?.();
           } else {
-            console.log('⚠️ Cannot restart yet, scheduling retry...');
+            console.log('?? Cannot restart yet, scheduling retry...');
             // Retry after audio finishes
-            setTimeout(() => {
+            if (retryRestartTimeoutRef.current) clearTimeout(retryRestartTimeoutRef.current)
+            retryRestartTimeoutRef.current = setTimeout(() => {
               if (stateRef.current.alwaysListening && !stateRef.current.isRecording && !stateRef.current.isProcessing) {
-                console.log('✅ Retry: Auto-restarting recording (Always Listening mode)');
+                console.log('? Retry: Auto-restarting recording (Always Listening mode)');
                 startRecordingRef.current?.();
               }
             }, 1000);
@@ -445,7 +477,9 @@ export default function AssistantPage() {
           audio: {
             echoCancellation: true,
             noiseSuppression: true,
-            sampleRate: 44100
+            autoGainControl: true, // Automatically adjust mic volume
+            sampleRate: 48000, // Higher sample rate for better quality
+            channelCount: 1, // Mono is sufficient and smaller file size
           }
         })
 
@@ -502,6 +536,14 @@ export default function AssistantPage() {
         wakeWordServiceRef.current.cleanup()
         wakeWordServiceRef.current = null
       }
+      // Cleanup all timeouts
+      if (autoRestartTimeoutRef.current) clearTimeout(autoRestartTimeoutRef.current)
+      if (processAudioTimeoutRef.current) clearTimeout(processAudioTimeoutRef.current)
+      if (textCommandTimeoutRef.current) clearTimeout(textCommandTimeoutRef.current)
+      if (retryRestartTimeoutRef.current) clearTimeout(retryRestartTimeoutRef.current)
+      if (autoStopTimeoutRef.current) clearTimeout(autoStopTimeoutRef.current)
+      if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current)
+      if (conversationWindowRef.current) clearTimeout(conversationWindowRef.current)
     }
   }, [stopAudio])
 
@@ -521,9 +563,10 @@ export default function AssistantPage() {
     
     // Simple timer-based auto-stop for Always Listening (much more performant)
     if (stateRef.current.alwaysListening) {
-      console.log('⏲️ Starting 5-second auto-stop timer for Always Listening');
-      silenceTimeoutRef.current = setTimeout(() => {
-        console.log('⏱️ 5 seconds elapsed - auto-stopping recording');
+      console.log('?? Starting 5-second auto-stop timer for Always Listening');
+      if (autoStopTimeoutRef.current) clearTimeout(autoStopTimeoutRef.current)
+      autoStopTimeoutRef.current = setTimeout(() => {
+        console.log('?? 5 seconds elapsed - auto-stopping recording');
         if (stateRef.current.isRecording && stopRecordingRef.current) {
           stopRecordingRef.current();
         }
@@ -631,10 +674,10 @@ export default function AssistantPage() {
       addMessage({
         type: 'system',
         content: isNetworkError 
-          ? '🔌 Network error. Please check your connection and try again.' 
+          ? '?? Network error. Please check your connection and try again.' 
           : isTimeoutError
-          ? '⏱️ Request timed out. The server might be busy. Please try again.'
-          : `❌ Error: ${errorMessage}. Please try rephrasing your command.`,
+          ? '?? Request timed out. The server might be busy. Please try again.'
+          : `? Error: ${errorMessage}. Please try rephrasing your command.`,
         metadata: {
           action: {
             type: 'error',
@@ -648,16 +691,16 @@ export default function AssistantPage() {
       
       // Auto-restart if Always Listening is enabled
       if (stateRef.current.alwaysListening) {
-        console.log('📍 Scheduling auto-restart after text command...');
+        console.log('?? Scheduling auto-restart after text command...');
         setTimeout(() => {
-          console.log(`📍 Text command restart check: alwaysListening=${stateRef.current.alwaysListening}, isRecording=${stateRef.current.isRecording}, isSpeaking=${stateRef.current.isSpeaking}`);
+          console.log(`?? Text command restart check: alwaysListening=${stateRef.current.alwaysListening}, isRecording=${stateRef.current.isRecording}, isSpeaking=${stateRef.current.isSpeaking}`);
           if (stateRef.current.alwaysListening && !stateRef.current.isRecording && !stateRef.current.isProcessing && !stateRef.current.isSpeaking) {
-            console.log('✅ Auto-restarting recording after text command (Always Listening mode)');
+            console.log('? Auto-restarting recording after text command (Always Listening mode)');
             startRecordingRef.current?.();
           } else {
             setTimeout(() => {
               if (stateRef.current.alwaysListening && !stateRef.current.isRecording && !stateRef.current.isProcessing) {
-                console.log('✅ Retry: Auto-restarting after text command (Always Listening mode)');
+                console.log('? Retry: Auto-restarting after text command (Always Listening mode)');
                 startRecordingRef.current?.();
               }
             }, 1000);
@@ -695,7 +738,7 @@ export default function AssistantPage() {
           
           // Immediate audio acknowledgment - play a quick "beep" or say "Yes?"
           const beep = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuBzvLZiTYHGGS56+mgUBELTKXh8bllHAU7k9XvyH0pBSh+zPDakTsIF2Kz6OumVRMNS6Lf8rpnIAU3i9Pvx4EqByR8yu/ekj0JGWG16+ypVxQLTKPi8LxnIgU7lNbvyH4qBCh9zO/dkj0JGGCy6OymVBINSqDf8rtnIQU5i9Huyoau');
-          beep.volume = 0.3;
+          beep.volume = 0.8; // Increased from 0.3 to 0.8 for more noticeable beep
           try {
             await beep.play();
           } catch (e) {
@@ -706,7 +749,7 @@ export default function AssistantPage() {
           if (addMessageRef.current) {
             addMessageRef.current({
               type: 'assistant',
-              content: `✨ Yes? I'm listening...`,
+              content: `? Yes? I'm listening...`,
               metadata: {
                 action: {
                   type: 'wake_word',
@@ -793,7 +836,7 @@ export default function AssistantPage() {
         
         addMessage({
           type: 'system',
-          content: '👂 Wake word listening started. Say "Hey Servio" to activate!',
+          content: '?? Wake word listening started. Say "Hey Servio" to activate!',
           metadata: {
             action: {
               type: 'wake_word',
@@ -820,215 +863,194 @@ export default function AssistantPage() {
   return (
     <>
       <Head>
-        <title>Servio Assistant - AI Staff Helper</title>
-        <meta name="description" content="Talk to Servio AI Assistant for restaurant operations" />
+        <title>AI Assistant - Servio</title>
+        <meta name="description" content="Voice-powered AI assistant for restaurant operations" />
       </Head>
 
       <DashboardLayout>
-        <div className="max-w-7xl mx-auto">
-          {/* Enhanced Header with Status Bar */}
-          <div className="mb-4 sm:mb-6">
-            <div className="flex items-start justify-between">
-              <div>
-                <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                  <span className="text-3xl">🤖</span>
-                  Servio AI Assistant
-                  {state.isProcessing && <span className="ml-2 px-2 py-1 text-xs bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300 rounded-full animate-pulse">Processing...</span>}
-                  {state.isSpeaking && <span className="ml-2 px-2 py-1 text-xs bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 rounded-full animate-pulse">🔊 Speaking</span>}
-                  {state.isRecording && <span className="ml-2 px-2 py-1 text-xs bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300 rounded-full animate-pulse">🎤 Recording</span>}
-                </h1>
-                <p className="mt-2 text-sm sm:text-base text-gray-600 dark:text-gray-400">
-                  Your intelligent AI-powered restaurant operations assistant. Talk naturally to manage orders, inventory, and tasks.
-                </p>
-              </div>
+        <div className="max-w-6xl mx-auto px-2 sm:px-4">
+          {/* Minimalist Header */}
+          <div className="mb-3 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div 
+                data-testid="status-indicator"
+                className={`w-2 h-2 rounded-full ${
+                state.isRecording ? 'bg-red-500 animate-pulse' :
+                state.isProcessing ? 'bg-yellow-500 animate-pulse' :
+                state.isSpeaking ? 'bg-green-500 animate-pulse' :
+                'bg-gray-400'
+              }`} />
+              <h1 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100">
+                AI Assistant
+              </h1>
+              {state.alwaysListening && (
+                <span className="px-2 py-0.5 text-xs bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded-full font-medium">
+                  Always On
+                </span>
+              )}
             </div>
-            
-            {/* Compact Stats Bar */}
-            <div className="flex items-center gap-3 mt-3 text-sm">
-              <div className="flex items-center gap-1.5">
-                <span className="text-lg">💬</span>
-                <span className="font-semibold">{state.messages.length}</span>
-              </div>
-              <div className="h-4 w-px bg-gray-300 dark:bg-gray-600"></div>
-              <div className="flex items-center gap-1.5">
-                <span className="text-lg">{state.alwaysListening ? state.inConversationWindow ? '💬' : '🎯' : '🔇'}</span>
-                <span className="text-sm font-medium">{state.alwaysListening ? state.inConversationWindow ? 'In Conversation' : 'Say "Servio"' : 'Inactive'}</span>
-              </div>
-              <div className="h-4 w-px bg-gray-300 dark:bg-gray-600"></div>
-              <div className="flex items-center gap-1.5">
-                <span className="text-lg">{state.isProcessing ? '🧠' : state.isSpeaking ? '🗣️' : state.isRecording ? '🎤' : '✅'}</span>
-                <span className="text-sm font-medium">{state.isProcessing ? 'Thinking' : state.isSpeaking ? 'Speaking' : state.isRecording ? 'Listening' : 'Ready'}</span>
-              </div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">
+              {state.messages.length} messages
             </div>
           </div>
 
-
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-            {/* Left Panel - Compact Controls */}
-            <div className="lg:col-span-1">
-              <div className="card-mobile space-y-3 bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900">
-                
-                <RealisticAvatar
-                  isTalking={state.isSpeaking}
-                  isListening={state.isRecording}
-                  isThinking={state.isProcessing}
-                  size="large"
-                  gender="female"
-                  name="Servio Assistant"
-                  audioLevel={talkIntensity * 100}
-                />
-
-                <MicrophoneButton
-                  isRecording={state.isRecording}
-                  isProcessing={state.isProcessing}
-                  onStartRecording={startRecording}
-                  onStopRecording={stopRecording}
-                  disabled={!mediaRecorder}
-                  toggleMode={state.micToggleMode}
-                />
-                
-
-                {/* Always Listening Mode - Compact */}
-                <div className="p-3 bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 rounded-lg border-2 border-purple-300 dark:border-purple-700">
-                  <div className="flex items-center justify-between mb-2">
-                    <div>
-                      <h3 className="text-sm font-bold text-purple-900 dark:text-purple-100 flex items-center gap-2">
-                        <span className="text-lg">🎯</span>
-                        Always Listening Mode
-                        {state.alwaysListening && <span className="px-2 py-0.5 bg-purple-600 text-white text-xs rounded-full animate-pulse">ACTIVE</span>}
-                      </h3>
-                      <p className="text-xs text-purple-700 dark:text-purple-300 mt-1">
-                        {state.alwaysListening 
-                          ? '🎤 Continuously listening and processing your commands' 
-                          : 'Enable for hands-free continuous operation'
-                        }
-                      </p>
-                    </div>
-                    <div className={`w-3 h-3 rounded-full ${
-                      state.alwaysListening ? 'bg-purple-500 animate-pulse' : 'bg-gray-300'
-                    }`} />
-                  </div>
-
-                  <button
-                    onClick={() => {
-                      const newAlwaysListening = !state.alwaysListening;
-                      setState(prev => ({ ...prev, alwaysListening: newAlwaysListening }));
-                      
-                      if (newAlwaysListening) {
-                        // Start recording immediately using ref
-                        addMessageRef.current?.({
-                          type: 'system',
-                          content: '🎯 Always Listening activated! I\'ll continuously process everything you say.',
-                          metadata: { action: { type: 'always_listening', status: 'completed' } }
-                        });
-                        
-                        // Start recording after a brief moment using ref
-                        setTimeout(() => {
-                          if (startRecordingRef.current && !stateRef.current.isRecording && !stateRef.current.isProcessing) {
-                            startRecordingRef.current();
-                          }
-                        }, 500);
-                      } else {
-                        // Stop recording if active using ref
-                        if (stateRef.current.isRecording && stopRecordingRef.current) {
-                          stopRecordingRef.current();
-                        }
-                        
-                        // Clear conversation window
-                        if (conversationWindowRef.current) {
-                          clearTimeout(conversationWindowRef.current);
-                          conversationWindowRef.current = null;
-                        }
-                        inConversationWindowRef.current = false;
-                        setState(prev => ({ ...prev, inConversationWindow: false }));
-                        
-                        addMessageRef.current?.({
-                          type: 'system',
-                          content: '🎯 Always Listening deactivated.',
-                          metadata: { action: { type: 'always_listening', status: 'completed' } }
-                        });
-                      }
-                    }}
-                    disabled={state.isProcessing}
-                    className={`w-full px-4 py-2.5 text-sm font-bold rounded-lg transition-all transform hover:scale-105 ${
-                      state.alwaysListening
-                        ? 'bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white shadow-lg'
-                        : 'bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white shadow-lg'
-                    } disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none`}
-                  >
-                    {state.alwaysListening ? '⏸️ Stop Always Listening' : '🎯 Start Always Listening'}
-                  </button>
-
-                  {state.alwaysListening && state.inConversationWindow && (
-                    <div className="mt-2 p-2 bg-green-100 dark:bg-green-900/30 rounded text-xs">
-                      <span className="font-bold text-green-700 dark:text-green-300">💬 IN CONVERSATION</span>
-                      <span className="text-green-600 dark:text-green-400 ml-2">- Talk freely for 30s</span>
-                    </div>
-                  )}
+          {/* Main Layout */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+            {/* Left Sidebar - Controls */}
+            <div className="lg:col-span-1 space-y-3">
+              {/* Avatar Card */}
+              <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow-sm border border-gray-200 dark:border-gray-700">
+                <div data-testid="assistant-avatar">
+                  <RealisticAvatar
+                    isTalking={state.isSpeaking}
+                    isListening={state.isRecording}
+                    isThinking={state.isProcessing}
+                    size="medium"
+                    gender="female"
+                    name="Servio"
+                    audioLevel={talkIntensity * 100}
+                  />
                 </div>
+                
+                {/* Audio Visualization */}
+                {state.isSpeaking && (
+                  <div className="flex items-center justify-center gap-1 h-12 mt-3">
+                    {[...Array(5)].map((_, i) => (
+                      <div
+                        key={i}
+                        className="w-1 bg-gradient-to-t from-green-500 to-green-400 rounded-full transition-all"
+                        style={{
+                          height: `${Math.max(8, talkIntensity * 48 * (1 + Math.sin(Date.now() / 100 + i)))}px`,
+                          opacity: 0.6 + talkIntensity * 0.4,
+                          animation: `pulse ${0.3 + i * 0.1}s ease-in-out infinite alternate`
+                        }}
+                      />
+                    ))}
+                  </div>
+                )}
+                
+                <div className={state.isSpeaking ? 'mt-2 text-center' : 'mt-3 text-center'} data-testid="microphone-button">
+                  <MicrophoneButton
+                    isRecording={state.isRecording}
+                    isProcessing={state.isProcessing}
+                    onStartRecording={startRecording}
+                    onStopRecording={stopRecording}
+                    disabled={!mediaRecorder}
+                    toggleMode={state.micToggleMode}
+                  />
+                </div>
+              </div>
 
+              {/* Always Listening Toggle */}
+              <div className="bg-white dark:bg-gray-800 rounded-lg p-3 shadow-sm border border-gray-200 dark:border-gray-700">
+                <button
+                  data-testid="always-listening-toggle"
+                  onClick={() => {
+                    const newAlwaysListening = !state.alwaysListening;
+                    setState(prev => ({ ...prev, alwaysListening: newAlwaysListening }));
+                    
+                    if (newAlwaysListening) {
+                      addMessageRef.current?.({
+                        type: 'system',
+                        content: '?? Always Listening activated.',
+                        metadata: { action: { type: 'always_listening', status: 'completed' } }
+                      });
+                      setTimeout(() => {
+                        if (startRecordingRef.current && !stateRef.current.isRecording && !stateRef.current.isProcessing) {
+                          startRecordingRef.current();
+                        }
+                      }, 500);
+                    } else {
+                      if (stateRef.current.isRecording && stopRecordingRef.current) {
+                        stopRecordingRef.current();
+                      }
+                      if (conversationWindowRef.current) {
+                        clearTimeout(conversationWindowRef.current);
+                        conversationWindowRef.current = null;
+                      }
+                      inConversationWindowRef.current = false;
+                      setState(prev => ({ ...prev, inConversationWindow: false }));
+                      addMessageRef.current?.({
+                        type: 'system',
+                        content: '?? Always Listening deactivated.',
+                        metadata: { action: { type: 'always_listening', status: 'completed' } }
+                      });
+                    }
+                  }}
+                  disabled={state.isProcessing}
+                  className={`w-full py-2 px-3 text-sm font-medium rounded-lg transition-colors ${
+                    state.alwaysListening
+                      ? 'bg-red-500 hover:bg-red-600 text-white'
+                      : 'bg-purple-500 hover:bg-purple-600 text-white'
+                  } disabled:opacity-50 disabled:cursor-not-allowed`}
+                >
+                  {state.alwaysListening ? '? Stop Listening' : '?? Always Listen'}
+                </button>
+                
+                {state.alwaysListening && (
+                  <p className="mt-2 text-xs text-gray-600 dark:text-gray-400 text-center">
+                    {state.inConversationWindow ? '?? In conversation' : 'Say "Servio" to start'}
+                  </p>
+                )}
               </div>
             </div>
 
-            {/* Right Panel - Transcript & Actions */}
-            <div className="lg:col-span-3 space-y-3">
-              {/* Conversation History */}
-              <div className="card-mobile h-[45vh] lg:h-[400px]">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100">
-                    Conversation
-                  </h2>
-                  <div className="flex items-center space-x-2 text-xs sm:text-sm text-gray-500 dark:text-gray-400">
-                    <div className="flex items-center space-x-1">
-                      <div className={`w-2 h-2 rounded-full ${
-                        state.isRecording ? 'bg-red-500' :
-                        state.isProcessing ? 'bg-yellow-500' :
-                        state.isSpeaking ? 'bg-green-500' :
-                        'bg-gray-300 dark:bg-gray-600'
-                      }`} />
-                      <span className="hidden sm:inline">
-                        {state.isRecording && 'Recording'}
-                        {state.isProcessing && 'Processing'}
-                        {state.isSpeaking && 'Speaking'}
-                        {!state.isRecording && !state.isProcessing && !state.isSpeaking && 'Ready'}
-                      </span>
-                      <span className="sm:hidden">
-                        {state.isRecording && 'Rec'}
-                        {state.isProcessing && 'Proc'}
-                        {state.isSpeaking && 'Talk'}
-                        {!state.isRecording && !state.isProcessing && !state.isSpeaking && 'Ready'}
-                      </span>
-                    </div>
-                  </div>
+            {/* Right Content - Conversation */}
+            <div className="lg:col-span-2 space-y-3">
+              {/* Conversation Card */}
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 h-[50vh] lg:h-[500px] flex flex-col">
+                <div className="p-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Conversation</span>
+                  <span className="text-xs px-2 py-0.5 bg-gray-100 dark:bg-gray-700 rounded text-gray-600 dark:text-gray-400">
+                    {state.isRecording ? '?? Listening' :
+                     state.isProcessing ? '?? Thinking' :
+                     state.isSpeaking ? '??? Speaking' :
+                     '? Ready'}
+                  </span>
                 </div>
-
-                <TranscriptFeed
-                  messages={state.messages}
-                  className="h-full mobile-scrolling"
-                />
+                <div className="flex-1 overflow-hidden" data-testid="transcript-feed">
+                  <TranscriptFeed
+                    messages={state.messages}
+                    className="h-full"
+                  />
+                </div>
               </div>
 
-              {/* Chat Input */}
-              <div className="card-mobile">
-                <div className="mb-3">
-                  <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">
-                    💬 Type Command
-                  </h3>
+              {/* Input Card */}
+              <div className="bg-white dark:bg-gray-800 rounded-lg p-3 shadow-sm border border-gray-200 dark:border-gray-700">
+                <div data-testid="chat-input-wrapper">
                   <ChatInput
                     onSendMessage={handleQuickCommand}
                     disabled={state.isProcessing || state.isRecording}
-                    placeholder="Type your command... (e.g., 'no more jerk chicken', 'check orders')"
+                    placeholder="Type a command..."
                   />
                 </div>
-
-                {/* Compact Suggestions */}
-                <div className="mt-3">
-                  <p className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">💡 Quick Examples:</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    <button onClick={() => handleQuickCommand('check current orders')} disabled={state.isProcessing || state.isRecording} className="px-2 py-1 text-xs bg-gray-100 dark:bg-gray-700 rounded hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50">Check orders</button>
-                    <button onClick={() => handleQuickCommand('what items are 86\'d')} disabled={state.isProcessing || state.isRecording} className="px-2 py-1 text-xs bg-gray-100 dark:bg-gray-700 rounded hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50">What's 86'd?</button>
-                    <button onClick={() => handleQuickCommand('show inventory levels')} disabled={state.isProcessing || state.isRecording} className="px-2 py-1 text-xs bg-gray-100 dark:bg-gray-700 rounded hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50">Inventory</button>
-                  </div>
+                
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  <button 
+                    data-testid="quick-command-check-orders"
+                    onClick={() => handleQuickCommand('check current orders')} 
+                    disabled={state.isProcessing || state.isRecording} 
+                    className="px-2 py-1 text-xs bg-gray-100 dark:bg-gray-700 rounded hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50 text-gray-700 dark:text-gray-300"
+                  >
+                    Check orders
+                  </button>
+                  <button 
+                    data-testid="quick-command-whats-86d"
+                    onClick={() => handleQuickCommand('what items are 86\'d')} 
+                    disabled={state.isProcessing || state.isRecording} 
+                    className="px-2 py-1 text-xs bg-gray-100 dark:bg-gray-700 rounded hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50 text-gray-700 dark:text-gray-300"
+                  >
+                    What's 86'd?
+                  </button>
+                  <button 
+                    data-testid="quick-command-inventory"
+                    onClick={() => handleQuickCommand('show inventory levels')} 
+                    disabled={state.isProcessing || state.isRecording} 
+                    className="px-2 py-1 text-xs bg-gray-100 dark:bg-gray-700 rounded hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50 text-gray-700 dark:text-gray-300"
+                  >
+                    Inventory
+                  </button>
                 </div>
               </div>
             </div>

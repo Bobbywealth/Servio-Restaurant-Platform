@@ -257,7 +257,7 @@ router.post('/campaigns', (0, errorHandler_1.asyncHandler)(async (req, res) => {
  * Send a campaign immediately
  */
 router.post('/campaigns/:id/send', (0, errorHandler_1.asyncHandler)(async (req, res) => {
-    const { id } = req.params;
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
     const campaign = await db.get('SELECT * FROM marketing_campaigns WHERE id = ?', [id]);
     if (!campaign) {

@@ -48,7 +48,7 @@ const ensureUploadsDir = async () => {
 router.get('/public/:slug', (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const { slug } = req.params;
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
-    const restaurant = await db.get('SELECT id, name, settings FROM restaurants WHERE slug = ? AND is_active = TRUE', [slug]);
+    const restaurant = await db.get('SELECT id, name, settings, logo_url, cover_image_url, address, phone, description FROM restaurants WHERE slug = ? AND is_active = TRUE', [slug]);
     if (!restaurant) {
         return res.status(404).json({ success: false, error: { message: 'Restaurant not found' } });
     }
@@ -62,7 +62,15 @@ router.get('/public/:slug', (0, errorHandler_1.asyncHandler)(async (req, res) =>
     res.json({
         success: true,
         data: {
-            restaurant: { name: restaurant.name, settings: JSON.parse(restaurant.settings || '{}') },
+            restaurant: {
+                name: restaurant.name,
+                settings: JSON.parse(restaurant.settings || '{}'),
+                logo_url: restaurant.logo_url,
+                cover_image_url: restaurant.cover_image_url,
+                address: JSON.parse(restaurant.address || '{}'),
+                phone: restaurant.phone,
+                description: restaurant.description
+            },
             items
         }
     });
@@ -110,7 +118,7 @@ router.post('/categories', (0, errorHandler_1.asyncHandler)(async (req, res) => 
     res.status(201).json({ success: true, data: { id: categoryId, name, description, sortOrder } });
 }));
 router.put('/categories/:id', (0, errorHandler_1.asyncHandler)(async (req, res) => {
-    const { id } = req.params;
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const { name, description, sortOrder, isActive } = req.body;
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
     const restaurantId = req.user?.restaurantId;
@@ -142,7 +150,7 @@ router.put('/categories/:id', (0, errorHandler_1.asyncHandler)(async (req, res) 
     res.json({ success: true });
 }));
 router.delete('/categories/:id', (0, errorHandler_1.asyncHandler)(async (req, res) => {
-    const { id } = req.params;
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
     const restaurantId = req.user?.restaurantId;
     if (!restaurantId)
@@ -232,7 +240,7 @@ router.post('/items', upload.array('images', 5), (0, errorHandler_1.asyncHandler
  * Update a menu item
  */
 router.put('/items/:id', upload.array('images', 5), (0, errorHandler_1.asyncHandler)(async (req, res) => {
-    const { id } = req.params;
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const { name, description, price, cost, categoryId, allergens, preparationTime, nutritionalInfo, sortOrder, isAvailable, existingImages } = req.body;
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
     const existingItem = await db.get('SELECT * FROM menu_items WHERE id = ?', [id]);
@@ -633,7 +641,7 @@ router.post('/modifier-groups', (0, errorHandler_1.asyncHandler)(async (req, res
  * Get options for a modifier group
  */
 router.get('/modifier-groups/:id/options', (0, errorHandler_1.asyncHandler)(async (req, res) => {
-    const { id } = req.params;
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
     const options = await db.all(`
     SELECT * FROM modifier_options 
@@ -650,7 +658,7 @@ router.get('/modifier-groups/:id/options', (0, errorHandler_1.asyncHandler)(asyn
  * Add option to a modifier group
  */
 router.post('/modifier-groups/:id/options', (0, errorHandler_1.asyncHandler)(async (req, res) => {
-    const { id } = req.params;
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const { name, description, priceModifier = 0 } = req.body;
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
     if (!name?.trim()) {
@@ -678,7 +686,7 @@ router.post('/modifier-groups/:id/options', (0, errorHandler_1.asyncHandler)(asy
  * Get modifiers assigned to a menu item
  */
 router.get('/items/:id/modifiers', (0, errorHandler_1.asyncHandler)(async (req, res) => {
-    const { id } = req.params;
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
     const modifiers = await db.all(`
     SELECT 
@@ -718,7 +726,7 @@ router.get('/items/:id/modifiers', (0, errorHandler_1.asyncHandler)(async (req, 
  * Assign modifier groups to a menu item
  */
 router.post('/items/:id/modifiers', (0, errorHandler_1.asyncHandler)(async (req, res) => {
-    const { id } = req.params;
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const { modifierGroupIds } = req.body;
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
     if (!Array.isArray(modifierGroupIds)) {

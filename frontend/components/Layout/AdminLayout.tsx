@@ -43,10 +43,15 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
     { name: 'Restaurants', href: '/admin/restaurants', icon: Building2 },
     { name: 'Campaigns', href: '/admin/campaigns', icon: Megaphone },
     { name: 'Orders', href: '/admin/orders', icon: ClipboardList },
-    { name: 'Demo Bookings', href: '/admin/demo-bookings', icon: CalendarDays },
     { name: 'System Health', href: '/admin/system-health', icon: Activity },
     { name: 'Audit Logs', href: '/admin/audit', icon: Shield },
   ]
+
+  // Remove demo-only admin pages in production.
+  const navItems = useMemo(() => {
+    if (process.env.NODE_ENV === 'production') return navigation
+    return [...navigation.slice(0, 4), { name: 'Demo Bookings', href: '/admin/demo-bookings', icon: CalendarDays }, ...navigation.slice(4)]
+  }, [navigation])
 
   const handleLogout = () => {
     logout()
@@ -144,7 +149,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
 
             {/* Navigation */}
             <nav className="flex-1 px-4 py-6 space-y-2">
-              {navigation.map((item) => {
+              {navItems.map((item) => {
                 const isActive = router.pathname === item.href || 
                   (item.href === '/admin' && router.pathname === '/admin') ||
                   (item.href !== '/admin' && router.pathname.startsWith(item.href))
@@ -264,7 +269,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
         {/* Mobile bottom navigation */}
         <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 border-t border-gray-200 backdrop-blur-md lg:hidden pb-safe-bottom">
           <div className="grid grid-cols-2 px-2 py-2">
-            {navigation.map((item) => {
+            {navItems.map((item) => {
               const isActive = router.pathname === item.href || router.pathname.startsWith(item.href)
               return (
                 <Link

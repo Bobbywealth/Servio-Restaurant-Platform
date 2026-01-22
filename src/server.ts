@@ -16,6 +16,7 @@ import { logger } from './utils/logger';
 import { errorHandler } from './middleware/errorHandler';
 import { requireAuth } from './middleware/auth';
 import { initializeNotifications } from './notifications/initNotifications';
+import rateLimit from 'express-rate-limit';
 
 const app = express();
 const server = createServer(app);
@@ -68,8 +69,20 @@ async function initializeServer() {
     // API Routes
     app.use('/api/auth', authRoutes);
     
+    // Rate limiter for expensive AI operations
+    const assistantLimiter = rateLimit({
+      windowMs: 15 * 60 * 1000, // 15 minutes
+      max: 50, // Limit each IP to 50 requests per window
+      message: {
+        success: false,
+        error: { message: 'Too many requests to the AI assistant. Please try again later.' }
+      },
+      standardHeaders: true,
+      legacyHeaders: false,
+    });
+
     // Protected routes
-    app.use('/api/assistant', requireAuth, assistantRoutes);
+    app.use('/api/assistant', assistantLimiter, requireAuth, assistantRoutes);
     // Orders routes: /public/* is public, others require auth
     app.use('/api/orders', (req, res, next) => {
       if (req.path.startsWith('/public')) return next();
@@ -97,7 +110,7 @@ async function initializeServer() {
 
     // Vapi and Voice routes (no auth or special auth)
     app.use('/api/vapi', vapiRoutes);
-    app.use('/api', voiceRoutes); // Mount voice ordering APIs under /api
+    app.use('/api/voice', voiceRoutes); // Voice ordering APIs - fixed from catch-all
 
 
     // 404 handler (must be last)

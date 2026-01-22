@@ -38,7 +38,9 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
   query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
   params.push(Number(limit), Number(offset));
 
-  const orders = await db.all(query, params);
+  let orders = await db.all(query, params);
+  // If orders are stored in normalized table (order_items), attach them for API consumers that expect items JSON.
+  orders = await attachOrderItems(db, orders);
 
   // Parse JSON fields
   const formattedOrders = orders.map((order: any) => ({
@@ -80,7 +82,7 @@ router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const db = DatabaseService.getInstance().getDatabase();
 
-  const order = await db.get('SELECT * FROM orders WHERE id = ?', [id]);
+  let order = await db.get('SELECT * FROM orders WHERE id = ?', [id]);
 
   if (!order) {
     return res.status(404).json({
@@ -88,6 +90,10 @@ router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
       error: { message: 'Order not found' }
     });
   }
+
+  // Attach normalized items if needed
+  const withItems = await attachOrderItems(db, [order]);
+  order = withItems[0];
 
   const formattedOrder = {
     ...order,
@@ -165,6 +171,111 @@ router.post('/:id/status', asyncHandler(async (req: Request, res: Response) => {
       updatedAt: new Date().toISOString()
     }
   });
+}));
+
+/**
+ * POST /api/orders/:id/kitchen/accept
+ * Kitchen accepts an incoming website order and sets prep time.
+ *
+ * - Sets status to 'preparing'
+ * - Stores prep_time_minutes, accepted_at, accepted_by_user_id
+ */
+router.post('/:id/kitchen/accept', asyncHandler(async (req: Request, res: Response) => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const { prepTimeMinutes } = req.body ?? {};
+
+  const prep = Number(prepTimeMinutes);
+  if (!Number.isFinite(prep) || prep <= 0 || prep > 240) {
+    throw new BadRequestError('prepTimeMinutes must be a number between 1 and 240');
+  }
+
+  const db = DatabaseService.getInstance().getDatabase();
+  const restaurantId = req.user?.restaurantId;
+  const userId = req.user?.id;
+
+  const order = await db.get<any>('SELECT * FROM orders WHERE id = ? AND restaurant_id = ?', [id, restaurantId]);
+  if (!order) {
+    return res.status(404).json({ success: false, error: { message: 'Order not found' } });
+  }
+
+  const acceptedAt = new Date().toISOString();
+  await db.run(
+    `UPDATE orders SET
+      status = 'preparing',
+      prep_time_minutes = ?,
+      accepted_at = ?,
+      accepted_by_user_id = ?,
+      updated_at = CURRENT_TIMESTAMP
+     WHERE id = ? AND restaurant_id = ?`,
+    [prep, acceptedAt, userId || null, id, restaurantId]
+  );
+
+  await DatabaseService.getInstance().logAudit(
+    restaurantId!,
+    userId || 'system',
+    'kitchen_accept_order',
+    'order',
+    id,
+    { prepTimeMinutes: prep, acceptedAt }
+  );
+
+  await eventBus.emit('order.kitchen_accepted', {
+    restaurantId: restaurantId!,
+    type: 'order.kitchen_accepted',
+    actor: { actorType: 'user', actorId: userId },
+    payload: { orderId: id, prepTimeMinutes: prep, acceptedAt },
+    occurredAt: acceptedAt
+  });
+
+  res.json({
+    success: true,
+    data: {
+      orderId: id,
+      status: 'preparing',
+      prepTimeMinutes: prep,
+      acceptedAt
+    }
+  });
+}));
+
+/**
+ * POST /api/orders/:id/kitchen/decline
+ * Kitchen declines/cancels an incoming website order.
+ */
+router.post('/:id/kitchen/decline', asyncHandler(async (req: Request, res: Response) => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const db = DatabaseService.getInstance().getDatabase();
+  const restaurantId = req.user?.restaurantId;
+  const userId = req.user?.id;
+
+  const order = await db.get<any>('SELECT * FROM orders WHERE id = ? AND restaurant_id = ?', [id, restaurantId]);
+  if (!order) {
+    return res.status(404).json({ success: false, error: { message: 'Order not found' } });
+  }
+
+  await db.run(
+    `UPDATE orders SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND restaurant_id = ?`,
+    [id, restaurantId]
+  );
+
+  await DatabaseService.getInstance().logAudit(
+    restaurantId!,
+    userId || 'system',
+    'kitchen_decline_order',
+    'order',
+    id,
+    { previousStatus: order.status }
+  );
+
+  await eventBus.emit('order.kitchen_declined', {
+    restaurantId: restaurantId!,
+    type: 'order.kitchen_declined',
+    actor: { actorType: 'user', actorId: userId },
+    payload: { orderId: id, previousStatus: order.status },
+    occurredAt: new Date().toISOString()
+  });
+
+  res.json({ success: true, data: { orderId: id, status: 'cancelled' } });
 }));
 
 /**
@@ -247,11 +358,26 @@ router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) =>
     totalAmount += (item.price * item.quantity);
   }
 
-  await db.run(`
-    INSERT INTO orders (
-      id, restaurant_id, channel, status, total_amount, payment_status, created_at, updated_at
-    ) VALUES (?, ?, 'website', 'NEW', ?, 'unpaid', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-  `, [orderId, restaurantId, totalAmount]);
+  const safeName =
+    typeof customerName === 'string' && customerName.trim().length > 0 ? customerName.trim() : 'Guest';
+  const safePhone = typeof customerPhone === 'string' && customerPhone.trim().length > 0 ? customerPhone.trim() : null;
+  await db.run(
+    `
+      INSERT INTO orders (
+        id,
+        restaurant_id,
+        channel,
+        status,
+        total_amount,
+        payment_status,
+        customer_name,
+        customer_phone,
+        created_at,
+        updated_at
+      ) VALUES (?, ?, 'website', 'NEW', ?, 'unpaid', ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `,
+    [orderId, restaurantId, totalAmount, safeName, safePhone]
+  );
 
   // Create order items
   for (const item of items) {
@@ -287,6 +413,43 @@ router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) =>
     data: { orderId, status: 'NEW' }
   });
 }));
+
+async function attachOrderItems(db: any, orders: any[]) {
+  if (!orders || orders.length === 0) return orders;
+  const ids = orders.map((o) => o.id).filter(Boolean);
+  if (ids.length === 0) return orders;
+
+  const placeholders = ids.map(() => '?').join(', ');
+  const rows = await db.all(
+    `
+      SELECT
+        order_id,
+        COALESCE(name, item_name_snapshot) as item_name,
+        COALESCE(quantity, qty) as item_qty,
+        COALESCE(unit_price, unit_price_snapshot) as item_unit_price
+      FROM order_items
+      WHERE order_id IN (${placeholders})
+    `,
+    ids
+  );
+
+  const byOrderId = new Map<string, any[]>();
+  for (const r of rows) {
+    const list = byOrderId.get(r.order_id) || [];
+    list.push({
+      name: r.item_name,
+      quantity: r.item_qty,
+      unit_price: r.item_unit_price
+    });
+    byOrderId.set(r.order_id, list);
+  }
+
+  return orders.map((o) => {
+    const hasJsonItems = typeof o.items === 'string' && o.items.trim().length > 0;
+    if (hasJsonItems) return o;
+    return { ...o, items: JSON.stringify(byOrderId.get(o.id) || []) };
+  });
+}
 router.get('/waiting-times', asyncHandler(async (req: Request, res: Response) => {
   const db = DatabaseService.getInstance().getDatabase();
   const dialect = DatabaseService.getInstance().getDialect();

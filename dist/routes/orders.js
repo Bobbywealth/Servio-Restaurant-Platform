@@ -32,7 +32,9 @@ router.get('/', (0, errorHandler_1.asyncHandler)(async (req, res) => {
     }
     query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
     params.push(Number(limit), Number(offset));
-    const orders = await db.all(query, params);
+    let orders = await db.all(query, params);
+    // If orders are stored in normalized table (order_items), attach them for API consumers that expect items JSON.
+    orders = await attachOrderItems(db, orders);
     // Parse JSON fields
     const formattedOrders = orders.map((order) => ({
         ...order,
@@ -65,15 +67,18 @@ router.get('/', (0, errorHandler_1.asyncHandler)(async (req, res) => {
  * Get a specific order by ID
  */
 router.get('/:id', (0, errorHandler_1.asyncHandler)(async (req, res) => {
-    const { id } = req.params;
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
-    const order = await db.get('SELECT * FROM orders WHERE id = ?', [id]);
+    let order = await db.get('SELECT * FROM orders WHERE id = ?', [id]);
     if (!order) {
         return res.status(404).json({
             success: false,
             error: { message: 'Order not found' }
         });
     }
+    // Attach normalized items if needed
+    const withItems = await attachOrderItems(db, [order]);
+    order = withItems[0];
     const formattedOrder = {
         ...order,
         items: JSON.parse(order.items || '[]')
@@ -88,7 +93,7 @@ router.get('/:id', (0, errorHandler_1.asyncHandler)(async (req, res) => {
  * Update order status
  */
 router.post('/:id/status', (0, errorHandler_1.asyncHandler)(async (req, res) => {
-    const { id } = req.params;
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const { status, userId } = req.body;
     const validStatuses = ['received', 'preparing', 'ready', 'completed', 'cancelled'];
     if (!status || !validStatuses.includes(status)) {
@@ -129,6 +134,77 @@ router.post('/:id/status', (0, errorHandler_1.asyncHandler)(async (req, res) => 
             updatedAt: new Date().toISOString()
         }
     });
+}));
+/**
+ * POST /api/orders/:id/kitchen/accept
+ * Kitchen accepts an incoming website order and sets prep time.
+ *
+ * - Sets status to 'preparing'
+ * - Stores prep_time_minutes, accepted_at, accepted_by_user_id
+ */
+router.post('/:id/kitchen/accept', (0, errorHandler_1.asyncHandler)(async (req, res) => {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const { prepTimeMinutes } = req.body ?? {};
+    const prep = Number(prepTimeMinutes);
+    if (!Number.isFinite(prep) || prep <= 0 || prep > 240) {
+        throw new errorHandler_1.BadRequestError('prepTimeMinutes must be a number between 1 and 240');
+    }
+    const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
+    const restaurantId = req.user?.restaurantId;
+    const userId = req.user?.id;
+    const order = await db.get('SELECT * FROM orders WHERE id = ? AND restaurant_id = ?', [id, restaurantId]);
+    if (!order) {
+        return res.status(404).json({ success: false, error: { message: 'Order not found' } });
+    }
+    const acceptedAt = new Date().toISOString();
+    await db.run(`UPDATE orders SET
+      status = 'preparing',
+      prep_time_minutes = ?,
+      accepted_at = ?,
+      accepted_by_user_id = ?,
+      updated_at = CURRENT_TIMESTAMP
+     WHERE id = ? AND restaurant_id = ?`, [prep, acceptedAt, userId || null, id, restaurantId]);
+    await DatabaseService_1.DatabaseService.getInstance().logAudit(restaurantId, userId || 'system', 'kitchen_accept_order', 'order', id, { prepTimeMinutes: prep, acceptedAt });
+    await bus_1.eventBus.emit('order.kitchen_accepted', {
+        restaurantId: restaurantId,
+        type: 'order.kitchen_accepted',
+        actor: { actorType: 'user', actorId: userId },
+        payload: { orderId: id, prepTimeMinutes: prep, acceptedAt },
+        occurredAt: acceptedAt
+    });
+    res.json({
+        success: true,
+        data: {
+            orderId: id,
+            status: 'preparing',
+            prepTimeMinutes: prep,
+            acceptedAt
+        }
+    });
+}));
+/**
+ * POST /api/orders/:id/kitchen/decline
+ * Kitchen declines/cancels an incoming website order.
+ */
+router.post('/:id/kitchen/decline', (0, errorHandler_1.asyncHandler)(async (req, res) => {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
+    const restaurantId = req.user?.restaurantId;
+    const userId = req.user?.id;
+    const order = await db.get('SELECT * FROM orders WHERE id = ? AND restaurant_id = ?', [id, restaurantId]);
+    if (!order) {
+        return res.status(404).json({ success: false, error: { message: 'Order not found' } });
+    }
+    await db.run(`UPDATE orders SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND restaurant_id = ?`, [id, restaurantId]);
+    await DatabaseService_1.DatabaseService.getInstance().logAudit(restaurantId, userId || 'system', 'kitchen_decline_order', 'order', id, { previousStatus: order.status });
+    await bus_1.eventBus.emit('order.kitchen_declined', {
+        restaurantId: restaurantId,
+        type: 'order.kitchen_declined',
+        actor: { actorType: 'user', actorId: userId },
+        payload: { orderId: id, previousStatus: order.status },
+        occurredAt: new Date().toISOString()
+    });
+    res.json({ success: true, data: { orderId: id, status: 'cancelled' } });
 }));
 /**
  * GET /api/orders/stats/summary
@@ -191,11 +267,22 @@ router.post('/public/:slug', (0, errorHandler_1.asyncHandler)(async (req, res) =
     for (const item of items) {
         totalAmount += (item.price * item.quantity);
     }
+    const safeName = typeof customerName === 'string' && customerName.trim().length > 0 ? customerName.trim() : 'Guest';
+    const safePhone = typeof customerPhone === 'string' && customerPhone.trim().length > 0 ? customerPhone.trim() : null;
     await db.run(`
-    INSERT INTO orders (
-      id, restaurant_id, channel, status, total_amount, payment_status, created_at, updated_at
-    ) VALUES (?, ?, 'website', 'NEW', ?, 'unpaid', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-  `, [orderId, restaurantId, totalAmount]);
+      INSERT INTO orders (
+        id,
+        restaurant_id,
+        channel,
+        status,
+        total_amount,
+        payment_status,
+        customer_name,
+        customer_phone,
+        created_at,
+        updated_at
+      ) VALUES (?, ?, 'website', 'NEW', ?, 'unpaid', ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `, [orderId, restaurantId, totalAmount, safeName, safePhone]);
     // Create order items
     for (const item of items) {
         await db.run(`
@@ -226,6 +313,39 @@ router.post('/public/:slug', (0, errorHandler_1.asyncHandler)(async (req, res) =
         data: { orderId, status: 'NEW' }
     });
 }));
+async function attachOrderItems(db, orders) {
+    if (!orders || orders.length === 0)
+        return orders;
+    const ids = orders.map((o) => o.id).filter(Boolean);
+    if (ids.length === 0)
+        return orders;
+    const placeholders = ids.map(() => '?').join(', ');
+    const rows = await db.all(`
+      SELECT
+        order_id,
+        COALESCE(name, item_name_snapshot) as item_name,
+        COALESCE(quantity, qty) as item_qty,
+        COALESCE(unit_price, unit_price_snapshot) as item_unit_price
+      FROM order_items
+      WHERE order_id IN (${placeholders})
+    `, ids);
+    const byOrderId = new Map();
+    for (const r of rows) {
+        const list = byOrderId.get(r.order_id) || [];
+        list.push({
+            name: r.item_name,
+            quantity: r.item_qty,
+            unit_price: r.item_unit_price
+        });
+        byOrderId.set(r.order_id, list);
+    }
+    return orders.map((o) => {
+        const hasJsonItems = typeof o.items === 'string' && o.items.trim().length > 0;
+        if (hasJsonItems)
+            return o;
+        return { ...o, items: JSON.stringify(byOrderId.get(o.id) || []) };
+    });
+}
 router.get('/waiting-times', (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
     const dialect = DatabaseService_1.DatabaseService.getInstance().getDialect();
@@ -313,6 +433,88 @@ router.post('/', (0, errorHandler_1.asyncHandler)(async (req, res) => {
             channel,
             status: 'received',
             createdAt: new Date().toISOString()
+        }
+    });
+}));
+/**
+ * GET /api/orders/history/stats
+ * Get aggregated statistics for historical orders
+ */
+router.get('/history/stats', (0, errorHandler_1.asyncHandler)(async (req, res) => {
+    const { dateFrom, dateTo } = req.query;
+    const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
+    const restaurantId = req.user?.restaurantId;
+    const stats = await db.get(`
+    SELECT 
+      COUNT(*) as total_orders,
+      SUM(total_amount) as total_revenue,
+      AVG(total_amount) as avg_order_value,
+      COUNT(DISTINCT customer_id) as unique_customers
+    FROM orders
+    WHERE restaurant_id = ?
+      AND created_at >= ?
+      AND created_at <= ?
+  `, [restaurantId, dateFrom, dateTo]);
+    res.json({
+        success: true,
+        data: {
+            totalOrders: stats.total_orders || 0,
+            totalRevenue: stats.total_revenue || 0,
+            avgOrderValue: stats.avg_order_value || 0,
+            uniqueCustomers: stats.unique_customers || 0
+        }
+    });
+}));
+/**
+ * GET /api/orders/history
+ * Get historical orders with filters and pagination
+ */
+router.get('/history', (0, errorHandler_1.asyncHandler)(async (req, res) => {
+    const { dateFrom, dateTo, status, channel, limit = 20, offset = 0 } = req.query;
+    const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
+    const restaurantId = req.user?.restaurantId;
+    const where = ['restaurant_id = ?'];
+    const params = [restaurantId];
+    if (dateFrom) {
+        where.push('created_at >= ?');
+        params.push(dateFrom);
+    }
+    if (dateTo) {
+        where.push('created_at <= ?');
+        params.push(dateTo);
+    }
+    if (status && status !== 'all') {
+        where.push('status = ?');
+        params.push(status);
+    }
+    if (channel && channel !== 'all') {
+        where.push('channel = ?');
+        params.push(channel);
+    }
+    const orders = await db.all(`
+    SELECT * FROM orders
+    WHERE ${where.join(' AND ')}
+    ORDER BY created_at DESC
+    LIMIT ? OFFSET ?
+  `, [...params, Number(limit), Number(offset)]);
+    const total = await db.get(`
+    SELECT COUNT(*) as count FROM orders
+    WHERE ${where.join(' AND ')}
+  `, params);
+    const formattedOrders = orders.map((order) => ({
+        ...order,
+        items: JSON.parse(order.items || '[]')
+    }));
+    res.json({
+        success: true,
+        data: {
+            orders: formattedOrders,
+            pagination: {
+                total: total.count,
+                limit: Number(limit),
+                offset: Number(offset),
+                hasMore: total.count > Number(offset) + orders.length
+            }
         }
     });
 }));

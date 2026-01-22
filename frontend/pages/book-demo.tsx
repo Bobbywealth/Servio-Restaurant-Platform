@@ -4,8 +4,16 @@ import Link from 'next/link'
 import { motion } from 'framer-motion'
 import { CalendarDays, Clock, ArrowLeft, CheckCircle2, AlertCircle } from 'lucide-react'
 import { api } from '../lib/api'
+import type { GetServerSideProps } from 'next'
 
 type BookingSlot = { booking_date: string; booking_time: string }
+
+export const getServerSideProps: GetServerSideProps = async () => {
+  if (process.env.NODE_ENV === 'production') {
+    return { notFound: true }
+  }
+  return { props: {} }
+}
 
 function pad2(n: number) {
   return String(n).padStart(2, '0')

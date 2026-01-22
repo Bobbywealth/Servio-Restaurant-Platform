@@ -58,7 +58,7 @@ router.post('/create-upload', auth_1.requireAuth, (0, errorHandler_1.asyncHandle
  * Marks receipt as uploaded and stores final metadata
  */
 router.post('/:id/confirm-upload', auth_1.requireAuth, (0, errorHandler_1.asyncHandler)(async (req, res) => {
-    const { id } = req.params;
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const { supplierName, totalAmount } = req.body;
     const user = req.user;
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
@@ -139,7 +139,7 @@ router.get('/list', auth_1.requireAuth, (0, errorHandler_1.asyncHandler)(async (
  * Get detailed receipt info with a fresh download URL
  */
 router.get('/:id', auth_1.requireAuth, (0, errorHandler_1.asyncHandler)(async (req, res) => {
-    const { id } = req.params;
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const user = req.user;
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
     const receipt = await db.get('SELECT * FROM receipts WHERE id = ?', [id]);
@@ -167,7 +167,7 @@ router.get('/:id', auth_1.requireAuth, (0, errorHandler_1.asyncHandler)(async (r
  * Get all line items for a receipt
  */
 router.get('/:id/items', auth_1.requireAuth, (0, errorHandler_1.asyncHandler)(async (req, res) => {
-    const { id } = req.params;
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const user = req.user;
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
     // Verify access
@@ -188,7 +188,7 @@ router.get('/:id/items', auth_1.requireAuth, (0, errorHandler_1.asyncHandler)(as
  * Add a manual line item to a receipt
  */
 router.post('/:id/items', auth_1.requireAuth, (0, errorHandler_1.asyncHandler)(async (req, res) => {
-    const { id } = req.params;
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const { description, quantity, unitCost, inventoryItemId } = req.body;
     const user = req.user;
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
@@ -211,7 +211,7 @@ router.post('/:id/items', auth_1.requireAuth, (0, errorHandler_1.asyncHandler)(a
  * Apply matched line items to inventory
  */
 router.post('/:id/apply', auth_1.requireAuth, (0, errorHandler_1.asyncHandler)(async (req, res) => {
-    const { id } = req.params;
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const user = req.user;
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
     const dbService = DatabaseService_1.DatabaseService.getInstance();

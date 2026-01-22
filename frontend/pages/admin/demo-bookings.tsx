@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import AdminLayout from '../../components/Layout/AdminLayout'
 import { api } from '../../lib/api'
 import { CalendarDays, RefreshCw } from 'lucide-react'
+import type { GetServerSideProps } from 'next'
 
 type AdminBooking = {
   id: string
@@ -15,6 +16,13 @@ type AdminBooking = {
   notes?: string | null
   status: string
   created_at: string
+}
+
+export const getServerSideProps: GetServerSideProps = async () => {
+  if (process.env.NODE_ENV === 'production') {
+    return { notFound: true }
+  }
+  return { props: {} }
 }
 
 function pad2(n: number) {

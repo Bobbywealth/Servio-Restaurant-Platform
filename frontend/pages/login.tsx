@@ -26,7 +26,7 @@ export default function LoginPage() {
     if (mounted && !isLoading && user) {
       const role = user.role;
       const targetRoute = (role === 'admin') 
-        ? '/admin/demo-bookings' 
+        ? '/admin' 
         : '/dashboard';
       
       // Only redirect if we're still on the login page
@@ -48,7 +48,7 @@ export default function LoginPage() {
   const routeAfterLogin = (userRole?: string) => {
     const role = userRole || user?.role;
     if (role === 'admin' || role === 'platform-admin') {
-      return '/admin/demo-bookings';
+      return '/admin';
     }
     return '/dashboard';
   };
@@ -236,6 +236,7 @@ export default function LoginPage() {
             </div>
           </form>
 
+          {process.env.NODE_ENV !== 'production' ? (
           <div className="mt-10">
             <div className="flex items-center gap-4 mb-6">
               <div className="h-px flex-1 bg-gray-600" />
@@ -278,6 +279,7 @@ export default function LoginPage() {
               </button>
             </div>
           </div>
+          ) : null}
         </div>
         
         <p className="mt-8 text-center text-gray-400 text-sm font-medium">

@@ -207,6 +207,30 @@ export class VoiceOrderingService {
     const orderId = uuidv4();
     const restaurantId = process.env.VAPI_RESTAURANT_ID || 'sasheys-kitchen-union';
 
+    // Ensure we persist caller phone even if the AI didn't explicitly collect it.
+    // Priority: explicit customer.phone -> input.fromPhone -> call_logs.from_phone (by callId)
+    let phone: string | null =
+      typeof input?.customer?.phone === 'string' && input.customer.phone.trim().length > 0
+        ? input.customer.phone.trim()
+        : typeof input?.fromPhone === 'string' && input.fromPhone.trim().length > 0
+          ? input.fromPhone.trim()
+          : null;
+
+    if (!phone && input?.callId) {
+      try {
+        const row = await db.get<any>(
+          'SELECT from_phone FROM call_logs WHERE call_id = ? ORDER BY created_at DESC LIMIT 1',
+          [input.callId]
+        );
+        if (row?.from_phone) phone = String(row.from_phone);
+      } catch {
+        // ignore
+      }
+    }
+
+    if (!input.customer) input.customer = {};
+    if (!input.customer.phone && phone) input.customer.phone = phone;
+
     await db.run(`
       INSERT INTO orders (
         id, restaurant_id, status, customer_name, customer_phone, last_initial,

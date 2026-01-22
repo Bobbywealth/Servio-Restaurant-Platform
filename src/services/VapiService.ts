@@ -177,7 +177,12 @@ export class VapiService {
     const customerNumber = message.call?.customer?.number;
     const duration = message.call?.duration;
     const endedReason = message.endedReason;
-    const restaurantId = process.env.VAPI_RESTAURANT_ID || 'demo-restaurant-1';
+    const restaurantId = process.env.VAPI_RESTAURANT_ID || process.env.DEFAULT_RESTAURANT_ID;
+
+    if (!restaurantId) {
+      logger.error('Vapi restaurant not configured (VAPI_RESTAURANT_ID or DEFAULT_RESTAURANT_ID).');
+      return { error: 'Restaurant not configured' };
+    }
 
     // Log the call for analytics
     await DatabaseService.getInstance().logAudit(
@@ -399,7 +404,11 @@ export class VapiService {
     try {
       const { orderId, phoneNumber } = parameters;
       const db = DatabaseService.getInstance().getDatabase();
-      const restaurantId = process.env.VAPI_RESTAURANT_ID || 'sasheys-kitchen-union';
+      const restaurantId = process.env.VAPI_RESTAURANT_ID || process.env.DEFAULT_RESTAURANT_ID;
+
+      if (!restaurantId) {
+        return { status: 'error', error: 'Restaurant not configured' };
+      }
 
       let query: string;
       let params: any[];

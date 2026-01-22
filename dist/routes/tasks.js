@@ -81,7 +81,7 @@ router.get('/', (0, errorHandler_1.asyncHandler)(async (req, res) => {
  * Mark a task as completed
  */
 router.post('/:id/complete', (0, errorHandler_1.asyncHandler)(async (req, res) => {
-    const { id } = req.params;
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const { userId } = req.body;
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
     const task = await db.get('SELECT * FROM tasks WHERE id = ? AND restaurant_id = ?', [id, req.user?.restaurantId]);
@@ -123,7 +123,7 @@ router.post('/:id/complete', (0, errorHandler_1.asyncHandler)(async (req, res) =
  * Mark a task as in progress
  */
 router.post('/:id/start', (0, errorHandler_1.asyncHandler)(async (req, res) => {
-    const { id } = req.params;
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const { userId } = req.body;
     const db = DatabaseService_1.DatabaseService.getInstance().getDatabase();
     const task = await db.get('SELECT * FROM tasks WHERE id = ? AND restaurant_id = ?', [id, req.user?.restaurantId]);

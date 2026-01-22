@@ -136,16 +136,19 @@ class AssistantService {
             }
             // Keep responses bounded for latency/cost.
             const input = text.length > 2000 ? text.slice(0, 2000) : text;
-            const model = process.env.OPENAI_TTS_MODEL || 'tts-1';
-            const voice = (process.env.OPENAI_TTS_VOICE || 'alloy');
+            const model = process.env.OPENAI_TTS_MODEL || 'tts-1-hd'; // Use HD model for better quality
+            const voice = (process.env.OPENAI_TTS_VOICE || 'nova'); // Nova is more expressive than alloy
             const speech = await this.openai.audio.speech.create({
                 model,
                 voice,
                 input,
-                response_format: 'mp3'
+                response_format: 'mp3',
+                speed: 1.05 // Slightly faster for more energetic delivery
             });
             const arrayBuffer = await speech.arrayBuffer();
             const audioBuffer = Buffer.from(arrayBuffer);
+            // Log audio generation for monitoring
+            logger_1.logger.info(`TTS generated: ${audioBuffer.length} bytes, voice: ${voice}, model: ${model}`);
             const ttsDir = path_1.default.join(process.cwd(), 'uploads', 'tts');
             await fs_1.default.promises.mkdir(ttsDir, { recursive: true });
             const fileName = `tts_${Date.now()}_${(0, uuid_1.v4)()}.mp3`;
@@ -370,6 +373,14 @@ Use the available tools to perform actions. Always be helpful and professional.`
         ];
     }
     async executeTool(toolCall, userId) {
+        if (toolCall.type !== 'function' || !('function' in toolCall)) {
+            return {
+                type: 'tool_call',
+                status: 'error',
+                description: 'Unsupported tool call type',
+                error: `Unsupported tool call type: ${String(toolCall?.type)}`
+            };
+        }
         const { name, arguments: args } = toolCall.function;
         try {
             const parsedArgs = JSON.parse(args);

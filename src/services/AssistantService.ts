@@ -28,9 +28,42 @@ export class AssistantService {
   private _db: any = null;
 
   constructor() {
+    if (!process.env.OPENAI_API_KEY) {
+      logger.error('❌ OPENAI_API_KEY is not configured. AI Assistant will not function.');
+    }
     this.openai = new OpenAI({
       apiKey: process.env.OPENAI_API_KEY || ''
     });
+  }
+
+  private async userHasPermission(userId: string, permission: string): Promise<boolean> {
+    const user = await this.db.get('SELECT role, permissions FROM users WHERE id = ?', [userId]);
+    if (!user) return false;
+    
+    // Admin has all permissions
+    if (user.role === 'admin' || user.role === 'platform-admin') return true;
+    
+    const permissions = JSON.parse(user.permissions || '[]');
+    if (permissions.includes('*')) return true;
+    
+    // Check for specific permission or wildcard
+    const [resource] = permission.split(':');
+    return permissions.includes(permission) || 
+           permissions.includes(`${resource}:*`) || 
+           permissions.includes(`${resource}.*`);
+  }
+
+  private getRequiredPermission(toolName: string): string | null {
+    const permissionMap: Record<string, string> = {
+      'get_orders': 'orders:read',
+      'update_order_status': 'orders:update',
+      'set_item_availability': 'menu:update',
+      'get_inventory': 'inventory:read',
+      'adjust_inventory': 'inventory:update',
+      'get_tasks': 'tasks:read',
+      'complete_task': 'tasks:update'
+    };
+    return permissionMap[toolName] || null;
   }
 
   private get db() {
@@ -170,18 +203,22 @@ export class AssistantService {
 
       // Keep responses bounded for latency/cost.
       const input = text.length > 2000 ? text.slice(0, 2000) : text;
-      const model = process.env.OPENAI_TTS_MODEL || 'tts-1';
-      const voice = (process.env.OPENAI_TTS_VOICE || 'alloy') as any;
+      const model = process.env.OPENAI_TTS_MODEL || 'tts-1-hd'; // Use HD model for better quality
+      const voice = (process.env.OPENAI_TTS_VOICE || 'nova') as any; // Nova is more expressive than alloy
 
       const speech = await this.openai.audio.speech.create({
         model,
         voice,
         input,
-        response_format: 'mp3'
+        response_format: 'mp3',
+        speed: 1.05 // Slightly faster for more energetic delivery
       });
 
       const arrayBuffer = await speech.arrayBuffer();
       const audioBuffer = Buffer.from(arrayBuffer);
+      
+      // Log audio generation for monitoring
+      logger.info(`TTS generated: ${audioBuffer.length} bytes, voice: ${voice}, model: ${model}`);
 
       const ttsDir = path.join(process.cwd(), 'uploads', 'tts');
       await fs.promises.mkdir(ttsDir, { recursive: true });
@@ -431,6 +468,21 @@ Use the available tools to perform actions. Always be helpful and professional.`
     try {
       const parsedArgs = JSON.parse(args);
       logger.info(`Executing tool: ${name} with args:`, parsedArgs);
+
+      // Check permissions before execution
+      const requiredPermission = this.getRequiredPermission(name);
+      if (requiredPermission) {
+        const hasPerm = await this.userHasPermission(userId, requiredPermission);
+        if (!hasPerm) {
+          logger.warn(`User ${userId} attempted to use tool ${name} without permission ${requiredPermission}`);
+          return {
+            type: name,
+            status: 'error',
+            description: `Permission denied: You don't have permission to perform this action (${name}).`,
+            error: 'PERMISSION_DENIED'
+          };
+        }
+      }
 
       switch (name) {
         case 'get_orders':

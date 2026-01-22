@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import { motion, AnimatePresence } from 'framer-motion';
+import clsx from 'clsx';
 import {
   Phone,
   MapPin,
@@ -11,7 +12,12 @@ import {
   Minus,
   AlertTriangle,
   Loader2,
-  CheckCircle2
+  CheckCircle2,
+  Bug,
+  Copy as CopyIcon,
+  Wand2,
+  Zap,
+  ExternalLink
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import toast from 'react-hot-toast';
@@ -43,6 +49,12 @@ export default function PublicProfile() {
   const router = useRouter();
   const { slug } = router.query;
   const restaurantSlug = Array.isArray(slug) ? slug[0] : slug;
+  const testMode = useMemo(() => {
+    const q = router.query;
+    const v = (q.test || q.debug || '') as string | string[];
+    const s = Array.isArray(v) ? v[0] : v;
+    return process.env.NODE_ENV !== 'production' && (s === '1' || s === 'true');
+  }, [router.query]);
 
   const [restaurant, setRestaurant] = useState<RestaurantInfo | null>(null);
   const [items, setItems] = useState<MenuItem[]>([]);
@@ -52,6 +64,14 @@ export default function PublicProfile() {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [orderComplete, setOrderComplete] = useState<string | null>(null);
+  const [customerName, setCustomerName] = useState('Guest');
+  const [customerPhone, setCustomerPhone] = useState('');
+  const [customerEmail, setCustomerEmail] = useState('');
+  const [orderNotes, setOrderNotes] = useState('');
+  const [orderType, setOrderType] = useState<'pickup' | 'delivery'>('pickup');
+  const [pickupTime, setPickupTime] = useState<string>('');
+  const [lastOrderRequest, setLastOrderRequest] = useState<any>(null);
+  const [lastOrderResponse, setLastOrderResponse] = useState<any>(null);
 
   useEffect(() => {
     if (!restaurantSlug) return;
@@ -98,15 +118,102 @@ export default function PublicProfile() {
     if (cart.length === 0) return;
     setIsSubmitting(true);
     try {
-      const resp = await api.post(`/api/orders/public/${restaurantSlug}`, {
+      const payload = {
         items: cart.map(i => ({ id: i.id, name: i.name, quantity: i.quantity, price: i.price })),
-        customerName: "Guest", // v1 simplicity
-      });
+        customerName: customerName || 'Guest',
+        customerPhone: customerPhone || undefined,
+        customerEmail: customerEmail || undefined,
+        // The current backend public order endpoint ignores these extra fields,
+        // but we include them for future-proofing/testing.
+        orderType,
+        pickupTime: pickupTime || undefined,
+        notes: orderNotes || undefined
+      };
+      setLastOrderRequest(payload);
+
+      const resp = await api.post(`/api/orders/public/${restaurantSlug}`, payload);
+      setLastOrderResponse(resp.data);
       setOrderComplete(resp.data.data.orderId);
       setCart([]);
       setIsCartOpen(false);
+      setOrderNotes('');
     } catch (err) {
       toast.error('Failed to place order');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const randomItem = () => {
+    const available = items.filter((i) => i.is_available);
+    if (available.length === 0) return null;
+    return available[Math.floor(Math.random() * available.length)];
+  };
+
+  const addRandomItems = (count: number) => {
+    const picked: MenuItem[] = [];
+    for (let i = 0; i < count; i++) {
+      const it = randomItem();
+      if (it) picked.push(it);
+    }
+    if (picked.length === 0) return;
+    setCart((prev) => {
+      const next = [...prev];
+      for (const it of picked) {
+        const existing = next.find((x) => x.id === it.id);
+        if (existing) existing.quantity += 1;
+        else next.push({ ...it, quantity: 1 });
+      }
+      return next;
+    });
+    toast.success(`Added ${picked.length} random item(s)`);
+  };
+
+  const copyJson = async (value: any) => {
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(value, null, 2));
+      toast.success('Copied');
+    } catch {
+      toast.error('Copy failed');
+    }
+  };
+
+  const sendTestOrder = async (opts?: { itemsCount?: number; openCart?: boolean }) => {
+    const itemsCount = opts?.itemsCount ?? 3;
+    const tempCart: CartItem[] = [];
+    for (let i = 0; i < itemsCount; i++) {
+      const it = randomItem();
+      if (!it) continue;
+      const existing = tempCart.find((x) => x.id === it.id);
+      if (existing) existing.quantity += 1;
+      else tempCart.push({ ...it, quantity: 1 });
+    }
+
+    if (tempCart.length === 0) {
+      toast.error('No available items to order');
+      return;
+    }
+
+    const payload = {
+      items: tempCart.map(i => ({ id: i.id, name: i.name, quantity: i.quantity, price: i.price })),
+      customerName: customerName || 'Guest',
+      customerPhone: customerPhone || undefined,
+      customerEmail: customerEmail || undefined,
+      orderType,
+      pickupTime: pickupTime || undefined,
+      notes: orderNotes || undefined
+    };
+
+    setIsSubmitting(true);
+    try {
+      setLastOrderRequest(payload);
+      const resp = await api.post(`/api/orders/public/${restaurantSlug}`, payload);
+      setLastOrderResponse(resp.data);
+      setOrderComplete(resp.data.data.orderId);
+      toast.success('Test order placed');
+      if (opts?.openCart) setIsCartOpen(true);
+    } catch {
+      toast.error('Failed to place test order');
     } finally {
       setIsSubmitting(false);
     }
@@ -174,6 +281,126 @@ export default function PublicProfile() {
       </div>
 
       <div className="max-w-4xl mx-auto px-4 py-8">
+        {testMode ? (
+          <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-2">
+                <Bug className="h-5 w-5 text-amber-700" />
+                <div className="font-bold text-amber-900">Testing Panel (dev only)</div>
+              </div>
+              <a
+                href="/tablet/orders"
+                className="inline-flex items-center gap-2 rounded-xl bg-black px-4 py-2 text-sm font-bold text-white"
+              >
+                Open Tablet Orders <ExternalLink className="h-4 w-4" />
+              </a>
+            </div>
+
+            <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+              <div className="rounded-xl bg-white p-4 border border-amber-200">
+                <div className="text-sm font-bold text-slate-900">Customer / Order Defaults</div>
+                <div className="mt-3 grid grid-cols-1 gap-3">
+                  <input
+                    className="input-field"
+                    placeholder="Customer name"
+                    value={customerName}
+                    onChange={(e) => setCustomerName(e.target.value)}
+                  />
+                  <input
+                    className="input-field"
+                    placeholder="Customer phone (optional)"
+                    value={customerPhone}
+                    onChange={(e) => setCustomerPhone(e.target.value)}
+                  />
+                  <input
+                    className="input-field"
+                    placeholder="Customer email (optional)"
+                    value={customerEmail}
+                    onChange={(e) => setCustomerEmail(e.target.value)}
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      className={clsx('btn-secondary flex-1', orderType === 'pickup' && 'bg-slate-900 text-white')}
+                      onClick={() => setOrderType('pickup')}
+                    >
+                      Pickup
+                    </button>
+                    <button
+                      type="button"
+                      className={clsx('btn-secondary flex-1', orderType === 'delivery' && 'bg-slate-900 text-white')}
+                      onClick={() => setOrderType('delivery')}
+                    >
+                      Delivery
+                    </button>
+                  </div>
+                  <input
+                    className="input-field"
+                    type="datetime-local"
+                    value={pickupTime}
+                    onChange={(e) => setPickupTime(e.target.value)}
+                  />
+                  <textarea
+                    className="input-field"
+                    rows={3}
+                    placeholder="Order notes (testing)"
+                    value={orderNotes}
+                    onChange={(e) => setOrderNotes(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="rounded-xl bg-white p-4 border border-amber-200">
+                <div className="text-sm font-bold text-slate-900">Quick Actions</div>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <button type="button" className="btn-secondary" onClick={() => addRandomItems(3)}>
+                    <Wand2 className="inline h-4 w-4 mr-1" />
+                    Add 3 random
+                  </button>
+                  <button type="button" className="btn-secondary" onClick={() => addRandomItems(15)}>
+                    <Zap className="inline h-4 w-4 mr-1" />
+                    Add 15 random
+                  </button>
+                  <button type="button" className="btn-primary" onClick={() => sendTestOrder({ itemsCount: 3 })} disabled={isSubmitting}>
+                    Place 3‑item order
+                  </button>
+                  <button type="button" className="btn-primary" onClick={() => sendTestOrder({ itemsCount: 12 })} disabled={isSubmitting}>
+                    Place 12‑item order
+                  </button>
+                  <button type="button" className="btn-secondary" onClick={() => setCart([])}>
+                    Clear cart
+                  </button>
+                  <button type="button" className="btn-secondary" onClick={() => setIsCartOpen(true)}>
+                    Open cart
+                  </button>
+                </div>
+
+                {(lastOrderRequest || lastOrderResponse) ? (
+                  <div className="mt-4 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="text-xs font-bold uppercase tracking-widest text-slate-600">Last payload</div>
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold"
+                        onClick={() => copyJson({ request: lastOrderRequest, response: lastOrderResponse })}
+                      >
+                        <CopyIcon className="h-4 w-4" />
+                        Copy JSON
+                      </button>
+                    </div>
+                    <pre className="max-h-56 overflow-auto rounded-xl bg-slate-900 p-3 text-xs text-slate-100">
+{JSON.stringify({ request: lastOrderRequest, response: lastOrderResponse }, null, 2)}
+                    </pre>
+                    <div className="text-xs text-slate-600">
+                      API base: <span className="font-mono">{String(api.defaults.baseURL || '')}</span>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        ) : null}
+
         <div className="grid grid-cols-1 gap-8">
           {Array.from(new Set(items.map(i => i.category_name))).map(cat => (
             <div key={cat}>
@@ -236,6 +463,53 @@ export default function PublicProfile() {
                 <div className="flex justify-between items-center mb-6">
                   <h2 className="text-2xl font-bold">Your Order</h2>
                   <button onClick={() => setIsCartOpen(false)} className="text-gray-400 font-bold">Close</button>
+                </div>
+
+                <div className="mb-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="text-sm font-bold text-slate-900">Customer</div>
+                  <div className="mt-3 grid grid-cols-1 gap-3">
+                    <input
+                      className="input-field"
+                      placeholder="Name"
+                      value={customerName}
+                      onChange={(e) => setCustomerName(e.target.value)}
+                    />
+                    <input
+                      className="input-field"
+                      placeholder="Phone (optional)"
+                      value={customerPhone}
+                      onChange={(e) => setCustomerPhone(e.target.value)}
+                    />
+                    <input
+                      className="input-field"
+                      placeholder="Email (optional)"
+                      value={customerEmail}
+                      onChange={(e) => setCustomerEmail(e.target.value)}
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        className={clsx('btn-secondary flex-1', orderType === 'pickup' && 'bg-slate-900 text-white')}
+                        onClick={() => setOrderType('pickup')}
+                      >
+                        Pickup
+                      </button>
+                      <button
+                        type="button"
+                        className={clsx('btn-secondary flex-1', orderType === 'delivery' && 'bg-slate-900 text-white')}
+                        onClick={() => setOrderType('delivery')}
+                      >
+                        Delivery
+                      </button>
+                    </div>
+                    <textarea
+                      className="input-field"
+                      rows={3}
+                      placeholder="Special instructions / notes (testing)"
+                      value={orderNotes}
+                      onChange={(e) => setOrderNotes(e.target.value)}
+                    />
+                  </div>
                 </div>
                 
                 <div className="space-y-4 mb-8">

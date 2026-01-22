@@ -92,12 +92,14 @@ export default function HomePage() {
                   Get Started
                 </Link>
 
-                <Link
-                  href="/book-demo"
-                  className="bg-white hover:bg-gray-100 text-gray-900 px-8 py-4 rounded-lg font-semibold text-lg transition-all duration-200"
-                >
-                  Book Demo
-                </Link>
+                {process.env.NODE_ENV !== 'production' ? (
+                  <Link
+                    href="/book-demo"
+                    className="bg-white hover:bg-gray-100 text-gray-900 px-8 py-4 rounded-lg font-semibold text-lg transition-all duration-200"
+                  >
+                    Book Demo
+                  </Link>
+                ) : null}
               </div>
 
               {/* Social Proof */}
@@ -204,13 +206,15 @@ export default function HomePage() {
                   ))}
                 </div>
                 <div className="flex flex-col sm:flex-row gap-4">
-                  <Link
-                    href="/book-demo"
-                    className="bg-teal-600 hover:bg-teal-700 text-white px-6 py-3 rounded-lg font-semibold transition-all duration-200 inline-flex items-center justify-center"
-                  >
-                    Book a phone demo
-                    <ArrowRight className="ml-2 w-4 h-4" />
-                  </Link>
+                  {process.env.NODE_ENV !== 'production' ? (
+                    <Link
+                      href="/book-demo"
+                      className="bg-teal-600 hover:bg-teal-700 text-white px-6 py-3 rounded-lg font-semibold transition-all duration-200 inline-flex items-center justify-center"
+                    >
+                      Book a phone demo
+                      <ArrowRight className="ml-2 w-4 h-4" />
+                    </Link>
+                  ) : null}
                   <Link
                     href="/dashboard/assistant"
                     className="border border-gray-700 hover:border-gray-500 text-gray-200 hover:text-white px-6 py-3 rounded-lg font-semibold transition-all duration-200 inline-flex items-center justify-center"
