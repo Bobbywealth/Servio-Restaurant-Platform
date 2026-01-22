@@ -78,6 +78,7 @@ const MenuManagement: React.FC = () => {
   const [editingCategory, setEditingCategory] = useState<MenuCategory | null>(null);
   const [showAddItemModal, setShowAddItemModal] = useState(false);
   const [showAddCategoryModal, setShowAddCategoryModal] = useState(false);
+  const [showEditItemModal, setShowEditItemModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [newCategory, setNewCategory] = useState({
     name: '',
@@ -85,6 +86,15 @@ const MenuManagement: React.FC = () => {
     sortOrder: 0
   });
   const [newItem, setNewItem] = useState({
+    name: '',
+    description: '',
+    price: '',
+    categoryId: '',
+    preparationTime: '',
+    isAvailable: true
+  });
+  const [editItem, setEditItem] = useState({
+    id: '',
     name: '',
     description: '',
     price: '',
@@ -290,6 +300,68 @@ const MenuManagement: React.FC = () => {
     }
   };
 
+  const openEditItemModal = (item: MenuItem) => {
+    setEditItem({
+      id: item.id,
+      name: item.name,
+      description: item.description || '',
+      price: String(item.price),
+      categoryId: item.category_id,
+      preparationTime: item.preparation_time ? String(item.preparation_time) : '',
+      isAvailable: item.is_available
+    });
+    setEditingItem(item);
+    setShowEditItemModal(true);
+  };
+
+  const handleUpdateItem = async () => {
+    if (!editItem.name.trim()) {
+      toast.error('Item name is required');
+      return;
+    }
+    if (!editItem.categoryId) {
+      toast.error('Category is required');
+      return;
+    }
+    if (!editItem.price || Number(editItem.price) <= 0) {
+      toast.error('Price must be greater than 0');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await api.put(`/api/menu/items/${editItem.id}`, {
+        name: editItem.name.trim(),
+        description: editItem.description.trim(),
+        price: Number(editItem.price),
+        categoryId: editItem.categoryId,
+        preparationTime: editItem.preparationTime ? Number(editItem.preparationTime) : 0,
+        isAvailable: editItem.isAvailable
+      });
+      toast.success('Menu item updated');
+      setShowEditItemModal(false);
+      setEditingItem(null);
+      await loadMenuData();
+    } catch (error) {
+      console.error('Failed to update menu item:', error);
+      toast.error('Failed to update menu item');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleToggleAvailability = async (item: MenuItem) => {
+    try {
+      const endpoint = item.is_available ? '/api/menu/items/set-unavailable' : '/api/menu/items/set-available';
+      await api.post(endpoint, { itemId: item.id });
+      toast.success(item.is_available ? 'Item marked as unavailable' : 'Item marked as available');
+      await loadMenuData();
+    } catch (error) {
+      console.error('Failed to toggle availability:', error);
+      toast.error('Failed to update item availability');
+    }
+  };
+
   const toggleCategory = (categoryId: string) => {
     setExpandedCategories(prev => {
       const newSet = new Set(prev);
@@ -470,6 +542,8 @@ const MenuManagement: React.FC = () => {
                   onToggle={() => toggleCategory(category.id)}
                   searchTerm={searchTerm}
                   onAddItem={openAddItemModal}
+                  onEditItem={openEditItemModal}
+                  onToggleAvailability={handleToggleAvailability}
                 />
               ))}
               
@@ -672,6 +746,117 @@ const MenuManagement: React.FC = () => {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Edit Item Modal */}
+      <AnimatePresence>
+        {showEditItemModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+            onClick={() => { setShowEditItemModal(false); setEditingItem(null); }}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white dark:bg-gray-800 rounded-lg max-w-lg w-full p-6"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white">Edit Menu Item</h2>
+              <div className="mt-4 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Name</label>
+                  <input
+                    type="text"
+                    value={editItem.name}
+                    onChange={(e) => setEditItem((prev) => ({ ...prev, name: e.target.value }))}
+                    className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                    placeholder="e.g. Jerk Chicken"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Description</label>
+                  <textarea
+                    value={editItem.description}
+                    onChange={(e) => setEditItem((prev) => ({ ...prev, description: e.target.value }))}
+                    className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                    rows={3}
+                    placeholder="Short description"
+                  />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Price</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={editItem.price}
+                      onChange={(e) => setEditItem((prev) => ({ ...prev, price: e.target.value }))}
+                      className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                      placeholder="0.00"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Prep time (mins)</label>
+                    <input
+                      type="number"
+                      value={editItem.preparationTime}
+                      onChange={(e) => setEditItem((prev) => ({ ...prev, preparationTime: e.target.value }))}
+                      className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                      placeholder="15"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Category</label>
+                  <select
+                    value={editItem.categoryId}
+                    onChange={(e) => setEditItem((prev) => ({ ...prev, categoryId: e.target.value }))}
+                    className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  >
+                    <option value="">Select category</option>
+                    {categories.map((category) => (
+                      <option key={category.id} value={category.id}>
+                        {category.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    id="edit-item-available"
+                    type="checkbox"
+                    checked={editItem.isAvailable}
+                    onChange={(e) => setEditItem((prev) => ({ ...prev, isAvailable: e.target.checked }))}
+                    className="h-4 w-4 text-red-600 border-gray-300 rounded"
+                  />
+                  <label htmlFor="edit-item-available" className="text-sm text-gray-700 dark:text-gray-300">
+                    Item is available
+                  </label>
+                </div>
+              </div>
+              <div className="mt-6 flex justify-end gap-3">
+                <button
+                  onClick={() => { setShowEditItemModal(false); setEditingItem(null); }}
+                  className="px-4 py-2 rounded-lg border border-gray-200 text-gray-600 hover:text-gray-900 dark:border-gray-600 dark:text-gray-300"
+                  disabled={isSaving}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleUpdateItem}
+                  className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white"
+                  disabled={isSaving}
+                >
+                  {isSaving ? 'Saving...' : 'Update'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </DashboardLayout>
   );
 };
@@ -683,6 +868,8 @@ interface CategorySectionProps {
   onToggle: () => void;
   searchTerm: string;
   onAddItem: (categoryId: string) => void;
+  onEditItem: (item: MenuItem) => void;
+  onToggleAvailability: (item: MenuItem) => void;
 }
 
 const CategorySection: React.FC<CategorySectionProps> = ({
@@ -690,7 +877,9 @@ const CategorySection: React.FC<CategorySectionProps> = ({
   isExpanded,
   onToggle,
   searchTerm,
-  onAddItem
+  onAddItem,
+  onEditItem,
+  onToggleAvailability
 }) => {
   const filteredItems = category.items?.filter(item =>
     searchTerm === '' ||
@@ -759,7 +948,12 @@ const CategorySection: React.FC<CategorySectionProps> = ({
               {filteredItems.length > 0 ? (
                 <div className="space-y-2 pt-3">
                   {filteredItems.map((item) => (
-                    <MenuItemCard key={item.id} item={item} />
+                    <MenuItemCard 
+                      key={item.id} 
+                      item={item} 
+                      onEdit={onEditItem}
+                      onToggleAvailability={onToggleAvailability}
+                    />
                   ))}
                 </div>
               ) : (
@@ -784,9 +978,11 @@ const CategorySection: React.FC<CategorySectionProps> = ({
 // Menu Item Card Component
 interface MenuItemCardProps {
   item: MenuItem;
+  onEdit: (item: MenuItem) => void;
+  onToggleAvailability: (item: MenuItem) => void;
 }
 
-const MenuItemCard: React.FC<MenuItemCardProps> = ({ item }) => {
+const MenuItemCard: React.FC<MenuItemCardProps> = ({ item, onEdit, onToggleAvailability }) => {
   return (
     <div className="flex items-center gap-4 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors">
       {/* Item Image */}
@@ -834,15 +1030,23 @@ const MenuItemCard: React.FC<MenuItemCardProps> = ({ item }) => {
 
       {/* Item Actions */}
       <div className="flex items-center gap-2">
-        <div className="flex items-center">
+        <button 
+          onClick={() => onToggleAvailability(item)}
+          className="flex items-center"
+          title={item.is_available ? 'Mark as unavailable' : 'Mark as available'}
+        >
           {item.is_available ? (
-            <CheckCircle className="w-5 h-5 text-green-500" />
+            <CheckCircle className="w-5 h-5 text-green-500 hover:text-green-600" />
           ) : (
-            <XCircle className="w-5 h-5 text-red-500" />
+            <XCircle className="w-5 h-5 text-red-500 hover:text-red-600" />
           )}
-        </div>
+        </button>
         
-        <button className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-white dark:hover:bg-gray-800 transition-colors">
+        <button 
+          onClick={() => onEdit(item)}
+          className="p-2 text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 rounded-lg hover:bg-white dark:hover:bg-gray-800 transition-colors"
+          title="Edit item"
+        >
           <Edit3 className="w-4 h-4" />
         </button>
         

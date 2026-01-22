@@ -2,8 +2,155 @@ import { Router, Request, Response } from 'express';
 import { DatabaseService } from '../services/DatabaseService';
 import { asyncHandler } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
+import { v4 as uuidv4 } from 'uuid';
 
 const router = Router();
+
+/**
+ * POST /api/inventory
+ * Create a new inventory item
+ */
+router.post('/', asyncHandler(async (req: Request, res: Response) => {
+  const { name, sku, unit, onHandQty, lowStockThreshold, category } = req.body;
+  const db = DatabaseService.getInstance().getDatabase();
+  const restaurantId = req.user?.restaurantId;
+
+  if (!name?.trim()) {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'Item name is required' }
+    });
+  }
+
+  if (!unit?.trim()) {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'Unit is required' }
+    });
+  }
+
+  if (!restaurantId) {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'Restaurant ID is required' }
+    });
+  }
+
+  const itemId = uuidv4();
+
+  await db.run(`
+    INSERT INTO inventory_items (
+      id, restaurant_id, name, sku, unit, on_hand_qty, low_stock_threshold, category, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+  `, [
+    itemId,
+    restaurantId,
+    name.trim(),
+    sku?.trim() || null,
+    unit.trim(),
+    onHandQty ?? 0,
+    lowStockThreshold ?? 10,
+    category?.trim() || null
+  ]);
+
+  const newItem = await db.get('SELECT * FROM inventory_items WHERE id = ?', [itemId]);
+
+  await DatabaseService.getInstance().logAudit(
+    restaurantId,
+    req.user?.id || 'system',
+    'create_inventory_item',
+    'inventory',
+    itemId,
+    { name, sku, unit, onHandQty, lowStockThreshold, category }
+  );
+
+  logger.info(`Inventory item created: ${name}`);
+
+  res.status(201).json({
+    success: true,
+    data: newItem
+  });
+}));
+
+/**
+ * PUT /api/inventory/:id
+ * Update an inventory item
+ */
+router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const { name, sku, unit, onHandQty, lowStockThreshold, category } = req.body;
+  const db = DatabaseService.getInstance().getDatabase();
+  const restaurantId = req.user?.restaurantId;
+
+  const existingItem = await db.get(
+    'SELECT * FROM inventory_items WHERE id = ? AND restaurant_id = ?',
+    [id, restaurantId]
+  );
+
+  if (!existingItem) {
+    return res.status(404).json({
+      success: false,
+      error: { message: 'Inventory item not found' }
+    });
+  }
+
+  const updateFields: string[] = [];
+  const updateValues: any[] = [];
+
+  if (name !== undefined) {
+    updateFields.push('name = ?');
+    updateValues.push(name.trim());
+  }
+  if (sku !== undefined) {
+    updateFields.push('sku = ?');
+    updateValues.push(sku?.trim() || null);
+  }
+  if (unit !== undefined) {
+    updateFields.push('unit = ?');
+    updateValues.push(unit.trim());
+  }
+  if (onHandQty !== undefined) {
+    updateFields.push('on_hand_qty = ?');
+    updateValues.push(Number(onHandQty));
+  }
+  if (lowStockThreshold !== undefined) {
+    updateFields.push('low_stock_threshold = ?');
+    updateValues.push(Number(lowStockThreshold));
+  }
+  if (category !== undefined) {
+    updateFields.push('category = ?');
+    updateValues.push(category?.trim() || null);
+  }
+
+  if (updateFields.length > 0) {
+    updateFields.push('updated_at = CURRENT_TIMESTAMP');
+    updateValues.push(id);
+
+    await db.run(`
+      UPDATE inventory_items
+      SET ${updateFields.join(', ')}
+      WHERE id = ?
+    `, updateValues);
+  }
+
+  const updatedItem = await db.get('SELECT * FROM inventory_items WHERE id = ?', [id]);
+
+  await DatabaseService.getInstance().logAudit(
+    restaurantId!,
+    req.user?.id || 'system',
+    'update_inventory_item',
+    'inventory',
+    id,
+    { name, sku, unit, onHandQty, lowStockThreshold, category }
+  );
+
+  logger.info(`Inventory item updated: ${updatedItem.name}`);
+
+  res.json({
+    success: true,
+    data: updatedItem
+  });
+}));
 
 /**
  * GET /api/inventory/search
@@ -116,12 +263,15 @@ router.post('/receive', asyncHandler(async (req: Request, res: Response) => {
  * Adjust inventory quantities
  */
 router.post('/adjust', asyncHandler(async (req: Request, res: Response) => {
-  const { itemId, quantity, reason, userId } = req.body;
+  const { itemId, quantity, delta, reason, userId } = req.body;
+  
+  // Support both 'quantity' and 'delta' for backwards compatibility
+  const adjustmentAmount = delta !== undefined ? delta : quantity;
 
-  if (!itemId || quantity === undefined || !reason) {
+  if (!itemId || adjustmentAmount === undefined) {
     return res.status(400).json({
       success: false,
-      error: { message: 'itemId, quantity, and reason are required' }
+      error: { message: 'itemId and quantity/delta are required' }
     });
   }
 
@@ -136,13 +286,13 @@ router.post('/adjust', asyncHandler(async (req: Request, res: Response) => {
     });
   }
 
-  const newQuantity = item.on_hand_qty + quantity;
+  const newQuantity = item.on_hand_qty + adjustmentAmount;
 
   if (newQuantity < 0) {
     return res.status(400).json({
       success: false,
       error: {
-        message: `Cannot reduce ${item.name} below 0. Current: ${item.on_hand_qty}, Requested: ${quantity}`
+        message: `Cannot reduce ${item.name} below 0. Current: ${item.on_hand_qty}, Requested: ${adjustmentAmount}`
       }
     });
   }
@@ -152,16 +302,18 @@ router.post('/adjust', asyncHandler(async (req: Request, res: Response) => {
     [newQuantity, itemId]
   );
 
+  const adjustReason = reason || (adjustmentAmount > 0 ? 'Manual addition' : 'Manual reduction');
+
   await DatabaseService.getInstance().logAudit(
     restaurantId!,
     req.user?.id || 'system',
     'adjust_inventory',
     'inventory',
     itemId,
-    { itemName: item.name, previousQuantity: item.on_hand_qty, adjustment: quantity, newQuantity, reason }
+    { itemName: item.name, previousQuantity: item.on_hand_qty, adjustment: adjustmentAmount, newQuantity, reason: adjustReason }
   );
 
-  logger.info(`Inventory adjusted: ${item.name} ${quantity > 0 ? '+' : ''}${quantity} (reason: ${reason})`);
+  logger.info(`Inventory adjusted: ${item.name} ${adjustmentAmount > 0 ? '+' : ''}${adjustmentAmount} (reason: ${adjustReason})`);
 
   res.json({
     success: true,
@@ -169,9 +321,9 @@ router.post('/adjust', asyncHandler(async (req: Request, res: Response) => {
       itemId,
       itemName: item.name,
       previousQuantity: item.on_hand_qty,
-      adjustment: quantity,
+      adjustment: adjustmentAmount,
       newQuantity,
-      reason,
+      reason: adjustReason,
       unit: item.unit
     }
   });

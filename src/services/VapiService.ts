@@ -104,11 +104,21 @@ export class VapiService {
 
   private async handleFunctionCall(message: any): Promise<VapiResponse> {
     if (!message.functionCall) {
+      logger.warn('[vapi] function-call missing functionCall data', { callId: message.call?.id });
       return { error: 'No function call data provided' };
     }
 
     const { name, parameters } = message.functionCall;
     const userId = this.getPhoneUserId(message.call?.customer?.number);
+    const callId = message.call?.id;
+
+    // Structured logging for tool calls
+    logger.info('[vapi] tool_call_start', { 
+      callId, 
+      toolName: name, 
+      parameters: JSON.stringify(parameters).slice(0, 500),
+      customerNumber: message.call?.customer?.number
+    });
 
     try {
       let result;
@@ -138,7 +148,34 @@ export class VapiService {
             const last = parts[parts.length - 1];
             parameters.customer.lastInitial = last ? last[0]?.toUpperCase() : undefined;
           }
+          
+          logger.info('[vapi] createOrder_attempt', {
+            callId,
+            customerName: parameters.customer?.name,
+            customerPhone: parameters.customer?.phone,
+            itemCount: parameters.items?.length,
+            orderType: parameters.orderType,
+            total: parameters.totals?.total
+          });
+          
           result = await VoiceOrderingService.getInstance().createOrder(parameters);
+          
+          // Log successful order creation
+          if (result.orderId) {
+            logger.info('[vapi] createOrder_success', {
+              callId,
+              orderId: result.orderId,
+              total: result.total,
+              status: result.status,
+              customerName: parameters.customer?.name
+            });
+          } else {
+            logger.warn('[vapi] createOrder_failed', {
+              callId,
+              errors: result.errors,
+              customerName: parameters.customer?.name
+            });
+          }
           break;
         case 'check_order_status':
           result = await this.handleCheckOrderStatus(parameters, userId);
@@ -159,10 +196,22 @@ export class VapiService {
       }
       
       if (result.status === 'error') {
+        logger.warn('[vapi] tool_call_error_result', { 
+          callId, 
+          toolName: name, 
+          error: result.error 
+        });
         return {
           result: `I'm sorry, ${result.error}. Is there something else I can help you with?`
         };
       }
+
+      // Log successful tool call completion
+      logger.info('[vapi] tool_call_success', { 
+        callId, 
+        toolName: name,
+        resultType: result.type || result.status || 'unknown'
+      });
 
       // Format the result for voice response
       const voiceResponse = this.formatActionResultForVoice(result);
@@ -170,7 +219,12 @@ export class VapiService {
       return { result: voiceResponse };
       
     } catch (error) {
-      logger.error('Function call failed:', error);
+      logger.error('[vapi] tool_call_exception', { 
+        callId,
+        toolName: name,
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
       return {
         result: "I'm sorry, I wasn't able to complete that action. What else can I help you with?"
       };

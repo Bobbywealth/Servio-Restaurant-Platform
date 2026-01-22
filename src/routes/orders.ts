@@ -527,7 +527,7 @@ router.get('/waiting-times', asyncHandler(async (req: Request, res: Response) =>
 
 /**
  * POST /api/orders
- * Create a new order (typically from delivery platforms)
+ * Create a new order (typically from delivery platforms or test orders)
  */
 router.post('/', asyncHandler(async (req: Request, res: Response) => {
   const {
@@ -537,7 +537,8 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
     customerName,
     customerPhone,
     totalAmount,
-    userId
+    userId,
+    restaurantId: bodyRestaurantId
   } = req.body;
 
   if (!externalId || !channel || !items || !totalAmount) {
@@ -548,15 +549,26 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
   }
 
   const db = DatabaseService.getInstance().getDatabase();
+  const restaurantId = bodyRestaurantId || req.user?.restaurantId;
+  
+  // Validate restaurantId is present
+  if (!restaurantId) {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'Restaurant ID is required to create an order' }
+    });
+  }
+  
   const orderId = `order_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
   await db.run(`
     INSERT INTO orders (
-      id, external_id, channel, items, customer_name,
-      customer_phone, total_amount, status
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      id, restaurant_id, external_id, channel, items, customer_name,
+      customer_phone, total_amount, status, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
   `, [
     orderId,
+    restaurantId,
     externalId,
     channel,
     JSON.stringify(items),

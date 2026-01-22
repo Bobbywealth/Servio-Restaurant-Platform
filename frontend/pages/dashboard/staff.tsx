@@ -59,25 +59,36 @@ export default function StaffPage() {
       setIsLoading(true)
       setError(null)
       try {
-        const [staffResp, currentResp, statsResp] = await Promise.all([
-          api.get('/api/restaurant/staff'),
-          api.get('/api/timeclock/current-staff'),
-          api.get('/api/timeclock/stats')
-        ])
-
+        // Fetch staff data - this is the primary data we need
+        const staffResp = await api.get('/api/restaurant/staff')
         const staffList = (staffResp.data?.data?.staff || []) as StaffUser[]
-        const current = (currentResp.data?.data?.currentStaff || []) as CurrentStaff[]
-        const userStats = (statsResp.data?.data?.userStats || []) as Array<{ user_id: string; total_hours: number }>
-
-        const hoursMap: Record<string, number> = {}
-        for (const s of userStats) {
-          hoursMap[s.user_id] = Number(s.total_hours || 0)
-        }
-
+        
         if (!isMounted) return
         setStaff(staffList)
-        setCurrentStaff(current)
-        setHoursByUserId(hoursMap)
+        
+        // Fetch timeclock data separately with graceful error handling
+        // These are secondary and should not block the page from loading
+        try {
+          const currentResp = await api.get('/api/timeclock/current-staff')
+          const current = (currentResp.data?.data?.currentStaff || []) as CurrentStaff[]
+          if (isMounted) setCurrentStaff(current)
+        } catch (timeclockError) {
+          console.warn('Failed to load current staff timeclock data:', timeclockError)
+          // Continue without timeclock data
+        }
+        
+        try {
+          const statsResp = await api.get('/api/timeclock/stats')
+          const userStats = (statsResp.data?.data?.userStats || []) as Array<{ user_id: string; total_hours: number }>
+          const hoursMap: Record<string, number> = {}
+          for (const s of userStats) {
+            hoursMap[s.user_id] = Number(s.total_hours || 0)
+          }
+          if (isMounted) setHoursByUserId(hoursMap)
+        } catch (statsError) {
+          console.warn('Failed to load timeclock stats:', statsError)
+          // Continue without stats data
+        }
       } catch (e: any) {
         if (!isMounted) return
         const message =
