@@ -334,7 +334,7 @@ router.get('/stats/summary', asyncHandler(async (req: Request, res: Response) =>
  */
 router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) => {
   const { slug } = req.params;
-  const { items, customerName, customerPhone, customerEmail } = req.body;
+  const { items, customerName, customerPhone, customerEmail, pickupTime } = req.body;
   const db = DatabaseService.getInstance().getDatabase();
   const requestId = getRequestId(req);
 
@@ -351,6 +351,7 @@ router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) =>
     customerName,
     customerPhone,
     customerEmail,
+    pickupTime,
     itemsCount: Array.isArray(parsedItems) ? parsedItems.length : 0
   };
 
@@ -379,6 +380,15 @@ router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) =>
     return res.status(400).json({ success: false, error: { message: 'Items are required' } });
   }
 
+  let normalizedPickupTime: string | null = null;
+  if (pickupTime) {
+    const parsed = new Date(pickupTime);
+    if (Number.isNaN(parsed.getTime())) {
+      return res.status(400).json({ success: false, error: { message: 'Invalid pickup time' } });
+    }
+    normalizedPickupTime = parsed.toISOString();
+  }
+
   const orderId = uuidv4();
   // Calculate total and validate items (simplified for v1 fast build)
   let totalAmount = 0;
@@ -395,15 +405,16 @@ router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) =>
     await db.run(`
       INSERT INTO orders (
         id, restaurant_id, channel, status, total_amount, payment_status,
-        items, customer_name, customer_phone, created_at, updated_at
-      ) VALUES (?, ?, 'website', 'received', ?, 'unpaid', ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        items, customer_name, customer_phone, pickup_time, created_at, updated_at
+      ) VALUES (?, ?, 'website', 'received', ?, 'unpaid', ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     `, [
       orderId,
       restaurantId,
       totalAmount,
       JSON.stringify(parsedItems),
       customerName || null,
-      customerPhone || null
+      customerPhone || null,
+      normalizedPickupTime
     ]);
 
     // Create order items
@@ -441,8 +452,11 @@ router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) =>
       payload: {
         orderId,
         customerName,
+        customerPhone,
+        customerEmail,
         totalAmount,
-        channel: 'website'
+        channel: 'website',
+        pickupTime: normalizedPickupTime
       },
       occurredAt: new Date().toISOString()
     });
@@ -461,7 +475,7 @@ router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) =>
 
   return res.status(201).json({
     success: true,
-    data: { orderId, status: 'received' }
+    data: { orderId, status: 'received', pickupTime: normalizedPickupTime }
   });
 }));
 

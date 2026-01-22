@@ -201,15 +201,29 @@ export class VoiceOrderingService {
   }
 
   public async createOrder(input: any) {
-    if (!input?.items || !Array.isArray(input.items) || input.items.length === 0) {
+    const normalizedItems = Array.isArray(input?.items)
+      ? input.items.map((item: any) => ({
+          itemId: item?.itemId || item?.id,
+          qty: item?.qty ?? item?.quantity,
+          modifiers: item?.modifiers || {}
+        }))
+      : [];
+    const normalizedCustomer = input?.customer || {
+      name: input?.customerName,
+      phone: input?.customerPhone,
+      email: input?.customerEmail,
+      lastInitial: input?.customerLastInitial
+    };
+
+    if (!normalizedItems || normalizedItems.length === 0) {
       logger.warn('createOrder missing items', { callId: input?.callId });
       return { success: false, errors: ['Missing items'] };
     }
-    if (!input?.customer?.name || !input?.customer?.phone) {
+    if (!normalizedCustomer?.name || !normalizedCustomer?.phone) {
       logger.warn('createOrder missing customer details', {
         callId: input?.callId,
-        hasName: Boolean(input?.customer?.name),
-        hasPhone: Boolean(input?.customer?.phone)
+        hasName: Boolean(normalizedCustomer?.name),
+        hasPhone: Boolean(normalizedCustomer?.phone)
       });
       return { success: false, errors: ['Missing customer name or phone'] };
     }
@@ -218,15 +232,15 @@ export class VoiceOrderingService {
       return { success: false, errors: ['Missing totals'] };
     }
 
-    const quote = this.validateQuote(input);
+    const quote = this.validateQuote({ ...input, items: normalizedItems });
     if (!quote.valid) return { success: false, errors: quote.errors };
 
     const db = DatabaseService.getInstance().getDatabase();
     const orderId = uuidv4();
     const restaurantId = process.env.VAPI_RESTAURANT_ID || 'sasheys-kitchen-union';
     const lastInitial =
-      input.customer?.lastInitial ||
-      String(input.customer?.name || '')
+      normalizedCustomer?.lastInitial ||
+      String(normalizedCustomer?.name || '')
         .trim()
         .split(/\s+/)
         .pop()
@@ -263,7 +277,7 @@ export class VoiceOrderingService {
         source, call_id, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     `, [
-      orderId, restaurantId, 'received', input.customer?.name, input.customer?.phone, lastInitial,
+      orderId, restaurantId, 'received', normalizedCustomer?.name, normalizedCustomer?.phone, lastInitial,
       input.orderType, input.pickupTime, JSON.stringify(orderItems), quote.subtotal, quote.tax, quote.fees, quote.total, quote.total,
       input.source || 'vapi', input.callId
     ]);
@@ -294,9 +308,9 @@ export class VoiceOrderingService {
         actor: { actorType: 'system' },
         payload: {
           orderId,
-          customerName: input.customer?.name,
-          customerPhone: input.customer?.phone,
-          customerEmail: input.customer?.email,
+          customerName: normalizedCustomer?.name,
+          customerPhone: normalizedCustomer?.phone,
+          customerEmail: normalizedCustomer?.email,
           totalAmount: quote.total,
           channel: 'vapi',
           status: 'received'
