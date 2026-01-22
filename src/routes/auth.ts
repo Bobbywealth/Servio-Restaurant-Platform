@@ -2,12 +2,19 @@ import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import { DatabaseService } from '../services/DatabaseService';
-import { asyncHandler, UnauthorizedError } from '../middleware/errorHandler';
+import { asyncHandler, ForbiddenError, UnauthorizedError } from '../middleware/errorHandler';
 import { issueAccessToken, requireAuth } from '../middleware/auth';
+import { logger } from '../utils/logger';
 
 const router = Router();
 
 const REFRESH_TOKEN_TTL_DAYS = Number(process.env.REFRESH_TOKEN_TTL_DAYS ?? 30);
+
+function getRequestId(req: Request): string {
+  const headerId = req.headers['x-request-id'];
+  if (typeof headerId === 'string' && headerId.trim()) return headerId.trim();
+  return `req_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
 
 function safeUser(row: any) {
   return {
@@ -65,48 +72,108 @@ router.post(
 router.post(
   '/login',
   asyncHandler(async (req: Request, res: Response) => {
+    const requestId = getRequestId(req);
+    const start = Date.now();
+
     const { email, password } = req.body ?? {};
-    if (!email || !password) {
-      throw new UnauthorizedError('Email and password are required');
-    }
+    const normalizedEmail = String(email ?? '').trim().toLowerCase();
 
-    const normalizedEmail = String(email).trim().toLowerCase();
-    const db = DatabaseService.getInstance().getDatabase();
-    const user = await db.get<any>(
-      'SELECT * FROM users WHERE LOWER(email) = ? AND (is_active = 1 OR is_active = TRUE)', 
-      [normalizedEmail]
-    );
-    if (!user || !user.password_hash) {
-      throw new UnauthorizedError('Invalid email or password');
-    }
-
-    const ok = await bcrypt.compare(String(password), String(user.password_hash));
-    if (!ok) throw new UnauthorizedError('Invalid email or password');
-
-    const sessionId = uuidv4();
-    const refreshToken = uuidv4();
-    const refreshTokenHash = await bcrypt.hash(refreshToken, 10);
-    const expiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000).toISOString();
-
-    await db.run(
-      'INSERT INTO auth_sessions (id, user_id, refresh_token_hash, expires_at) VALUES (?, ?, ?, ?)',
-      [sessionId, user.id, refreshTokenHash, expiresAt]
+    logger.info(
+      `[auth.login] entry ${JSON.stringify({
+        requestId,
+        method: req.method,
+        path: req.originalUrl,
+        hasEmail: Boolean(email),
+        email: normalizedEmail || null,
+        hasPassword: Boolean(password),
+        origin: req.headers.origin ?? null,
+        userAgent: req.headers['user-agent'] ?? null
+      })}`
     );
 
-    const accessToken = issueAccessToken({ 
-      sub: user.id, 
-      restaurantId: user.restaurant_id, 
-      sid: sessionId 
-    });
-
-    res.json({
-      success: true,
-      data: {
-        user: safeUser(user),
-        accessToken,
-        refreshToken
+    try {
+      if (!email || !password) {
+        throw new UnauthorizedError('Email and password are required');
       }
-    });
+
+      logger.info(`[auth.login] before_db_get_user ${JSON.stringify({ requestId })}`);
+      const db = DatabaseService.getInstance().getDatabase();
+      // Postgres-safe: do not compare boolean to integer in SQL.
+      const user = await db.get<any>('SELECT * FROM users WHERE LOWER(email) = ?', [normalizedEmail]);
+      logger.info(
+        `[auth.login] after_db_get_user ${JSON.stringify({
+          requestId,
+          userFound: Boolean(user),
+          hasPasswordHash: Boolean(user?.password_hash),
+          userId: user?.id ?? null,
+          restaurantId: user?.restaurant_id ?? null,
+          role: user?.role ?? null,
+          isActive: user?.is_active ?? null
+        })}`
+      );
+
+      if (!user || !user.password_hash) {
+        throw new UnauthorizedError('Invalid email or password');
+      }
+
+      const isActive = user.is_active === true || user.is_active === 1;
+      if (!isActive) {
+        throw new ForbiddenError('User is inactive');
+      }
+
+      const ok = await bcrypt.compare(String(password), String(user.password_hash));
+      if (!ok) throw new UnauthorizedError('Invalid email or password');
+
+      const sessionId = uuidv4();
+      const refreshToken = uuidv4();
+      const refreshTokenHash = await bcrypt.hash(refreshToken, 10);
+      const expiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000).toISOString();
+
+      logger.info(`[auth.login] before_db_insert_session ${JSON.stringify({ requestId, sessionId })}`);
+      await db.run(
+        'INSERT INTO auth_sessions (id, user_id, refresh_token_hash, expires_at) VALUES (?, ?, ?, ?)',
+        [sessionId, user.id, refreshTokenHash, expiresAt]
+      );
+      logger.info(`[auth.login] after_db_insert_session ${JSON.stringify({ requestId, sessionId })}`);
+
+      logger.info(`[auth.login] before_jwt_sign ${JSON.stringify({ requestId, sessionId, userId: user.id })}`);
+      const accessToken = issueAccessToken({
+        sub: user.id,
+        restaurantId: user.restaurant_id,
+        sid: sessionId
+      });
+
+      logger.info(
+        `[auth.login] before_response ${JSON.stringify({
+          requestId,
+          ms: Date.now() - start,
+          status: 200,
+          userId: user.id,
+          restaurantId: user.restaurant_id
+        })}`
+      );
+
+      res.json({
+        success: true,
+        data: {
+          user: safeUser(user),
+          accessToken,
+          refreshToken
+        }
+      });
+    } catch (error) {
+      const err = error as any;
+      logger.error(
+        `[auth.login] error ${JSON.stringify({
+          requestId,
+          ms: Date.now() - start,
+          name: err?.name ?? null,
+          message: err?.message ?? String(err),
+          stack: err?.stack ?? null
+        })}`
+      );
+      throw error;
+    }
   })
 );
 
