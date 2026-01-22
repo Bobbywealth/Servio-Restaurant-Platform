@@ -342,9 +342,17 @@ router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) =>
   try {
     await db.run(`
       INSERT INTO orders (
-        id, restaurant_id, channel, status, total_amount, payment_status, created_at, updated_at
-      ) VALUES (?, ?, 'website', 'received', ?, 'unpaid', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-    `, [orderId, restaurantId, totalAmount]);
+        id, restaurant_id, channel, status, total_amount, payment_status,
+        items, customer_name, customer_phone, created_at, updated_at
+      ) VALUES (?, ?, 'website', 'received', ?, 'unpaid', ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `, [
+      orderId,
+      restaurantId,
+      totalAmount,
+      JSON.stringify(parsedItems),
+      customerName || null,
+      customerPhone || null
+    ]);
 
     // Create order items
     for (const item of parsedItems) {
