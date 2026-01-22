@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import jwt from 'jsonwebtoken';
 import { DatabaseService } from '../services/DatabaseService';
 import { asyncHandler, BadRequestError } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
@@ -7,6 +8,13 @@ import { eventBus } from '../events/bus';
 
 const router = Router();
 const num = (v: any) => (typeof v === 'number' ? v : Number(v ?? 0));
+const getRequestId = (req: Request) => {
+  const headerId =
+    (req.headers['x-request-id'] as string) ||
+    (req.headers['x-correlation-id'] as string) ||
+    (req.headers['x-amzn-trace-id'] as string);
+  return headerId || uuidv4();
+};
 
 /**
  * GET /api/orders
@@ -16,6 +24,39 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
   const { status, channel, limit = 50, offset = 0 } = req.query;
   const db = DatabaseService.getInstance().getDatabase();
   const restaurantId = req.user?.restaurantId;
+  const requestId = getRequestId(req);
+
+  const authHeader = req.headers.authorization;
+  let decodedToken: any = null;
+  if (authHeader?.startsWith('Bearer ')) {
+    const token = authHeader.slice('Bearer '.length).trim();
+    try {
+      decodedToken = jwt.decode(token);
+    } catch (err) {
+      decodedToken = { error: 'decode_failed' };
+    }
+  }
+
+  logger.info(
+    `[orders.list] entry ${JSON.stringify({
+      requestId,
+      user: req.user ?? null,
+      decodedToken,
+      restaurantId: restaurantId ?? null,
+      query: req.query
+    })}`
+  );
+
+  if (!restaurantId) {
+    logger.warn(
+      `[orders.list] missing_restaurant_id ${JSON.stringify({
+        requestId,
+        user: req.user ?? null,
+        decodedToken
+      })}`
+    );
+    throw new BadRequestError('Missing restaurantId for orders lookup');
+  }
 
   let query = 'SELECT * FROM orders';
   const params: any[] = [restaurantId];
@@ -41,10 +82,23 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
   const orders = await db.all(query, params);
 
   // Parse JSON fields
-  const formattedOrders = orders.map((order: any) => ({
-    ...order,
-    items: JSON.parse(order.items || '[]')
-  }));
+  const formattedOrders = orders.map((order: any) => {
+    let items: any[] = [];
+    try {
+      items = JSON.parse(order.items || '[]');
+    } catch (err) {
+      logger.warn(
+        `[orders.list] invalid_items_json ${JSON.stringify({
+          requestId,
+          orderId: order?.id ?? null
+        })}`
+      );
+    }
+    return {
+      ...order,
+      items
+    };
+  });
 
   // Get total count for pagination
   let countQuery = 'SELECT COUNT(*) as total FROM orders';
