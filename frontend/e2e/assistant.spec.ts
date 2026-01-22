@@ -2,12 +2,78 @@ import { test, expect } from '@playwright/test';
 
 test.describe('Assistant Page E2E', () => {
   test.beforeEach(async ({ page }) => {
-    // Login as manager/owner
-    await page.goto('/login');
-    await page.fill('input[type="email"]', 'admin@servio.com');
-    await page.fill('input[type="password"]', 'password');
-    await page.click('button[type="submit"]');
-    await page.waitForURL('/dashboard');
+    // Make E2E deterministic: don't require backend, DB, or OpenAI.
+    // We seed auth state via localStorage and mock the API surface the frontend uses.
+
+    // Disable socket.io noise in tests (avoids flakey reconnect timing).
+    await page.route('**/socket.io/**', (route) => route.abort());
+
+    // Seed auth state before app code runs
+    await page.addInitScript(() => {
+      const user = {
+        id: 'e2e-user-1',
+        restaurantId: 'demo-restaurant-1',
+        name: 'E2E User',
+        email: 'e2e@servio.test',
+        role: 'admin',
+        permissions: ['*'],
+      };
+      window.localStorage.setItem('servio_access_token', 'e2e_access_token');
+      window.localStorage.setItem('servio_refresh_token', 'e2e_refresh_token');
+      window.localStorage.setItem('servio_user', JSON.stringify(user));
+    });
+
+    // Mock auth endpoints used by UserContext bootstrap
+    await page.route('**/api/auth/me', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          data: {
+            user: {
+              id: 'e2e-user-1',
+              restaurantId: 'demo-restaurant-1',
+              name: 'E2E User',
+              email: 'e2e@servio.test',
+              role: 'admin',
+              permissions: ['*'],
+            },
+          },
+        }),
+      });
+    });
+
+    await page.route('**/api/auth/available-accounts', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          data: { accounts: { admin: [{ id: 'e2e-user-1', email: 'e2e@servio.test', name: 'E2E User', role: 'admin' }] }, totalCount: 1 },
+        }),
+      });
+    });
+
+    // Mock assistant status so the page doesn't depend on OPENAI_API_KEY
+    await page.route('**/api/assistant/status', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          data: {
+            service: 'online',
+            configured: false,
+            message: 'E2E mocked status',
+            features: { speechToText: 'unavailable', textToSpeech: 'unavailable', llm: 'unavailable' },
+            capabilities: [],
+            version: '1.0.0',
+          },
+        }),
+      });
+    });
+
     await page.goto('/dashboard/assistant');
   });
 

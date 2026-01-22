@@ -4,6 +4,7 @@ import path from 'path';
 import os from 'os';
 import { DatabaseService } from './DatabaseService';
 import { logger } from '../utils/logger';
+import { ensureUploadsDir } from '../utils/uploads';
 import { v4 as uuidv4 } from 'uuid';
 
 interface AssistantResponse {
@@ -220,8 +221,8 @@ export class AssistantService {
       // Log audio generation for monitoring
       logger.info(`TTS generated: ${audioBuffer.length} bytes, voice: ${voice}, model: ${model}`);
 
-      const ttsDir = path.join(process.cwd(), 'uploads', 'tts');
-      await fs.promises.mkdir(ttsDir, { recursive: true });
+      // Use configurable UPLOADS_DIR for Render persistent disk support
+      const ttsDir = await ensureUploadsDir('tts');
 
       const fileName = `tts_${Date.now()}_${uuidv4()}.mp3`;
       const outPath = path.join(ttsDir, fileName);

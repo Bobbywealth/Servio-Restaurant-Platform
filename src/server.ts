@@ -16,17 +16,29 @@ import { logger } from './utils/logger';
 import { errorHandler } from './middleware/errorHandler';
 import { requireAuth } from './middleware/auth';
 import { initializeNotifications } from './notifications/initNotifications';
+import { validateEnvironment, failFastIfInvalid, getCorsOrigins } from './utils/validateEnv';
+import { UPLOADS_DIR, checkUploadsHealth } from './utils/uploads';
 import rateLimit from 'express-rate-limit';
+
+// ============================================================================
+// ENVIRONMENT VALIDATION (fail fast in production)
+// ============================================================================
+if (process.env.NODE_ENV === 'production') {
+  failFastIfInvalid();
+} else {
+  validateEnvironment(); // Just log warnings in development
+}
 
 const app = express();
 const server = createServer(app);
+
+// Get CORS origins from environment (FRONTEND_URL + ALLOWED_ORIGINS)
+const corsOrigins = getCorsOrigins();
+logger.info(`CORS origins: ${corsOrigins.join(', ')}`);
+
 const io = new SocketIOServer(server, {
   cors: {
-    origin: [
-      process.env.FRONTEND_URL || "http://localhost:3000",
-      "https://serviorestaurantplatform.netlify.app",
-      "https://servio-app.onrender.com"
-    ],
+    origin: corsOrigins,
     methods: ["GET", "POST"],
     credentials: true
   },
@@ -154,11 +166,7 @@ app.use(helmet({
 }));
 
 app.use(cors({
-  origin: [
-    process.env.FRONTEND_URL || "http://localhost:3000",
-    "https://serviorestaurantplatform.netlify.app",
-    "https://servio-app.onrender.com"
-  ],
+  origin: corsOrigins,
   credentials: true,
   optionsSuccessStatus: 200,
   preflightContinue: false,
@@ -206,6 +214,33 @@ app.use((req, res, next) => {
   }
   next();
 });
+
+// ============================================================================
+// STATIC FILE SERVING FOR UPLOADS
+// ============================================================================
+// Serve uploaded files (TTS audio, menu images, restaurant logos, QR codes)
+// UPLOADS_DIR is configurable via environment for Render persistent disk
+app.use('/uploads', express.static(UPLOADS_DIR, {
+  maxAge: '1d', // Cache for 1 day
+  etag: true,
+  lastModified: true,
+  // Set proper headers for audio files
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.mp3')) {
+      res.setHeader('Content-Type', 'audio/mpeg');
+      res.setHeader('Accept-Ranges', 'bytes');
+    } else if (filePath.endsWith('.png')) {
+      res.setHeader('Content-Type', 'image/png');
+    } else if (filePath.endsWith('.jpg') || filePath.endsWith('.jpeg')) {
+      res.setHeader('Content-Type', 'image/jpeg');
+    } else if (filePath.endsWith('.webp')) {
+      res.setHeader('Content-Type', 'image/webp');
+    }
+    // Allow cross-origin access to uploads
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  }
+}));
+logger.info(`Static file serving enabled: /uploads -> ${UPLOADS_DIR}`);
 
 // IN-MEMORY CACHE FOR API RESPONSES
 const cache = new Map();
@@ -300,12 +335,55 @@ app.set('socketio', io);
 
 // Routes will be loaded after database initialization
 
-// Health check
-app.get('/health', (req, res) => {
-  res.status(200).json({
-    status: 'ok',
+// Health check with environment and DB status
+app.get('/health', async (req, res) => {
+  const envStatus = validateEnvironment();
+  
+  // Check database connectivity
+  let dbStatus: 'connected' | 'disconnected' | 'unknown' = 'unknown';
+  let dbError: string | undefined;
+  try {
+    const db = DatabaseService.getInstance().getDatabase();
+    await db.get('SELECT 1 as ok');
+    dbStatus = 'connected';
+  } catch (error) {
+    dbStatus = 'disconnected';
+    dbError = error instanceof Error ? error.message : 'Unknown error';
+  }
+
+  // Check uploads directory
+  const uploadsHealth = await checkUploadsHealth();
+
+  const isHealthy = dbStatus === 'connected' && envStatus.valid;
+
+  res.status(isHealthy ? 200 : 503).json({
+    status: isHealthy ? 'ok' : 'degraded',
     timestamp: new Date().toISOString(),
-    version: '1.0.0'
+    version: '1.1.0',
+    environment: process.env.NODE_ENV || 'development',
+    services: {
+      database: dbStatus,
+      assistant: envStatus.services.assistant,
+      auth: envStatus.services.auth,
+      uploads: uploadsHealth.ok ? 'ok' : 'error',
+    },
+    checks: {
+      env: envStatus.valid ? 'pass' : 'fail',
+      db: dbStatus === 'connected' ? 'pass' : 'fail',
+      uploads: uploadsHealth.ok ? 'pass' : 'fail',
+    },
+    config: {
+      uploadsDir: UPLOADS_DIR,
+      corsOrigins: corsOrigins.length,
+    },
+    // Only include errors in non-production or if explicitly requested
+    ...(process.env.NODE_ENV !== 'production' || req.query.verbose === 'true' ? {
+      errors: {
+        env: envStatus.errors,
+        db: dbError,
+        uploads: uploadsHealth.error,
+      }
+    } : {})
   });
 });
 
