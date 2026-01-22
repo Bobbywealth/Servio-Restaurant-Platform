@@ -20,6 +20,8 @@ import { validateEnvironment, failFastIfInvalid, getCorsOrigins } from './utils/
 import { UPLOADS_DIR, checkUploadsHealth } from './utils/uploads';
 import rateLimit from 'express-rate-limit';
 
+const FRONTEND_ORIGIN = 'https://servio-app.onrender.com';
+
 // ============================================================================
 // ENVIRONMENT VALIDATION (fail fast in production)
 // ============================================================================
@@ -35,6 +37,9 @@ const server = createServer(app);
 // Get CORS origins from environment (FRONTEND_URL + ALLOWED_ORIGINS)
 const corsOrigins = getCorsOrigins();
 logger.info(`CORS origins: ${corsOrigins.join(', ')}`);
+if (process.env.FRONTEND_URL && process.env.FRONTEND_URL !== FRONTEND_ORIGIN) {
+  logger.warn(`FRONTEND_URL env does not match expected origin: ${process.env.FRONTEND_URL} (expected ${FRONTEND_ORIGIN})`);
+}
 
 const io = new SocketIOServer(server, {
   cors: {
@@ -158,6 +163,15 @@ app.use(cors({
   optionsSuccessStatus: 200,
   preflightContinue: false,
   maxAge: 86400 // 24 hour preflight cache
+}));
+
+// Ensure OPTIONS preflight is handled for all routes (including /api/auth/login).
+// This guarantees CORS headers are present even when no explicit route exists for OPTIONS.
+app.options(/.*/, cors({
+  origin: corsOrigins,
+  credentials: true,
+  optionsSuccessStatus: 200,
+  preflightContinue: false
 }));
 
 // LIGHTNING FAST COMPRESSION

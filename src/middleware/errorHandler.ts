@@ -1,6 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
 import { logger } from '../utils/logger';
 
+const FRONTEND_ORIGIN = 'https://servio-app.onrender.com';
+
 export interface AppError extends Error {
   statusCode?: number;
   isOperational?: boolean;
@@ -126,6 +128,26 @@ export const errorHandler = (
   // Add request ID if available
   if (req.headers['x-request-id']) {
     errorResponse.requestId = req.headers['x-request-id'];
+  }
+
+  // Ensure CORS headers are present even on errors (so browsers don't mask real errors as CORS failures).
+  try {
+    const origin = req.headers.origin;
+    const hasCorsHeader = Boolean(res.getHeader('Access-Control-Allow-Origin'));
+    if (!hasCorsHeader && typeof origin === 'string' && origin.trim()) {
+      const allowed = new Set<string>([
+        process.env.FRONTEND_URL || 'http://localhost:3000',
+        'https://serviorestaurantplatform.netlify.app',
+        FRONTEND_ORIGIN
+      ]);
+      if (allowed.has(origin)) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+        res.setHeader('Vary', 'Origin');
+      }
+    }
+  } catch {
+    // never let CORS header logic crash the handler
   }
 
   // Ensure JSON response
