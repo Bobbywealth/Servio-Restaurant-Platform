@@ -1,6 +1,9 @@
 import { Router, Request, Response } from 'express';
 import { VapiService, VapiWebhookPayload } from '../services/VapiService';
 import { logger } from '../utils/logger';
+import { DatabaseService } from '../services/DatabaseService';
+import { validateEnvironment } from '../utils/validateEnv';
+import { checkUploadsHealth, UPLOADS_DIR } from '../utils/uploads';
 
 const router = Router();
 const vapiService = new VapiService();
@@ -169,8 +172,40 @@ router.get('/assistant-config', async (req: Request, res: Response) => {
 });
 
 // Health check endpoint
-router.get('/health', (req: Request, res: Response) => {
-  res.json({ status: 'healthy', timestamp: new Date().toISOString() });
+router.get('/health', async (req: Request, res: Response) => {
+  // Keep this endpoint lightweight but informative in production.
+  const envStatus = validateEnvironment();
+
+  let dbStatus: 'connected' | 'disconnected' | 'unknown' = 'unknown';
+  let dbError: string | undefined;
+  try {
+    const db = DatabaseService.getInstance().getDatabase();
+    await db.get('SELECT 1 as ok');
+    dbStatus = 'connected';
+  } catch (err) {
+    dbStatus = 'disconnected';
+    dbError = err instanceof Error ? err.message : 'Unknown error';
+  }
+
+  const uploadsHealth = await checkUploadsHealth();
+
+  const isHealthy = envStatus.valid && dbStatus === 'connected' && uploadsHealth.ok;
+  res.status(isHealthy ? 200 : 503).json({
+    status: isHealthy ? 'ok' : 'degraded',
+    timestamp: new Date().toISOString(),
+    services: {
+      database: dbStatus,
+      assistant: envStatus.services.assistant,
+      auth: envStatus.services.auth,
+      uploads: uploadsHealth.ok ? 'ok' : 'error',
+    },
+    config: {
+      uploadsDir: UPLOADS_DIR,
+    },
+    ...(process.env.NODE_ENV !== 'production' || req.query.verbose === 'true'
+      ? { errors: { env: envStatus.errors, db: dbError, uploads: uploadsHealth.error } }
+      : {}),
+  });
 });
 
 export default router;

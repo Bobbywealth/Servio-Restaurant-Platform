@@ -12,8 +12,14 @@
     "build": "tsc && mkdir -p dist/database && cp -r src/database/migrations dist/database/",
     "start": "node dist/server.js",
     "start:worker": "node dist/worker.js",
-    "lint": "eslint src --ext .ts,.js",
-    "test": "jest --passWithNoTests"
+    "typecheck": "tsc --noEmit",
+    "lint": "ESLINT_USE_FLAT_CONFIG=false eslint src --ext .ts,.js",
+    "test": "npm run test:unit",
+    "test:unit": "jest --config jest.config.cjs --passWithNoTests",
+    "test:integration": "jest --config jest.config.cjs --passWithNoTests --testPathPattern=integration",
+    "test:e2e": "cd frontend && npm run test:e2e",
+    "test:all": "npm run typecheck && npm run lint && npm run test:unit && npm run test:integration && npm run test:e2e",
+    "seed:demo": "tsx src/scripts/seed-demo-users.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.972.0",
@@ -62,6 +68,8 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@swc/core": "^1.13.5",
+    "@swc/jest": "^0.2.39",
     "@types/jest": "^30.0.0",
     "@typescript-eslint/eslint-plugin": "^8.53.1",
     "@typescript-eslint/parser": "^8.53.1",

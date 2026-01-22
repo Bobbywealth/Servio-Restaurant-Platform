@@ -329,12 +329,17 @@ router.get('/download/:exportId', asyncHandler(async (req: Request, res: Respons
 
   // In a real app, you would check if the export file exists and serve it
   // For demo purposes, return a mock response
+  // Derive base URL from request or env (corrected default port: 3002)
+  const protocol = req.secure || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
+  const host = req.headers.host || 'localhost:3002';
+  const baseUrl = process.env.BACKEND_URL || `${protocol}://${host}`;
+  
   res.json({
     success: true,
     data: {
       exportId,
       status: 'ready',
-      fileUrl: `${process.env.BACKEND_URL || 'http://localhost:3001'}/exports/${exportId}.json`,
+      fileUrl: `${baseUrl}/exports/${exportId}.json`,
       fileSize: '2.3 MB',
       recordCount: 1247,
       generatedAt: new Date().toISOString(),

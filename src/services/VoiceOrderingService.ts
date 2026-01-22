@@ -7,7 +7,8 @@ import { SmsService } from './SmsService';
 import { eventBus } from '../events/bus';
 import { logger } from '../utils/logger';
 
-const MENU_DATA_PATH = path.join(process.cwd(), 'backend/data/menu/sasheys_menu_vapi.json');
+// Menu data path - corrected for production (no 'backend/' prefix)
+const MENU_DATA_PATH = path.join(process.cwd(), 'data/menu/sasheys_menu_vapi.json');
 
 export class VoiceOrderingService {
   private static instance: VoiceOrderingService;
