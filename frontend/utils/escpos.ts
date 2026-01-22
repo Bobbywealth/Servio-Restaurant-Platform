@@ -1,34 +1,7 @@
 /**
- * ESC/POS command generator for thermal receipt printers
+ * Plain text receipt generator for thermal printers
  * Used with RawBT app for direct Bluetooth printing without dialogs
  */
-
-// ESC/POS Commands
-const ESC = '\x1B';
-const GS = '\x1D';
-const LF = '\x0A';
-
-// Initialize printer
-const INIT = ESC + '@';
-
-// Text alignment
-const ALIGN_LEFT = ESC + 'a' + '\x00';
-const ALIGN_CENTER = ESC + 'a' + '\x01';
-const ALIGN_RIGHT = ESC + 'a' + '\x02';
-
-// Text style
-const BOLD_ON = ESC + 'E' + '\x01';
-const BOLD_OFF = ESC + 'E' + '\x00';
-const DOUBLE_HEIGHT_ON = GS + '!' + '\x11';
-const DOUBLE_HEIGHT_OFF = GS + '!' + '\x00';
-const NORMAL_SIZE = GS + '!' + '\x00';
-const LARGE_SIZE = GS + '!' + '\x11';
-
-// Paper cut (partial cut)
-const CUT_PAPER = GS + 'V' + '\x01';
-
-// Line feed
-const FEED_LINES = (n: number) => ESC + 'd' + String.fromCharCode(n);
 
 export interface ReceiptItem {
   name: string;
@@ -55,6 +28,12 @@ export interface ReceiptData {
   specialInstructions?: string;
 }
 
+function centerText(text: string, width: number): string {
+  if (text.length >= width) return text.substring(0, width);
+  const padding = Math.floor((width - text.length) / 2);
+  return ' '.repeat(padding) + text;
+}
+
 function padRight(str: string, len: number): string {
   return str.length >= len ? str.substring(0, len) : str + ' '.repeat(len - str.length);
 }
@@ -71,67 +50,57 @@ function line(char: string, width: number): string {
   return char.repeat(width);
 }
 
-export function generateEscPosReceipt(data: ReceiptData, paperWidth: '80mm' | '58mm' = '80mm'): string {
+/**
+ * Generate a plain text receipt (no ESC/POS codes)
+ * RawBT will format this as plain text for the printer
+ */
+export function generatePlainTextReceipt(data: ReceiptData, paperWidth: '80mm' | '58mm' = '80mm'): string {
   const charWidth = paperWidth === '80mm' ? 48 : 32;
   const divider = line('-', charWidth);
+  const doubleDivider = line('=', charWidth);
   
   let receipt = '';
   
-  // Initialize
-  receipt += INIT;
+  // Header - Restaurant name (centered)
+  receipt += centerText(data.restaurantName?.toUpperCase() || 'SERVIO RESTAURANT', charWidth) + '\n';
   
-  // Header - Restaurant name (centered, large)
-  receipt += ALIGN_CENTER;
-  receipt += LARGE_SIZE;
-  receipt += BOLD_ON;
-  receipt += (data.restaurantName || 'SERVIO RESTAURANT') + LF;
-  receipt += BOLD_OFF;
-  receipt += NORMAL_SIZE;
-  
-  // Restaurant info
+  // Restaurant info (centered)
   if (data.restaurantPhone) {
-    receipt += data.restaurantPhone + LF;
+    receipt += centerText(data.restaurantPhone, charWidth) + '\n';
   }
   if (data.restaurantAddress) {
-    receipt += data.restaurantAddress + LF;
+    receipt += centerText(data.restaurantAddress, charWidth) + '\n';
   }
   
-  receipt += LF;
-  receipt += divider + LF;
+  receipt += '\n';
+  receipt += doubleDivider + '\n';
   
-  // Order info (centered, bold)
-  receipt += BOLD_ON;
-  receipt += LARGE_SIZE;
-  receipt += `ORDER #${data.orderNumber}` + LF;
-  receipt += NORMAL_SIZE;
-  receipt += BOLD_OFF;
+  // Order number (centered, prominent)
+  receipt += centerText(`*** ORDER #${data.orderNumber} ***`, charWidth) + '\n';
   
-  receipt += divider + LF;
-  receipt += ALIGN_LEFT;
+  receipt += doubleDivider + '\n';
   
   // Customer info
   if (data.customerName) {
-    receipt += `Customer: ${data.customerName}` + LF;
+    receipt += `Customer: ${data.customerName}\n`;
   }
   if (data.customerPhone) {
-    receipt += `Phone: ${data.customerPhone}` + LF;
+    receipt += `Phone: ${data.customerPhone}\n`;
   }
   if (data.orderType) {
-    receipt += `Type: ${data.orderType.toUpperCase()}` + LF;
+    receipt += `Type: ${data.orderType.toUpperCase()}\n`;
   }
   if (data.pickupTime) {
     const pickupDate = new Date(data.pickupTime);
-    receipt += `Pickup: ${pickupDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` + LF;
+    receipt += `Pickup: ${pickupDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}\n`;
   }
   
-  receipt += divider + LF;
-  receipt += LF;
+  receipt += divider + '\n';
+  receipt += '\n';
   
   // Items header
-  receipt += BOLD_ON;
-  receipt += padRight('ITEM', charWidth - 10) + padLeft('TOTAL', 10) + LF;
-  receipt += BOLD_OFF;
-  receipt += divider + LF;
+  receipt += padRight('ITEM', charWidth - 10) + padLeft('TOTAL', 10) + '\n';
+  receipt += divider + '\n';
   
   // Items
   for (const item of data.items) {
@@ -142,113 +111,79 @@ export function generateEscPosReceipt(data: ReceiptData, paperWidth: '80mm' | '5
     
     // If item name is too long, wrap it
     if (itemLine.length > charWidth - 10) {
-      receipt += itemLine.substring(0, charWidth - 10) + LF;
-      receipt += padRight('', charWidth - 10) + padLeft(priceLine, 10) + LF;
+      receipt += itemLine.substring(0, charWidth - 10) + '\n';
+      receipt += padRight('', charWidth - 10) + padLeft(priceLine, 10) + '\n';
     } else {
-      receipt += padRight(itemLine, charWidth - 10) + padLeft(priceLine, 10) + LF;
+      receipt += padRight(itemLine, charWidth - 10) + padLeft(priceLine, 10) + '\n';
     }
     
     // Modifiers
     if (item.modifiers && item.modifiers.length > 0) {
       for (const mod of item.modifiers) {
-        receipt += `  - ${mod}` + LF;
+        receipt += `  - ${mod}\n`;
       }
     }
   }
   
-  receipt += LF;
-  receipt += divider + LF;
+  receipt += '\n';
+  receipt += divider + '\n';
   
   // Totals
   if (data.subtotal !== undefined) {
-    receipt += padRight('Subtotal:', charWidth - 10) + padLeft(formatMoney(data.subtotal), 10) + LF;
+    receipt += padRight('Subtotal:', charWidth - 10) + padLeft(formatMoney(data.subtotal), 10) + '\n';
   }
   if (data.tax !== undefined) {
-    receipt += padRight('Tax:', charWidth - 10) + padLeft(formatMoney(data.tax), 10) + LF;
+    receipt += padRight('Tax:', charWidth - 10) + padLeft(formatMoney(data.tax), 10) + '\n';
   }
   
-  receipt += BOLD_ON;
-  receipt += LARGE_SIZE;
-  receipt += padRight('TOTAL:', charWidth - 10) + padLeft(formatMoney(data.total), 10) + LF;
-  receipt += NORMAL_SIZE;
-  receipt += BOLD_OFF;
-  
-  receipt += divider + LF;
+  receipt += doubleDivider + '\n';
+  receipt += padRight('TOTAL:', charWidth - 10) + padLeft(formatMoney(data.total), 10) + '\n';
+  receipt += doubleDivider + '\n';
   
   // Special instructions
   if (data.specialInstructions) {
-    receipt += LF;
-    receipt += BOLD_ON;
-    receipt += 'SPECIAL INSTRUCTIONS:' + LF;
-    receipt += BOLD_OFF;
-    receipt += data.specialInstructions + LF;
-    receipt += divider + LF;
+    receipt += '\n';
+    receipt += 'SPECIAL INSTRUCTIONS:\n';
+    receipt += data.specialInstructions + '\n';
+    receipt += divider + '\n';
   }
   
-  // Footer
-  receipt += LF;
-  receipt += ALIGN_CENTER;
+  // Footer (centered)
+  receipt += '\n';
   
   // Timestamp
   const now = data.createdAt ? new Date(data.createdAt) : new Date();
-  receipt += now.toLocaleString() + LF;
+  receipt += centerText(now.toLocaleString(), charWidth) + '\n';
   
-  receipt += LF;
-  receipt += 'Thank you for your order!' + LF;
-  receipt += LF;
-  
-  // Feed and cut
-  receipt += FEED_LINES(4);
-  receipt += CUT_PAPER;
+  receipt += '\n';
+  receipt += centerText('Thank you for your order!', charWidth) + '\n';
+  receipt += '\n\n\n';  // Extra lines before cut
   
   return receipt;
 }
 
-/**
- * Convert ESC/POS data to base64 for RawBT URL scheme
- */
-export function escPosToBase64(escPosData: string): string {
-  // Convert string to bytes
-  const bytes = new Uint8Array(escPosData.length);
-  for (let i = 0; i < escPosData.length; i++) {
-    bytes[i] = escPosData.charCodeAt(i);
-  }
-  
-  // Convert to base64
-  let binary = '';
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return btoa(binary);
-}
-
-/**
- * Generate RawBT intent URL for printing
- * RawBT app must be installed on the Android device
- */
-export function generateRawBTUrl(escPosData: string): string {
-  const base64Data = escPosToBase64(escPosData);
-  // RawBT intent URL format
-  return `intent://base64,${base64Data}#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;end;`;
-}
-
-/**
- * Alternative RawBT URL format (simpler, works on some devices)
- */
-export function generateRawBTSimpleUrl(escPosData: string): string {
-  const base64Data = escPosToBase64(escPosData);
-  return `rawbt:base64,${base64Data}`;
-}
+// Keep the old function name as an alias for backward compatibility
+export const generateEscPosReceipt = generatePlainTextReceipt;
 
 // Track if we're currently printing to prevent duplicates
 let isPrintingViaRawBT = false;
 let lastPrintTime = 0;
 
 /**
- * Try to print via RawBT app
+ * Generate RawBT URL with plain text
+ * Uses URL encoding for the text content
+ */
+export function generateRawBTUrl(plainText: string): string {
+  // URL encode the plain text receipt
+  const encodedText = encodeURIComponent(plainText);
+  return `rawbt:${encodedText}`;
+}
+
+/**
+ * Try to print via RawBT app using plain text
  * Returns true if RawBT was triggered, false if not available
  */
-export function printViaRawBT(escPosData: string): boolean {
+export function printViaRawBT(receiptText: string): boolean {
   // Prevent duplicate prints within 2 seconds
   const now = Date.now();
   if (isPrintingViaRawBT || (now - lastPrintTime < 2000)) {
@@ -260,8 +195,8 @@ export function printViaRawBT(escPosData: string): boolean {
   lastPrintTime = now;
   
   try {
-    // Use the simple rawbt: URL scheme (more reliable)
-    const url = generateRawBTSimpleUrl(escPosData);
+    // Generate URL with plain text (URL encoded)
+    const url = generateRawBTUrl(receiptText);
     
     // Open via window.location - this triggers the RawBT app
     window.location.href = url;
@@ -275,41 +210,6 @@ export function printViaRawBT(escPosData: string): boolean {
   } catch (e) {
     console.error('RawBT print failed:', e);
     isPrintingViaRawBT = false;
-    return false;
-  }
-}
-
-/**
- * Open RawBT directly with data (alternative method using iframe)
- * Use this if the simple URL scheme doesn't work
- */
-export function openRawBTViaIframe(escPosData: string): boolean {
-  // Prevent duplicate prints
-  const now = Date.now();
-  if (now - lastPrintTime < 2000) {
-    return true;
-  }
-  lastPrintTime = now;
-  
-  try {
-    const intentUrl = generateRawBTUrl(escPosData);
-    
-    // Create a hidden iframe to trigger the intent
-    const iframe = document.createElement('iframe');
-    iframe.style.display = 'none';
-    iframe.src = intentUrl;
-    document.body.appendChild(iframe);
-    
-    // Clean up after a short delay
-    setTimeout(() => {
-      if (iframe.parentNode) {
-        document.body.removeChild(iframe);
-      }
-    }, 1000);
-    
-    return true;
-  } catch (e) {
-    console.error('RawBT iframe print failed:', e);
     return false;
   }
 }
