@@ -107,6 +107,7 @@ async function initializeServer() {
     app.use('/api/integrations', requireAuth, integrationsRoutes);
     app.use('/api/notifications', requireAuth, notificationsRoutes);
     app.use('/api/voice-hub', voiceHubRoutes);
+    app.use('/api/admin', requireAuth, adminRoutes); // Fixed unused variable
 
     // Vapi and Voice routes (no auth or special auth)
     app.use('/api/vapi', vapiRoutes);

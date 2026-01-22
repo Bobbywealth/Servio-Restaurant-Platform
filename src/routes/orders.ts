@@ -112,7 +112,7 @@ router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
  */
 router.post('/:id/status', asyncHandler(async (req: Request, res: Response) => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const { status, userId } = req.body;
+  const { status } = req.body;
 
   const validStatuses = ['received', 'preparing', 'ready', 'completed', 'cancelled'];
 
@@ -339,7 +339,7 @@ router.get('/stats/summary', asyncHandler(async (req: Request, res: Response) =>
  */
 router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) => {
   const { slug } = req.params;
-  const { items, customerName, customerPhone, customerEmail } = req.body;
+  const { items, customerName, customerPhone } = req.body;
 
   if (!items || !Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ success: false, error: { message: 'Items are required' } });

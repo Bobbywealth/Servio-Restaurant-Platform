@@ -538,7 +538,7 @@ router.get('/items/search', asyncHandler(async (req: Request, res: Response) => 
  * 86 (make unavailable) menu items
  */
 router.post('/items/set-unavailable', asyncHandler(async (req: Request, res: Response) => {
-  const { itemId, channels = ['all'], userId } = req.body;
+  const { itemId, channels = ['all'] } = req.body;
 
   if (!itemId) {
     return res.status(400).json({
@@ -614,7 +614,7 @@ router.post('/items/set-unavailable', asyncHandler(async (req: Request, res: Res
  * Restore menu item availability
  */
 router.post('/items/set-available', asyncHandler(async (req: Request, res: Response) => {
-  const { itemId, channels = ['all'], userId } = req.body;
+  const { itemId, channels = ['all'] } = req.body;
 
   if (!itemId) {
     return res.status(400).json({
