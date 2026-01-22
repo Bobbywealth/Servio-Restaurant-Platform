@@ -129,6 +129,8 @@ export default function TabletOrdersPage() {
   const [autoPrintPendingId, setAutoPrintPendingId] = useState<string | null>(null);
   const lastAutoPromptedId = useRef<string | null>(null);
   const alarmIntervalRef = useRef<number | null>(null);
+  const alarmAudioRef = useRef<HTMLAudioElement | null>(null);
+  const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   const [prepModalOrder, setPrepModalOrder] = useState<Order | null>(null);
   const [prepMinutes, setPrepMinutes] = useState<number>(15);
   const [printingOrderId, setPrintingOrderId] = useState<string | null>(null);
@@ -138,6 +140,9 @@ export default function TabletOrdersPage() {
   const [restaurantProfile, setRestaurantProfile] = useState<ReceiptRestaurant | null>(null);
   const [receiptHtml, setReceiptHtml] = useState<string | null>(null);
   const lastRefreshAt = useRef<number>(0);
+  const [viewMode, setViewMode] = useState<'active' | 'history'>('active');
+  const [historyOrders, setHistoryOrders] = useState<Order[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -170,6 +175,16 @@ export default function TabletOrdersPage() {
         // ignore
       }
     }
+
+    const storedSound = typeof window !== 'undefined' ? window.localStorage.getItem('servio_sound_enabled') : null;
+    setSoundEnabled(storedSound === null ? true : storedSound === 'true');
+
+    if (typeof window !== 'undefined') {
+      const audio = new Audio('/sounds/new-order.mp3');
+      audio.loop = true;
+      audio.volume = 1;
+      alarmAudioRef.current = audio;
+    }
   }, []);
 
   async function refresh() {
@@ -186,6 +201,19 @@ export default function TabletOrdersPage() {
       console.error(e);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function refreshHistory() {
+    try {
+      setHistoryLoading(true);
+      const json = await apiGet<OrdersResponse>('/api/orders/history?limit=50&offset=0');
+      const list = Array.isArray(json?.data?.orders) ? json.data!.orders! : [];
+      setHistoryOrders(list);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setHistoryLoading(false);
     }
   }
 
@@ -344,24 +372,38 @@ export default function TabletOrdersPage() {
     return activeOrders.filter((o) => normalizeStatus(o.status) === 'received');
   }, [activeOrders]);
 
-  const filtered = activeOrders;
+  const filtered = viewMode === 'history' ? historyOrders : activeOrders;
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    if (receivedOrders.length > 0) {
-      if (alarmIntervalRef.current === null) {
-        playAlarmTone();
-        alarmIntervalRef.current = window.setInterval(() => {
+    const audio = alarmAudioRef.current;
+    if (receivedOrders.length > 0 && soundEnabled) {
+      if (audio) {
+        audio.play().catch(() => {
+          // autoplay restrictions
+        });
+      } else {
+        if (alarmIntervalRef.current === null) {
           playAlarmTone();
-        }, 2500);
+          alarmIntervalRef.current = window.setInterval(() => {
+            playAlarmTone();
+          }, 2500);
+        }
       }
-    } else if (alarmIntervalRef.current !== null) {
-      window.clearInterval(alarmIntervalRef.current);
-      alarmIntervalRef.current = null;
+    } else {
+      if (audio) {
+        audio.pause();
+        audio.currentTime = 0;
+      }
+      if (alarmIntervalRef.current !== null) {
+        window.clearInterval(alarmIntervalRef.current);
+        alarmIntervalRef.current = null;
+      }
     }
-  }, [receivedOrders.length]);
+  }, [receivedOrders.length, soundEnabled]);
 
   useEffect(() => {
+    if (viewMode === 'history') return;
     // Avoid printing everything on initial load; mark existing active orders as already-seen.
     if (!hasInitializedPrintedRef.current) {
       if (!loading) {
@@ -386,7 +428,7 @@ export default function TabletOrdersPage() {
     if (autoPrintPendingId || lastAutoPromptedId.current === newest.id) return;
     lastAutoPromptedId.current = newest.id;
     setAutoPrintPendingId(newest.id);
-  }, [autoPrintEnabled, filtered, loading, autoPrintPendingId]);
+  }, [autoPrintEnabled, filtered, loading, autoPrintPendingId, viewMode]);
 
   return (
     <div className="min-h-screen bg-white text-black font-sans">
@@ -412,10 +454,7 @@ export default function TabletOrdersPage() {
                 className="h-9 w-9"
               />
             </div>
-            <div className="bg-white text-black font-black px-3 py-1 rounded text-xl italic">SERVIO</div>
           </div>
-          <div className="h-8 w-px bg-white/20 hidden sm:block" />
-          <div className="text-2xl font-bold tracking-tight">KITCHEN DISPLAY</div>
         </div>
         <div className="flex items-center gap-6">
           <div className="text-right hidden sm:block">
@@ -423,6 +462,29 @@ export default function TabletOrdersPage() {
             <div className="text-xl font-mono font-bold">
               {now ? new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}
             </div>
+          </div>
+          <div className="flex items-center gap-2 bg-white/10 rounded-xl p-1">
+            <button
+              className={clsx(
+                'px-3 py-2 rounded-lg text-xs font-black uppercase tracking-widest',
+                viewMode === 'active' ? 'bg-white text-black' : 'text-white/70'
+              )}
+              onClick={() => setViewMode('active')}
+            >
+              Active
+            </button>
+            <button
+              className={clsx(
+                'px-3 py-2 rounded-lg text-xs font-black uppercase tracking-widest',
+                viewMode === 'history' ? 'bg-white text-black' : 'text-white/70'
+              )}
+              onClick={() => {
+                setViewMode('history');
+                refreshHistory();
+              }}
+            >
+              History
+            </button>
           </div>
           <button
             type="button"
@@ -433,24 +495,14 @@ export default function TabletOrdersPage() {
             <Settings2 className="h-5 w-5" />
             Settings
           </button>
-          <button
-            type="button"
-            onClick={() => {
-              const next = !autoPrintEnabled;
-              setAutoPrintEnabled(next);
-              window.localStorage.setItem('servio_auto_print_enabled', String(next));
-            }}
-            className={clsx(
-              'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-black uppercase tracking-widest transition-colors',
-              autoPrintEnabled ? 'bg-blue-600 hover:bg-blue-700' : 'bg-white/10 hover:bg-white/20'
-            )}
-            title="Toggle auto-print"
-          >
-            <Printer className="h-5 w-5" />
-            {autoPrintEnabled ? 'AUTO PRINT ON' : 'AUTO PRINT OFF'}
-          </button>
           <button 
-            onClick={refresh}
+            onClick={() => {
+              if (viewMode === 'history') {
+                refreshHistory();
+              } else {
+                refresh();
+              }
+            }}
             className="bg-white/10 hover:bg-white/20 p-3 rounded-full transition-colors"
           >
             <RefreshCcw className={clsx("h-6 w-6", loading && "animate-spin")} />
@@ -459,11 +511,17 @@ export default function TabletOrdersPage() {
       </div>
 
       <div className="no-print p-4 sm:p-6">
-        {filtered.length === 0 && !loading ? (
+        {viewMode === 'history' && historyLoading ? (
+          <div className="flex flex-col items-center justify-center py-24 text-slate-400">
+            <div className="text-xl font-bold">Loading history…</div>
+          </div>
+        ) : filtered.length === 0 && !loading ? (
           <div className="flex flex-col items-center justify-center py-32 text-slate-400">
             <CheckCircle2 className="h-24 w-24 mb-6 opacity-20" />
-            <h2 className="text-3xl font-bold">ALL CLEAR</h2>
-            <p className="text-xl mt-2 font-medium uppercase tracking-widest">No active orders</p>
+            <h2 className="text-3xl font-bold">{viewMode === 'history' ? 'NO HISTORY' : 'ALL CLEAR'}</h2>
+            <p className="text-xl mt-2 font-medium uppercase tracking-widest">
+              {viewMode === 'history' ? 'No historical orders' : 'No active orders'}
+            </p>
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
@@ -608,7 +666,7 @@ export default function TabletOrdersPage() {
 
                   {/* Action Button */}
                   <div className="p-4 bg-slate-100 mt-auto">
-                    {isNew && (
+                    {viewMode === 'active' && isNew && (
                       <button
                         disabled={busyId === o.id}
                         onClick={() => {
@@ -621,7 +679,7 @@ export default function TabletOrdersPage() {
                         <ArrowRight className="h-10 w-10 stroke-[4px]" />
                       </button>
                     )}
-                    {isPreparing && (
+                    {viewMode === 'active' && isPreparing && (
                       <button
                         disabled={busyId === o.id}
                         onClick={() => setStatus(o.id, 'ready')}
@@ -631,7 +689,7 @@ export default function TabletOrdersPage() {
                         <CheckCircle2 className="h-10 w-10 stroke-[4px]" />
                       </button>
                     )}
-                    {isReady && (
+                    {viewMode === 'active' && isReady && (
                       <button
                         disabled={busyId === o.id}
                         onClick={() => setStatus(o.id, 'completed')}

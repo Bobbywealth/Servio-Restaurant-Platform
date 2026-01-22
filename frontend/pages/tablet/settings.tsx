@@ -1,7 +1,8 @@
 import Head from 'next/head';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/router';
 import { ArrowLeft, Bluetooth, CheckCircle2, Printer, Settings2 } from 'lucide-react';
+import { api } from '../../lib/api';
 
 type PrintMode = 'bluetooth' | 'system' | 'bridge';
 type PrintResult = { status: 'success' | 'error'; message?: string } | null;
@@ -14,6 +15,9 @@ export default function TabletSettings() {
   const [lastPrintResult, setLastPrintResult] = useState<PrintResult>(null);
   const [bleSupported, setBleSupported] = useState(false);
   const [bluetoothStatus, setBluetoothStatus] = useState<'connected' | 'not_connected'>('not_connected');
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [receivedCount, setReceivedCount] = useState(0);
+  const alertAudioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     const storedAuto = window.localStorage.getItem('servio_auto_print_enabled');
@@ -36,8 +40,46 @@ export default function TabletSettings() {
       }
     }
 
+    const storedSound = window.localStorage.getItem('servio_sound_enabled');
+    setSoundEnabled(storedSound === null ? true : storedSound === 'true');
+
     setBleSupported(Boolean((navigator as any).bluetooth));
   }, []);
+
+  useEffect(() => {
+    const audio = new Audio('/sounds/new-order.mp3');
+    audio.loop = true;
+    audio.volume = 1;
+    alertAudioRef.current = audio;
+  }, []);
+
+  useEffect(() => {
+    const poll = async () => {
+      try {
+        if (!window.localStorage.getItem('servio_access_token')) return;
+        const resp = await api.get('/api/orders?limit=20&offset=0');
+        const orders = resp.data?.data?.orders || [];
+        const count = orders.filter((o: any) => (o?.status || '').toLowerCase() === 'received').length;
+        setReceivedCount(count);
+      } catch {
+        // ignore
+      }
+    };
+    poll();
+    const t = window.setInterval(poll, 10000);
+    return () => window.clearInterval(t);
+  }, []);
+
+  useEffect(() => {
+    const audio = alertAudioRef.current;
+    if (!audio) return;
+    if (receivedCount > 0 && soundEnabled) {
+      audio.play().catch(() => {});
+    } else {
+      audio.pause();
+      audio.currentTime = 0;
+    }
+  }, [receivedCount, soundEnabled]);
 
   const bluetoothHelp = useMemo(() => {
     if (!bleSupported) {
@@ -59,6 +101,11 @@ export default function TabletSettings() {
   const savePaperWidth = (next: '80mm' | '58mm') => {
     setPaperWidth(next);
     window.localStorage.setItem('servio_thermal_paper_width', next);
+  };
+
+  const saveSoundEnabled = (next: boolean) => {
+    setSoundEnabled(next);
+    window.localStorage.setItem('servio_sound_enabled', String(next));
   };
 
   const handlePairBluetooth = async () => {
@@ -93,6 +140,19 @@ export default function TabletSettings() {
       </div>
 
       <div className="max-w-4xl mx-auto p-6 space-y-6">
+        {receivedCount > 0 && (
+          <div className="bg-blue-600 text-white rounded-2xl p-4 flex items-center justify-between shadow-lg">
+            <div className="font-black uppercase tracking-widest">
+              New order received ({receivedCount})
+            </div>
+            <button
+              className="bg-white text-blue-700 font-black px-4 py-2 rounded-xl"
+              onClick={() => router.push('/tablet/orders')}
+            >
+              View Orders
+            </button>
+          </div>
+        )}
         <section className="bg-white rounded-2xl shadow-lg p-6">
           <h2 className="text-lg font-black mb-4">Auto-Print</h2>
           <div className="flex items-center justify-between">
@@ -107,6 +167,37 @@ export default function TabletSettings() {
               }`}
             >
               {autoPrintEnabled ? 'On' : 'Off'}
+            </button>
+          </div>
+        </section>
+
+        <section className="bg-white rounded-2xl shadow-lg p-6">
+          <h2 className="text-lg font-black mb-4">Order Sound</h2>
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="font-bold">New order alert</div>
+              <div className="text-sm text-slate-500">Loops until accepted.</div>
+            </div>
+            <button
+              onClick={() => saveSoundEnabled(!soundEnabled)}
+              className={`px-4 py-2 rounded-xl font-black uppercase tracking-widest ${
+                soundEnabled ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-700'
+              }`}
+            >
+              {soundEnabled ? 'On' : 'Off'}
+            </button>
+          </div>
+          <div className="mt-4">
+            <button
+              className="px-4 py-2 rounded-xl bg-black text-white font-black flex items-center gap-2"
+              onClick={() => {
+                const audio = new Audio('/sounds/new-order.mp3');
+                audio.volume = 1;
+                audio.play().catch(() => {});
+              }}
+            >
+              <CheckCircle2 className="h-4 w-4" />
+              Test Sound
             </button>
           </div>
         </section>
