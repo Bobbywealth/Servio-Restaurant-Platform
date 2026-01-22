@@ -1,8 +1,9 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react'
 import Head from 'next/head'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import dynamic from 'next/dynamic'
 import { api } from '../../lib/api'
+import toast from 'react-hot-toast'
 import { 
   Package, 
   AlertTriangle, 
@@ -14,7 +15,8 @@ import {
   Edit3,
   Trash2,
   AlertCircle,
-  RefreshCw
+  RefreshCw,
+  X
 } from 'lucide-react'
 
 const DashboardLayout = dynamic(() => import('../../components/Layout/DashboardLayout'), {
@@ -39,6 +41,27 @@ export default function InventoryPage() {
   const [items, setItems] = useState<InventoryItem[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showAddModal, setShowAddModal] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [editingItem, setEditingItem] = useState<InventoryItem | null>(null)
+  const [isSaving, setIsSaving] = useState(false)
+  const [newItem, setNewItem] = useState({
+    name: '',
+    sku: '',
+    unit: 'each',
+    onHandQty: '',
+    lowStockThreshold: '',
+    category: ''
+  })
+  const [editItem, setEditItem] = useState({
+    id: '',
+    name: '',
+    sku: '',
+    unit: 'each',
+    onHandQty: '',
+    lowStockThreshold: '',
+    category: ''
+  })
 
   const fetchData = useCallback(async () => {
     setIsLoading(true)
@@ -61,6 +84,94 @@ export default function InventoryPage() {
   useEffect(() => {
     fetchData()
   }, [fetchData])
+
+  const handleCreateItem = async () => {
+    if (!newItem.name.trim()) {
+      toast.error('Item name is required')
+      return
+    }
+    if (!newItem.unit.trim()) {
+      toast.error('Unit is required')
+      return
+    }
+
+    setIsSaving(true)
+    try {
+      await api.post('/api/inventory', {
+        name: newItem.name.trim(),
+        sku: newItem.sku.trim() || undefined,
+        unit: newItem.unit.trim(),
+        onHandQty: newItem.onHandQty ? Number(newItem.onHandQty) : 0,
+        lowStockThreshold: newItem.lowStockThreshold ? Number(newItem.lowStockThreshold) : 10,
+        category: newItem.category.trim() || undefined
+      })
+      toast.success('Inventory item created')
+      setShowAddModal(false)
+      setNewItem({ name: '', sku: '', unit: 'each', onHandQty: '', lowStockThreshold: '', category: '' })
+      await fetchData()
+    } catch (e: any) {
+      const msg = e?.response?.data?.error?.message || 'Failed to create item'
+      toast.error(msg)
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const openEditModal = (item: InventoryItem) => {
+    setEditItem({
+      id: item.id,
+      name: item.name,
+      sku: item.sku || '',
+      unit: item.unit,
+      onHandQty: String(item.on_hand_qty),
+      lowStockThreshold: String(item.low_stock_threshold),
+      category: item.category || ''
+    })
+    setEditingItem(item)
+    setShowEditModal(true)
+  }
+
+  const handleUpdateItem = async () => {
+    if (!editItem.name.trim()) {
+      toast.error('Item name is required')
+      return
+    }
+
+    setIsSaving(true)
+    try {
+      await api.put(`/api/inventory/${editItem.id}`, {
+        name: editItem.name.trim(),
+        sku: editItem.sku.trim() || undefined,
+        unit: editItem.unit.trim(),
+        onHandQty: editItem.onHandQty ? Number(editItem.onHandQty) : 0,
+        lowStockThreshold: editItem.lowStockThreshold ? Number(editItem.lowStockThreshold) : 10,
+        category: editItem.category.trim() || undefined
+      })
+      toast.success('Inventory item updated')
+      setShowEditModal(false)
+      setEditingItem(null)
+      await fetchData()
+    } catch (e: any) {
+      const msg = e?.response?.data?.error?.message || 'Failed to update item'
+      toast.error(msg)
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleAdjustQuantity = async (itemId: string, delta: number) => {
+    try {
+      await api.post('/api/inventory/adjust', {
+        itemId,
+        delta,
+        reason: delta > 0 ? 'Manual addition' : 'Manual reduction'
+      })
+      toast.success('Quantity updated')
+      await fetchData()
+    } catch (e: any) {
+      toast.error('Failed to adjust quantity')
+    }
+  }
 
   const categories = useMemo(() => {
     const set = new Set<string>()
@@ -93,6 +204,7 @@ export default function InventoryPage() {
               className="btn-primary inline-flex items-center space-x-2"
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
+              onClick={() => setShowAddModal(true)}
             >
               <Plus className="w-4 h-4" />
               <span>Add Item</span>
@@ -289,11 +401,26 @@ export default function InventoryPage() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                         <div className="flex items-center space-x-2">
-                          <button className="btn-icon text-primary-600 hover:text-primary-700">
+                          <button 
+                            className="btn-icon text-primary-600 hover:text-primary-700"
+                            onClick={() => openEditModal(item)}
+                            title="Edit item"
+                          >
                             <Edit3 className="w-4 h-4" />
                           </button>
-                          <button className="btn-icon text-surface-400 hover:text-surface-600">
-                            <MoreVertical className="w-4 h-4" />
+                          <button 
+                            className="btn-icon text-green-600 hover:text-green-700"
+                            onClick={() => handleAdjustQuantity(item.id, 1)}
+                            title="Add 1"
+                          >
+                            <Plus className="w-4 h-4" />
+                          </button>
+                          <button 
+                            className="btn-icon text-red-600 hover:text-red-700"
+                            onClick={() => handleAdjustQuantity(item.id, -1)}
+                            title="Remove 1"
+                          >
+                            <TrendingDown className="w-4 h-4" />
                           </button>
                         </div>
                       </td>
@@ -303,6 +430,242 @@ export default function InventoryPage() {
               </table>
             </div>
           </motion.div>
+
+          {/* Add Item Modal */}
+          <AnimatePresence>
+            {showAddModal && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+                onClick={() => setShowAddModal(false)}
+              >
+                <motion.div
+                  initial={{ scale: 0.95, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0.95, opacity: 0 }}
+                  className="bg-white dark:bg-gray-800 rounded-xl max-w-lg w-full p-6"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-xl font-bold text-surface-900 dark:text-surface-100">Add Inventory Item</h2>
+                    <button onClick={() => setShowAddModal(false)} className="text-surface-400 hover:text-surface-600">
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">Item Name *</label>
+                      <input
+                        type="text"
+                        value={newItem.name}
+                        onChange={(e) => setNewItem(prev => ({ ...prev, name: e.target.value }))}
+                        className="input-field"
+                        placeholder="e.g. Chicken Breast"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">SKU</label>
+                        <input
+                          type="text"
+                          value={newItem.sku}
+                          onChange={(e) => setNewItem(prev => ({ ...prev, sku: e.target.value }))}
+                          className="input-field"
+                          placeholder="e.g. CHK-001"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">Unit *</label>
+                        <select
+                          value={newItem.unit}
+                          onChange={(e) => setNewItem(prev => ({ ...prev, unit: e.target.value }))}
+                          className="input-field"
+                        >
+                          <option value="each">Each</option>
+                          <option value="lb">Pound (lb)</option>
+                          <option value="kg">Kilogram (kg)</option>
+                          <option value="oz">Ounce (oz)</option>
+                          <option value="g">Gram (g)</option>
+                          <option value="gal">Gallon</option>
+                          <option value="L">Liter</option>
+                          <option value="case">Case</option>
+                          <option value="box">Box</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">Quantity On Hand</label>
+                        <input
+                          type="number"
+                          value={newItem.onHandQty}
+                          onChange={(e) => setNewItem(prev => ({ ...prev, onHandQty: e.target.value }))}
+                          className="input-field"
+                          placeholder="0"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">Low Stock Alert</label>
+                        <input
+                          type="number"
+                          value={newItem.lowStockThreshold}
+                          onChange={(e) => setNewItem(prev => ({ ...prev, lowStockThreshold: e.target.value }))}
+                          className="input-field"
+                          placeholder="10"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">Category</label>
+                      <input
+                        type="text"
+                        value={newItem.category}
+                        onChange={(e) => setNewItem(prev => ({ ...prev, category: e.target.value }))}
+                        className="input-field"
+                        placeholder="e.g. Proteins, Produce, Dairy"
+                      />
+                    </div>
+                  </div>
+                  <div className="mt-6 flex justify-end gap-3">
+                    <button
+                      onClick={() => setShowAddModal(false)}
+                      className="btn-secondary"
+                      disabled={isSaving}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleCreateItem}
+                      className="btn-primary"
+                      disabled={isSaving}
+                    >
+                      {isSaving ? 'Saving...' : 'Add Item'}
+                    </button>
+                  </div>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Edit Item Modal */}
+          <AnimatePresence>
+            {showEditModal && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+                onClick={() => { setShowEditModal(false); setEditingItem(null); }}
+              >
+                <motion.div
+                  initial={{ scale: 0.95, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0.95, opacity: 0 }}
+                  className="bg-white dark:bg-gray-800 rounded-xl max-w-lg w-full p-6"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-xl font-bold text-surface-900 dark:text-surface-100">Edit Inventory Item</h2>
+                    <button onClick={() => { setShowEditModal(false); setEditingItem(null); }} className="text-surface-400 hover:text-surface-600">
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">Item Name *</label>
+                      <input
+                        type="text"
+                        value={editItem.name}
+                        onChange={(e) => setEditItem(prev => ({ ...prev, name: e.target.value }))}
+                        className="input-field"
+                        placeholder="e.g. Chicken Breast"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">SKU</label>
+                        <input
+                          type="text"
+                          value={editItem.sku}
+                          onChange={(e) => setEditItem(prev => ({ ...prev, sku: e.target.value }))}
+                          className="input-field"
+                          placeholder="e.g. CHK-001"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">Unit *</label>
+                        <select
+                          value={editItem.unit}
+                          onChange={(e) => setEditItem(prev => ({ ...prev, unit: e.target.value }))}
+                          className="input-field"
+                        >
+                          <option value="each">Each</option>
+                          <option value="lb">Pound (lb)</option>
+                          <option value="kg">Kilogram (kg)</option>
+                          <option value="oz">Ounce (oz)</option>
+                          <option value="g">Gram (g)</option>
+                          <option value="gal">Gallon</option>
+                          <option value="L">Liter</option>
+                          <option value="case">Case</option>
+                          <option value="box">Box</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">Quantity On Hand</label>
+                        <input
+                          type="number"
+                          value={editItem.onHandQty}
+                          onChange={(e) => setEditItem(prev => ({ ...prev, onHandQty: e.target.value }))}
+                          className="input-field"
+                          placeholder="0"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">Low Stock Alert</label>
+                        <input
+                          type="number"
+                          value={editItem.lowStockThreshold}
+                          onChange={(e) => setEditItem(prev => ({ ...prev, lowStockThreshold: e.target.value }))}
+                          className="input-field"
+                          placeholder="10"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">Category</label>
+                      <input
+                        type="text"
+                        value={editItem.category}
+                        onChange={(e) => setEditItem(prev => ({ ...prev, category: e.target.value }))}
+                        className="input-field"
+                        placeholder="e.g. Proteins, Produce, Dairy"
+                      />
+                    </div>
+                  </div>
+                  <div className="mt-6 flex justify-end gap-3">
+                    <button
+                      onClick={() => { setShowEditModal(false); setEditingItem(null); }}
+                      className="btn-secondary"
+                      disabled={isSaving}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleUpdateItem}
+                      className="btn-primary"
+                      disabled={isSaving}
+                    >
+                      {isSaving ? 'Saving...' : 'Update Item'}
+                    </button>
+                  </div>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </DashboardLayout>
     </>
