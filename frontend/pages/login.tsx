@@ -110,13 +110,19 @@ export default function LoginPage() {
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center">
               <img
-                src="/images/servio_logo_transparent_tight.png"
+                src="/images/servio_icon_tight.png"
                 alt="Servio Logo"
-                className="h-8 w-auto brightness-0 invert"
+                className="h-8 w-auto"
               />
               <span className="ml-2 text-xl font-bold text-white">Servio</span>
             </div>
             <div className="hidden md:flex items-center space-x-8">
+              <a
+                href="/"
+                className="text-teal-100 hover:text-white font-semibold transition-colors border border-teal-500/40 bg-teal-500/10 px-3 py-1.5 rounded-full"
+              >
+                Home
+              </a>
               <a href="/#services" className="text-gray-300 hover:text-white font-medium transition-colors">Services</a>
               <a href="/#features" className="text-gray-300 hover:text-white font-medium transition-colors">Features</a>
               <a href="/#pricing" className="text-gray-300 hover:text-white font-medium transition-colors">Pricing</a>
@@ -206,7 +212,7 @@ export default function LoginPage() {
                 whileTap={{ scale: 0.98 }}
                 type="submit"
                 disabled={loading}
-                className="w-full bg-gradient-to-r from-teal-600 to-orange-500 hover:from-teal-700 hover:to-orange-600 text-white rounded-xl py-3 font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-50 group shadow-[0_12px_30px_-16px_rgba(20,184,166,0.7)]"
+                className="w-full bg-gradient-to-r from-teal-600 to-orange-500 hover:from-teal-700 hover:to-orange-600 text-white rounded-xl py-3 font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-50 group shadow-[0_12px_30px_-16px_rgba(20,184,166,0.7)] hover:shadow-[0_16px_36px_-16px_rgba(249,115,22,0.6)] active:shadow-[0_10px_24px_-16px_rgba(20,184,166,0.5)]"
               >
                 {loading ? (
                   <Loader2 className="w-5 h-5 animate-spin" />
