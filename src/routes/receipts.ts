@@ -229,7 +229,8 @@ router.get('/:id/items', requireAuth, asyncHandler(async (req: Request, res: Res
   }
 
   const items = await db.all(
-    `SELECT ri.*, ii.name as matched_item_name, ii.unit as matched_item_unit 
+    `SELECT ri.id, ri.receipt_id, ri.item_name, ri.quantity, ri.unit_cost, ri.total_price, ri.inventory_item_id,
+            ii.name as matched_item_name, ii.unit as matched_item_unit 
      FROM receipt_line_items ri 
      LEFT JOIN inventory_items ii ON ri.inventory_item_id = ii.id 
      WHERE ri.receipt_id = ?`,
@@ -245,7 +246,9 @@ router.get('/:id/items', requireAuth, asyncHandler(async (req: Request, res: Res
  */
 router.post('/:id/items', requireAuth, asyncHandler(async (req: Request, res: Response) => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const { description, quantity, unitCost, inventoryItemId } = req.body;
+  // Support both 'description' and 'itemName' for backwards compatibility
+  const { description, itemName, quantity, unitCost, inventoryItemId } = req.body;
+  const itemDescription = description || itemName;
   const user = req.user!;
 
   const db = DatabaseService.getInstance().getDatabase();
@@ -253,15 +256,15 @@ router.post('/:id/items', requireAuth, asyncHandler(async (req: Request, res: Re
 
   await db.run(
     `INSERT INTO receipt_line_items (
-      id, receipt_id, description, quantity, unit_cost, total_price, inventory_item_id, created_at
+      id, receipt_id, item_name, quantity, unit_cost, total_price, inventory_item_id, created_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
     [
       itemId,
       id,
-      description,
-      quantity,
-      unitCost,
-      (quantity * unitCost) || 0,
+      itemDescription,
+      quantity || 1,
+      unitCost || 0,
+      ((quantity || 1) * (unitCost || 0)),
       inventoryItemId || null
     ]
   );

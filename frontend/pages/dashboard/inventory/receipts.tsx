@@ -76,9 +76,6 @@ export default function ReceiptsPage() {
   const [newItem, setNewItem] = useState({ itemName: '', quantity: 1, unitCost: 0, inventoryItemId: '' })
   const [invSearch, setInvSearch] = useState('')
 
-  // Mock restaurant ID for v1 (would come from context in prod)
-  const restaurantId = 'demo-restaurant-id'
-
   useEffect(() => {
     if (typeof window === 'undefined') return
     const token = localStorage.getItem('servio_access_token')
@@ -108,7 +105,7 @@ export default function ReceiptsPage() {
   const fetchReceipts = async () => {
     try {
       setLoading(true)
-      const res = await api.get('/api/receipts/list', { params: { restaurantId } })
+      const res = await api.get('/api/receipts/list')
       const data = res.data
       if (data.success) setReceipts(data.data.receipts)
     } catch (error) {
@@ -120,9 +117,9 @@ export default function ReceiptsPage() {
 
   const fetchInventory = async () => {
     try {
-      const res = await api.get('/api/inventory', { params: { restaurantId } })
+      const res = await api.get('/api/inventory/search')
       const data = res.data
-      if (data.success) setInventoryItems(data.data.items || [])
+      if (data.success) setInventoryItems(data.data || [])
     } catch (error) {
       console.error('Failed to fetch inventory:', error)
     }
@@ -203,8 +200,7 @@ export default function ReceiptsPage() {
       
       const createRes = await api.post('/api/receipts/create-upload', {
         fileName: uploadFile.name,
-        contentType: uploadFile.type,
-        restaurantId
+        contentType: uploadFile.type
       })
       
       const createData = createRes.data
