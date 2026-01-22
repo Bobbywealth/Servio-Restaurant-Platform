@@ -283,63 +283,114 @@ router.get('/stats/summary', asyncHandler(async (req: Request, res: Response) =>
 router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) => {
   const { slug } = req.params;
   const { items, customerName, customerPhone, customerEmail } = req.body;
+  const db = DatabaseService.getInstance().getDatabase();
+  const requestId = getRequestId(req);
 
-  if (!items || !Array.isArray(items) || items.length === 0) {
+  let parsedItems = items;
+  if (typeof items === 'string') {
+    try {
+      parsedItems = JSON.parse(items);
+    } catch {
+      return res.status(400).json({ success: false, error: { message: 'Items must be valid JSON' } });
+    }
+  }
+
+  const safeBody = {
+    customerName,
+    customerPhone,
+    customerEmail,
+    itemsCount: Array.isArray(parsedItems) ? parsedItems.length : 0
+  };
+
+  const restaurant = await db.get('SELECT id, slug FROM restaurants WHERE slug = ?', [slug]);
+  const restaurantId = restaurant?.id ?? null;
+
+  logger.info(
+    `[orders.public] entry ${JSON.stringify({
+      requestId,
+      slug,
+      restaurant: restaurant ?? null,
+      restaurantId,
+      body: safeBody
+    })}`
+  );
+
+  if (!restaurant) {
+    return res.status(404).json({ success: false, error: { message: 'Restaurant not found' } });
+  }
+
+  if (!restaurantId) {
+    return res.status(400).json({ success: false, error: { message: 'Missing restaurantId for order' } });
+  }
+
+  if (!parsedItems || !Array.isArray(parsedItems) || parsedItems.length === 0) {
     return res.status(400).json({ success: false, error: { message: 'Items are required' } });
   }
 
-  const db = DatabaseService.getInstance().getDatabase();
-  const restaurant = await db.get('SELECT id FROM restaurants WHERE slug = ?', [slug]);
-  if (!restaurant) throw new BadRequestError('Restaurant not found');
+  try {
+    const orderId = uuidv4();
 
-  const orderId = uuidv4();
-  const restaurantId = restaurant.id;
+    // Calculate total and validate items (simplified for v1 fast build)
+    let totalAmount = 0;
+    for (const item of parsedItems) {
+      const price = Number(item?.price ?? 0);
+      const quantity = Number(item?.quantity ?? 0);
+      if (!Number.isFinite(price) || !Number.isFinite(quantity) || quantity <= 0) {
+        return res.status(400).json({ success: false, error: { message: 'Invalid items' } });
+      }
+      totalAmount += price * quantity;
+    }
 
-  // Calculate total and validate items (simplified for v1 fast build)
-  let totalAmount = 0;
-  for (const item of items) {
-    totalAmount += (item.price * item.quantity);
-  }
-
-  await db.run(`
-    INSERT INTO orders (
-      id, restaurant_id, channel, status, total_amount, payment_status, created_at, updated_at
-    ) VALUES (?, ?, 'website', 'NEW', ?, 'unpaid', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-  `, [orderId, restaurantId, totalAmount]);
-
-  // Create order items
-  for (const item of items) {
     await db.run(`
-      INSERT INTO order_items (id, order_id, menu_item_id, name, quantity, unit_price)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `, [uuidv4(), orderId, item.id, item.name, item.quantity, item.price]);
+      INSERT INTO orders (
+        id, restaurant_id, channel, status, total_amount, payment_status, created_at, updated_at
+      ) VALUES (?, ?, 'website', 'NEW', ?, 'unpaid', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `, [orderId, restaurantId, totalAmount]);
+
+    // Create order items
+    for (const item of parsedItems) {
+      await db.run(`
+        INSERT INTO order_items (id, order_id, menu_item_id, name, quantity, unit_price)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `, [uuidv4(), orderId, item.id, item.name, item.quantity, item.price]);
+    }
+
+    // Notify dashboard via Socket.IO
+    const io = req.app.get('socketio');
+    if (io) {
+      io.to(`restaurant-${restaurantId}`).emit('new-order', { orderId, totalAmount });
+    }
+
+    await eventBus.emit('order.created_web', {
+      restaurantId,
+      type: 'order.created_web',
+      actor: { actorType: 'system' },
+      payload: {
+        orderId,
+        customerName,
+        totalAmount,
+        channel: 'website'
+      },
+      occurredAt: new Date().toISOString()
+    });
+
+    await DatabaseService.getInstance().logAudit(restaurantId, null, 'create_public_order', 'order', orderId, { totalAmount });
+
+    return res.status(201).json({
+      success: true,
+      data: { orderId, status: 'NEW' }
+    });
+  } catch (error) {
+    logger.error(
+      `[orders.public] error ${JSON.stringify({
+        requestId,
+        slug,
+        restaurantId,
+        message: error instanceof Error ? error.message : String(error)
+      })}`
+    );
+    return res.status(500).json({ success: false, error: { message: 'Failed to create order' } });
   }
-
-  // Notify dashboard via Socket.IO
-  const io = req.app.get('socketio');
-  if (io) {
-    io.to(`restaurant-${restaurantId}`).emit('new-order', { orderId, totalAmount });
-  }
-
-  await eventBus.emit('order.created_web', {
-    restaurantId,
-    type: 'order.created_web',
-    actor: { actorType: 'system' },
-    payload: {
-      orderId,
-      customerName,
-      totalAmount,
-      channel: 'website'
-    },
-    occurredAt: new Date().toISOString()
-  });
-
-  await DatabaseService.getInstance().logAudit(restaurantId, null, 'create_public_order', 'order', orderId, { totalAmount });
-
-  res.status(201).json({
-    success: true,
-    data: { orderId, status: 'NEW' }
-  });
 }));
 router.get('/waiting-times', asyncHandler(async (req: Request, res: Response) => {
   const db = DatabaseService.getInstance().getDatabase();
