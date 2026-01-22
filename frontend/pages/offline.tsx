@@ -155,7 +155,7 @@ export default function OfflinePage() {
 
             {/* Network Info */}
             <div className="mt-4 text-2xs text-surface-400 dark:text-surface-500">
-              <p>Connection: {navigator.onLine ? 'Online' : 'Offline'}</p>
+              <p>Connection: {isOnline ? 'Online' : 'Offline'}</p>
               <p>Servio will sync when connection is restored</p>
             </div>
           </motion.div>
