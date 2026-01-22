@@ -139,17 +139,22 @@ router.get('/assistant-config', async (req: Request, res: Response) => {
                   type: 'object',
                   properties: {
                     itemId: { type: 'string', description: 'Menu item ID' },
-                    id: { type: 'string', description: 'Menu item ID (alias)' },
                     qty: { type: 'number', description: 'Quantity' },
-                    quantity: { type: 'number', description: 'Quantity (alias)' },
                     modifiers: { type: 'object', description: 'Modifier selections keyed by modifier group id' }
                   },
                   required: ['itemId', 'qty']
                 }
               },
-              customerName: { type: 'string' },
-              customerPhone: { type: 'string' },
-              customerEmail: { type: 'string' },
+              customer: {
+                type: 'object',
+                properties: {
+                  name: { type: 'string' },
+                  phone: { type: 'string' },
+                  email: { type: 'string' },
+                  lastInitial: { type: 'string' }
+                },
+                required: ['name', 'phone']
+              },
               totals: {
                 type: 'object',
                 properties: {
@@ -164,7 +169,7 @@ router.get('/assistant-config', async (req: Request, res: Response) => {
               pickupTime: { type: 'string' },
               callId: { type: 'string' }
             },
-            required: ['items', 'customerName', 'customerPhone', 'orderType', 'totals']
+            required: ['items', 'customer', 'orderType', 'totals']
           }
         }
       ]

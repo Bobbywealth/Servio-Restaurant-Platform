@@ -131,13 +131,8 @@ export class VapiService {
           // Ensure the order is linked to the inbound call for matching later in Voice Hub
           parameters.callId = parameters.callId || message.call?.id;
           parameters.source = parameters.source || 'vapi';
-          const normalizedCustomer = {
-            name: parameters.customer?.name || parameters.customerName,
-            phone: parameters.customer?.phone || parameters.customerPhone || message.call?.customer?.number,
-            email: parameters.customer?.email || parameters.customerEmail,
-            lastInitial: parameters.customer?.lastInitial
-          };
-          parameters.customer = normalizedCustomer;
+          if (!parameters.customer) parameters.customer = {};
+          parameters.customer.phone = parameters.customer.phone || message.call?.customer?.number;
           if (!parameters.customer.lastInitial && parameters.customer.name) {
             const parts = String(parameters.customer.name).trim().split(/\s+/);
             const last = parts[parts.length - 1];

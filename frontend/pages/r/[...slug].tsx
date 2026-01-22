@@ -54,15 +54,6 @@ export default function PublicProfile() {
   const [orderComplete, setOrderComplete] = useState<string | null>(null);
   const [orderStatus, setOrderStatus] = useState<string | null>(null);
   const [pickupTime, setPickupTime] = useState<string | null>(null);
-  const [customerName, setCustomerName] = useState('');
-  const [customerPhone, setCustomerPhone] = useState('');
-  const [customerEmail, setCustomerEmail] = useState('');
-  const [scheduledFor, setScheduledFor] = useState('');
-
-  const toLocalDateTimeValue = (date: Date) => {
-    const tzOffsetMs = date.getTimezoneOffset() * 60 * 1000;
-    return new Date(date.getTime() - tzOffsetMs).toISOString().slice(0, 16);
-  };
 
   useEffect(() => {
     if (!restaurantSlug) return;
@@ -107,38 +98,16 @@ export default function PublicProfile() {
 
   const handleCheckout = async () => {
     if (cart.length === 0) return;
-    if (!customerName.trim() || !customerPhone.trim()) {
-      toast.error('Name and phone are required');
-      return;
-    }
     setIsSubmitting(true);
     try {
-      let scheduledPickup: string | null = null;
-      if (scheduledFor) {
-        const parsed = new Date(scheduledFor);
-        if (Number.isNaN(parsed.getTime())) {
-          toast.error('Invalid scheduled time');
-          setIsSubmitting(false);
-          return;
-        }
-        scheduledPickup = parsed.toISOString();
-      }
       const resp = await api.post(`/api/orders/public/${restaurantSlug}`, {
         items: cart.map(i => ({ id: i.id, name: i.name, quantity: i.quantity, price: i.price })),
-        customerName: customerName.trim(),
-        customerPhone: customerPhone.trim(),
-        customerEmail: customerEmail.trim() || null,
-        pickupTime: scheduledPickup
+        customerName: "Guest", // v1 simplicity
       });
       setOrderComplete(resp.data.data.orderId);
       setOrderStatus(resp.data.data.status || null);
-      setPickupTime(resp.data.data.pickupTime || null);
       setCart([]);
       setIsCartOpen(false);
-      setCustomerName('');
-      setCustomerPhone('');
-      setCustomerEmail('');
-      setScheduledFor('');
     } catch (err) {
       toast.error('Failed to place order');
     } finally {
@@ -174,7 +143,7 @@ export default function PublicProfile() {
         <p className="text-gray-600 mb-6">Your order number is <span className="font-mono font-bold text-blue-600">{orderComplete}</span></p>
         {pickupTime && (
           <div className="mb-4 text-lg font-semibold text-gray-700">
-            Scheduled for {new Date(pickupTime).toLocaleString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' })}
+            Prep time: ready by {new Date(pickupTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
           </div>
         )}
         {orderStatus && (
@@ -313,43 +282,6 @@ export default function PublicProfile() {
                       </div>
                     </div>
                   ))}
-                </div>
-
-                <div className="space-y-4 mb-8">
-                  <h3 className="text-lg font-bold">Your Details</h3>
-                  <div className="grid grid-cols-1 gap-3">
-                    <input
-                      value={customerName}
-                      onChange={(e) => setCustomerName(e.target.value)}
-                      placeholder="Full name"
-                      className="w-full rounded-xl border px-4 py-3 text-sm"
-                    />
-                    <input
-                      value={customerPhone}
-                      onChange={(e) => setCustomerPhone(e.target.value)}
-                      placeholder="Phone number"
-                      className="w-full rounded-xl border px-4 py-3 text-sm"
-                    />
-                    <input
-                      value={customerEmail}
-                      onChange={(e) => setCustomerEmail(e.target.value)}
-                      placeholder="Email (optional)"
-                      className="w-full rounded-xl border px-4 py-3 text-sm"
-                    />
-                  </div>
-                  <div className="pt-2">
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">Schedule for later (optional)</label>
-                    <input
-                      type="datetime-local"
-                      min={toLocalDateTimeValue(new Date())}
-                      value={scheduledFor}
-                      onChange={(e) => setScheduledFor(e.target.value)}
-                      className="w-full rounded-xl border px-4 py-3 text-sm"
-                    />
-                    <p className="text-xs text-gray-500 mt-2">
-                      Leave empty for ASAP pickup.
-                    </p>
-                  </div>
                 </div>
 
                 <div className="border-t pt-4 mb-8">
