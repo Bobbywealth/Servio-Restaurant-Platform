@@ -1,6 +1,7 @@
 import '../styles/globals.css'
 import type { AppProps } from 'next/app'
 import Head from 'next/head'
+import { useRouter } from 'next/router'
 import { useState, useEffect } from 'react'
 import Router from 'next/router'
 import dynamic from 'next/dynamic'
@@ -23,6 +24,8 @@ const ToastProvider = dynamic(() => import('../components/ui/Toast'), {
 
 export default function App({ Component, pageProps }: AppProps) {
   const [routeLoading, setRouteLoading] = useState(false)
+  const router = useRouter()
+  const isTabletRoute = router.pathname.startsWith('/tablet')
 
   useEffect(() => {
     // Route loading indicator
@@ -53,7 +56,7 @@ export default function App({ Component, pageProps }: AppProps) {
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="msapplication-tap-highlight" content="no" />
         <meta name="theme-color" content="#14B8A6" />
-        <link rel="manifest" href="/manifest.json" />
+        <link rel="manifest" href={isTabletRoute ? '/manifest-tablet.webmanifest' : '/manifest.json'} />
         <link rel="apple-touch-icon" href="/images/servio_logo_transparent_tight.png" />
 
         {/* PERFORMANCE HINTS */}
