@@ -92,9 +92,9 @@ function beep() {
     const ctx = new AudioContext();
     const o = ctx.createOscillator();
     const g = ctx.createGain();
-    o.type = 'sine';
+    o.type = 'square';
     o.frequency.value = 880;
-    g.gain.value = 0.05;
+    g.gain.value = 0.2;
     o.connect(g);
     g.connect(ctx.destination);
     o.start();
@@ -107,6 +107,11 @@ function beep() {
   }
 }
 
+function playAlarmTone() {
+  beep();
+  window.setTimeout(() => beep(), 220);
+}
+
 
 export default function TabletOrdersPage() {
   const router = useRouter();
@@ -117,8 +122,15 @@ export default function TabletOrdersPage() {
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState<number | null>(null);
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
-  const [autoPrintEnabled, setAutoPrintEnabled] = useState<boolean>(true);
+  const [autoPrintEnabled, setAutoPrintEnabled] = useState<boolean>(false);
   const [paperWidth, setPaperWidth] = useState<ReceiptPaperWidth>('80mm');
+  const [printMode, setPrintMode] = useState<'bluetooth' | 'system' | 'bridge'>('system');
+  const [lastPrintResult, setLastPrintResult] = useState<{ status: 'success' | 'error'; message?: string } | null>(null);
+  const [autoPrintPendingId, setAutoPrintPendingId] = useState<string | null>(null);
+  const lastAutoPromptedId = useRef<string | null>(null);
+  const alarmIntervalRef = useRef<number | null>(null);
+  const [prepModalOrder, setPrepModalOrder] = useState<Order | null>(null);
+  const [prepMinutes, setPrepMinutes] = useState<number>(15);
   const [printingOrderId, setPrintingOrderId] = useState<string | null>(null);
   const [printedOrders, setPrintedOrders] = useState<Set<string>>(() => new Set());
   const printedOrdersRef = useRef<Set<string>>(new Set());
@@ -137,18 +149,27 @@ export default function TabletOrdersPage() {
   }, [router]);
 
   useEffect(() => {
-    // Init print settings from env + localStorage
-    const envAuto = (process.env.NEXT_PUBLIC_AUTO_PRINT_ENABLED || '').toLowerCase();
-    const defaultAuto = envAuto === '' ? true : envAuto === 'true' || envAuto === '1' || envAuto === 'yes';
     const storedAuto = typeof window !== 'undefined' ? window.localStorage.getItem('servio_auto_print_enabled') : null;
-    const auto = storedAuto === null ? defaultAuto : storedAuto === 'true';
+    const auto = storedAuto === 'true';
     setAutoPrintEnabled(auto);
 
-    const envPaper = (process.env.NEXT_PUBLIC_THERMAL_PAPER_WIDTH || '').toLowerCase();
-    const defaultPaper: ReceiptPaperWidth = envPaper === '58mm' ? '58mm' : '80mm';
     const storedPaper = typeof window !== 'undefined' ? window.localStorage.getItem('servio_thermal_paper_width') : null;
-    const paper: ReceiptPaperWidth = storedPaper === '58mm' ? '58mm' : storedPaper === '80mm' ? '80mm' : defaultPaper;
+    const paper: ReceiptPaperWidth = storedPaper === '58mm' ? '58mm' : '80mm';
     setPaperWidth(paper);
+
+    const storedMode = typeof window !== 'undefined' ? window.localStorage.getItem('servio_print_mode') : null;
+    if (storedMode === 'bluetooth' || storedMode === 'bridge' || storedMode === 'system') {
+      setPrintMode(storedMode);
+    }
+
+    const storedResult = typeof window !== 'undefined' ? window.localStorage.getItem('servio_last_print_result') : null;
+    if (storedResult) {
+      try {
+        setLastPrintResult(JSON.parse(storedResult));
+      } catch {
+        // ignore
+      }
+    }
   }, []);
 
   async function refresh() {
@@ -191,6 +212,15 @@ export default function TabletOrdersPage() {
   async function printOrder(orderId: string, opts?: { markAsPrinted?: boolean }) {
     setPrintingOrderId(orderId);
     try {
+      if (printMode !== 'system') {
+        const message = printMode === 'bluetooth'
+          ? 'Bluetooth mode is not available for this device'
+          : 'Print Bridge mode is not configured';
+        setLastPrintResult({ status: 'error', message });
+        window.localStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'error', message }));
+        return;
+      }
+
       const full = await apiGet<{ success: boolean; data?: any }>(`/api/orders/${encodeURIComponent(orderId)}`);
       const order = (full?.data || full) as ReceiptOrder;
 
@@ -222,8 +252,13 @@ export default function TabletOrdersPage() {
           return next;
         });
       }
+      setLastPrintResult({ status: 'success' });
+      window.localStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'success' }));
     } catch (e) {
       console.error('Print failed', e);
+      const message = e instanceof Error ? e.message : 'Print failed';
+      setLastPrintResult({ status: 'error', message });
+      window.localStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'error', message }));
     } finally {
       setPrintingOrderId(null);
       // clear receipt after print dialog is opened; also clear onafterprint for some browsers
@@ -238,6 +273,27 @@ export default function TabletOrdersPage() {
       await apiPost(`/api/orders/${encodeURIComponent(orderId)}/status`, { status: nextStatus });
       if (socket) {
         socket.emit('order:status_changed', { orderId, status: nextStatus, timestamp: new Date() });
+      }
+    } catch (e) {
+      await refresh();
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function setPrepTime(orderId: string, minutes: number) {
+    setBusyId(orderId);
+    try {
+      const resp = await apiPost<{ success: boolean; data?: { pickupTime?: string } }>(
+        `/api/orders/${encodeURIComponent(orderId)}/prep-time`,
+        { prepMinutes: minutes }
+      );
+      const pickupTime = resp?.data?.pickupTime;
+      setOrders((prev) =>
+        prev.map((o) => (o.id === orderId ? { ...o, status: 'preparing', pickup_time: pickupTime } : o))
+      );
+      if (socket) {
+        socket.emit('order:status_changed', { orderId, status: 'preparing', timestamp: new Date() });
       }
     } catch (e) {
       await refresh();
@@ -284,7 +340,26 @@ export default function TabletOrdersPage() {
     return orders.filter((o) => activeStatuses.has(normalizeStatus(o.status)));
   }, [orders]);
 
+  const receivedOrders = useMemo(() => {
+    return activeOrders.filter((o) => normalizeStatus(o.status) === 'received');
+  }, [activeOrders]);
+
   const filtered = activeOrders;
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (receivedOrders.length > 0) {
+      if (alarmIntervalRef.current === null) {
+        playAlarmTone();
+        alarmIntervalRef.current = window.setInterval(() => {
+          playAlarmTone();
+        }, 2500);
+      }
+    } else if (alarmIntervalRef.current !== null) {
+      window.clearInterval(alarmIntervalRef.current);
+      alarmIntervalRef.current = null;
+    }
+  }, [receivedOrders.length]);
 
   useEffect(() => {
     // Avoid printing everything on initial load; mark existing active orders as already-seen.
@@ -307,11 +382,11 @@ export default function TabletOrdersPage() {
 
     if (toAutoPrint.length === 0) return;
 
-    // Print newest first (end of list is newest because sorted DESC on server; still defensive)
     const newest = toAutoPrint[0];
-    beep();
-    printOrder(newest.id, { markAsPrinted: true });
-  }, [autoPrintEnabled, filtered, loading]);
+    if (autoPrintPendingId || lastAutoPromptedId.current === newest.id) return;
+    lastAutoPromptedId.current = newest.id;
+    setAutoPrintPendingId(newest.id);
+  }, [autoPrintEnabled, filtered, loading, autoPrintPendingId]);
 
   return (
     <div className="min-h-screen bg-white text-black font-sans">
@@ -351,6 +426,15 @@ export default function TabletOrdersPage() {
           </div>
           <button
             type="button"
+            onClick={() => router.push('/tablet/settings')}
+            className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-black uppercase tracking-widest bg-white/10 hover:bg-white/20 transition-colors"
+            title="Settings"
+          >
+            <Settings2 className="h-5 w-5" />
+            Settings
+          </button>
+          <button
+            type="button"
             onClick={() => {
               const next = !autoPrintEnabled;
               setAutoPrintEnabled(next);
@@ -362,7 +446,7 @@ export default function TabletOrdersPage() {
             )}
             title="Toggle auto-print"
           >
-            <Settings2 className="h-5 w-5" />
+            <Printer className="h-5 w-5" />
             {autoPrintEnabled ? 'AUTO PRINT ON' : 'AUTO PRINT OFF'}
           </button>
           <button 
@@ -395,7 +479,7 @@ export default function TabletOrdersPage() {
                 <div 
                   key={o.id} 
                   className={clsx(
-                    "flex flex-col rounded-[2rem] border-[4px] bg-white overflow-hidden shadow-2xl transition-all",
+                    "flex flex-col rounded-[2rem] border-[4px] bg-white overflow-hidden shadow-2xl transition-all hover:shadow-[0_25px_60px_-35px_rgba(15,23,42,0.55)] hover:-translate-y-1",
                     isNew ? "border-blue-600 ring-8 ring-blue-50" : "border-black",
                     isReady && "opacity-50 grayscale"
                   )}
@@ -505,6 +589,11 @@ export default function TabletOrdersPage() {
                           Type: {o.order_type}
                         </div>
                       ) : null}
+                      {o.pickup_time ? (
+                        <div className="text-sm font-bold text-slate-700">
+                          Pickup: {new Date(o.pickup_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </div>
+                      ) : null}
                       <div className="flex items-center justify-between pt-3 border-t border-slate-300">
                         <div className="text-lg font-black text-black">TOTAL</div>
                         <div className="text-2xl font-black text-black">
@@ -522,7 +611,10 @@ export default function TabletOrdersPage() {
                     {isNew && (
                       <button
                         disabled={busyId === o.id}
-                        onClick={() => setStatus(o.id, 'preparing')}
+                        onClick={() => {
+                          setPrepMinutes(15);
+                          setPrepModalOrder(o);
+                        }}
                         className="w-full bg-blue-600 hover:bg-blue-700 active:scale-95 text-white py-8 rounded-[1.5rem] flex items-center justify-center gap-4 transition-all shadow-xl disabled:opacity-50"
                       >
                         <span className="text-4xl font-black uppercase tracking-tighter">START PREP</span>
@@ -555,6 +647,71 @@ export default function TabletOrdersPage() {
           </div>
         )}
       </div>
+
+      {autoPrintPendingId && (
+        <div className="no-print fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="bg-white rounded-3xl shadow-2xl p-8 w-full max-w-lg mx-6">
+            <h3 className="text-2xl font-black mb-2">Print now?</h3>
+            <p className="text-slate-600 mb-6">Auto-print is on. Do you want to print this new order?</p>
+            <div className="flex items-center justify-end gap-3">
+              <button
+                className="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 font-bold"
+                onClick={() => setAutoPrintPendingId(null)}
+              >
+                Not now
+              </button>
+              <button
+                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold"
+                onClick={() => {
+                  const orderId = autoPrintPendingId;
+                  setAutoPrintPendingId(null);
+                  printOrder(orderId, { markAsPrinted: true });
+                }}
+              >
+                Print now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {prepModalOrder && (
+        <div className="no-print fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="bg-white rounded-3xl shadow-2xl p-8 w-full max-w-lg mx-6">
+            <h3 className="text-2xl font-black mb-2">Set prep time</h3>
+            <p className="text-slate-600 mb-6">Enter prep time before starting this order.</p>
+            <div className="flex items-center gap-3 mb-6">
+              <input
+                type="number"
+                min={1}
+                max={180}
+                value={prepMinutes}
+                onChange={(e) => setPrepMinutes(Number(e.target.value || 0))}
+                className="w-28 px-4 py-3 rounded-xl border-2 border-slate-200 text-xl font-black"
+              />
+              <span className="text-lg font-bold text-slate-700">minutes</span>
+            </div>
+            <div className="flex items-center justify-end gap-3">
+              <button
+                className="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 font-bold"
+                onClick={() => setPrepModalOrder(null)}
+              >
+                Cancel
+              </button>
+              <button
+                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold"
+                onClick={() => {
+                  const orderId = prepModalOrder.id;
+                  setPrepModalOrder(null);
+                  setPrepTime(orderId, prepMinutes);
+                }}
+              >
+                Start prep
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <style jsx global>{`
         body {
