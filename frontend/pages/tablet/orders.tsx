@@ -680,6 +680,20 @@ export default function TabletOrdersPage() {
           <div className="bg-white rounded-3xl shadow-2xl p-8 w-full max-w-lg mx-6">
             <h3 className="text-2xl font-black mb-2">Set prep time</h3>
             <p className="text-slate-600 mb-6">Enter prep time before starting this order.</p>
+            <div className="flex flex-wrap gap-3 mb-6">
+              {[10, 15, 20, 30, 45].map((minutes) => (
+                <button
+                  key={minutes}
+                  onClick={() => setPrepMinutes(minutes)}
+                  className={clsx(
+                    'px-4 py-2 rounded-xl font-black',
+                    prepMinutes === minutes ? 'bg-black text-white' : 'bg-slate-100 text-slate-700'
+                  )}
+                >
+                  {minutes} min
+                </button>
+              ))}
+            </div>
             <div className="flex items-center gap-3 mb-6">
               <input
                 type="number"
