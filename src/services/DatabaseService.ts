@@ -75,7 +75,16 @@ function splitSqlStatements(sql: string): string[] {
 }
 
 function normalizeIdentifier(value: string): string {
-  return value.replace(/^[`"\[]/, '').replace(/[`\]"]$/, '');
+  let v = value;
+  const first = v[0];
+  if (first === '`' || first === '"' || first === '[') {
+    v = v.slice(1);
+  }
+  const last = v[v.length - 1];
+  if (last === '`' || last === '"' || last === ']') {
+    v = v.slice(0, -1);
+  }
+  return v;
 }
 
 function isIgnorableSqliteError(error: any, statement: string): boolean {
@@ -558,7 +567,9 @@ export class DatabaseService {
             JSON.stringify(item.tags || [])
           ]
         );
-      } catch (err) {}
+      } catch (err) {
+        logger.warn('Demo menu item seed failed:', err);
+      }
     }
 
     for (const item of inventory) {
@@ -567,7 +578,9 @@ export class DatabaseService {
           'INSERT INTO inventory_items (id, restaurant_id, name, sku, unit, on_hand_qty, low_stock_threshold) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO NOTHING',
           [item.id, item.restaurant_id, item.name, item.sku, item.unit, item.on_hand_qty, item.low_stock_threshold]
         );
-      } catch (err) {}
+      } catch (err) {
+        logger.warn('Demo inventory seed failed:', err);
+      }
     }
 
     for (const order of orders) {
@@ -576,7 +589,9 @@ export class DatabaseService {
           'INSERT INTO orders (id, restaurant_id, channel, status, total_amount) VALUES (?, ?, ?, ?, ?) ON CONFLICT (id) DO NOTHING',
           [order.id, order.restaurant_id, order.channel, order.status, order.total_amount]
         );
-      } catch (err) {}
+      } catch (err) {
+        logger.warn('Demo order seed failed:', err);
+      }
     }
 
     logger.info('Database seeded with sample data');

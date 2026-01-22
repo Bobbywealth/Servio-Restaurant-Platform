@@ -141,7 +141,8 @@ router.put('/profile', upload.fields([
   let coverImageUrl = existingRestaurant.cover_image_url;
 
   if (req.files) {
-    const files = req.files as { [fieldname: string]: Express.Multer.File[] };
+    type UploadedFile = { buffer: Buffer; mimetype: string; originalname: string };
+    const files = req.files as Record<string, UploadedFile[]>;
     const uploadsPath = await ensureUploadsDir();
 
     // Process logo upload

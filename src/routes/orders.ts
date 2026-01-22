@@ -500,8 +500,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
     items,
     customerName,
     customerPhone,
-    totalAmount,
-    userId
+    totalAmount
   } = req.body;
 
   if (!externalId || !channel || !items || !totalAmount) {

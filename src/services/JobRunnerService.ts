@@ -36,7 +36,7 @@ export class JobRunnerService {
   private static instance: JobRunnerService;
   private handlers: Map<string, JobHandler> = new Map();
   private isRunning: boolean = false;
-  private pollInterval: NodeJS.Timeout | null = null;
+  private pollInterval: ReturnType<typeof setInterval> | null = null;
 
   private constructor() {}
 
