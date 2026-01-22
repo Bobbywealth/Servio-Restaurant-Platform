@@ -433,22 +433,6 @@ export default function TabletOrdersPage() {
             <Settings2 className="h-5 w-5" />
             Settings
           </button>
-          <button
-            type="button"
-            onClick={() => {
-              const next = !autoPrintEnabled;
-              setAutoPrintEnabled(next);
-              window.localStorage.setItem('servio_auto_print_enabled', String(next));
-            }}
-            className={clsx(
-              'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-black uppercase tracking-widest transition-colors',
-              autoPrintEnabled ? 'bg-blue-600 hover:bg-blue-700' : 'bg-white/10 hover:bg-white/20'
-            )}
-            title="Toggle auto-print"
-          >
-            <Printer className="h-5 w-5" />
-            {autoPrintEnabled ? 'AUTO PRINT ON' : 'AUTO PRINT OFF'}
-          </button>
           <button 
             onClick={refresh}
             className="bg-white/10 hover:bg-white/20 p-3 rounded-full transition-colors"
