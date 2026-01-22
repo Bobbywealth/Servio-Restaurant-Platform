@@ -201,22 +201,70 @@ export class VoiceOrderingService {
   }
 
   public async createOrder(input: any) {
+    if (!input?.items || !Array.isArray(input.items) || input.items.length === 0) {
+      logger.warn('createOrder missing items', { callId: input?.callId });
+      return { success: false, errors: ['Missing items'] };
+    }
+    if (!input?.customer?.name || !input?.customer?.phone) {
+      logger.warn('createOrder missing customer details', {
+        callId: input?.callId,
+        hasName: Boolean(input?.customer?.name),
+        hasPhone: Boolean(input?.customer?.phone)
+      });
+      return { success: false, errors: ['Missing customer name or phone'] };
+    }
+    if (!input?.totals) {
+      logger.warn('createOrder missing totals payload', { callId: input?.callId });
+      return { success: false, errors: ['Missing totals'] };
+    }
+
     const quote = this.validateQuote(input);
     if (!quote.valid) return { success: false, errors: quote.errors };
 
     const db = DatabaseService.getInstance().getDatabase();
     const orderId = uuidv4();
     const restaurantId = process.env.VAPI_RESTAURANT_ID || 'sasheys-kitchen-union';
+    const lastInitial =
+      input.customer?.lastInitial ||
+      String(input.customer?.name || '')
+        .trim()
+        .split(/\s+/)
+        .pop()
+        ?.charAt(0)
+        ?.toUpperCase();
+
+    const providedTotals = input?.totals;
+    const totalDelta = Math.abs(Number(providedTotals.total) - Number(quote.total));
+    if (totalDelta > 0.05) {
+      logger.warn('createOrder totals mismatch', {
+        callId: input?.callId,
+        orderId,
+        provided: providedTotals,
+        computed: { subtotal: quote.subtotal, tax: quote.tax, fees: quote.fees, total: quote.total }
+      });
+    }
+
+    const orderItems = (quote.items as any[]).map((item: any) => {
+      const menuItem = this.getMenuItem(item.itemId);
+      return {
+        item_id: item.itemId,
+        name: menuItem?.name || item.itemId,
+        quantity: item.qty || 1,
+        unit_price: item.price,
+        price: item.price,
+        modifiers: item.modifiers || {}
+      };
+    });
 
     await db.run(`
       INSERT INTO orders (
         id, restaurant_id, status, customer_name, customer_phone, last_initial,
-        order_type, pickup_time, subtotal, tax, fees, total, total_amount,
+        order_type, pickup_time, items, subtotal, tax, fees, total, total_amount,
         source, call_id, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     `, [
-      orderId, restaurantId, 'pending', input.customer?.name, input.customer?.phone, input.customer?.lastInitial,
-      input.orderType, input.pickupTime, quote.subtotal, quote.tax, quote.fees, quote.total, quote.total,
+      orderId, restaurantId, 'received', input.customer?.name, input.customer?.phone, lastInitial,
+      input.orderType, input.pickupTime, JSON.stringify(orderItems), quote.subtotal, quote.tax, quote.fees, quote.total, quote.total,
       input.source || 'vapi', input.callId
     ]);
 
@@ -231,22 +279,41 @@ export class VoiceOrderingService {
       ]);
     }
 
-    await eventBus.emit('order.created_vapi', {
+    logger.info('createOrder success', {
+      orderId,
       restaurantId,
-      type: 'order.created_vapi',
-      actor: { actorType: 'system' },
-      payload: {
-        orderId,
-        customerName: input.customer?.name,
-        totalAmount: quote.total,
-        channel: 'vapi'
-      },
-      occurredAt: new Date().toISOString()
+      callId: input?.callId,
+      total: quote.total,
+      status: 'received'
     });
+
+    try {
+      await eventBus.emit('order.created_vapi', {
+        restaurantId,
+        type: 'order.created_vapi',
+        actor: { actorType: 'system' },
+        payload: {
+          orderId,
+          customerName: input.customer?.name,
+          customerPhone: input.customer?.phone,
+          customerEmail: input.customer?.email,
+          totalAmount: quote.total,
+          channel: 'vapi',
+          status: 'received'
+        },
+        occurredAt: new Date().toISOString()
+      });
+    } catch (error) {
+      logger.warn('createOrder event emit failed', {
+        orderId,
+        callId: input?.callId,
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
 
     return {
       orderId,
-      status: 'pending',
+      status: 'received',
       total: quote.total
     };
   }
@@ -256,12 +323,12 @@ export class VoiceOrderingService {
     const order = await db.get('SELECT * FROM orders WHERE id = ?', [orderId]);
 
     if (!order) throw new Error('Order not found');
-    if (order.status !== 'pending') throw new Error('Order is not pending');
+    if (!['pending', 'received'].includes(order.status)) throw new Error('Order is not pending');
 
     const acceptedAt = new Date().toISOString();
     await db.run(`
       UPDATE orders SET
-        status = 'accepted',
+        status = 'preparing',
         prep_time_minutes = ?,
         accepted_at = ?,
         accepted_by_user_id = ?,
@@ -280,7 +347,7 @@ export class VoiceOrderingService {
     await db.run(`
       INSERT INTO order_events (id, order_id, event, meta_json, created_at)
       VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-    `, [uuidv4(), orderId, 'accepted', JSON.stringify({ prepTimeMinutes, acceptedAt, userId })]);
+    `, [uuidv4(), orderId, 'preparing', JSON.stringify({ prepTimeMinutes, acceptedAt, userId })]);
 
     return { success: true, smsSent: true };
   }
