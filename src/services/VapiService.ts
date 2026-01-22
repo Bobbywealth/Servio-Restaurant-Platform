@@ -133,6 +133,11 @@ export class VapiService {
           parameters.source = parameters.source || 'vapi';
           if (!parameters.customer) parameters.customer = {};
           parameters.customer.phone = parameters.customer.phone || message.call?.customer?.number;
+          if (!parameters.customer.lastInitial && parameters.customer.name) {
+            const parts = String(parameters.customer.name).trim().split(/\s+/);
+            const last = parts[parts.length - 1];
+            parameters.customer.lastInitial = last ? last[0]?.toUpperCase() : undefined;
+          }
           result = await VoiceOrderingService.getInstance().createOrder(parameters);
           break;
         case 'check_order_status':
@@ -258,8 +263,11 @@ export class VapiService {
     if (!result) return "I'm sorry, I couldn't complete that action.";
 
     // Handle new VoiceOrderingService results
-    if (result.status === 'pending' && result.orderId) {
-      return `Perfect! I've placed your order. Your order number is ${result.orderId.slice(-4)}. Total is $${result.total.toFixed(2)}. We'll start preparing it once the staff confirms.`;
+    if (result.status === 'received' && result.orderId) {
+      return `Perfect! I've placed your order. Your order number is ${result.orderId.slice(-4)}. Total is $${result.total.toFixed(2)}. We'll start preparing it shortly.`;
+    }
+    if (result.success === false && result.errors?.length) {
+      return `I'm sorry, I couldn't place that order: ${result.errors.join('. ')}.`;
     }
 
     if (result.valid !== undefined) {
@@ -344,7 +352,7 @@ export class VapiService {
       return {
         type: 'place_order',
         status: 'success',
-        description: `Perfect! I've placed your order. Your order number is ${result.orderId.slice(-4)}. Total is $${result.total.toFixed(2)}. We'll start preparing it once the staff confirms.`,
+        description: `Perfect! I've placed your order. Your order number is ${result.orderId.slice(-4)}. Total is $${result.total.toFixed(2)}. We'll start preparing it shortly.`,
         details: result
       };
     } catch (error) {
@@ -504,23 +512,25 @@ export class VapiService {
     
     YOUR CALL FLOW:
     1. Greet the customer warmly.
-    2. Get their first name.
-    3. Confirm their phone number.
-    4. Get their last name initial.
-    5. Ask if it is for pickup or delivery.
-    6. If pickup, ask for the pickup time.
-    7. Take the order.
-    8. For any item tagged "dinner", you MUST ask for:
+    2. Ask if it is for pickup or delivery.
+    3. If pickup, ask for the pickup time.
+    4. Take the order.
+    5. For any item tagged "dinner", you MUST ask for:
        - Rice choice (Rice & Peas OR White Rice)
        - Cabbage (Yes or No)
        - Spice level (Mild, Medium, or Spicy)
-    9. For Fish dinners, ask for style (Escovitch or Brown Stewed).
-    10. For Wings, ask for size and sauce.
-    11. For Ackee, ask if they want to add callaloo for $3.
-    12. For Oxtail, ask if they want gravy on the side ($0.50).
-    13. Confirm the full order and total.
-    14. Upsell a drink or side.
-    15. Close the call.
+    6. For Fish dinners, ask for style (Escovitch or Brown Stewed).
+    7. For Wings, ask for size and sauce.
+    8. For Ackee, ask if they want to add callaloo for $3.
+    9. For Oxtail, ask if they want gravy on the side ($0.50).
+    10. Confirm the full order and total (use quoteOrder to compute totals).
+    11. Collect customer details before placing the order:
+       - Full name
+       - Phone number (confirm if caller ID is available)
+       - Email address (optional)
+    12. Place the order using createOrder with items, modifiers, customer details, and totals.
+    13. Upsell a drink or side.
+    14. Close the call.
 
     IMPORTANT PHONE CALL GUIDELINES:
     - Keep responses concise and conversational.

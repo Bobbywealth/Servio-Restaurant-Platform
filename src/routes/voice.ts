@@ -35,7 +35,7 @@ router.post('/order/quote', requireVapiAuth, asyncHandler(async (req: Request, r
   res.json(service.validateQuote(req.body));
 }));
 
-// 4) Create Order (PENDING Only)
+// 4) Create Order (Received status)
 router.post('/orders', requireVapiAuth, asyncHandler(async (req: Request, res: Response) => {
   const result = await service.createOrder(req.body);
   if (result.orderId) {

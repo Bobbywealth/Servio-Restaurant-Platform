@@ -129,7 +129,7 @@ router.get('/assistant-config', async (req: Request, res: Response) => {
         },
         {
           name: 'createOrder',
-          description: 'Place the final order in the system as PENDING',
+          description: 'Place the final order in the system as received',
           parameters: {
             type: 'object',
             properties: {
@@ -138,9 +138,9 @@ router.get('/assistant-config', async (req: Request, res: Response) => {
                 items: {
                   type: 'object',
                   properties: {
-                    itemId: { type: 'string' },
-                    qty: { type: 'number' },
-                    modifiers: { type: 'object' }
+                    itemId: { type: 'string', description: 'Menu item ID' },
+                    qty: { type: 'number', description: 'Quantity' },
+                    modifiers: { type: 'object', description: 'Modifier selections keyed by modifier group id' }
                   },
                   required: ['itemId', 'qty']
                 }
@@ -150,15 +150,26 @@ router.get('/assistant-config', async (req: Request, res: Response) => {
                 properties: {
                   name: { type: 'string' },
                   phone: { type: 'string' },
+                  email: { type: 'string' },
                   lastInitial: { type: 'string' }
                 },
-                required: ['name', 'phone', 'lastInitial']
+                required: ['name', 'phone']
+              },
+              totals: {
+                type: 'object',
+                properties: {
+                  subtotal: { type: 'number' },
+                  tax: { type: 'number' },
+                  fees: { type: 'number' },
+                  total: { type: 'number' }
+                },
+                required: ['subtotal', 'tax', 'fees', 'total']
               },
               orderType: { type: 'string', enum: ['pickup', 'delivery'] },
               pickupTime: { type: 'string' },
               callId: { type: 'string' }
             },
-            required: ['items', 'customer', 'orderType']
+            required: ['items', 'customer', 'orderType', 'totals']
           }
         }
       ]
