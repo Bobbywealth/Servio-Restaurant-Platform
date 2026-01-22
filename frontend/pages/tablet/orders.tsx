@@ -1,8 +1,11 @@
 import Head from 'next/head';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import clsx from 'clsx';
-import { CheckCircle2, Clock, RefreshCcw, ArrowRight, X, ChevronDown, DollarSign, User, Phone } from 'lucide-react';
+import { CheckCircle2, RefreshCcw, ArrowRight, ChevronDown, User, Printer, Settings2 } from 'lucide-react';
 import { useSocket } from '../../lib/socket';
+import { PrintReceipt } from '../../components/PrintReceipt';
+import type { ReceiptPaperWidth, ReceiptOrder, ReceiptRestaurant } from '../../utils/receiptGenerator';
+import { generateReceiptHtml } from '../../utils/receiptGenerator';
 
 type OrderItem = {
   id?: string;
@@ -18,7 +21,12 @@ type Order = {
   channel?: string | null;
   status?: string | null;
   customer_name?: string | null;
+  customer_phone?: string | null;
+  order_type?: string | null;
+  pickup_time?: string | null;
+  special_instructions?: string | null;
   total_amount?: number | null;
+  subtotal?: number | null;
   created_at?: string | null;
   items?: OrderItem[];
 };
@@ -101,6 +109,29 @@ function normalizeStatus(s: string | null | undefined) {
   return lower;
 }
 
+function beep() {
+  // Small in-browser beep; no asset files required.
+  try {
+    const AudioContext = (window as any).AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContext) return;
+    const ctx = new AudioContext();
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = 'sine';
+    o.frequency.value = 880;
+    g.gain.value = 0.05;
+    o.connect(g);
+    g.connect(ctx.destination);
+    o.start();
+    window.setTimeout(() => {
+      o.stop();
+      ctx.close?.().catch(() => {});
+    }, 120);
+  } catch {
+    // ignore
+  }
+}
+
 
 export default function TabletOrdersPage() {
   const socket = useSocket();
@@ -110,7 +141,30 @@ export default function TabletOrdersPage() {
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState<number | null>(null);
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
+  const [autoPrintEnabled, setAutoPrintEnabled] = useState<boolean>(true);
+  const [paperWidth, setPaperWidth] = useState<ReceiptPaperWidth>('80mm');
+  const [printingOrderId, setPrintingOrderId] = useState<string | null>(null);
+  const [printedOrders, setPrintedOrders] = useState<Set<string>>(() => new Set());
+  const printedOrdersRef = useRef<Set<string>>(new Set());
+  const hasInitializedPrintedRef = useRef(false);
+  const [restaurantProfile, setRestaurantProfile] = useState<ReceiptRestaurant | null>(null);
+  const [receiptHtml, setReceiptHtml] = useState<string | null>(null);
   const lastRefreshAt = useRef<number>(0);
+
+  useEffect(() => {
+    // Init print settings from env + localStorage
+    const envAuto = (process.env.NEXT_PUBLIC_AUTO_PRINT_ENABLED || '').toLowerCase();
+    const defaultAuto = envAuto === '' ? true : envAuto === 'true' || envAuto === '1' || envAuto === 'yes';
+    const storedAuto = typeof window !== 'undefined' ? window.localStorage.getItem('servio_auto_print_enabled') : null;
+    const auto = storedAuto === null ? defaultAuto : storedAuto === 'true';
+    setAutoPrintEnabled(auto);
+
+    const envPaper = (process.env.NEXT_PUBLIC_THERMAL_PAPER_WIDTH || '').toLowerCase();
+    const defaultPaper: ReceiptPaperWidth = envPaper === '58mm' ? '58mm' : '80mm';
+    const storedPaper = typeof window !== 'undefined' ? window.localStorage.getItem('servio_thermal_paper_width') : null;
+    const paper: ReceiptPaperWidth = storedPaper === '58mm' ? '58mm' : storedPaper === '80mm' ? '80mm' : defaultPaper;
+    setPaperWidth(paper);
+  }, []);
 
   async function refresh() {
     try {
@@ -122,6 +176,66 @@ export default function TabletOrdersPage() {
       console.error(e);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function fetchRestaurantProfile() {
+    try {
+      const json = await apiGet<{ success: boolean; data?: any }>('/restaurant/profile');
+      if (json?.success && json.data) {
+        setRestaurantProfile({
+          name: json.data.name,
+          phone: json.data.phone,
+          address: json.data.address,
+          logo_url: json.data.logo_url
+        });
+      }
+    } catch (e) {
+      // Non-fatal for printing; receipts will still print with fallback header.
+      console.warn('Failed to load restaurant profile for printing', e);
+    }
+  }
+
+  async function printOrder(orderId: string, opts?: { markAsPrinted?: boolean }) {
+    setPrintingOrderId(orderId);
+    try {
+      const full = await apiGet<{ success: boolean; data?: any }>(`/orders/${encodeURIComponent(orderId)}`);
+      const order = (full?.data || full) as ReceiptOrder;
+
+      // Ensure we have restaurant info
+      let restaurant = restaurantProfile;
+      if (!restaurant) {
+        await fetchRestaurantProfile();
+        restaurant = restaurantProfile;
+      }
+
+      const html = generateReceiptHtml({
+        restaurant: restaurant || null,
+        order: order as ReceiptOrder,
+        paperWidth
+      });
+
+      setReceiptHtml(html);
+
+      // Wait for receipt DOM to render before invoking print
+      await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+
+      window.print();
+
+      if (opts?.markAsPrinted !== false) {
+        setPrintedOrders((prev) => {
+          const next = new Set(prev);
+          next.add(orderId);
+          printedOrdersRef.current = next;
+          return next;
+        });
+      }
+    } catch (e) {
+      console.error('Print failed', e);
+    } finally {
+      setPrintingOrderId(null);
+      // clear receipt after print dialog is opened; also clear onafterprint for some browsers
+      window.setTimeout(() => setReceiptHtml(null), 250);
     }
   }
 
@@ -142,6 +256,7 @@ export default function TabletOrdersPage() {
 
   useEffect(() => {
     refresh();
+    fetchRestaurantProfile();
     const t = window.setInterval(() => {
       if (Date.now() - lastRefreshAt.current < 5000) return;
       refresh();
@@ -179,6 +294,33 @@ export default function TabletOrdersPage() {
 
   const filtered = activeOrders;
 
+  useEffect(() => {
+    // Avoid printing everything on initial load; mark existing active orders as already-seen.
+    if (!hasInitializedPrintedRef.current) {
+      if (!loading) {
+        const initial = new Set<string>();
+        for (const o of filtered) initial.add(o.id);
+        setPrintedOrders(initial);
+        printedOrdersRef.current = initial;
+        hasInitializedPrintedRef.current = true;
+      }
+      return;
+    }
+
+    if (!autoPrintEnabled) return;
+
+    const toAutoPrint = filtered.filter(
+      (o) => normalizeStatus(o.status) === 'received' && !printedOrdersRef.current.has(o.id)
+    );
+
+    if (toAutoPrint.length === 0) return;
+
+    // Print newest first (end of list is newest because sorted DESC on server; still defensive)
+    const newest = toAutoPrint[0];
+    beep();
+    printOrder(newest.id, { markAsPrinted: true });
+  }, [autoPrintEnabled, filtered, loading]);
+
   return (
     <div className="min-h-screen bg-white text-black font-sans">
       <Head>
@@ -186,10 +328,24 @@ export default function TabletOrdersPage() {
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0" />
       </Head>
 
+      {/* Print-only receipt (duplicate copies) */}
+      <div id="print-root" className="print-only">
+        {receiptHtml ? <PrintReceipt receiptHtml={receiptHtml} copies={2} paperWidth={paperWidth} /> : null}
+      </div>
+
       {/* Header */}
-      <div className="sticky top-0 z-20 bg-black text-white px-6 py-4 flex items-center justify-between shadow-lg">
+      <div className="no-print sticky top-0 z-20 bg-black text-white px-6 py-4 flex items-center justify-between shadow-lg">
         <div className="flex items-center gap-4">
-          <div className="bg-white text-black font-black px-3 py-1 rounded text-xl italic">SERVIO</div>
+          <div className="flex items-center gap-3">
+            <div className="bg-white rounded-lg p-1.5">
+              <img
+                src="/images/servio_icon_tight.png"
+                alt="Servio"
+                className="h-9 w-9"
+              />
+            </div>
+            <div className="bg-white text-black font-black px-3 py-1 rounded text-xl italic">SERVIO</div>
+          </div>
           <div className="h-8 w-px bg-white/20 hidden sm:block" />
           <div className="text-2xl font-bold tracking-tight">KITCHEN DISPLAY</div>
         </div>
@@ -200,6 +356,22 @@ export default function TabletOrdersPage() {
               {now ? new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}
             </div>
           </div>
+          <button
+            type="button"
+            onClick={() => {
+              const next = !autoPrintEnabled;
+              setAutoPrintEnabled(next);
+              window.localStorage.setItem('servio_auto_print_enabled', String(next));
+            }}
+            className={clsx(
+              'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-black uppercase tracking-widest transition-colors',
+              autoPrintEnabled ? 'bg-blue-600 hover:bg-blue-700' : 'bg-white/10 hover:bg-white/20'
+            )}
+            title="Toggle auto-print"
+          >
+            <Settings2 className="h-5 w-5" />
+            {autoPrintEnabled ? 'AUTO PRINT ON' : 'AUTO PRINT OFF'}
+          </button>
           <button 
             onClick={refresh}
             className="bg-white/10 hover:bg-white/20 p-3 rounded-full transition-colors"
@@ -209,7 +381,7 @@ export default function TabletOrdersPage() {
         </div>
       </div>
 
-      <div className="p-4 sm:p-6">
+      <div className="no-print p-4 sm:p-6">
         {filtered.length === 0 && !loading ? (
           <div className="flex flex-col items-center justify-center py-32 text-slate-400">
             <CheckCircle2 className="h-24 w-24 mb-6 opacity-20" />
@@ -249,6 +421,21 @@ export default function TabletOrdersPage() {
                         #{o.external_id ? o.external_id.slice(-4).toUpperCase() : o.id.slice(-4).toUpperCase()}
                       </span>
                     </div>
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          printOrder(o.id);
+                        }}
+                        className={clsx(
+                          'rounded-xl px-3 py-2 bg-white/10 hover:bg-white/20 transition-colors',
+                          printingOrderId === o.id && 'opacity-60'
+                        )}
+                        title="Print receipt"
+                      >
+                        <Printer className={clsx('h-6 w-6', printingOrderId === o.id && 'animate-pulse')} />
+                      </button>
                     <div className="text-right">
                       <span className="text-xs font-black uppercase tracking-widest opacity-70">Elapsed</span>
                       <div className={clsx(
@@ -262,6 +449,7 @@ export default function TabletOrdersPage() {
                       "h-6 w-6 transition-transform ml-2",
                       isExpanded && "rotate-180"
                     )} />
+                    </div>
                   </div>
 
                   {/* Customer Info */}
@@ -314,6 +502,16 @@ export default function TabletOrdersPage() {
                           Order ID: {o.external_id || shortId(o.id)}
                         </div>
                       </div>
+                      {o.customer_phone ? (
+                        <div className="text-sm font-bold text-slate-700">
+                          Phone: {o.customer_phone}
+                        </div>
+                      ) : null}
+                      {o.order_type ? (
+                        <div className="text-sm font-bold text-slate-700">
+                          Type: {o.order_type}
+                        </div>
+                      ) : null}
                       <div className="flex items-center justify-between pt-3 border-t border-slate-300">
                         <div className="text-lg font-black text-black">TOTAL</div>
                         <div className="text-2xl font-black text-black">

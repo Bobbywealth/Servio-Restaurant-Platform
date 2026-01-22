@@ -1,0 +1,175 @@
+/* Thermal receipt printing helpers.
+   Strategy:
+   - Mark normal UI as .no-print
+   - Render the receipt inside #print-root (hidden on screen, visible in print)
+*/
+
+.print-only {
+  display: none;
+}
+
+@media print {
+  /* Hide everything except the receipt root */
+  .no-print {
+    display: none !important;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+
+  /* Named pages for different paper widths (Chromium support) */
+  @page thermal80 {
+    size: 80mm auto;
+    margin: 0;
+  }
+
+  @page thermal58 {
+    size: 58mm auto;
+    margin: 0;
+  }
+
+  .print-root {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .receipt.paper-80mm {
+    page: thermal80;
+    width: 80mm;
+  }
+
+  .receipt.paper-58mm {
+    page: thermal58;
+    width: 58mm;
+  }
+
+  .receipt-copy {
+    page-break-after: always;
+  }
+
+  .receipt-copy-last {
+    page-break-after: auto;
+  }
+}
+
+/* Receipt base styling (screen and print) */
+.receipt {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  color: #000;
+  background: #fff;
+  padding: 10px 10px 14px;
+}
+
+.receipt-header {
+  text-align: center;
+}
+
+.receipt-title {
+  font-size: 18px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.receipt-subtitle {
+  font-size: 11px;
+  font-weight: 700;
+  margin-top: 2px;
+}
+
+.receipt-divider {
+  border-top: 2px dashed #000;
+  margin: 10px 0;
+}
+
+.receipt-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  margin: 4px 0;
+}
+
+.receipt-row-strong {
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.receipt-items {
+  margin-top: 6px;
+}
+
+.receipt-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 8px 0;
+}
+
+.receipt-item-left {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.receipt-item-qty {
+  width: 34px;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.receipt-item-name {
+  font-size: 13px;
+  font-weight: 800;
+  word-break: break-word;
+  min-width: 0;
+  text-transform: uppercase;
+}
+
+.receipt-item-right {
+  flex: none;
+}
+
+.receipt-item-total {
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.receipt-muted {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.receipt-totals .receipt-row {
+  margin: 3px 0;
+}
+
+.receipt-notes-title {
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.receipt-notes-body {
+  font-size: 12px;
+  font-weight: 800;
+  white-space: pre-wrap;
+  word-break: break-word;
+  text-transform: none;
+}
+
+.receipt-footer {
+  text-align: center;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
