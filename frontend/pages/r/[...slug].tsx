@@ -52,6 +52,8 @@ export default function PublicProfile() {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [orderComplete, setOrderComplete] = useState<string | null>(null);
+  const [orderStatus, setOrderStatus] = useState<string | null>(null);
+  const [pickupTime, setPickupTime] = useState<string | null>(null);
 
   useEffect(() => {
     if (!restaurantSlug) return;
@@ -103,6 +105,7 @@ export default function PublicProfile() {
         customerName: "Guest", // v1 simplicity
       });
       setOrderComplete(resp.data.data.orderId);
+      setOrderStatus(resp.data.data.status || null);
       setCart([]);
       setIsCartOpen(false);
     } catch (err) {
@@ -111,6 +114,23 @@ export default function PublicProfile() {
       setIsSubmitting(false);
     }
   };
+
+  useEffect(() => {
+    if (!orderComplete) return;
+    const poll = async () => {
+      try {
+        const resp = await api.get(`/api/orders/public/order/${orderComplete}`);
+        const data = resp.data?.data;
+        if (data?.status) setOrderStatus(data.status);
+        if (data?.pickup_time) setPickupTime(data.pickup_time);
+      } catch {
+        // ignore polling errors
+      }
+    };
+    poll();
+    const t = window.setInterval(poll, 15000);
+    return () => window.clearInterval(t);
+  }, [orderComplete]);
 
   if (isLoading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin h-8 w-8 text-blue-600" /></div>;
   if (error || !restaurant) return <div className="min-h-screen flex items-center justify-center font-bold text-red-600">{error || 'Restaurant not found'}</div>;
@@ -121,6 +141,16 @@ export default function PublicProfile() {
         <CheckCircle2 className="h-16 w-16 text-green-500 mb-4" />
         <h1 className="text-3xl font-bold mb-2">Order Placed!</h1>
         <p className="text-gray-600 mb-6">Your order number is <span className="font-mono font-bold text-blue-600">{orderComplete}</span></p>
+        {pickupTime && (
+          <div className="mb-4 text-lg font-semibold text-gray-700">
+            Prep time: ready by {new Date(pickupTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </div>
+        )}
+        {orderStatus && (
+          <div className="mb-4 text-sm text-gray-500 uppercase tracking-widest">
+            Status: {orderStatus}
+          </div>
+        )}
         <button onClick={() => setOrderComplete(null)} className="btn-primary">Place Another Order</button>
       </div>
     );

@@ -222,6 +222,58 @@ router.post('/:id/status', asyncHandler(async (req: Request, res: Response) => {
 }));
 
 /**
+ * POST /api/orders/:id/prep-time
+ * Set prep time before starting preparation
+ */
+router.post('/:id/prep-time', asyncHandler(async (req: Request, res: Response) => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const { prepMinutes } = req.body ?? {};
+
+  const minutes = Number(prepMinutes);
+  if (!Number.isFinite(minutes) || minutes <= 0 || minutes > 180) {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'prepMinutes must be between 1 and 180' }
+    });
+  }
+
+  const db = DatabaseService.getInstance().getDatabase();
+  const order = await db.get<any>('SELECT * FROM orders WHERE id = ?', [id]);
+  if (!order) {
+    return res.status(404).json({
+      success: false,
+      error: { message: 'Order not found' }
+    });
+  }
+
+  const pickupTime = new Date(Date.now() + minutes * 60 * 1000).toISOString();
+
+  await db.run(
+    'UPDATE orders SET status = ?, pickup_time = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+    ['preparing', pickupTime, id]
+  );
+
+  await DatabaseService.getInstance().logAudit(
+    req.user?.restaurantId!,
+    req.user?.id || 'system',
+    'set_prep_time',
+    'order',
+    id,
+    { prepMinutes: minutes, pickupTime }
+  );
+
+  res.json({
+    success: true,
+    data: {
+      orderId: id,
+      status: 'preparing',
+      prepMinutes: minutes,
+      pickupTime
+    }
+  });
+}));
+
+/**
  * GET /api/orders/stats/summary
  * Get order statistics summary
  */
@@ -410,6 +462,28 @@ router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) =>
   return res.status(201).json({
     success: true,
     data: { orderId, status: 'received' }
+  });
+}));
+
+/**
+ * GET /api/orders/public/order/:id
+ * Public order status for customers
+ */
+router.get('/public/order/:id', asyncHandler(async (req: Request, res: Response) => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const db = DatabaseService.getInstance().getDatabase();
+  const order = await db.get<any>(
+    'SELECT id, status, pickup_time, created_at, total_amount FROM orders WHERE id = ?',
+    [id]
+  );
+
+  if (!order) {
+    return res.status(404).json({ success: false, error: { message: 'Order not found' } });
+  }
+
+  res.json({
+    success: true,
+    data: order
   });
 }));
 router.get('/waiting-times', asyncHandler(async (req: Request, res: Response) => {

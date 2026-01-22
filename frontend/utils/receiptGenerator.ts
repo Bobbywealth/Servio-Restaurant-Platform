@@ -12,6 +12,7 @@ export type ReceiptOrderItem = {
   quantity?: number | null;
   unit_price?: number | null;
   price?: number | null;
+  modifiers?: any;
 };
 
 export type ReceiptOrder = {
@@ -116,11 +117,23 @@ export function generateReceiptHtml(args: {
           const name = escapeHtml((it.name || 'Item').toString());
           const unit = typeof it.unit_price === 'number' ? it.unit_price : typeof it.price === 'number' ? it.price : 0;
           const lineTotal = unit * qty;
+          const modifiers = (() => {
+            const raw = (it as any)?.modifiers;
+            if (!raw) return '';
+            const list = Array.isArray(raw)
+              ? raw
+              : typeof raw === 'string'
+                ? raw.split(',').map((v) => v.trim()).filter(Boolean)
+                : [];
+            if (!list.length) return '';
+            return `<div class="receipt-item-modifiers">${list.map((m) => `• ${escapeHtml(String(m))}`).join('<br/>')}</div>`;
+          })();
           return `
             <div class="receipt-item">
               <div class="receipt-item-left">
                 <div class="receipt-item-qty">${qty}x</div>
                 <div class="receipt-item-name">${name}</div>
+                ${modifiers}
               </div>
               <div class="receipt-item-right">
                 <div class="receipt-item-total">$${lineTotal.toFixed(2)}</div>
