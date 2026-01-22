@@ -105,14 +105,6 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       roles: ['staff', 'manager', 'owner', 'admin']
     },
     {
-      name: 'Time Clock',
-      href: '/dashboard/timeclock',
-      icon: Clock,
-      description: 'View your hours',
-      color: 'text-emerald-500',
-      roles: ['staff', 'manager', 'owner', 'admin']
-    },
-    {
       name: 'Menu',
       href: '/dashboard/menu-management',
       icon: UtensilsCrossed,
@@ -189,9 +181,8 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const allMobileNav = [
     { name: 'Home', href: '/dashboard', icon: Home, roles: ['staff', 'manager', 'owner', 'admin'] },
     { name: 'Orders', href: '/dashboard/orders', icon: ClipboardList, roles: ['staff', 'manager', 'owner', 'admin'] },
-    { name: 'Clock', href: '/dashboard/timeclock', icon: Clock, roles: ['staff', 'manager', 'owner', 'admin'] },
+    { name: 'Menu', href: '/dashboard/menu-management', icon: UtensilsCrossed, roles: ['manager', 'owner', 'admin'] },
     { name: 'Assistant', href: '/dashboard/assistant', icon: Mic, roles: ['manager', 'owner', 'admin'] },
-    { name: 'Inventory', href: '/dashboard/inventory', icon: Package, roles: ['manager', 'owner', 'admin'] },
     { name: 'Staff', href: '/dashboard/staff', icon: Users, roles: ['manager', 'owner', 'admin'] }
   ];
 
@@ -293,6 +284,25 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
             );
           })}
         </nav>
+        
+        {/* Logout Button - Always visible at bottom of sidebar */}
+        <div className="px-4 py-4 border-t border-gray-200 dark:border-gray-700">
+          <button
+            onClick={() => {
+              logout();
+              router.push('/login');
+            }}
+            className="w-full flex items-center px-4 py-3 text-sm font-medium rounded-xl text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all duration-200"
+          >
+            <div className="flex items-center justify-center w-10 h-10 rounded-lg mr-3 bg-red-50 dark:bg-red-900/30">
+              <LogOut className="w-5 h-5 text-red-600 dark:text-red-400" />
+            </div>
+            <div className="flex-1 min-w-0 text-left">
+              <span className="font-medium">Log Out</span>
+              <p className="text-2xs text-red-500 dark:text-red-400 truncate">Sign out of your account</p>
+            </div>
+          </button>
+        </div>
       </motion.div>
 
       <div className="pl-0 lg:pl-72 transition-all duration-300">
