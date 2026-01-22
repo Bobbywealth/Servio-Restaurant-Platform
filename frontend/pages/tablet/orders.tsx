@@ -211,6 +211,12 @@ export default function TabletOrdersPage() {
   }
 
   async function printOrder(orderId: string, opts?: { markAsPrinted?: boolean }) {
+    // Prevent duplicate prints
+    if (printingOrderId) {
+      console.log('Print already in progress, ignoring');
+      return;
+    }
+    
     setPrintingOrderId(orderId);
     try {
       // Fetch order details

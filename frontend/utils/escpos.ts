@@ -240,13 +240,58 @@ export function generateRawBTSimpleUrl(escPosData: string): string {
   return `rawbt:base64,${base64Data}`;
 }
 
+// Track if we're currently printing to prevent duplicates
+let isPrintingViaRawBT = false;
+let lastPrintTime = 0;
+
 /**
  * Try to print via RawBT app
  * Returns true if RawBT was triggered, false if not available
  */
 export function printViaRawBT(escPosData: string): boolean {
+  // Prevent duplicate prints within 2 seconds
+  const now = Date.now();
+  if (isPrintingViaRawBT || (now - lastPrintTime < 2000)) {
+    console.log('RawBT: Ignoring duplicate print request');
+    return true; // Return true to prevent error messages
+  }
+  
+  isPrintingViaRawBT = true;
+  lastPrintTime = now;
+  
   try {
-    // Try intent URL first (more reliable on Android)
+    // Use the simple rawbt: URL scheme (more reliable)
+    const url = generateRawBTSimpleUrl(escPosData);
+    
+    // Open via window.location - this triggers the RawBT app
+    window.location.href = url;
+    
+    // Reset flag after delay
+    setTimeout(() => {
+      isPrintingViaRawBT = false;
+    }, 2000);
+    
+    return true;
+  } catch (e) {
+    console.error('RawBT print failed:', e);
+    isPrintingViaRawBT = false;
+    return false;
+  }
+}
+
+/**
+ * Open RawBT directly with data (alternative method using iframe)
+ * Use this if the simple URL scheme doesn't work
+ */
+export function openRawBTViaIframe(escPosData: string): boolean {
+  // Prevent duplicate prints
+  const now = Date.now();
+  if (now - lastPrintTime < 2000) {
+    return true;
+  }
+  lastPrintTime = now;
+  
+  try {
     const intentUrl = generateRawBTUrl(escPosData);
     
     // Create a hidden iframe to trigger the intent
@@ -257,20 +302,14 @@ export function printViaRawBT(escPosData: string): boolean {
     
     // Clean up after a short delay
     setTimeout(() => {
-      document.body.removeChild(iframe);
+      if (iframe.parentNode) {
+        document.body.removeChild(iframe);
+      }
     }, 1000);
     
     return true;
   } catch (e) {
-    console.error('RawBT print failed:', e);
+    console.error('RawBT iframe print failed:', e);
     return false;
   }
-}
-
-/**
- * Open RawBT directly with data (alternative method)
- */
-export function openRawBT(escPosData: string): void {
-  const url = generateRawBTSimpleUrl(escPosData);
-  window.location.href = url;
 }
