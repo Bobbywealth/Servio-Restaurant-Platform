@@ -128,6 +128,28 @@ export const errorHandler = (
     errorResponse.requestId = req.headers['x-request-id'];
   }
 
+  // Ensure CORS headers are present even on errors.
+  // In rare cases (or when an upstream proxy injects an error), missing CORS headers
+  // will show up in the browser as a CORS failure instead of the real error.
+  try {
+    const origin = req.headers.origin;
+    const hasCorsHeader = Boolean(res.getHeader('Access-Control-Allow-Origin'));
+    if (!hasCorsHeader && typeof origin === 'string' && origin.trim()) {
+      const allowed = new Set<string>([
+        process.env.FRONTEND_URL || 'http://localhost:3000',
+        'https://serviorestaurantplatform.netlify.app',
+        'https://servio-app.onrender.com'
+      ]);
+      if (allowed.has(origin)) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+        res.setHeader('Vary', 'Origin');
+      }
+    }
+  } catch {
+    // never let CORS header logic crash the handler
+  }
+
   // Ensure JSON response
   res.setHeader('Content-Type', 'application/json');
   return res.status(statusCode).json(errorResponse);
