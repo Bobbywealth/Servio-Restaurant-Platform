@@ -719,7 +719,6 @@ const MenuManagement: React.FC = () => {
       setEditItemExistingImages([]);
       setEditItemAttachedGroups([]);
       setEditItemExistingAttachedGroups([]);
-      setEditItemModifierGroupIds([]);
       await loadMenuData();
     } catch (error) {
       console.error('Failed to update menu item:', error);
