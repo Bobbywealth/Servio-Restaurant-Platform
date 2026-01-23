@@ -23,13 +23,20 @@ import {
   Tag,
   Sparkles,
   X,
-  Copy
+  Copy,
+  GripVertical
 } from 'lucide-react';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import { useUser } from '../../contexts/UserContext';
 import { api } from '../../lib/api';
 import toast from 'react-hot-toast';
 import { resolveMediaUrl } from '../../lib/utils';
+import { CategorySidebar } from '../../components/Menu/CategorySidebar';
+import { ItemSizeEditor, type ItemSize } from '../../components/Menu/ItemSizeEditor';
+import { ChoiceGroupAssignment, type ChoiceGroup as ChoiceGroupType } from '../../components/Menu/ChoiceGroupAssignment';
+import { DndContext, type DragEndEvent, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 interface MenuCategory {
   id: string;
@@ -38,6 +45,7 @@ interface MenuCategory {
   image?: string;
   sort_order: number;
   is_active: boolean;
+  is_hidden?: boolean;
   item_count: number;
   created_at: string;
 }
@@ -49,6 +57,7 @@ interface MenuItem {
   name: string;
   description: string;
   price: number;
+  fromPrice?: number;
   cost?: number;
   image?: string;
   images?: string[];
@@ -60,6 +69,9 @@ interface MenuItem {
   sort_order: number;
   created_at: string;
   updated_at: string;
+  sizes?: ItemSize[];
+  // Combined modifier groups (category-level first, then item-level)
+  modifierGroups?: any[];
 }
 
 interface CategoryWithItems extends MenuCategory {
@@ -107,6 +119,9 @@ const MenuManagement: React.FC = () => {
   const [showPreview, setShowPreview] = useState(false);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
   const [editingCategory, setEditingCategory] = useState<MenuCategory | null>(null);
+  const [categoryInheritedGroups, setCategoryInheritedGroups] = useState<ChoiceGroupType[]>([]);
+  const [categoryModifierGroupIds, setCategoryModifierGroupIds] = useState<string[]>([]);
+  const [isLoadingCategoryGroups, setIsLoadingCategoryGroups] = useState(false);
   const [showAddItemModal, setShowAddItemModal] = useState(false);
   const [showAddCategoryModal, setShowAddCategoryModal] = useState(false);
   const [showEditItemModal, setShowEditItemModal] = useState(false);
@@ -119,6 +134,8 @@ const MenuManagement: React.FC = () => {
   const [newItemImages, setNewItemImages] = useState<File[]>([]);
   const [editItemImages, setEditItemImages] = useState<File[]>([]);
   const [editItemExistingImages, setEditItemExistingImages] = useState<string[]>([]);
+  const [editItemSizes, setEditItemSizes] = useState<ItemSize[]>([]);
+  const [editItemInheritedGroups, setEditItemInheritedGroups] = useState<ChoiceGroupType[]>([]);
   const [modifierGroups, setModifierGroups] = useState<ModifierGroup[]>([]);
   const [modifierOptions, setModifierOptions] = useState<Record<string, ModifierOption[]>>({});
   const [expandedModifierGroups, setExpandedModifierGroups] = useState<Set<string>>(new Set());
@@ -207,6 +224,7 @@ const MenuManagement: React.FC = () => {
           name: item.name,
           description: item.description || '',
           price: Number(item.price || 0),
+          fromPrice: Number(item.fromPrice ?? item.from_price ?? item.price ?? 0),
           cost: item.cost ? Number(item.cost) : undefined,
           images: Array.isArray(item.images) ? item.images : [],
           image: Array.isArray(item.images) ? item.images[0] : undefined,
@@ -218,6 +236,15 @@ const MenuManagement: React.FC = () => {
           sort_order: Number(item.sort_order || 0),
           created_at: item.created_at,
           updated_at: item.updated_at,
+          sizes: Array.isArray(item.sizes)
+            ? item.sizes.map((s: any, idx: number) => ({
+                id: s.id,
+                sizeName: s.sizeName ?? s.size_name ?? `Size ${idx + 1}`,
+                price: Number(s.price || 0),
+                isPreselected: Boolean(s.isPreselected ?? s.is_preselected),
+                displayOrder: Number(s.displayOrder ?? s.display_order ?? idx)
+              }))
+            : [],
           modifierGroups: Array.isArray(item.modifierGroups)
             ? item.modifierGroups.map((mg: any, idx: number) => ({
                 ...mg,
@@ -228,6 +255,7 @@ const MenuManagement: React.FC = () => {
                 maxSelections: mg.maxSelections ?? mg.max_selections ?? null,
                 isRequired: mg.isRequired ?? mg.is_required ?? false,
                 displayOrder: mg.displayOrder ?? idx,
+                assignmentLevel: mg.assignmentLevel || mg.assignment_level,
                 overrides: mg.overrides || {
                   overrideMin: mg.overrideMin ?? null,
                   overrideMax: mg.overrideMax ?? null,
@@ -241,7 +269,9 @@ const MenuManagement: React.FC = () => {
                       description: opt.description,
                       priceDelta: Number(opt.price_delta ?? opt.priceDelta ?? 0),
                       isActive: opt.is_active ?? opt.isActive ?? true,
-                      displayOrder: opt.display_order ?? 0
+                      isSoldOut: Boolean(opt.isSoldOut ?? opt.is_sold_out),
+                      isPreselected: Boolean(opt.isPreselected ?? opt.is_preselected),
+                      displayOrder: opt.displayOrder ?? opt.display_order ?? 0
                     }))
                   : []
               }))
@@ -258,6 +288,7 @@ const MenuManagement: React.FC = () => {
 
       setCategories(mergedCategories);
       setExpandedCategories(new Set(mergedCategories.map((cat) => cat.id)));
+      setSelectedCategory((prev) => (prev === 'all' && mergedCategories[0]?.id ? mergedCategories[0].id : prev));
     } catch (error) {
       console.error('Error loading menu data:', error);
       toast.error('Failed to load menu data');
@@ -315,6 +346,52 @@ const MenuManagement: React.FC = () => {
     loadModifierGroups();
   }, [user?.restaurantId, loadModifierGroups]);
 
+  const toChoiceGroup = (g: any): ChoiceGroupType => ({
+    id: String(g.id),
+    name: String(g.name || ''),
+    description: g.description ?? null,
+    selectionType: (g.selectionType || g.selection_type || 'single') as any,
+    minSelections: Number(g.minSelections ?? g.min_selections ?? 0),
+    maxSelections: g.maxSelections === undefined ? (g.max_selections ?? null) : g.maxSelections,
+    isRequired: Boolean(g.isRequired ?? g.is_required ?? false)
+  });
+
+  const loadCategoryChoiceGroups = useCallback(async (categoryId: string) => {
+    if (!categoryId) return;
+    try {
+      setIsLoadingCategoryGroups(true);
+      const resp = await api.get(`/api/menu/categories/${encodeURIComponent(categoryId)}/modifier-groups`);
+      const rows = resp.data?.data || [];
+      const groups = Array.isArray(rows) ? rows.map((r: any) => toChoiceGroup({
+        id: r.groupId ?? r.group_id ?? r.id,
+        name: r.name,
+        description: r.description,
+        selectionType: r.selectionType,
+        minSelections: r.minSelections,
+        maxSelections: r.maxSelections,
+        isRequired: r.isRequired
+      })) : [];
+      setCategoryInheritedGroups(groups);
+      setCategoryModifierGroupIds(groups.map((g) => g.id));
+    } catch (error) {
+      console.error('Failed to load category choice groups', error);
+      setCategoryInheritedGroups([]);
+      setCategoryModifierGroupIds([]);
+    } finally {
+      setIsLoadingCategoryGroups(false);
+    }
+  }, []);
+
+  // Keep category-level groups in sync with selected category
+  useEffect(() => {
+    const categoryId = selectedCategory && selectedCategory !== 'all' ? selectedCategory : categories[0]?.id;
+    if (!categoryId) return;
+    loadCategoryChoiceGroups(categoryId);
+  }, [selectedCategory, categories, loadCategoryChoiceGroups]);
+
+  // DnD sensors (must be defined at top-level for hooks)
+  const categoryGroupSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+
   // Load restaurant slug for public ordering link
   useEffect(() => {
     if (!user?.id) return;
@@ -355,6 +432,77 @@ const MenuManagement: React.FC = () => {
     } catch {
       // Fallback
       toast.error('Failed to copy. Please copy manually.');
+    }
+  };
+
+  const handleToggleCategoryHidden = async (categoryId: string, nextHidden: boolean) => {
+    try {
+      await api.put(`/api/menu/categories/${encodeURIComponent(categoryId)}/visibility`, { isHidden: nextHidden });
+      setCategories((prev) =>
+        prev.map((c) => (c.id === categoryId ? { ...c, is_hidden: nextHidden } : c))
+      );
+      toast.success(nextHidden ? 'Category hidden from menu' : 'Category shown on menu');
+    } catch (error) {
+      console.error('Failed to toggle category visibility', error);
+      toast.error('Failed to update category visibility');
+    }
+  };
+
+  const handleReorderCategories = async (nextOrderedIds: string[]) => {
+    // Optimistic reorder in UI
+    setCategories((prev) => {
+      const byId = new Map(prev.map((c) => [c.id, c] as const));
+      const next = nextOrderedIds.map((id, idx) => {
+        const c = byId.get(id);
+        return c ? { ...c, sort_order: idx } : null;
+      }).filter(Boolean) as CategoryWithItems[];
+      // Append anything not in nextOrderedIds (safety)
+      const remaining = prev.filter((c) => !nextOrderedIds.includes(c.id));
+      return [...next, ...remaining];
+    });
+
+    try {
+      await api.put('/api/menu/categories/reorder', { categoryIds: nextOrderedIds });
+    } catch (error) {
+      console.error('Failed to persist category order', error);
+      toast.error('Failed to save category order');
+    }
+  };
+
+  const handleSetCategoryModifierGroups = async (categoryId: string, groupIds: string[]) => {
+    try {
+      await api.post(`/api/menu/categories/${encodeURIComponent(categoryId)}/modifier-groups`, { groupIds });
+      setCategoryModifierGroupIds(groupIds);
+      await loadCategoryChoiceGroups(categoryId);
+      toast.success('Category choice groups updated');
+    } catch (error) {
+      console.error('Failed to update category modifier groups', error);
+      toast.error('Failed to update category choice groups');
+    }
+  };
+
+  const handleReorderItems = async (categoryId: string, orderedItemIds: string[]) => {
+    // Optimistic reorder in UI
+    setCategories((prev) =>
+      prev.map((cat) => {
+        if (cat.id !== categoryId) return cat;
+        const byId = new Map((cat.items || []).map((i) => [i.id, i] as const));
+        const nextItems = orderedItemIds
+          .map((id, idx) => {
+            const it = byId.get(id);
+            return it ? { ...it, sort_order: idx } : null;
+          })
+          .filter(Boolean) as MenuItem[];
+        const remaining = (cat.items || []).filter((i) => !orderedItemIds.includes(i.id));
+        return { ...cat, items: [...nextItems, ...remaining] };
+      })
+    );
+
+    try {
+      await api.put(`/api/menu/categories/${encodeURIComponent(categoryId)}/items/reorder`, { itemIds: orderedItemIds });
+    } catch (error) {
+      console.error('Failed to save item order', error);
+      toast.error('Failed to save item order');
     }
   };
 
@@ -654,7 +802,7 @@ const MenuManagement: React.FC = () => {
     }
   };
 
-  const openEditItemModal = (item: MenuItem) => {
+  const openEditItemModal = async (item: MenuItem) => {
     setEditItem({
       id: item.id,
       name: item.name,
@@ -667,19 +815,79 @@ const MenuManagement: React.FC = () => {
     setEditingItem(item);
     setEditItemImages([]);
     setEditItemExistingImages(item.images || []);
-    const attached = Array.isArray((item as any).modifierGroups)
-      ? (item as any).modifierGroups.map((g: any, idx: number) => ({
-          groupId: g.id,
-          name: g.name,
-          overrideMin: g.overrides?.overrideMin ?? null,
-          overrideMax: g.overrides?.overrideMax ?? null,
-          overrideRequired: g.overrides?.overrideRequired ?? null,
-          displayOrder: g.overrides?.displayOrder ?? g.displayOrder ?? idx
-        }))
-      : [];
+    const groups = Array.isArray((item as any).modifierGroups) ? (item as any).modifierGroups : [];
+    const attached = groups
+      .filter((g: any) => (g.assignmentLevel || g.assignment_level) !== 'category')
+      .map((g: any, idx: number) => ({
+        groupId: g.id,
+        name: g.name,
+        overrideMin: g.overrides?.overrideMin ?? null,
+        overrideMax: g.overrides?.overrideMax ?? null,
+        overrideRequired: g.overrides?.overrideRequired ?? null,
+        displayOrder: g.overrides?.displayOrder ?? g.displayOrder ?? idx
+      }));
     setEditItemAttachedGroups(attached);
     setEditItemExistingAttachedGroups(attached);
+    setEditItemInheritedGroups(
+      groups
+        .filter((g: any) => (g.assignmentLevel || g.assignment_level) === 'category')
+        .map((g: any) => toChoiceGroup(g))
+    );
+    try {
+      const [sizesResp, catGroupsResp] = await Promise.all([
+        api.get(`/api/menu/items/${encodeURIComponent(item.id)}/sizes`),
+        api.get(`/api/menu/categories/${encodeURIComponent(item.category_id)}/modifier-groups`)
+      ]);
+      const sizeRows = sizesResp.data?.data || [];
+      setEditItemSizes(
+        Array.isArray(sizeRows)
+          ? sizeRows.map((s: any, idx: number) => ({
+              id: s.id,
+              sizeName: s.sizeName ?? s.size_name ?? `Size ${idx + 1}`,
+              price: Number(s.price || 0),
+              isPreselected: Boolean(s.isPreselected ?? s.is_preselected),
+              displayOrder: Number(s.displayOrder ?? s.display_order ?? idx)
+            }))
+          : []
+      );
+
+      const rows = catGroupsResp.data?.data || [];
+      const inherited = Array.isArray(rows)
+        ? rows.map((r: any) =>
+            toChoiceGroup({
+              id: r.groupId ?? r.group_id ?? r.id,
+              name: r.name,
+              description: r.description,
+              selectionType: r.selectionType,
+              minSelections: r.minSelections,
+              maxSelections: r.maxSelections,
+              isRequired: r.isRequired
+            })
+          )
+        : [];
+      setEditItemInheritedGroups(inherited);
+    } catch (error) {
+      console.warn('Failed to load item sizes/category groups for edit modal', error);
+      setEditItemSizes([]);
+      // keep previously set inherited groups from item payload
+    }
     setShowEditItemModal(true);
+  };
+
+  const reloadEditItemSizes = async (itemId: string) => {
+    const resp = await api.get(`/api/menu/items/${encodeURIComponent(itemId)}/sizes`);
+    const rows = resp.data?.data || [];
+    setEditItemSizes(
+      Array.isArray(rows)
+        ? rows.map((s: any, idx: number) => ({
+            id: s.id,
+            sizeName: s.sizeName ?? s.size_name ?? `Size ${idx + 1}`,
+            price: Number(s.price || 0),
+            isPreselected: Boolean(s.isPreselected ?? s.is_preselected),
+            displayOrder: Number(s.displayOrder ?? s.display_order ?? idx)
+          }))
+        : []
+    );
   };
 
   const handleUpdateItem = async () => {
@@ -912,23 +1120,9 @@ const MenuManagement: React.FC = () => {
                 />
               </div>
               
-              <select
-                value={selectedCategory}
-                onChange={(e) => setSelectedCategory(e.target.value)}
-                className="px-4 py-2.5 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white min-w-[150px]"
-              >
-                <option value="all">All items</option>
-                {categories.map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {category.name}
-                  </option>
-                ))}
-              </select>
-
-              <button className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 rounded-lg hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-700 transition-colors">
-                <Filter className="w-4 h-4" />
-                Filter
-              </button>
+              <div className="hidden md:block text-sm text-gray-500 dark:text-gray-400">
+                Use the category sidebar to manage hierarchy.
+              </div>
             </div>
           </div>
         </div>
@@ -941,137 +1135,260 @@ const MenuManagement: React.FC = () => {
               <p className="text-gray-500 mt-2">Loading menu...</p>
             </div>
           ) : (
-            <div className="space-y-6">
-              <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-5">
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Add-ons & Modifiers</h2>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">Create modifier groups and options, then assign them to menu items.</p>
-                  </div>
-                  <button
-                    onClick={() => setShowAddModifierGroupModal(true)}
-                    className="flex items-center gap-2 px-3 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-colors"
-                  >
-                    <Plus className="w-4 h-4" />
-                    New Group
-                  </button>
-                </div>
-                {modifierGroups.length === 0 ? (
-                  <div className="text-sm text-gray-500 dark:text-gray-400">No modifier groups yet.</div>
-                ) : (
-                  <div className="space-y-3">
-                    {modifierGroups.map((group) => {
-                      const options = modifierOptions[group.id] || [];
-                      const isExpanded = expandedModifierGroups.has(group.id);
-                      const draft = newModifierOptionDrafts[group.id] || { name: '', description: '', priceModifier: '' };
-                      return (
-                        <div key={group.id} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-                          <button
-                            className="w-full flex items-center justify-between text-left"
-                            onClick={() => toggleModifierGroupExpanded(group.id)}
-                            type="button"
+            <div className="flex flex-col md:flex-row gap-6">
+              <CategorySidebar
+                categories={categories.map((c) => ({
+                  id: c.id,
+                  name: c.name,
+                  description: c.description,
+                  sort_order: c.sort_order,
+                  is_active: c.is_active,
+                  is_hidden: Boolean((c as any).is_hidden),
+                  item_count: c.item_count
+                }))}
+                selectedCategoryId={selectedCategory !== 'all' ? selectedCategory : categories[0]?.id || null}
+                onSelectCategory={(id) => setSelectedCategory(id)}
+                onAddCategory={() => setShowAddCategoryModal(true)}
+                onToggleHidden={handleToggleCategoryHidden}
+                onReorderCategories={handleReorderCategories}
+              />
+
+              <div className="flex-1 space-y-6">
+                {/* Category-level configuration */}
+                {(() => {
+                  const activeCategoryId = selectedCategory !== 'all' ? selectedCategory : categories[0]?.id;
+                  const active = activeCategoryId ? categories.find((c) => c.id === activeCategoryId) : null;
+                  if (!active) return null;
+                  return (
+                    <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-5">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0">
+                          <h2 className="text-xl font-black text-gray-900 dark:text-white truncate">{active.name}</h2>
+                          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 whitespace-pre-wrap">
+                            {active.description || 'No category description yet.'}
+                          </p>
+                        </div>
+                        <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 dark:text-gray-300">
+                          <input
+                            type="checkbox"
+                            checked={!Boolean((active as any).is_hidden)}
+                            onChange={(e) => handleToggleCategoryHidden(active.id, !e.target.checked)}
+                          />
+                          Visible on menu
+                        </label>
+                      </div>
+
+                      <div className="mt-4">
+                        <div className="text-sm font-bold text-gray-900 dark:text-white">Category-level choice groups</div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">
+                          Applied to all items in this category. Item-level groups can be added in the item editor.
+                        </div>
+
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                          <select
+                            className="px-3 py-2 border border-gray-200 rounded-lg text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                            defaultValue=""
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (!val || !activeCategoryId) return;
+                              const next = Array.from(new Set([...categoryModifierGroupIds, val]));
+                              handleSetCategoryModifierGroups(activeCategoryId, next);
+                              e.currentTarget.value = '';
+                            }}
                           >
-                            <div>
-                              <div className="font-semibold text-gray-900 dark:text-white">{group.name}</div>
-                              <div className="text-xs text-gray-500 dark:text-gray-400">
-                                {group.selectionType} • {group.minSelections}-{group.maxSelections ?? '∞'} selections
-                                {group.isRequired ? ' • Required' : ''} • {options.length} options
-                              </div>
-                            </div>
-                            <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
-                          </button>
-                          {isExpanded && (
-                            <div className="mt-3 space-y-3">
-                              {options.length > 0 ? (
-                                <div className="space-y-2">
-                                  {options.map((opt) => (
-                                    <div key={opt.id} className="flex items-center justify-between text-sm text-gray-700 dark:text-gray-300">
-                                      <div>
-                                        <span className="font-medium">{opt.name}</span>
-                                        {opt.description ? <span className="text-xs text-gray-500 ml-2">{opt.description}</span> : null}
-                                      </div>
-                                      <span className="text-xs text-gray-500">+{Number((opt as any).priceDelta ?? 0).toFixed(2)}</span>
-                                    </div>
-                                  ))}
+                            <option value="">Add group…</option>
+                            {modifierGroups
+                              .filter((g) => !categoryModifierGroupIds.includes(g.id))
+                              .map((g) => (
+                                <option key={g.id} value={g.id}>
+                                  {g.name}
+                                </option>
+                              ))}
+                          </select>
+
+                          {isLoadingCategoryGroups ? (
+                            <div className="text-sm text-gray-500">Loading…</div>
+                          ) : categoryInheritedGroups.length === 0 ? (
+                            <div className="text-sm text-gray-500">No category-level choice groups assigned.</div>
+                          ) : (
+                            <DndContext
+                              sensors={categoryGroupSensors}
+                              onDragEnd={(event) => {
+                                if (!activeCategoryId) return;
+                                const { active, over } = event;
+                                if (!over) return;
+                                const activeId = String(active.id);
+                                const overId = String(over.id);
+                                if (activeId === overId) return;
+                                const oldIndex = categoryModifierGroupIds.indexOf(activeId);
+                                const newIndex = categoryModifierGroupIds.indexOf(overId);
+                                if (oldIndex === -1 || newIndex === -1) return;
+                                const next = arrayMove(categoryModifierGroupIds, oldIndex, newIndex);
+                                handleSetCategoryModifierGroups(activeCategoryId, next);
+                              }}
+                            >
+                              <SortableContext items={categoryModifierGroupIds} strategy={verticalListSortingStrategy}>
+                                <div className="flex flex-wrap gap-2">
+                                  {categoryModifierGroupIds.map((id) => {
+                                    const g = categoryInheritedGroups.find((x) => x.id === id);
+                                    if (!g) return null;
+                                    return (
+                                      <SortableCategoryGroupChip
+                                        key={g.id}
+                                        id={g.id}
+                                        label={g.name}
+                                        onRemove={() => {
+                                          if (!activeCategoryId) return;
+                                          const next = categoryModifierGroupIds.filter((x) => x !== g.id);
+                                          handleSetCategoryModifierGroups(activeCategoryId, next);
+                                        }}
+                                      />
+                                    );
+                                  })}
                                 </div>
-                              ) : (
-                                <div className="text-xs text-gray-500 dark:text-gray-400">No options yet.</div>
-                              )}
-                              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                                <input
-                                  type="text"
-                                  value={draft.name}
-                                  onChange={(e) =>
-                                    setNewModifierOptionDrafts((prev) => ({
-                                      ...prev,
-                                      [group.id]: { ...draft, name: e.target.value }
-                                    }))
-                                  }
-                                  placeholder="Option name"
-                                  className="px-3 py-2 border border-gray-200 rounded-lg text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                                />
-                                <input
-                                  type="text"
-                                  value={draft.description}
-                                  onChange={(e) =>
-                                    setNewModifierOptionDrafts((prev) => ({
-                                      ...prev,
-                                      [group.id]: { ...draft, description: e.target.value }
-                                    }))
-                                  }
-                                  placeholder="Description (optional)"
-                                  className="px-3 py-2 border border-gray-200 rounded-lg text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                                />
-                                <div className="flex gap-2">
+                              </SortableContext>
+                            </DndContext>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Global modifiers management (unchanged) */}
+                <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-5">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Add-ons & Modifiers</h2>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">Create modifier groups and options, then assign them to menu items.</p>
+                    </div>
+                    <button
+                      onClick={() => setShowAddModifierGroupModal(true)}
+                      className="flex items-center gap-2 px-3 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-colors"
+                    >
+                      <Plus className="w-4 h-4" />
+                      New Group
+                    </button>
+                  </div>
+                  {modifierGroups.length === 0 ? (
+                    <div className="text-sm text-gray-500 dark:text-gray-400">No modifier groups yet.</div>
+                  ) : (
+                    <div className="space-y-3">
+                      {modifierGroups.map((group) => {
+                        const options = modifierOptions[group.id] || [];
+                        const isExpanded = expandedModifierGroups.has(group.id);
+                        const draft = newModifierOptionDrafts[group.id] || { name: '', description: '', priceModifier: '' };
+                        return (
+                          <div key={group.id} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                            <button
+                              className="w-full flex items-center justify-between text-left"
+                              onClick={() => toggleModifierGroupExpanded(group.id)}
+                              type="button"
+                            >
+                              <div>
+                                <div className="font-semibold text-gray-900 dark:text-white">{group.name}</div>
+                                <div className="text-xs text-gray-500 dark:text-gray-400">
+                                  {group.selectionType} • {group.minSelections}-{group.maxSelections ?? '∞'} selections
+                                  {group.isRequired ? ' • Required' : ''} • {options.length} options
+                                </div>
+                              </div>
+                              <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                            </button>
+                            {isExpanded && (
+                              <div className="mt-3 space-y-3">
+                                {options.length > 0 ? (
+                                  <div className="space-y-2">
+                                    {options.map((opt) => (
+                                      <div key={opt.id} className="flex items-center justify-between text-sm text-gray-700 dark:text-gray-300">
+                                        <div>
+                                          <span className="font-medium">{opt.name}</span>
+                                          {opt.description ? <span className="text-xs text-gray-500 ml-2">{opt.description}</span> : null}
+                                        </div>
+                                        <span className="text-xs text-gray-500">+{Number((opt as any).priceDelta ?? 0).toFixed(2)}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <div className="text-xs text-gray-500 dark:text-gray-400">No options yet.</div>
+                                )}
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                                   <input
-                                    type="number"
-                                    step="0.01"
-                                    value={draft.priceModifier}
+                                    type="text"
+                                    value={draft.name}
                                     onChange={(e) =>
                                       setNewModifierOptionDrafts((prev) => ({
                                         ...prev,
-                                        [group.id]: { ...draft, priceModifier: e.target.value }
+                                        [group.id]: { ...draft, name: e.target.value }
                                       }))
                                     }
-                                    placeholder="Price +"
-                                    className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                    placeholder="Option name"
+                                    className="px-3 py-2 border border-gray-200 rounded-lg text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                                   />
-                                  <button
-                                    onClick={() => handleAddModifierOption(group.id)}
-                                    className="px-3 py-2 bg-slate-900 text-white rounded-lg text-sm hover:bg-slate-800"
-                                    disabled={isSavingModifier}
-                                  >
-                                    Add
-                                  </button>
+                                  <input
+                                    type="text"
+                                    value={draft.description}
+                                    onChange={(e) =>
+                                      setNewModifierOptionDrafts((prev) => ({
+                                        ...prev,
+                                        [group.id]: { ...draft, description: e.target.value }
+                                      }))
+                                    }
+                                    placeholder="Description (optional)"
+                                    className="px-3 py-2 border border-gray-200 rounded-lg text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                  />
+                                  <div className="flex gap-2">
+                                    <input
+                                      type="number"
+                                      step="0.01"
+                                      value={draft.priceModifier}
+                                      onChange={(e) =>
+                                        setNewModifierOptionDrafts((prev) => ({
+                                          ...prev,
+                                          [group.id]: { ...draft, priceModifier: e.target.value }
+                                        }))
+                                      }
+                                      placeholder="Price +"
+                                      className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                    />
+                                    <button
+                                      onClick={() => handleAddModifierOption(group.id)}
+                                      className="px-3 py-2 bg-slate-900 text-white rounded-lg text-sm hover:bg-slate-800"
+                                      disabled={isSavingModifier}
+                                    >
+                                      Add
+                                    </button>
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {filteredCategories.map((category) => (
+                  <CategorySection
+                    key={category.id}
+                    category={category}
+                    isExpanded={true}
+                    onToggle={() => {}}
+                    searchTerm={searchTerm}
+                    onAddItem={openAddItemModal}
+                    onEditItem={openEditItemModal}
+                    onToggleAvailability={handleToggleAvailability}
+                    onReorderItems={handleReorderItems}
+                  />
+                ))}
+
+                {filteredCategories.length === 0 && (
+                  <div className="text-center py-12">
+                    <p className="text-gray-500 text-lg">No items found</p>
+                    <p className="text-gray-400 text-sm mt-1">Try adjusting your search or filters</p>
                   </div>
                 )}
               </div>
-              {filteredCategories.map((category) => (
-                <CategorySection
-                  key={category.id}
-                  category={category}
-                  isExpanded={expandedCategories.has(category.id)}
-                  onToggle={() => toggleCategory(category.id)}
-                  searchTerm={searchTerm}
-                  onAddItem={openAddItemModal}
-                  onEditItem={openEditItemModal}
-                  onToggleAvailability={handleToggleAvailability}
-                />
-              ))}
-              
-              {filteredCategories.length === 0 && (
-                <div className="text-center py-12">
-                  <p className="text-gray-500 text-lg">No items found</p>
-                  <p className="text-gray-400 text-sm mt-1">Try adjusting your search or filters</p>
-                </div>
-              )}
             </div>
           )}
         </div>
@@ -1555,7 +1872,14 @@ const MenuManagement: React.FC = () => {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
-            onClick={() => { setShowEditItemModal(false); setEditingItem(null); setEditItemAttachedGroups([]); setEditItemExistingAttachedGroups([]); }}
+            onClick={() => {
+              setShowEditItemModal(false);
+              setEditingItem(null);
+              setEditItemAttachedGroups([]);
+              setEditItemExistingAttachedGroups([]);
+              setEditItemSizes([]);
+              setEditItemInheritedGroups([]);
+            }}
           >
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
@@ -1635,135 +1959,54 @@ const MenuManagement: React.FC = () => {
                     ))}
                   </select>
                 </div>
-                {modifierGroups.length > 0 && (
-                  <div className="space-y-2">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Attached Modifier Groups</label>
-                    <div className="flex gap-2">
-                      <select
-                        className="flex-1 px-3 py-2 border border-gray-200 rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          if (!val) return;
-                          setEditItemAttachedGroups((prev) => {
-                            if (prev.some((p) => p.groupId === val)) return prev;
-                            const found = modifierGroups.find((g) => g.id === val);
-                            return [
-                              ...prev,
-                              {
-                                groupId: val,
-                                name: found?.name,
-                                displayOrder: prev.length
-                              }
-                            ];
-                          });
-                          e.target.value = '';
-                        }}
-                        defaultValue=""
-                      >
-                        <option value="">Select group to attach</option>
-                        {modifierGroups
-                          .filter((g) => !editItemAttachedGroups.some((a) => a.groupId === g.id))
-                          .map((g) => (
-                            <option key={g.id} value={g.id}>
-                              {g.name} ({g.selectionType})
-                            </option>
-                          ))}
-                      </select>
-                    </div>
-                    {editItemAttachedGroups.length > 0 && (
-                      <div className="space-y-2">
-                        {editItemAttachedGroups.map((att, idx) => (
-                          <div
-                            key={att.groupId}
-                            className="border border-gray-200 dark:border-gray-700 rounded-lg p-3 text-sm flex flex-col gap-2"
-                          >
-                            <div className="flex justify-between items-center">
-                              <div className="font-semibold text-gray-900 dark:text-white">
-                                {att.name || att.groupId}
-                              </div>
-                              <button
-                                type="button"
-                                className="text-red-600 text-xs"
-                                onClick={() =>
-                                  setEditItemAttachedGroups((prev) =>
-                                    prev.filter((p) => p.groupId !== att.groupId)
-                                  )
-                                }
-                              >
-                                Detach
-                              </button>
-                            </div>
-                            <div className="grid grid-cols-3 gap-2">
-                              <div>
-                                <label className="block text-xs text-gray-500">Override Min</label>
-                                <input
-                                  type="number"
-                                  value={att.overrideMin ?? ''}
-                                  onChange={(e) => {
-                                    const val = e.target.value;
-                                    setEditItemAttachedGroups((prev) =>
-                                      prev.map((p) =>
-                                        p.groupId === att.groupId ? { ...p, overrideMin: val === '' ? null : Number(val) } : p
-                                      )
-                                    );
-                                  }}
-                                  className="w-full px-2 py-1 border border-gray-200 rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-xs text-gray-500">Override Max</label>
-                                <input
-                                  type="number"
-                                  value={att.overrideMax ?? ''}
-                                  onChange={(e) => {
-                                    const val = e.target.value;
-                                    setEditItemAttachedGroups((prev) =>
-                                      prev.map((p) =>
-                                        p.groupId === att.groupId ? { ...p, overrideMax: val === '' ? null : Number(val) } : p
-                                      )
-                                    );
-                                  }}
-                                  className="w-full px-2 py-1 border border-gray-200 rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-xs text-gray-500">Display Order</label>
-                                <input
-                                  type="number"
-                                  value={att.displayOrder ?? idx}
-                                  onChange={(e) => {
-                                    const val = e.target.value;
-                                    setEditItemAttachedGroups((prev) =>
-                                      prev.map((p) =>
-                                        p.groupId === att.groupId ? { ...p, displayOrder: val === '' ? idx : Number(val) } : p
-                                      )
-                                    );
-                                  }}
-                                  className="w-full px-2 py-1 border border-gray-200 rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                                />
-                              </div>
-                            </div>
-                            <label className="inline-flex items-center gap-2 text-xs text-gray-700 dark:text-gray-300">
-                              <input
-                                type="checkbox"
-                                checked={att.overrideRequired ?? false}
-                                onChange={(e) =>
-                                  setEditItemAttachedGroups((prev) =>
-                                    prev.map((p) =>
-                                      p.groupId === att.groupId ? { ...p, overrideRequired: e.target.checked } : p
-                                    )
-                                  )
-                                }
-                                className="h-4 w-4 text-red-600 border-gray-300 rounded"
-                              />
-                              Required
-                            </label>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
+                <ItemSizeEditor
+                  sizes={editItemSizes}
+                  onCreate={async (input) => {
+                    await api.post(`/api/menu/items/${encodeURIComponent(editItem.id)}/sizes`, {
+                      sizeName: input.sizeName,
+                      price: input.price,
+                      isPreselected: input.isPreselected,
+                      displayOrder: input.displayOrder
+                    });
+                    await reloadEditItemSizes(editItem.id);
+                  }}
+                  onUpdate={async (sizeId, patch) => {
+                    await api.put(`/api/menu/items/${encodeURIComponent(editItem.id)}/sizes/${encodeURIComponent(sizeId)}`, patch);
+                    await reloadEditItemSizes(editItem.id);
+                  }}
+                  onDelete={async (sizeId) => {
+                    await api.delete(`/api/menu/items/${encodeURIComponent(editItem.id)}/sizes/${encodeURIComponent(sizeId)}`);
+                    await reloadEditItemSizes(editItem.id);
+                  }}
+                />
+
+                <ChoiceGroupAssignment
+                  availableGroups={modifierGroups.map((g: any) => toChoiceGroup(g))}
+                  inheritedGroups={editItemInheritedGroups}
+                  attachedGroups={editItemAttachedGroups}
+                  onAddAttachedGroup={(groupId) => {
+                    setEditItemAttachedGroups((prev) => {
+                      if (prev.some((p) => p.groupId === groupId)) return prev;
+                      const found = modifierGroups.find((g) => g.id === groupId);
+                      return [
+                        ...prev,
+                        {
+                          groupId,
+                          name: found?.name,
+                          displayOrder: prev.length
+                        }
+                      ];
+                    });
+                  }}
+                  onRemoveAttachedGroup={(groupId) =>
+                    setEditItemAttachedGroups((prev) => prev.filter((p) => p.groupId !== groupId))
+                  }
+                  onUpdateAttachedGroup={(groupId, patch) =>
+                    setEditItemAttachedGroups((prev) =>
+                      prev.map((p) => (p.groupId === groupId ? { ...p, ...patch } : p))
+                    )
+                  }
+                />
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Images</label>
                   <div className="mt-1 flex flex-col gap-2">
@@ -1807,7 +2050,14 @@ const MenuManagement: React.FC = () => {
               </div>
               <div className="mt-6 flex justify-end gap-3">
                 <button
-                  onClick={() => { setShowEditItemModal(false); setEditingItem(null); setEditItemAttachedGroups([]); setEditItemExistingAttachedGroups([]); }}
+                  onClick={() => {
+                    setShowEditItemModal(false);
+                    setEditingItem(null);
+                    setEditItemAttachedGroups([]);
+                    setEditItemExistingAttachedGroups([]);
+                    setEditItemSizes([]);
+                    setEditItemInheritedGroups([]);
+                  }}
                   className="px-4 py-2 rounded-lg border border-gray-200 text-gray-600 hover:text-gray-900 dark:border-gray-600 dark:text-gray-300"
                   disabled={isSaving}
                 >
@@ -1838,6 +2088,7 @@ interface CategorySectionProps {
   onAddItem: (categoryId: string) => void;
   onEditItem: (item: MenuItem) => void;
   onToggleAvailability: (item: MenuItem) => void;
+  onReorderItems: (categoryId: string, orderedItemIds: string[]) => void;
 }
 
 const CategorySection: React.FC<CategorySectionProps> = ({
@@ -1847,13 +2098,30 @@ const CategorySection: React.FC<CategorySectionProps> = ({
   searchTerm,
   onAddItem,
   onEditItem,
-  onToggleAvailability
+  onToggleAvailability,
+  onReorderItems
 }) => {
   const filteredItems = category.items?.filter(item =>
     searchTerm === '' ||
     item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     item.description.toLowerCase().includes(searchTerm.toLowerCase())
   ) || [];
+
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+  const itemIds = filteredItems.map((i) => i.id);
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over) return;
+    const activeId = String(active.id);
+    const overId = String(over.id);
+    if (activeId === overId) return;
+    const oldIndex = itemIds.indexOf(activeId);
+    const newIndex = itemIds.indexOf(overId);
+    if (oldIndex === -1 || newIndex === -1) return;
+    const nextIds = arrayMove(itemIds, oldIndex, newIndex);
+    onReorderItems(category.id, nextIds);
+  };
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
@@ -1914,16 +2182,20 @@ const CategorySection: React.FC<CategorySectionProps> = ({
           >
             <div className="px-4 pb-4 border-t border-gray-100 dark:border-gray-700">
               {filteredItems.length > 0 ? (
-                <div className="space-y-2 pt-3">
-                  {filteredItems.map((item) => (
-                    <MenuItemCard 
-                      key={item.id} 
-                      item={item} 
-                      onEdit={onEditItem}
-                      onToggleAvailability={onToggleAvailability}
-                    />
-                  ))}
-                </div>
+                <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+                  <SortableContext items={itemIds} strategy={verticalListSortingStrategy}>
+                    <div className="space-y-2 pt-3">
+                      {filteredItems.map((item) => (
+                        <SortableMenuItemRow
+                          key={item.id}
+                          item={item}
+                          onEdit={onEditItem}
+                          onToggleAvailability={onToggleAvailability}
+                        />
+                      ))}
+                    </div>
+                  </SortableContext>
+                </DndContext>
               ) : (
                 <div className="text-center py-8">
                   <p className="text-gray-500">No items in this category</p>
@@ -1939,6 +2211,83 @@ const CategorySection: React.FC<CategorySectionProps> = ({
           </motion.div>
         )}
       </AnimatePresence>
+    </div>
+  );
+};
+
+const SortableMenuItemRow: React.FC<{
+  item: MenuItem;
+  onEdit: (item: MenuItem) => void;
+  onToggleAvailability: (item: MenuItem) => void;
+}> = ({ item, onEdit, onToggleAvailability }) => {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={clsx(isDragging && 'opacity-70')}
+    >
+      <div className="flex items-start gap-2">
+        <button
+          type="button"
+          className="mt-2 p-2 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
+          aria-label="Drag to reorder"
+          title="Drag to reorder"
+          {...attributes}
+          {...listeners}
+        >
+          <GripVertical className="w-5 h-5" />
+        </button>
+        <div className="flex-1">
+          <MenuItemCard item={item} onEdit={onEdit} onToggleAvailability={onToggleAvailability} />
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const SortableCategoryGroupChip: React.FC<{
+  id: string;
+  label: string;
+  onRemove: () => void;
+}> = ({ id, label, onRemove }) => {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  const style: React.CSSProperties = { transform: CSS.Transform.toString(transform), transition };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={clsx(
+        'inline-flex items-center gap-2 px-3 py-2 rounded-full bg-gray-100 dark:bg-gray-700 text-sm font-semibold text-gray-800 dark:text-gray-200',
+        isDragging && 'opacity-70'
+      )}
+    >
+      <button
+        type="button"
+        className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+        aria-label="Drag to reorder"
+        title="Drag to reorder"
+        {...attributes}
+        {...listeners}
+      >
+        <GripVertical className="w-4 h-4" />
+      </button>
+      <span className="truncate max-w-[240px]">{label}</span>
+      <button
+        type="button"
+        className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+        aria-label="Remove"
+        title="Remove"
+        onClick={onRemove}
+      >
+        ×
+      </button>
     </div>
   );
 };
@@ -1985,7 +2334,7 @@ const MenuItemCard: React.FC<MenuItemCardProps> = ({ item, onEdit, onToggleAvail
         </p>
         <div className="flex items-center gap-3 mt-1">
           <span className="text-sm font-medium text-gray-900 dark:text-white">
-            ${item.price.toFixed(2)}
+            {(item.sizes && item.sizes.length > 0 ? 'From ' : '')}${(Number(item.fromPrice ?? item.price) || 0).toFixed(2)}
           </span>
           {item.preparation_time && (
             <span className="flex items-center gap-1 text-xs text-gray-500">
@@ -2101,7 +2450,7 @@ const MenuPreviewModal: React.FC<MenuPreviewModalProps> = ({ categories, onClose
                             {item.name}
                           </h4>
                           <span className="font-bold text-green-600">
-                            ${item.price.toFixed(2)}
+                            {(item.sizes && item.sizes.length > 0 ? 'From ' : '')}${(Number(item.fromPrice ?? item.price) || 0).toFixed(2)}
                           </span>
                         </div>
                         <p className="text-gray-600 dark:text-gray-400 text-sm mt-1">

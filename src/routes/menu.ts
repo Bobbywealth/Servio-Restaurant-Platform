@@ -120,15 +120,21 @@ router.get('/public/:slug', asyncHandler(async (req: Request, res: Response) => 
     SELECT mi.*, mc.name as category_name
     FROM menu_items mi
     LEFT JOIN menu_categories mc ON mi.category_id = mc.id
-    WHERE mi.restaurant_id = ? AND mi.is_available = TRUE AND mc.is_active = TRUE
+    WHERE mi.restaurant_id = ?
+      AND mi.is_available = TRUE
+      AND mc.is_active = TRUE
+      AND COALESCE(mc.is_hidden, FALSE) = FALSE
     ORDER BY mc.sort_order ASC, mi.name ASC
   `, [restaurant.id]);
 
   // Load modifier groups/options and attach to items
   const itemIds = items.map((i: any) => i.id);
+  const categoryIds = Array.from(new Set(items.map((i: any) => i.category_id).filter(Boolean)));
   let optionsByGroup: Record<string, any[]> = {};
   let groupsById: Record<string, any> = {};
   let itemGroupsMap: Record<string, any[]> = {};
+  let categoryGroupsMap: Record<string, any[]> = {};
+  let sizesByItem: Record<string, any[]> = {};
 
   if (itemIds.length) {
     const modifierGroups = await db.all(`
@@ -186,7 +192,17 @@ router.get('/public/:slug', asyncHandler(async (req: Request, res: Response) => 
           maxSelections: effectiveMax,
           isRequired: effectiveRequired,
           displayOrder: row.display_order ?? baseGroup.display_order ?? 0,
-          options: optionsByGroup[baseGroup.id] || []
+          assignmentLevel: 'item',
+          options: (optionsByGroup[baseGroup.id] || []).map((opt: any) => ({
+            id: opt.id,
+            name: opt.name,
+            description: opt.description ?? null,
+            priceDelta: Number(opt.price_delta || 0),
+            isActive: Boolean(opt.is_active),
+            isSoldOut: Boolean(opt.is_sold_out),
+            isPreselected: Boolean(opt.is_preselected),
+            displayOrder: opt.display_order ?? 0
+          }))
         };
 
         if (!acc[row.item_id]) acc[row.item_id] = [];
@@ -194,12 +210,93 @@ router.get('/public/:slug', asyncHandler(async (req: Request, res: Response) => 
         return acc;
       }, {});
     }
+
+    // Load category-level modifier group assignments (inherited)
+    if (categoryIds.length && Object.keys(groupsById).length) {
+      const catPlaceholders = categoryIds.map(() => '?').join(',');
+      const categoryModifierRows = await db.all(
+        `
+          SELECT *
+          FROM category_modifier_groups
+          WHERE category_id IN (${catPlaceholders})
+          ORDER BY display_order ASC
+        `,
+        categoryIds
+      );
+
+      categoryGroupsMap = categoryModifierRows.reduce((acc: Record<string, any[]>, row: any) => {
+        const baseGroup = groupsById[row.group_id];
+        if (!baseGroup) return acc;
+
+        const enriched = {
+          id: baseGroup.id,
+          name: baseGroup.name,
+          description: baseGroup.description,
+          selectionType: baseGroup.selection_type,
+          minSelections: baseGroup.min_selections,
+          maxSelections: baseGroup.max_selections,
+          isRequired: baseGroup.is_required,
+          displayOrder: row.display_order ?? baseGroup.display_order ?? 0,
+          assignmentLevel: 'category',
+          options: (optionsByGroup[baseGroup.id] || []).map((opt: any) => ({
+            id: opt.id,
+            name: opt.name,
+            description: opt.description ?? null,
+            priceDelta: Number(opt.price_delta || 0),
+            isActive: Boolean(opt.is_active),
+            isSoldOut: Boolean(opt.is_sold_out),
+            isPreselected: Boolean(opt.is_preselected),
+            displayOrder: opt.display_order ?? 0
+          }))
+        };
+
+        if (!acc[row.category_id]) acc[row.category_id] = [];
+        acc[row.category_id].push(enriched);
+        return acc;
+      }, {});
+    }
+
+    // Load item sizes
+    const sizeRows = await db.all(
+      `
+        SELECT *
+        FROM item_sizes
+        WHERE item_id IN (${placeholders})
+        ORDER BY display_order ASC, size_name ASC
+      `,
+      itemIds
+    );
+    sizesByItem = sizeRows.reduce((acc: Record<string, any[]>, row: any) => {
+      if (!acc[row.item_id]) acc[row.item_id] = [];
+      acc[row.item_id].push({
+        id: row.id,
+        sizeName: row.size_name,
+        price: Number(row.price || 0),
+        isPreselected: Boolean(row.is_preselected),
+        displayOrder: Number(row.display_order || 0)
+      });
+      return acc;
+    }, {});
   }
 
-  const itemsWithModifiers = items.map((item: any) => ({
-    ...item,
-    modifierGroups: itemGroupsMap[item.id] || []
-  }));
+  const itemsWithModifiers = items.map((item: any) => {
+    const itemGroups = itemGroupsMap[item.id] || [];
+    const itemGroupIds = new Set(itemGroups.map((g: any) => g.id));
+    const inheritedGroups = (categoryGroupsMap[item.category_id] || []).filter((g: any) => !itemGroupIds.has(g.id));
+
+    const sizes = sizesByItem[item.id] || [];
+    const fromPrice =
+      sizes.length > 0
+        ? Math.min(...sizes.map((s: any) => Number(s.price || 0)))
+        : Number(item.price || 0);
+
+    return {
+      ...item,
+      fromPrice,
+      sizes,
+      modifierGroups: [...inheritedGroups, ...itemGroups]
+    };
+  });
 
   res.json({
     success: true,
@@ -231,6 +328,7 @@ router.get('/categories/all', asyncHandler(async (req: Request, res: Response) =
       id,
       name,
       description,
+      COALESCE(is_hidden, FALSE) as is_hidden,
       sort_order,
       is_active,
       created_at,
@@ -323,6 +421,250 @@ router.delete('/categories/:id', asyncHandler(async (req: Request, res: Response
     id,
     { categoryName: category?.name || 'Unknown' }
   );
+  res.json({ success: true });
+}));
+
+/**
+ * PUT /api/menu/categories/:id/visibility
+ * Toggle category visibility for customer menu
+ */
+router.put('/categories/:id/visibility', asyncHandler(async (req: Request, res: Response) => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const { isHidden } = req.body || {};
+  const restaurantId = req.user?.restaurantId;
+  if (!restaurantId) throw new UnauthorizedError();
+  const db = DatabaseService.getInstance().getDatabase();
+
+  const category = await db.get('SELECT id, name FROM menu_categories WHERE id = ? AND restaurant_id = ?', [id, restaurantId]);
+  if (!category) {
+    return res.status(404).json({ success: false, error: { message: 'Category not found' } });
+  }
+
+  await db.run(
+    'UPDATE menu_categories SET is_hidden = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND restaurant_id = ?',
+    [Boolean(isHidden) ? 1 : 0, id, restaurantId]
+  );
+
+  await DatabaseService.getInstance().logAudit(
+    restaurantId,
+    req.user?.id || 'system',
+    'update_category_visibility',
+    'menu_category',
+    id,
+    { isHidden: Boolean(isHidden) }
+  );
+
+  res.json({ success: true });
+}));
+
+/**
+ * GET /api/menu/categories/:id/modifier-groups
+ * List modifier groups assigned at the category level (inherited by items)
+ */
+router.get('/categories/:id/modifier-groups', asyncHandler(async (req: Request, res: Response) => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const restaurantId = req.user?.restaurantId;
+  if (!restaurantId) throw new UnauthorizedError();
+  const db = DatabaseService.getInstance().getDatabase();
+
+  const category = await db.get('SELECT id FROM menu_categories WHERE id = ? AND restaurant_id = ?', [id, restaurantId]);
+  if (!category) {
+    return res.status(404).json({ success: false, error: { message: 'Category not found' } });
+  }
+
+  const rows = await db.all(
+    `
+      SELECT
+        cmg.id as assignment_id,
+        cmg.category_id,
+        cmg.group_id,
+        cmg.display_order as assignment_order,
+        mg.name,
+        mg.description,
+        mg.selection_type,
+        mg.min_selections,
+        mg.max_selections,
+        mg.is_required,
+        mg.is_active
+      FROM category_modifier_groups cmg
+      JOIN modifier_groups mg ON mg.id = cmg.group_id
+      WHERE cmg.category_id = ?
+        AND mg.restaurant_id = ?
+        AND mg.deleted_at IS NULL
+      ORDER BY cmg.display_order ASC, mg.name ASC
+    `,
+    [id, restaurantId]
+  );
+
+  res.json({
+    success: true,
+    data: rows.map((r: any) => ({
+      assignmentId: r.assignment_id,
+      categoryId: r.category_id,
+      groupId: r.group_id,
+      assignmentOrder: Number(r.assignment_order || 0),
+      name: r.name,
+      description: r.description ?? null,
+      selectionType: r.selection_type,
+      minSelections: Number(r.min_selections || 0),
+      maxSelections: r.max_selections === null || r.max_selections === undefined ? null : Number(r.max_selections),
+      isRequired: Boolean(r.is_required),
+      isActive: Boolean(r.is_active)
+    }))
+  });
+}));
+
+/**
+ * POST /api/menu/categories/:id/modifier-groups
+ * Replace category-level modifier group assignments (ordered)
+ * Body: { groupIds: string[] }
+ */
+router.post('/categories/:id/modifier-groups', asyncHandler(async (req: Request, res: Response) => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const restaurantId = req.user?.restaurantId;
+  if (!restaurantId) throw new UnauthorizedError();
+  const db = DatabaseService.getInstance().getDatabase();
+
+  const category = await db.get('SELECT id FROM menu_categories WHERE id = ? AND restaurant_id = ?', [id, restaurantId]);
+  if (!category) {
+    return res.status(404).json({ success: false, error: { message: 'Category not found' } });
+  }
+
+  const groupIdsRaw = (req.body?.groupIds ?? req.body?.modifierGroupIds) as unknown;
+  const groupIds = Array.isArray(groupIdsRaw) ? groupIdsRaw.map(String) : [];
+
+  // Replace-all semantics for consistent ordering
+  await db.run('DELETE FROM category_modifier_groups WHERE category_id = ?', [id]);
+
+  for (let i = 0; i < groupIds.length; i++) {
+    await db.run(
+      `
+        INSERT INTO category_modifier_groups (id, category_id, group_id, display_order)
+        VALUES (?, ?, ?, ?)
+      `,
+      [uuidv4(), id, groupIds[i], i]
+    );
+  }
+
+  await DatabaseService.getInstance().logAudit(
+    restaurantId,
+    req.user?.id || 'system',
+    'set_category_modifier_groups',
+    'menu_category',
+    id,
+    { groupIds }
+  );
+
+  res.json({ success: true });
+}));
+
+/**
+ * DELETE /api/menu/categories/:id/modifier-groups/:groupId
+ * Remove a single category-level modifier group assignment
+ */
+router.delete('/categories/:id/modifier-groups/:groupId', asyncHandler(async (req: Request, res: Response) => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const groupId = Array.isArray(req.params.groupId) ? req.params.groupId[0] : req.params.groupId;
+  const restaurantId = req.user?.restaurantId;
+  if (!restaurantId) throw new UnauthorizedError();
+  const db = DatabaseService.getInstance().getDatabase();
+
+  const category = await db.get('SELECT id FROM menu_categories WHERE id = ? AND restaurant_id = ?', [id, restaurantId]);
+  if (!category) {
+    return res.status(404).json({ success: false, error: { message: 'Category not found' } });
+  }
+
+  await db.run('DELETE FROM category_modifier_groups WHERE category_id = ? AND group_id = ?', [id, groupId]);
+
+  await DatabaseService.getInstance().logAudit(
+    restaurantId,
+    req.user?.id || 'system',
+    'remove_category_modifier_group',
+    'menu_category',
+    id,
+    { groupId }
+  );
+
+  res.json({ success: true });
+}));
+
+/**
+ * PUT /api/menu/categories/reorder
+ * Reorder categories by setting sort_order (drag-and-drop)
+ * Body: { categoryIds: string[] }
+ */
+router.put('/categories/reorder', asyncHandler(async (req: Request, res: Response) => {
+  const restaurantId = req.user?.restaurantId;
+  if (!restaurantId) throw new UnauthorizedError();
+  const db = DatabaseService.getInstance().getDatabase();
+
+  const categoryIdsRaw = (req.body?.categoryIds ?? req.body?.orderedIds) as unknown;
+  const categoryIds = Array.isArray(categoryIdsRaw) ? categoryIdsRaw.map(String) : [];
+  if (!categoryIds.length) {
+    return res.status(400).json({ success: false, error: { message: 'categoryIds is required' } });
+  }
+
+  for (let i = 0; i < categoryIds.length; i++) {
+    await db.run(
+      'UPDATE menu_categories SET sort_order = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND restaurant_id = ?',
+      [i, categoryIds[i], restaurantId]
+    );
+  }
+
+  await DatabaseService.getInstance().logAudit(
+    restaurantId,
+    req.user?.id || 'system',
+    'reorder_menu_categories',
+    'menu_category',
+    'multiple',
+    { categoryIds }
+  );
+
+  res.json({ success: true });
+}));
+
+/**
+ * PUT /api/menu/categories/:id/items/reorder
+ * Reorder items within a category by setting sort_order
+ * Body: { itemIds: string[] }
+ */
+router.put('/categories/:id/items/reorder', asyncHandler(async (req: Request, res: Response) => {
+  const categoryId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const restaurantId = req.user?.restaurantId;
+  if (!restaurantId) throw new UnauthorizedError();
+  const db = DatabaseService.getInstance().getDatabase();
+
+  const category = await db.get('SELECT id FROM menu_categories WHERE id = ? AND restaurant_id = ?', [categoryId, restaurantId]);
+  if (!category) {
+    return res.status(404).json({ success: false, error: { message: 'Category not found' } });
+  }
+
+  const itemIdsRaw = (req.body?.itemIds ?? req.body?.orderedItemIds) as unknown;
+  const itemIds = Array.isArray(itemIdsRaw) ? itemIdsRaw.map(String) : [];
+  if (!itemIds.length) {
+    return res.status(400).json({ success: false, error: { message: 'itemIds is required' } });
+  }
+
+  for (let i = 0; i < itemIds.length; i++) {
+    await db.run(
+      `
+        UPDATE menu_items
+        SET sort_order = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ? AND restaurant_id = ? AND category_id = ?
+      `,
+      [i, itemIds[i], restaurantId, categoryId]
+    );
+  }
+
+  await DatabaseService.getInstance().logAudit(
+    restaurantId,
+    req.user?.id || 'system',
+    'reorder_menu_items',
+    'menu_item',
+    'multiple',
+    { categoryId, itemIds }
+  );
+
   res.json({ success: true });
 }));
 
@@ -612,6 +954,216 @@ router.post('/items/describe', asyncHandler(async (req: Request, res: Response) 
   });
 }));
 
+// ============================================================================
+// ITEM SIZES (SIZE VARIATIONS)
+// ============================================================================
+
+/**
+ * GET /api/menu/items/:id/sizes
+ * Get size variations for a menu item
+ */
+router.get('/items/:id/sizes', asyncHandler(async (req: Request, res: Response) => {
+  const itemId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const restaurantId = req.user?.restaurantId;
+  const db = DatabaseService.getInstance().getDatabase();
+
+  const item = await db.get('SELECT id FROM menu_items WHERE id = ? AND restaurant_id = ?', [itemId, restaurantId]);
+  if (!item) {
+    return res.status(404).json({ success: false, error: { message: 'Menu item not found' } });
+  }
+
+  const sizes = await db.all(
+    `
+      SELECT *
+      FROM item_sizes
+      WHERE item_id = ?
+      ORDER BY display_order ASC, size_name ASC
+    `,
+    [itemId]
+  );
+
+  res.json({
+    success: true,
+    data: sizes.map((s: any) => ({
+      id: s.id,
+      item_id: s.item_id,
+      size_name: s.size_name,
+      price: Number(s.price || 0),
+      is_preselected: Boolean(s.is_preselected),
+      display_order: Number(s.display_order || 0)
+    }))
+  });
+}));
+
+/**
+ * POST /api/menu/items/:id/sizes
+ * Create a size variation for a menu item
+ */
+router.post('/items/:id/sizes', asyncHandler(async (req: Request, res: Response) => {
+  const itemId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const restaurantId = req.user?.restaurantId;
+  const { sizeName, price, isPreselected = false, displayOrder = 0 } = req.body || {};
+  const db = DatabaseService.getInstance().getDatabase();
+
+  const item = await db.get('SELECT id FROM menu_items WHERE id = ? AND restaurant_id = ?', [itemId, restaurantId]);
+  if (!item) {
+    return res.status(404).json({ success: false, error: { message: 'Menu item not found' } });
+  }
+
+  if (!sizeName || typeof sizeName !== 'string' || !sizeName.trim()) {
+    return res.status(400).json({ success: false, error: { message: 'sizeName is required' } });
+  }
+  const parsedPrice = Number(price);
+  if (!Number.isFinite(parsedPrice) || parsedPrice < 0) {
+    return res.status(400).json({ success: false, error: { message: 'price must be a non-negative number' } });
+  }
+
+  const sizeId = uuidv4();
+
+  // If this size is preselected, clear other preselected sizes first.
+  if (Boolean(isPreselected)) {
+    await db.run('UPDATE item_sizes SET is_preselected = FALSE WHERE item_id = ?', [itemId]);
+  }
+
+  await db.run(
+    `
+      INSERT INTO item_sizes (id, item_id, size_name, price, is_preselected, display_order)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `,
+    [sizeId, itemId, sizeName.trim(), parsedPrice, Boolean(isPreselected) ? 1 : 0, Number(displayOrder) || 0]
+  );
+
+  const created = await db.get('SELECT * FROM item_sizes WHERE id = ?', [sizeId]);
+  res.status(201).json({
+    success: true,
+    data: {
+      id: created.id,
+      item_id: created.item_id,
+      size_name: created.size_name,
+      price: Number(created.price || 0),
+      is_preselected: Boolean(created.is_preselected),
+      display_order: Number(created.display_order || 0)
+    }
+  });
+}));
+
+/**
+ * PUT /api/menu/items/:id/sizes/:sizeId
+ * Update a size variation
+ */
+router.put('/items/:id/sizes/:sizeId', asyncHandler(async (req: Request, res: Response) => {
+  const itemId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const sizeId = Array.isArray(req.params.sizeId) ? req.params.sizeId[0] : req.params.sizeId;
+  const restaurantId = req.user?.restaurantId;
+  const { sizeName, price, isPreselected, displayOrder } = req.body || {};
+  const db = DatabaseService.getInstance().getDatabase();
+
+  const item = await db.get('SELECT id FROM menu_items WHERE id = ? AND restaurant_id = ?', [itemId, restaurantId]);
+  if (!item) {
+    return res.status(404).json({ success: false, error: { message: 'Menu item not found' } });
+  }
+
+  const existing = await db.get('SELECT * FROM item_sizes WHERE id = ? AND item_id = ?', [sizeId, itemId]);
+  if (!existing) {
+    return res.status(404).json({ success: false, error: { message: 'Size not found' } });
+  }
+
+  const updateFields: string[] = [];
+  const updateValues: any[] = [];
+
+  if (sizeName !== undefined) {
+    if (typeof sizeName !== 'string' || !sizeName.trim()) {
+      return res.status(400).json({ success: false, error: { message: 'sizeName must be a non-empty string' } });
+    }
+    updateFields.push('size_name = ?');
+    updateValues.push(sizeName.trim());
+  }
+  if (price !== undefined) {
+    const parsedPrice = Number(price);
+    if (!Number.isFinite(parsedPrice) || parsedPrice < 0) {
+      return res.status(400).json({ success: false, error: { message: 'price must be a non-negative number' } });
+    }
+    updateFields.push('price = ?');
+    updateValues.push(parsedPrice);
+  }
+  if (displayOrder !== undefined) {
+    updateFields.push('display_order = ?');
+    updateValues.push(Number(displayOrder) || 0);
+  }
+
+  if (isPreselected !== undefined) {
+    const boolPre = Boolean(isPreselected);
+    if (boolPre) {
+      await db.run('UPDATE item_sizes SET is_preselected = FALSE WHERE item_id = ?', [itemId]);
+    }
+    updateFields.push('is_preselected = ?');
+    updateValues.push(boolPre ? 1 : 0);
+  }
+
+  if (!updateFields.length) {
+    return res.json({
+      success: true,
+      data: {
+        id: existing.id,
+        item_id: existing.item_id,
+        size_name: existing.size_name,
+        price: Number(existing.price || 0),
+        is_preselected: Boolean(existing.is_preselected),
+        display_order: Number(existing.display_order || 0)
+      }
+    });
+  }
+
+  updateFields.push('updated_at = CURRENT_TIMESTAMP');
+
+  await db.run(
+    `
+      UPDATE item_sizes
+      SET ${updateFields.join(', ')}
+      WHERE id = ? AND item_id = ?
+    `,
+    [...updateValues, sizeId, itemId]
+  );
+
+  const updated = await db.get('SELECT * FROM item_sizes WHERE id = ?', [sizeId]);
+  res.json({
+    success: true,
+    data: {
+      id: updated.id,
+      item_id: updated.item_id,
+      size_name: updated.size_name,
+      price: Number(updated.price || 0),
+      is_preselected: Boolean(updated.is_preselected),
+      display_order: Number(updated.display_order || 0)
+    }
+  });
+}));
+
+/**
+ * DELETE /api/menu/items/:id/sizes/:sizeId
+ * Delete a size variation
+ */
+router.delete('/items/:id/sizes/:sizeId', asyncHandler(async (req: Request, res: Response) => {
+  const itemId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const sizeId = Array.isArray(req.params.sizeId) ? req.params.sizeId[0] : req.params.sizeId;
+  const restaurantId = req.user?.restaurantId;
+  const db = DatabaseService.getInstance().getDatabase();
+
+  const item = await db.get('SELECT id FROM menu_items WHERE id = ? AND restaurant_id = ?', [itemId, restaurantId]);
+  if (!item) {
+    return res.status(404).json({ success: false, error: { message: 'Menu item not found' } });
+  }
+
+  const existing = await db.get('SELECT * FROM item_sizes WHERE id = ? AND item_id = ?', [sizeId, itemId]);
+  if (!existing) {
+    return res.status(404).json({ success: false, error: { message: 'Size not found' } });
+  }
+
+  await db.run('DELETE FROM item_sizes WHERE id = ? AND item_id = ?', [sizeId, itemId]);
+
+  res.json({ success: true });
+}));
+
 /**
  * GET /api/menu/items/full
  * Get all menu items with full details including categories
@@ -642,6 +1194,9 @@ router.get('/items/full', asyncHandler(async (req: Request, res: Response) => {
   // Attach modifier groups/options from new schema
   const itemIds = formattedItems.map((i: any) => i.id);
   let itemGroupsMap: Record<string, any[]> = {};
+  let categoryGroupsMap: Record<string, any[]> = {};
+  let sizesByItem: Record<string, any[]> = {};
+  const categoryIds = Array.from(new Set(formattedItems.map((i: any) => i.category_id).filter(Boolean)));
   if (itemIds.length) {
     // Load active groups/options for the restaurant
     const groups = await db.all(
@@ -717,11 +1272,87 @@ router.get('/items/full', asyncHandler(async (req: Request, res: Response) => {
           overrideRequired: row.override_required,
           displayOrder: row.display_order ?? 0
         },
-        options: optionsByGroup[baseGroup.id] || []
+        assignmentLevel: 'item',
+        options: (optionsByGroup[baseGroup.id] || []).map((opt: any) => ({
+          id: opt.id,
+          name: opt.name,
+          description: opt.description ?? null,
+          priceDelta: Number(opt.price_delta || 0),
+          isActive: Boolean(opt.is_active),
+          isSoldOut: Boolean(opt.is_sold_out),
+          isPreselected: Boolean(opt.is_preselected),
+          displayOrder: opt.display_order ?? 0
+        }))
       };
 
       if (!acc[row.item_id]) acc[row.item_id] = [];
       acc[row.item_id].push(enriched);
+      return acc;
+    }, {});
+
+    // Category-level modifier groups (inherited)
+    if (categoryIds.length) {
+      const catPlaceholders = categoryIds.map(() => '?').join(',');
+      const categoryModifierRows = await db.all(
+        `
+          SELECT *
+          FROM category_modifier_groups
+          WHERE category_id IN (${catPlaceholders})
+          ORDER BY display_order ASC
+        `,
+        categoryIds
+      );
+
+      categoryGroupsMap = categoryModifierRows.reduce((acc: Record<string, any[]>, row: any) => {
+        const baseGroup = groupById[row.group_id];
+        if (!baseGroup) return acc;
+        const enriched = {
+          id: baseGroup.id,
+          name: baseGroup.name,
+          description: baseGroup.description,
+          selectionType: baseGroup.selection_type,
+          minSelections: baseGroup.min_selections,
+          maxSelections: baseGroup.max_selections,
+          isRequired: baseGroup.is_required,
+          displayOrder: row.display_order ?? baseGroup.display_order ?? 0,
+          assignmentLevel: 'category',
+          options: (optionsByGroup[baseGroup.id] || []).map((opt: any) => ({
+            id: opt.id,
+            name: opt.name,
+            description: opt.description ?? null,
+            priceDelta: Number(opt.price_delta || 0),
+            isActive: Boolean(opt.is_active),
+            isSoldOut: Boolean(opt.is_sold_out),
+            isPreselected: Boolean(opt.is_preselected),
+            displayOrder: opt.display_order ?? 0
+          }))
+        };
+        if (!acc[row.category_id]) acc[row.category_id] = [];
+        acc[row.category_id].push(enriched);
+        return acc;
+      }, {});
+    }
+
+    // Item sizes
+    const placeholders2 = itemIds.map(() => '?').join(',');
+    const sizeRows = await db.all(
+      `
+        SELECT *
+        FROM item_sizes
+        WHERE item_id IN (${placeholders2})
+        ORDER BY display_order ASC, size_name ASC
+      `,
+      itemIds
+    );
+    sizesByItem = sizeRows.reduce((acc: Record<string, any[]>, row: any) => {
+      if (!acc[row.item_id]) acc[row.item_id] = [];
+      acc[row.item_id].push({
+        id: row.id,
+        sizeName: row.size_name,
+        price: Number(row.price || 0),
+        isPreselected: Boolean(row.is_preselected),
+        displayOrder: Number(row.display_order || 0)
+      });
       return acc;
     }, {});
   }
@@ -739,7 +1370,18 @@ router.get('/items/full', asyncHandler(async (req: Request, res: Response) => {
     }
     acc[categoryName].items.push({
       ...item,
-      modifierGroups: itemGroupsMap[item.id] || []
+      fromPrice: (() => {
+        const sizes = sizesByItem[item.id] || [];
+        if (sizes.length) return Math.min(...sizes.map((s: any) => Number(s.price || 0)));
+        return Number(item.price || 0);
+      })(),
+      sizes: sizesByItem[item.id] || [],
+      modifierGroups: (() => {
+        const itemGroups = itemGroupsMap[item.id] || [];
+        const itemGroupIds = new Set(itemGroups.map((g: any) => g.id));
+        const inheritedGroups = (categoryGroupsMap[item.category_id] || []).filter((g: any) => !itemGroupIds.has(g.id));
+        return [...inheritedGroups, ...itemGroups];
+      })()
     });
     return acc;
   }, {});
@@ -1005,6 +1647,7 @@ router.get('/categories', asyncHandler(async (req: Request, res: Response) => {
       mc.id,
       mc.name,
       mc.description,
+      COALESCE(mc.is_hidden, FALSE) as is_hidden,
       mc.sort_order,
       mc.is_active,
       COUNT(mi.id) as total_items,

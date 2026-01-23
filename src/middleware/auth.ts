@@ -29,6 +29,10 @@ export function issueAccessToken(payload: Omit<AccessTokenPayload, 'iat' | 'exp'
 
 export async function requireAuth(req: Request, _res: Response, next: NextFunction) {
   try {
+    // Vapi webhooks/tools do NOT send JWTs. Never run jwt.verify for these requests.
+    // (These routes are protected separately via Vapi-specific auth.)
+    if (req.originalUrl?.startsWith('/api/vapi/')) return next();
+
     const header = req.headers.authorization;
     if (!header || !header.startsWith('Bearer ')) {
       throw new UnauthorizedError('Missing Authorization header');

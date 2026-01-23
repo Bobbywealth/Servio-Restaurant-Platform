@@ -26,3 +26,39 @@ export const requireVapiAuth = (req: Request, res: Response, next: NextFunction)
 
   next();
 };
+
+/**
+ * Webhook auth for Vapi -> Servio backend.
+ *
+ * Recommended: configure a Vapi Custom Credential (Bearer Token) that sends:
+ *   X-Vapi-Secret: <VAPI_WEBHOOK_SECRET>
+ *
+ * This middleware intentionally does NOT use JWT.
+ */
+export const requireVapiWebhookAuth = (req: Request, _res: Response, next: NextFunction) => {
+  const secret = process.env.VAPI_WEBHOOK_SECRET;
+
+  // In dev, allow webhooks even without a configured secret (but warn).
+  if (!secret) {
+    if (process.env.NODE_ENV === 'production') {
+      return next(new UnauthorizedError('Vapi webhook secret not configured'));
+    }
+    console.warn('VAPI_WEBHOOK_SECRET not configured in environment variables');
+    return next();
+  }
+
+  const headerSecret = req.headers['x-vapi-secret'];
+  const provided =
+    typeof headerSecret === 'string'
+      ? headerSecret
+      : Array.isArray(headerSecret)
+        ? headerSecret[0]
+        : undefined;
+
+  // Also allow standard Bearer token if you choose to configure it that way in Vapi.
+  const authHeader = req.headers.authorization;
+  const bearer = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice('Bearer '.length).trim() : null;
+
+  if (provided === secret || bearer === secret) return next();
+  return next(new UnauthorizedError('Invalid Vapi webhook secret'));
+};
