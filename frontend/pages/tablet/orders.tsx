@@ -625,123 +625,126 @@ export default function TabletOrdersPage() {
         )}
       </div>
 
-      {/* Order Detail Modal */}
+      {/* Order Detail Modal - Optimized for landscape tablets */}
       {selectedOrder && (
-        <div className="no-print fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
-            {/* Modal Header */}
-            <div className={clsx(
-              "px-6 py-5 flex items-center justify-between",
-              normalizeStatus(selectedOrder.status) === 'received' ? "bg-blue-600 text-white" : 
-              normalizeStatus(selectedOrder.status) === 'preparing' ? "bg-amber-500 text-white" : "bg-black text-white"
-            )}>
-              <div>
-                <span className="text-lg font-black uppercase tracking-wider opacity-80">Order Details</span>
-                <div className="text-5xl font-black font-mono leading-none tracking-tighter">
-                  #{selectedOrder.external_id ? selectedOrder.external_id.slice(-4).toUpperCase() : selectedOrder.id.slice(-4).toUpperCase()}
-                </div>
-              </div>
-              <button
-                onClick={() => setSelectedOrder(null)}
-                className="bg-white/20 hover:bg-white/30 p-3 rounded-xl transition-colors"
-              >
-                <span className="text-3xl font-black">✕</span>
-              </button>
-            </div>
-
-            {/* Customer Info */}
-            <div className="px-6 py-4 bg-slate-100 border-b-2 border-slate-200">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-lg font-bold text-slate-500 uppercase">Customer</div>
-                  <div className="text-3xl font-black text-black uppercase">{selectedOrder.customer_name || 'GUEST'}</div>
-                  {selectedOrder.customer_phone && (
-                    <div className="text-xl font-bold text-slate-600 mt-1">{selectedOrder.customer_phone}</div>
-                  )}
-                </div>
-                <div className="text-right">
-                  <div className="bg-black text-white px-4 py-2 rounded-xl text-xl font-black uppercase">
-                    {selectedOrder.channel || 'POS'}
+        <div className="no-print fixed inset-0 z-50 flex items-stretch bg-black/70">
+          {/* Left side - scrollable order details */}
+          <div className="flex-1 flex items-center justify-center p-3 overflow-hidden">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl h-full max-h-full overflow-hidden flex flex-col">
+              {/* Modal Header - compact */}
+              <div className={clsx(
+                "px-4 py-3 flex items-center justify-between flex-shrink-0",
+                normalizeStatus(selectedOrder.status) === 'received' ? "bg-blue-600 text-white" : 
+                normalizeStatus(selectedOrder.status) === 'preparing' ? "bg-amber-500 text-white" : "bg-black text-white"
+              )}>
+                <div className="flex items-center gap-4">
+                  <div className="text-4xl font-black font-mono leading-none tracking-tighter">
+                    #{selectedOrder.external_id ? selectedOrder.external_id.slice(-4).toUpperCase() : selectedOrder.id.slice(-4).toUpperCase()}
                   </div>
-                  {selectedOrder.order_type && (
-                    <div className="text-lg font-bold text-slate-600 mt-2">{selectedOrder.order_type}</div>
-                  )}
+                  <div className="text-lg font-bold opacity-80 uppercase">
+                    {normalizeStatus(selectedOrder.status)}
+                  </div>
+                </div>
+                <button
+                  onClick={() => setSelectedOrder(null)}
+                  className="bg-white/20 hover:bg-white/30 p-2 rounded-xl transition-colors"
+                >
+                  <span className="text-2xl font-black">✕</span>
+                </button>
+              </div>
+
+              {/* Customer Info - compact */}
+              <div className="px-4 py-3 bg-slate-100 border-b-2 border-slate-200 flex-shrink-0">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-2xl font-black text-black uppercase">{selectedOrder.customer_name || 'GUEST'}</div>
+                    {selectedOrder.customer_phone && (
+                      <div className="text-lg font-bold text-slate-600">{selectedOrder.customer_phone}</div>
+                    )}
+                  </div>
+                  <div className="text-right">
+                    <div className="bg-black text-white px-3 py-1 rounded-lg text-lg font-black uppercase">
+                      {selectedOrder.channel || 'POS'}
+                    </div>
+                    {selectedOrder.order_type && (
+                      <div className="text-base font-bold text-slate-600 mt-1">{selectedOrder.order_type}</div>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
 
-            {/* Items List */}
-            <div className="flex-grow overflow-y-auto px-6 py-4">
-              <div className="text-lg font-black text-slate-500 uppercase mb-3">Items</div>
-              <div className="space-y-4">
-                {(selectedOrder.items || []).map((it, idx) => (
-                  <div key={idx} className="flex items-start gap-4 py-3 border-b border-slate-200 last:border-0">
-                    <div className="flex-shrink-0 bg-black text-white w-14 h-14 rounded-xl flex items-center justify-center text-2xl font-black">
-                      {it.quantity || 1}
-                    </div>
-                    <div className="flex-grow">
-                      <div className="text-2xl font-black leading-tight text-black break-words uppercase">
-                        {it.name}
+              {/* Items List - SCROLLABLE */}
+              <div className="flex-1 overflow-y-auto px-4 py-3 min-h-0">
+                <div className="text-base font-black text-slate-500 uppercase mb-2">Items</div>
+                <div className="space-y-3">
+                  {(selectedOrder.items || []).map((it, idx) => (
+                    <div key={idx} className="flex items-center gap-3 py-2 border-b border-slate-200 last:border-0">
+                      <div className="flex-shrink-0 bg-black text-white w-10 h-10 rounded-lg flex items-center justify-center text-xl font-black">
+                        {it.quantity || 1}
+                      </div>
+                      <div className="flex-grow min-w-0">
+                        <div className="text-xl font-black leading-tight text-black break-words uppercase truncate">
+                          {it.name}
+                        </div>
+                      </div>
+                      <div className="text-xl font-black text-black flex-shrink-0">
+                        {formatMoney((it.unit_price || it.price || 0) * (it.quantity || 1))}
                       </div>
                     </div>
-                    <div className="text-2xl font-black text-black">
-                      {formatMoney((it.unit_price || it.price || 0) * (it.quantity || 1))}
-                    </div>
+                  ))}
+                </div>
+                
+                {selectedOrder.special_instructions && (
+                  <div className="mt-3 p-3 bg-yellow-50 border-2 border-yellow-200 rounded-xl">
+                    <div className="text-base font-black text-yellow-700 uppercase mb-1">Special Instructions</div>
+                    <div className="text-lg font-bold text-yellow-900">{selectedOrder.special_instructions}</div>
                   </div>
-                ))}
+                )}
               </div>
-              
-              {selectedOrder.special_instructions && (
-                <div className="mt-4 p-4 bg-yellow-50 border-2 border-yellow-200 rounded-xl">
-                  <div className="text-lg font-black text-yellow-700 uppercase mb-1">Special Instructions</div>
-                  <div className="text-xl font-bold text-yellow-900">{selectedOrder.special_instructions}</div>
-                </div>
-              )}
-            </div>
 
-            {/* Total */}
-            <div className="px-6 py-4 bg-slate-100 border-t-2 border-slate-200">
-              <div className="flex items-center justify-between">
-                <span className="text-2xl font-black text-black uppercase">Total</span>
-                <span className="text-4xl font-black text-black">{formatMoney(selectedOrder.total_amount)}</span>
+              {/* Total - compact */}
+              <div className="px-4 py-3 bg-slate-100 border-t-2 border-slate-200 flex-shrink-0">
+                <div className="flex items-center justify-between">
+                  <span className="text-xl font-black text-black uppercase">Total</span>
+                  <span className="text-3xl font-black text-black">{formatMoney(selectedOrder.total_amount)}</span>
+                </div>
+                {selectedOrder.pickup_time && (
+                  <div className="text-lg font-bold text-slate-600 mt-1">
+                    Pickup: {new Date(selectedOrder.pickup_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </div>
+                )}
               </div>
-              {selectedOrder.pickup_time && (
-                <div className="text-xl font-bold text-slate-600 mt-2">
-                  Pickup: {new Date(selectedOrder.pickup_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </div>
-              )}
-            </div>
 
-            {/* Action Buttons */}
-            <div className="px-6 py-5 bg-white border-t-2 border-slate-200">
+            {/* Action Buttons - compact */}
+            <div className="px-4 py-3 bg-white border-t-2 border-slate-200 flex-shrink-0">
               {normalizeStatus(selectedOrder.status) === 'received' && (
-                <div className="flex gap-4">
+                <div className="flex gap-3">
                   <button
                     disabled={busyId === selectedOrder.id}
                     onClick={() => declineOrder(selectedOrder)}
-                    className="flex-1 bg-red-600 hover:bg-red-700 active:scale-95 text-white py-6 rounded-2xl flex items-center justify-center gap-3 transition-all shadow-xl disabled:opacity-50"
+                    className="flex-1 bg-red-600 hover:bg-red-700 active:scale-95 text-white py-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-xl disabled:opacity-50"
                   >
-                    <span className="text-3xl font-black uppercase">DECLINE</span>
+                    <span className="text-2xl font-black uppercase">DECLINE</span>
                   </button>
                   <button
                     disabled={busyId === selectedOrder.id}
                     onClick={() => acceptOrder(selectedOrder)}
-                    className="flex-[2] bg-green-600 hover:bg-green-700 active:scale-95 text-white py-6 rounded-2xl flex items-center justify-center gap-3 transition-all shadow-xl disabled:opacity-50"
+                    className="flex-[2] bg-green-600 hover:bg-green-700 active:scale-95 text-white py-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-xl disabled:opacity-50"
                   >
-                    <span className="text-3xl font-black uppercase">ACCEPT ORDER</span>
-                    <CheckCircle2 className="h-8 w-8 stroke-[3px]" />
+                    <span className="text-2xl font-black uppercase">ACCEPT</span>
+                    <CheckCircle2 className="h-7 w-7 stroke-[3px]" />
                   </button>
                 </div>
               )}
               {normalizeStatus(selectedOrder.status) === 'preparing' && (
-                <div className="flex gap-4">
+                <div className="flex gap-3">
                   <button
                     onClick={() => printOrder(selectedOrder.id)}
                     disabled={printingOrderId === selectedOrder.id}
-                    className="flex-1 bg-slate-200 hover:bg-slate-300 active:scale-95 text-black py-6 rounded-2xl flex items-center justify-center gap-3 transition-all disabled:opacity-50"
+                    className="flex-1 bg-slate-200 hover:bg-slate-300 active:scale-95 text-black py-4 rounded-xl flex items-center justify-center gap-2 transition-all disabled:opacity-50"
                   >
-                    <Printer className="h-7 w-7" />
-                    <span className="text-2xl font-black uppercase">PRINT</span>
+                    <Printer className="h-6 w-6" />
+                    <span className="text-xl font-black uppercase">PRINT</span>
                   </button>
                   <button
                     disabled={busyId === selectedOrder.id}
@@ -749,10 +752,10 @@ export default function TabletOrdersPage() {
                       setStatus(selectedOrder.id, 'ready');
                       setSelectedOrder(null);
                     }}
-                    className="flex-[2] bg-black hover:bg-slate-800 active:scale-95 text-white py-6 rounded-2xl flex items-center justify-center gap-3 transition-all shadow-xl disabled:opacity-50"
+                    className="flex-[2] bg-black hover:bg-slate-800 active:scale-95 text-white py-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-xl disabled:opacity-50"
                   >
-                    <span className="text-3xl font-black uppercase">MARK READY</span>
-                    <CheckCircle2 className="h-8 w-8 stroke-[3px]" />
+                    <span className="text-2xl font-black uppercase">READY</span>
+                    <CheckCircle2 className="h-7 w-7 stroke-[3px]" />
                   </button>
                 </div>
               )}
@@ -763,11 +766,12 @@ export default function TabletOrdersPage() {
                     setStatus(selectedOrder.id, 'completed');
                     setSelectedOrder(null);
                   }}
-                  className="w-full bg-slate-500 hover:bg-slate-600 active:scale-95 text-white py-6 rounded-2xl flex items-center justify-center gap-3 transition-all disabled:opacity-50"
+                  className="w-full bg-slate-500 hover:bg-slate-600 active:scale-95 text-white py-4 rounded-xl flex items-center justify-center gap-2 transition-all disabled:opacity-50"
                 >
-                  <span className="text-3xl font-black uppercase">COMPLETE ORDER</span>
+                  <span className="text-2xl font-black uppercase">COMPLETE</span>
                 </button>
               )}
+            </div>
             </div>
           </div>
         </div>
