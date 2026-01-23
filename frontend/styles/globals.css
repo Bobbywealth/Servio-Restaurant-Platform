@@ -336,6 +336,16 @@ img, video {
   animation: route-progress 1.2s ease-in-out infinite;
 }
 
+/* Shimmer effect for skeleton loaders */
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
 @layer utilities {
   .bg-gray-850 {
     background-color: rgb(26 32 44);

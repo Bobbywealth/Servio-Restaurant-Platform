@@ -6,79 +6,86 @@ import dynamic from 'next/dynamic'
 import { useUser } from '../../contexts/UserContext'
 import { api } from '../../lib/api'
 import { useSocket } from '../../lib/socket'
-import { MessageCircle, ShoppingCart, Package, CheckSquare, TrendingUp, Sparkles, ArrowRight } from 'lucide-react'
+import { MessageCircle, ShoppingCart, Package, CheckSquare, TrendingUp, Sparkles, ArrowRight, Mic, Zap, Activity } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 import DashboardLayout from '../../components/Layout/DashboardLayout'
 
-// STAT CARD COMPONENT FOR PERFORMANCE
+// PREMIUM STAT CARD WITH GLASSMORPHISM
 const StatCard = memo(({ stat, index }: { stat: any; index: number }) => (
   <motion.div
-    className="card-hover"
+    className="relative group"
     initial={{ opacity: 0, y: 20 }}
     animate={{ opacity: 1, y: 0 }}
-    transition={{ delay: 0.1 * (index + 2) }}
-    whileHover={{ y: -4 }}
+    transition={{ delay: 0.1 * (index + 1), duration: 0.5 }}
+    whileHover={{ y: -6, scale: 1.02 }}
   >
-    <div className="flex items-center">
-      <motion.div
-        className={`p-3 rounded-xl ${stat.color || 'bg-primary-500'}`}
-        whileHover={{ scale: 1.1, rotate: 5 }}
-        transition={{ type: "spring", stiffness: 400, damping: 10 }}
-      >
-        <stat.icon className="h-6 w-6 text-white" />
-      </motion.div>
-      <div className="ml-4 flex-1">
-        <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
-          {stat.name}
-        </p>
-        <motion.p
-          className="text-2xl font-bold text-gray-900 dark:text-gray-100"
-          initial={{ scale: 0 }}
-          animate={{ scale: 1 }}
-          transition={{ delay: 0.2 * (index + 2), type: "spring", bounce: 0.4 }}
+    {/* Gradient background glow */}
+    <div className={`absolute inset-0 rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 blur-xl ${stat.glowColor || 'bg-primary-500/30'}`} />
+    
+    <div className="relative bg-white/80 dark:bg-surface-800/80 backdrop-blur-xl rounded-3xl p-6 shadow-xl border border-white/50 dark:border-surface-700/50 overflow-hidden">
+      {/* Decorative gradient orb */}
+      <div className={`absolute -top-10 -right-10 w-32 h-32 rounded-full opacity-20 ${stat.color || 'bg-primary-500'} blur-2xl`} />
+      
+      <div className="relative flex items-start justify-between">
+        <div>
+          <p className="text-sm font-semibold text-surface-500 dark:text-surface-400 uppercase tracking-wider mb-1">
+            {stat.name}
+          </p>
+          <motion.p
+            className="text-4xl font-black text-surface-900 dark:text-white tracking-tight"
+            initial={{ scale: 0.5, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ delay: 0.2 * (index + 1), type: "spring", bounce: 0.4 }}
+          >
+            {stat.value}
+          </motion.p>
+        </div>
+        <motion.div
+          className={`p-4 rounded-2xl shadow-lg ${stat.color || 'bg-primary-500'}`}
+          whileHover={{ scale: 1.1, rotate: 10 }}
+          transition={{ type: "spring", stiffness: 400, damping: 10 }}
         >
-          {stat.value}
-        </motion.p>
+          <stat.icon className="h-7 w-7 text-white" />
+        </motion.div>
       </div>
-    </div>
-    <div className="mt-4 flex items-center justify-between">
-      <div className="flex items-center">
-        <span className={`text-sm font-medium inline-flex items-center px-2 py-1 rounded-full ${
+      
+      <div className="mt-5 pt-4 border-t border-surface-200/50 dark:border-surface-700/50 flex items-center justify-between">
+        <span className={`text-sm font-bold inline-flex items-center gap-1 px-3 py-1.5 rounded-full ${
           stat.changeType === 'increase'
-            ? 'text-servio-green-700 bg-servio-green-100'
-            : 'text-servio-red-700 bg-servio-red-100'
+            ? 'text-emerald-700 bg-emerald-100 dark:text-emerald-300 dark:bg-emerald-900/30'
+            : 'text-rose-700 bg-rose-100 dark:text-rose-300 dark:bg-rose-900/30'
         }`}>
-          {stat.change}
+          {stat.changeType === 'increase' ? '↑' : '↓'} {stat.change}
         </span>
+        <span className="text-xs font-medium text-surface-400">vs yesterday</span>
       </div>
-      <span className="text-xs text-gray-500">
-        from yesterday
-      </span>
     </div>
   </motion.div>
 ))
 
 StatCard.displayName = 'StatCard'
 
-const SkeletonCard = memo(() => (
+// PREMIUM SKELETON LOADER
+const SkeletonCard = memo(({ index = 0 }: { index?: number }) => (
   <motion.div 
-    className="bg-white dark:bg-surface-800 rounded-2xl p-6 shadow-lg border border-surface-100 dark:border-surface-700 animate-pulse"
+    className="relative bg-white/60 dark:bg-surface-800/60 backdrop-blur-xl rounded-3xl p-6 shadow-xl border border-white/30 dark:border-surface-700/30 overflow-hidden"
     initial={{ opacity: 0, y: 20 }}
     animate={{ opacity: 1, y: 0 }}
-    transition={{ duration: 0.5 }}
+    transition={{ delay: index * 0.1, duration: 0.5 }}
   >
-    <div className="flex items-center justify-between mb-4">
-      <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-surface-200 to-surface-300 dark:from-surface-700 dark:to-surface-600" />
-      <div className="h-6 w-16 rounded-full bg-surface-200 dark:bg-surface-700" />
-    </div>
-    <div className="space-y-3">
-      <div className="h-4 w-24 rounded bg-surface-200 dark:bg-surface-700" />
-      <div className="flex items-baseline space-x-2">
-        <div className="h-8 w-20 rounded bg-surface-200 dark:bg-surface-700" />
-        <div className="h-4 w-12 rounded bg-surface-200 dark:bg-surface-700" />
+    {/* Shimmer effect */}
+    <div className="absolute inset-0 -translate-x-full animate-[shimmer_2s_infinite] bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+    
+    <div className="flex items-start justify-between mb-4">
+      <div className="space-y-3">
+        <div className="h-4 w-24 rounded-lg bg-surface-200/80 dark:bg-surface-700/80" />
+        <div className="h-10 w-20 rounded-lg bg-surface-200/80 dark:bg-surface-700/80" />
       </div>
-      <div className="h-3 w-32 rounded bg-surface-200 dark:bg-surface-700" />
+      <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-surface-200 to-surface-300 dark:from-surface-700 dark:to-surface-600" />
+    </div>
+    <div className="pt-4 border-t border-surface-200/30 dark:border-surface-700/30">
+      <div className="h-6 w-32 rounded-full bg-surface-200/80 dark:bg-surface-700/80" />
     </div>
   </motion.div>
 ))
@@ -129,39 +136,43 @@ const DashboardIndex = memo(() => {
     }
   }, [socket])
 
-  // STATS DATA FOR PERFORMANCE
+  // STATS DATA WITH PREMIUM STYLING
   const stats = useMemo(() => [
     {
       name: 'Active Orders',
       value: activeOrders.toString(),
-      change: '+2.5%',
+      change: '2.5%',
       changeType: 'increase' as const,
       icon: ShoppingCart,
-      color: 'bg-primary-500'
+      color: 'bg-gradient-to-br from-blue-500 to-indigo-600',
+      glowColor: 'bg-blue-500/40'
     },
     {
       name: 'Items 86\'d',
       value: '0',
-      change: '+0',
+      change: '0',
       changeType: 'increase' as const,
       icon: Package,
-      color: 'bg-servio-red-500'
+      color: 'bg-gradient-to-br from-rose-500 to-pink-600',
+      glowColor: 'bg-rose-500/40'
     },
     {
       name: 'Pending Tasks',
       value: pendingTasks.toString(),
-      change: '-3',
+      change: '3',
       changeType: 'decrease' as const,
       icon: CheckSquare,
-      color: 'bg-servio-orange-500'
+      color: 'bg-gradient-to-br from-amber-500 to-orange-600',
+      glowColor: 'bg-amber-500/40'
     },
     {
       name: 'Today\'s Sales',
       value: `$${todaySales.toFixed(2)}`,
-      change: '+12.5%',
+      change: '12.5%',
       changeType: 'increase' as const,
       icon: TrendingUp,
-      color: 'bg-servio-green-500'
+      color: 'bg-gradient-to-br from-emerald-500 to-teal-600',
+      glowColor: 'bg-emerald-500/40'
     }
   ], [activeOrders, pendingTasks, todaySales])
 
@@ -202,161 +213,217 @@ const DashboardIndex = memo(() => {
         <div className="space-y-6">
           {/* Welcome Section */}
           <motion.div
-            className="mb-2"
+            className="mb-4"
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
           >
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
               <div>
+                <motion.div
+                  className="flex items-center gap-2 mb-2"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.1 }}
+                >
+                  <span className="text-sm font-semibold text-surface-500 dark:text-surface-400 uppercase tracking-widest">Dashboard</span>
+                  <span className="text-surface-300 dark:text-surface-600">•</span>
+                  <span className="text-sm text-surface-400 dark:text-surface-500">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}</span>
+                </motion.div>
                 <motion.h1 
-                  className="text-4xl font-bold bg-gradient-to-r from-surface-900 via-primary-700 to-servio-orange-600 bg-clip-text text-transparent dark:from-surface-100 dark:via-primary-300 dark:to-servio-orange-400"
+                  className="text-4xl md:text-5xl font-black text-surface-900 dark:text-white tracking-tight"
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: 0.2 }}
                 >
-                  Welcome back, {user?.name || 'Team'}! 👋
+                  Welcome back, {user?.name?.split(' ')[0] || 'Team'}
                 </motion.h1>
-                <motion.p 
-                  className="mt-3 text-lg text-surface-600 dark:text-surface-400"
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.3 }}
-                >
-                  Here&apos;s what&apos;s happening with your restaurant today.
-                </motion.p>
               </div>
               
               <motion.div
-                className="hidden md:flex items-center space-x-3"
+                className="flex items-center gap-3"
                 initial={{ opacity: 0, scale: 0.8 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ delay: 0.4 }}
               >
-                <div className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-servio-green-100 to-servio-green-50 dark:from-servio-green-900/30 dark:to-servio-green-800/20 rounded-full">
+                <div className="flex items-center gap-2 px-4 py-2.5 bg-emerald-50 dark:bg-emerald-900/20 rounded-full border border-emerald-200 dark:border-emerald-800">
                   <motion.div
-                    className="w-2 h-2 bg-servio-green-500 rounded-full"
-                    animate={{ scale: [1, 1.2, 1] }}
+                    className="w-2.5 h-2.5 bg-emerald-500 rounded-full"
+                    animate={{ scale: [1, 1.3, 1], opacity: [1, 0.7, 1] }}
                     transition={{ duration: 2, repeat: Infinity }}
                   />
-                  <span className="text-sm font-medium text-servio-green-700 dark:text-servio-green-300">Restaurant Online</span>
+                  <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">Online</span>
                 </div>
               </motion.div>
             </div>
           </motion.div>
 
-          {/* Hero Assistant Section */}
+          {/* PREMIUM AI ASSISTANT HERO */}
           <motion.div
-            className="relative bg-gradient-to-r from-teal-500 via-teal-400 to-orange-500 rounded-3xl p-8 text-white overflow-hidden shadow-2xl"
+            className="relative rounded-[2rem] overflow-hidden"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
+            transition={{ delay: 0.1, duration: 0.6 }}
           >
-            {/* Animated background patterns */}
-            <div className="absolute inset-0 opacity-20">
-              <div className="absolute top-0 left-0 w-72 h-72 bg-white rounded-full mix-blend-soft-light filter blur-xl opacity-70 animate-pulse"></div>
-              <div className="absolute bottom-0 right-0 w-96 h-96 bg-gradient-to-r from-yellow-300 to-orange-300 rounded-full mix-blend-soft-light filter blur-2xl opacity-50"></div>
+            {/* Multi-layer gradient background */}
+            <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900" />
+            <div className="absolute inset-0 bg-gradient-to-r from-teal-500/20 via-transparent to-orange-500/20" />
+            
+            {/* Animated mesh gradient */}
+            <div className="absolute inset-0 overflow-hidden">
+              <motion.div 
+                className="absolute -top-1/2 -left-1/2 w-full h-full bg-gradient-to-br from-teal-400/30 to-transparent rounded-full blur-3xl"
+                animate={{ 
+                  x: [0, 100, 0],
+                  y: [0, 50, 0],
+                  scale: [1, 1.2, 1]
+                }}
+                transition={{ duration: 15, repeat: Infinity, ease: "easeInOut" }}
+              />
+              <motion.div 
+                className="absolute -bottom-1/2 -right-1/2 w-full h-full bg-gradient-to-tl from-orange-400/30 to-transparent rounded-full blur-3xl"
+                animate={{ 
+                  x: [0, -100, 0],
+                  y: [0, -50, 0],
+                  scale: [1.2, 1, 1.2]
+                }}
+                transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
+              />
             </div>
             
-            <div className="relative flex items-center justify-between">
-              <div className="flex-1">
-                <motion.div
-                  className="flex items-center mb-4"
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.2 }}
-                >
-                  <div className="bg-white/20 backdrop-blur-sm rounded-xl p-3 mr-4">
-                    <motion.div
-                      animate={{ rotate: 360 }}
-                      transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
-                    >
-                      <Sparkles className="w-8 h-8" />
-                    </motion.div>
-                  </div>
-                  <div>
-                    <h2 className="text-3xl font-bold tracking-tight">Meet Servio Assistant</h2>
-                    <div className="flex items-center mt-1">
-                      <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse mr-2"></div>
-                      <span className="text-sm font-medium text-orange-100">AI-Powered • Ready to Help</span>
-                    </div>
-                  </div>
-                </motion.div>
-                
-                <motion.p
-                  className="text-lg text-orange-50 mb-6 max-w-2xl leading-relaxed"
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.3 }}
-                >
-                  Your AI-powered helper for orders, inventory, and tasks.
-                  Just talk and Servio will help!
-                </motion.p>
-                
-                <motion.div
-                  className="flex flex-wrap gap-4"
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.4 }}
-                >
-                  <Link
-                    href="/dashboard/assistant"
-                    className="inline-flex items-center space-x-3 bg-white text-servio-orange-600 px-8 py-4 rounded-2xl font-semibold hover:bg-orange-50 transition-all duration-300 transform hover:scale-105 hover:-translate-y-1 shadow-xl hover:shadow-2xl group"
+            {/* Grid pattern overlay */}
+            <div className="absolute inset-0 opacity-[0.03]" style={{
+              backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`
+            }} />
+            
+            <div className="relative px-8 py-10 md:px-12 md:py-12">
+              <div className="flex flex-col lg:flex-row items-center justify-between gap-8">
+                {/* Content */}
+                <div className="flex-1 text-center lg:text-left">
+                  {/* Badge */}
+                  <motion.div
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 backdrop-blur-sm border border-white/10 mb-6"
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.2 }}
                   >
-                    <MessageCircle className="h-6 w-6 group-hover:animate-bounce" />
-                    <span className="text-lg">Start Talking to Servio</span>
-                    <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
-                  </Link>
-                  
-                  <div className="flex items-center space-x-4 text-orange-100">
-                    <div className="flex items-center space-x-2">
-                      <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
-                      <span className="text-sm font-medium">Voice Ready</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <div className="w-3 h-3 bg-blue-400 rounded-full animate-pulse" style={{ animationDelay: '0.5s' }}></div>
-                      <span className="text-sm font-medium">Real-time Sync</span>
-                    </div>
-                  </div>
-                </motion.div>
-              </div>
-              
-              <div className="hidden lg:block ml-8">
-                <motion.div
-                  className="relative"
-                  animate={{
-                    y: [-10, 10, -10],
-                  }}
-                  transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
-                >
-                  <div className="w-32 h-32 bg-white/20 backdrop-blur-sm rounded-3xl flex items-center justify-center border border-white/30">
                     <motion.div
-                      animate={{ scale: [1, 1.1, 1] }}
+                      className="w-2 h-2 rounded-full bg-emerald-400"
+                      animate={{ scale: [1, 1.3, 1], opacity: [1, 0.7, 1] }}
                       transition={{ duration: 2, repeat: Infinity }}
+                    />
+                    <span className="text-sm font-semibold text-white/90">AI Assistant Online</span>
+                    <Zap className="w-4 h-4 text-amber-400" />
+                  </motion.div>
+                  
+                  <motion.h2 
+                    className="text-4xl md:text-5xl font-black text-white mb-4 tracking-tight"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.3 }}
+                  >
+                    Your AI Command Center
+                  </motion.h2>
+                  
+                  <motion.p
+                    className="text-lg text-white/70 mb-8 max-w-xl leading-relaxed"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.4 }}
+                  >
+                    Talk naturally to manage orders, check inventory, update menus, and run your restaurant hands-free.
+                  </motion.p>
+                  
+                  <motion.div
+                    className="flex flex-col sm:flex-row items-center gap-4"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.5 }}
+                  >
+                    <Link
+                      href="/dashboard/assistant"
+                      className="group relative inline-flex items-center gap-3 bg-white text-slate-900 px-8 py-4 rounded-2xl font-bold text-lg hover:bg-white/90 transition-all duration-300 shadow-2xl shadow-white/20 hover:shadow-white/30 hover:scale-105"
                     >
-                      <MessageCircle className="h-16 w-16" />
+                      <motion.div
+                        animate={{ scale: [1, 1.2, 1] }}
+                        transition={{ duration: 1.5, repeat: Infinity }}
+                      >
+                        <Mic className="h-6 w-6 text-teal-600" />
+                      </motion.div>
+                      <span>Start Talking</span>
+                      <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
+                    </Link>
+                    
+                    <div className="flex items-center gap-6 text-white/60">
+                      <div className="flex items-center gap-2">
+                        <Activity className="w-4 h-4 text-emerald-400" />
+                        <span className="text-sm font-medium">Real-time</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Sparkles className="w-4 h-4 text-amber-400" />
+                        <span className="text-sm font-medium">Voice-first</span>
+                      </div>
+                    </div>
+                  </motion.div>
+                </div>
+                
+                {/* Visual element */}
+                <motion.div 
+                  className="hidden lg:flex items-center justify-center"
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: 0.4, duration: 0.6 }}
+                >
+                  <div className="relative">
+                    {/* Outer ring */}
+                    <motion.div
+                      className="absolute inset-0 rounded-full border-2 border-white/10"
+                      animate={{ rotate: 360 }}
+                      transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
+                      style={{ width: 180, height: 180, margin: -20 }}
+                    />
+                    
+                    {/* Inner glowing orb */}
+                    <motion.div
+                      className="w-36 h-36 rounded-full bg-gradient-to-br from-teal-400 via-teal-500 to-orange-500 flex items-center justify-center shadow-2xl shadow-teal-500/30"
+                      animate={{ 
+                        boxShadow: [
+                          "0 0 60px rgba(20,184,166,0.4)",
+                          "0 0 80px rgba(20,184,166,0.6)",
+                          "0 0 60px rgba(20,184,166,0.4)"
+                        ]
+                      }}
+                      transition={{ duration: 3, repeat: Infinity }}
+                    >
+                      <motion.div
+                        animate={{ scale: [1, 1.1, 1] }}
+                        transition={{ duration: 2, repeat: Infinity }}
+                      >
+                        <MessageCircle className="w-16 h-16 text-white" />
+                      </motion.div>
                     </motion.div>
+                    
+                    {/* Floating particles */}
+                    <motion.div
+                      className="absolute -top-2 -right-2 w-4 h-4 rounded-full bg-amber-400"
+                      animate={{ y: [-5, 5, -5], x: [-3, 3, -3] }}
+                      transition={{ duration: 4, repeat: Infinity }}
+                    />
+                    <motion.div
+                      className="absolute -bottom-1 -left-3 w-3 h-3 rounded-full bg-teal-300"
+                      animate={{ y: [5, -5, 5], x: [3, -3, 3] }}
+                      transition={{ duration: 3, repeat: Infinity }}
+                    />
                   </div>
-                  {/* Floating accent elements */}
-                  <motion.div
-                    className="absolute -top-2 -right-2 w-6 h-6 bg-yellow-300 rounded-full"
-                    animate={{ scale: [1, 1.2, 1], rotate: 360 }}
-                    transition={{ duration: 3, repeat: Infinity }}
-                  />
-                  <motion.div
-                    className="absolute -bottom-1 -left-1 w-4 h-4 bg-green-300 rounded-full"
-                    animate={{ scale: [1, 1.3, 1] }}
-                    transition={{ duration: 2, repeat: Infinity, delay: 1 }}
-                  />
                 </motion.div>
               </div>
             </div>
           </motion.div>
 
-          {/* Stats Grid - Optimized with Memoized Components */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {/* Stats Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
             {isFetching
-              ? Array.from({ length: 4 }).map((_, idx) => <SkeletonCard key={`skeleton-${idx}`} />)
+              ? Array.from({ length: 4 }).map((_, idx) => <SkeletonCard key={`skeleton-${idx}`} index={idx} />)
               : stats.map((stat, index) => (
                   <StatCard key={stat.name} stat={stat} index={index} />
                 ))}
