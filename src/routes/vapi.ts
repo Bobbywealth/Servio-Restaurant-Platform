@@ -59,8 +59,10 @@ router.post('/tool/:toolName', requireVapiWebhookAuth, async (req: Request, res:
   const toolName = Array.isArray(toolNameParam) ? toolNameParam[0] : toolNameParam;
   const body = req.body && typeof req.body === 'object' ? req.body : {};
 
-  // Log raw body to diagnose what Vapi is sending
-  logger.info('[vapi:tool] raw_body', { toolName, body: JSON.stringify(body).slice(0, 2000) });
+  // Log raw request to diagnose what Vapi is sending (use console.log to avoid logger truncation)
+  const bodyStr = JSON.stringify(body);
+  const queryStr = JSON.stringify(req.query);
+  console.log(`[VAPI_DEBUG] toolName=${toolName} body=${bodyStr} query=${queryStr}`);
 
   const parameters =
     (body as any)?.parameters ??
