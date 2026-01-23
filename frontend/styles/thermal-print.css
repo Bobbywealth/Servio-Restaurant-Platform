@@ -65,6 +65,14 @@
   text-align: center;
 }
 
+.receipt-logo {
+  display: block;
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 6px;
+  object-fit: contain;
+}
+
 .receipt-title {
   font-size: 18px;
   font-weight: 900;

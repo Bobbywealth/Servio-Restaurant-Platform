@@ -28,6 +28,7 @@ import DashboardLayout from '../../components/Layout/DashboardLayout';
 import { useUser } from '../../contexts/UserContext';
 import toast from 'react-hot-toast';
 import { api } from '../../lib/api';
+import { resolveMediaUrl } from '../../lib/utils';
 
 interface RestaurantProfile {
   id: string;
@@ -793,7 +794,7 @@ export default function RestaurantProfile() {
                       <input {...getLogoInputProps()} />
                       {profile?.logo_url ? (
                         <img
-                          src={profile.logo_url}
+                          src={resolveMediaUrl(profile.logo_url)}
                           alt="Restaurant logo"
                           className="w-24 h-24 object-cover rounded-lg mx-auto mb-3"
                         />
@@ -817,7 +818,7 @@ export default function RestaurantProfile() {
                       <input {...getCoverInputProps()} />
                       {profile?.cover_image_url ? (
                         <img
-                          src={profile.cover_image_url}
+                          src={resolveMediaUrl(profile.cover_image_url)}
                           alt="Restaurant header"
                           className="w-full h-32 object-cover rounded-lg mb-3"
                         />

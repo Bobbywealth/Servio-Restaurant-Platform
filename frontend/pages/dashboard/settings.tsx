@@ -22,6 +22,7 @@ import {
   Mail,
   Calendar,
   Phone,
+  Printer,
   CreditCard,
   Wallet,
   DollarSign
@@ -89,6 +90,15 @@ export default function SettingsPage() {
   })
   const [isSavingPayments, setIsSavingPayments] = useState(false)
 
+  // Printer Settings State
+  const [printerSettings, setPrinterSettings] = useState({
+    autoPrintEnabled: false,
+    paperWidth: '80mm',
+    printMode: 'system'
+  })
+  const [isSavingPrinterSettings, setIsSavingPrinterSettings] = useState(false)
+  const [isTestingPrinter, setIsTestingPrinter] = useState(false)
+
   // Load Vapi settings when phone tab is active
   useEffect(() => {
     if (activeTab === 'phone' && user?.restaurantId) {
@@ -100,6 +110,13 @@ export default function SettingsPage() {
   useEffect(() => {
     if (activeTab === 'payments' && user?.restaurantId) {
       loadPaymentSettings()
+    }
+  }, [activeTab, user?.restaurantId])
+
+  // Load Printer settings when printer tab is active
+  useEffect(() => {
+    if (activeTab === 'printing' && user?.restaurantId) {
+      loadPrinterSettings()
     }
   }, [activeTab, user?.restaurantId])
 
@@ -117,6 +134,21 @@ export default function SettingsPage() {
     }
   }
 
+  const loadPrinterSettings = async () => {
+    if (!user?.restaurantId) return
+    try {
+      const response = await api.get('/api/restaurant/profile')
+      const settings = response.data?.data?.settings || {}
+      setPrinterSettings({
+        autoPrintEnabled: Boolean(settings.printer_auto_print_enabled),
+        paperWidth: settings.printer_paper_width || '80mm',
+        printMode: settings.printer_mode || 'system'
+      })
+    } catch (err) {
+      console.error('Failed to load printer settings:', err)
+    }
+  }
+
   const savePaymentSettings = async () => {
     if (!user?.restaurantId) return
     setIsSavingPayments(true)
@@ -129,6 +161,36 @@ export default function SettingsPage() {
       alert(getErrorMessage(err, 'Failed to save payment settings'))
     } finally {
       setIsSavingPayments(false)
+    }
+  }
+
+  const savePrinterSettings = async () => {
+    if (!user?.restaurantId) return
+    setIsSavingPrinterSettings(true)
+    try {
+      await api.put('/api/restaurant/settings', {
+        printer_auto_print_enabled: printerSettings.autoPrintEnabled,
+        printer_paper_width: printerSettings.paperWidth,
+        printer_mode: printerSettings.printMode
+      })
+      alert('Printer settings saved!')
+    } catch (err: any) {
+      alert(getErrorMessage(err, 'Failed to save printer settings'))
+    } finally {
+      setIsSavingPrinterSettings(false)
+    }
+  }
+
+  const testPrinter = async () => {
+    if (!user?.restaurantId) return
+    setIsTestingPrinter(true)
+    try {
+      await api.post('/api/restaurant/printer-test')
+      alert('Test print sent to tablet!')
+    } catch (err: any) {
+      alert(getErrorMessage(err, 'Failed to send test print'))
+    } finally {
+      setIsTestingPrinter(false)
     }
   }
 
@@ -188,6 +250,7 @@ export default function SettingsPage() {
     { id: 'account', name: 'Account', icon: User },
     { id: 'general', name: 'General', icon: SettingsIcon },
     { id: 'payments', name: 'Payments', icon: CreditCard },
+    { id: 'printing', name: 'Printing', icon: Printer },
     { id: 'phone', name: 'Phone System', icon: Phone },
     { id: 'notifications', name: 'Notifications', icon: Bell },
     { id: 'security', name: 'Security', icon: Shield },
@@ -491,6 +554,113 @@ export default function SettingsPage() {
                 )}
                 <span>{isSavingPayments ? 'Saving...' : 'Save Payment Settings'}</span>
               </motion.button>
+            </div>
+          </div>
+        )
+
+      case 'printing':
+        return (
+          <div className="space-y-6">
+            <div className="bg-surface-50 dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-lg p-4">
+              <div className="flex items-start">
+                <Printer className="w-5 h-5 text-surface-700 dark:text-surface-300 mr-3 mt-0.5" />
+                <div>
+                  <h3 className="text-sm font-medium text-surface-900 dark:text-surface-100">
+                    Printer Settings
+                  </h3>
+                  <p className="text-xs text-surface-600 dark:text-surface-400 mt-1">
+                    Configure how orders are printed on the tablet.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-start justify-between py-4 border-b border-surface-200 dark:border-surface-700">
+              <div>
+                <h4 className="font-medium text-surface-900 dark:text-surface-100">Auto-Print Orders</h4>
+                <p className="text-sm text-surface-600 dark:text-surface-400 mt-1">
+                  Automatically print new orders when they arrive.
+                </p>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="sr-only"
+                  checked={printerSettings.autoPrintEnabled}
+                  onChange={(e) => setPrinterSettings(prev => ({ ...prev, autoPrintEnabled: e.target.checked }))}
+                />
+                <div className={`w-11 h-6 rounded-full transition-colors ${
+                  printerSettings.autoPrintEnabled ? 'bg-primary-500' : 'bg-surface-300 dark:bg-surface-600'
+                }`}>
+                  <div className={`w-4 h-4 bg-white rounded-full shadow-sm transform transition-transform ${
+                    printerSettings.autoPrintEnabled ? 'translate-x-6' : 'translate-x-1'
+                  } mt-1`} />
+                </div>
+              </label>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-surface-900 dark:text-surface-100 mb-2">
+                  Paper Width
+                </label>
+                <select
+                  className="input-field"
+                  value={printerSettings.paperWidth}
+                  onChange={(e) => setPrinterSettings(prev => ({ ...prev, paperWidth: e.target.value }))}
+                >
+                  <option value="80mm">80mm</option>
+                  <option value="58mm">58mm</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-surface-900 dark:text-surface-100 mb-2">
+                  Print Mode
+                </label>
+                <select
+                  className="input-field"
+                  value={printerSettings.printMode}
+                  onChange={(e) => setPrinterSettings(prev => ({ ...prev, printMode: e.target.value }))}
+                >
+                  <option value="system">System Print</option>
+                  <option value="rawbt">RawBT</option>
+                  <option value="bluetooth">WebBluetooth</option>
+                  <option value="bridge">Print Bridge</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="pt-4">
+              <div className="flex flex-wrap gap-3">
+                <motion.button
+                  onClick={savePrinterSettings}
+                  disabled={isSavingPrinterSettings}
+                  className="btn-primary inline-flex items-center space-x-2"
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                >
+                  {isSavingPrinterSettings ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <Save className="w-4 h-4" />
+                  )}
+                  <span>{isSavingPrinterSettings ? 'Saving...' : 'Save Printer Settings'}</span>
+                </motion.button>
+                <motion.button
+                  onClick={testPrinter}
+                  disabled={isTestingPrinter}
+                  className="btn-secondary inline-flex items-center space-x-2"
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                >
+                  {isTestingPrinter ? (
+                    <div className="w-4 h-4 border-2 border-surface-600 border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <Printer className="w-4 h-4" />
+                  )}
+                  <span>{isTestingPrinter ? 'Sending...' : 'Send Test Print'}</span>
+                </motion.button>
+              </div>
             </div>
           </div>
         )

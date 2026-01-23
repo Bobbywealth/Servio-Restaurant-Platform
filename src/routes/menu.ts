@@ -7,6 +7,9 @@ import multer from 'multer';
 import sharp from 'sharp';
 import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
+import OpenAI from 'openai';
+import pdfParse from 'pdf-parse';
+import mammoth from 'mammoth';
 
 const router = Router();
 
@@ -23,6 +26,78 @@ const upload = multer({
     }
   }
 });
+
+// Configure multer for menu imports (CSV/XLSX/PDF/DOCX)
+const importUpload = multer({
+  storage,
+  limits: { fileSize: 25 * 1024 * 1024 }, // 25MB limit
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = [
+      'text/csv',
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/pdf',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    ];
+    const allowedExts = ['.csv', '.xls', '.xlsx', '.pdf', '.docx'];
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (allowedTypes.includes(file.mimetype) || allowedExts.includes(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Unsupported file type. Use CSV, XLS/XLSX, PDF, or DOCX.'));
+    }
+  }
+});
+
+const openai = process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;
+
+type ParsedMenuRow = {
+  name: string;
+  description?: string | null;
+  price: number;
+  category?: string | null;
+  cost?: number | null;
+  preparation_time?: number | null;
+};
+
+function parsePrice(value: string): number | null {
+  const cleaned = value.replace(/[^0-9.]/g, '');
+  const price = Number.parseFloat(cleaned);
+  return Number.isFinite(price) ? price : null;
+}
+
+function extractMenuRowsFromText(text: string): ParsedMenuRow[] {
+  const rows: ParsedMenuRow[] = [];
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+
+  let currentCategory: string | null = null;
+  for (const line of lines) {
+    const priceMatch = line.match(/\$?\d+(?:\.\d{1,2})?/);
+    if (!priceMatch) {
+      if (line.length <= 40) {
+        currentCategory = line;
+      }
+      continue;
+    }
+
+    const price = parsePrice(priceMatch[0]);
+    if (price === null) continue;
+    const namePart = line.slice(0, priceMatch.index).replace(/[-–|]+$/g, '').trim();
+    const descriptionPart = line.slice((priceMatch.index || 0) + priceMatch[0].length).trim();
+
+    rows.push({
+      name: namePart || line,
+      description: descriptionPart || null,
+      price,
+      category: currentCategory || null
+    });
+  }
+
+  return rows;
+}
 
 // ============================================================================
 // PUBLIC ORDERING ENDPOINTS
@@ -409,6 +484,54 @@ router.put('/items/:id', upload.array('images', 5), asyncHandler(async (req: Req
   res.json({
     success: true,
     data: formattedItem
+  });
+}));
+
+/**
+ * POST /api/menu/items/describe
+ * Generate a menu item description with AI
+ */
+router.post('/items/describe', asyncHandler(async (req: Request, res: Response) => {
+  const { name, modifiers, category } = req.body || {};
+
+  if (!name || typeof name !== 'string' || !name.trim()) {
+    return res.status(400).json({ success: false, error: { message: 'Item name is required' } });
+  }
+
+  if (!openai) {
+    return res.status(503).json({ success: false, error: { message: 'AI service is not configured' } });
+  }
+
+  const modifierList = Array.isArray(modifiers) ? modifiers : [];
+  const modifierText = modifierList.length > 0
+    ? `Modifiers: ${modifierList.map((m: any) => m?.name || m).filter(Boolean).join(', ')}.`
+    : 'No modifiers listed.';
+
+  const categoryText = category ? `Category: ${category}.` : '';
+
+  const prompt = [
+    `Write a concise, appetizing menu description for "${name}".`,
+    categoryText,
+    modifierText,
+    'Keep it 1-2 sentences, under 160 characters.',
+    'Do not mention pricing.'
+  ].filter(Boolean).join(' ');
+
+  const completion = await openai.chat.completions.create({
+    model: 'gpt-4',
+    messages: [
+      { role: 'system', content: 'You are a restaurant menu copywriter.' },
+      { role: 'user', content: prompt }
+    ],
+    temperature: 0.7,
+    max_tokens: 120
+  });
+
+  const description = completion.choices[0]?.message?.content?.trim() || '';
+
+  res.json({
+    success: true,
+    data: { description }
   });
 }));
 
@@ -969,9 +1092,9 @@ router.post('/items/:id/modifiers', asyncHandler(async (req: Request, res: Respo
 
 /**
  * POST /api/menu/import
- * Import menu from Excel/CSV file
+ * Import menu from Excel/CSV/PDF/DOCX file
  */
-router.post('/import', upload.single('file'), asyncHandler(async (req: Request, res: Response) => {
+router.post('/import', importUpload.single('file'), asyncHandler(async (req: Request, res: Response) => {
   if (!req.file) {
     return res.status(400).json({
       success: false,
@@ -982,7 +1105,19 @@ router.post('/import', upload.single('file'), asyncHandler(async (req: Request, 
   const db = DatabaseService.getInstance().getDatabase();
   const restaurantId = req.user?.restaurantId;
   const importId = uuidv4();
-  const fileType = req.file.mimetype.includes('excel') || req.file.originalname.endsWith('.xlsx') ? 'excel' : 'csv';
+  const ext = path.extname(req.file.originalname).toLowerCase();
+  const mime = req.file.mimetype;
+  const fileType = (() => {
+    if (mime.includes('excel') || ext === '.xlsx' || ext === '.xls') return 'excel';
+    if (mime.includes('csv') || ext === '.csv') return 'csv';
+    if (mime === 'application/pdf' || ext === '.pdf') return 'pdf';
+    if (mime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || ext === '.docx') return 'docx';
+    return 'unknown';
+  })();
+
+  if (fileType === 'unknown') {
+    return res.status(400).json({ success: false, error: { message: 'Unsupported file type' } });
+  }
 
   // Create import record
   await db.run(`
@@ -1000,7 +1135,7 @@ router.post('/import', upload.single('file'), asyncHandler(async (req: Request, 
       const sheetName = workbook.SheetNames[0];
       const worksheet = workbook.Sheets[sheetName];
       data = XLSX.utils.sheet_to_json(worksheet);
-    } else {
+    } else if (fileType === 'csv') {
       // Handle CSV files
       const csv = require('csv-parser');
       const { Readable } = require('stream');
@@ -1013,6 +1148,12 @@ router.post('/import', upload.single('file'), asyncHandler(async (req: Request, 
           .on('end', resolve)
           .on('error', reject);
       });
+    } else if (fileType === 'pdf') {
+      const parsed = await pdfParse(req.file.buffer);
+      data = extractMenuRowsFromText(parsed.text);
+    } else if (fileType === 'docx') {
+      const parsed = await mammoth.extractRawText({ buffer: req.file.buffer });
+      data = extractMenuRowsFromText(parsed.value || '');
     }
 
     // Process the data
@@ -1024,14 +1165,22 @@ router.post('/import', upload.single('file'), asyncHandler(async (req: Request, 
       const row = data[i];
       try {
         // Validate required fields
-        if (!row.name || !row.price || !row.category) {
-          throw new Error('Missing required fields: name, price, category');
+        if (!row.name || row.price === undefined || row.price === null) {
+          throw new Error('Missing required fields: name, price');
+        }
+
+        const categoryName = row.category || 'Uncategorized';
+        const priceValue = typeof row.price === 'number'
+          ? row.price
+          : parsePrice(String(row.price));
+        if (!Number.isFinite(priceValue)) {
+          throw new Error('Invalid price value');
         }
 
         // Find or create category
         let category = await db.get(
           'SELECT id FROM menu_categories WHERE name = ? AND restaurant_id = ?',
-          [row.category, restaurantId]
+          [categoryName, restaurantId]
         );
 
         if (!category) {
@@ -1039,7 +1188,7 @@ router.post('/import', upload.single('file'), asyncHandler(async (req: Request, 
           await db.run(`
             INSERT INTO menu_categories (id, restaurant_id, name, is_active)
             VALUES (?, ?, ?, 1)
-          `, [categoryId, restaurantId, row.category]);
+          `, [categoryId, restaurantId, categoryName]);
           category = { id: categoryId };
         }
 
@@ -1054,11 +1203,11 @@ router.post('/import', upload.single('file'), asyncHandler(async (req: Request, 
           itemId,
           restaurantId,
           category.id,
-          row.name.trim(),
-          row.description?.trim() || null,
-          parseFloat(row.price),
-          row.cost ? parseFloat(row.cost) : null,
-          row.preparation_time ? parseInt(row.preparation_time) : 0,
+          String(row.name).trim(),
+          row.description ? String(row.description).trim() : null,
+          priceValue,
+          row.cost ? parseFloat(String(row.cost)) : null,
+          row.preparation_time ? parseInt(String(row.preparation_time)) : 0,
           i
         ]);
 

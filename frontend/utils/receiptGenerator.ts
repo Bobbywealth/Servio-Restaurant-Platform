@@ -1,3 +1,5 @@
+import { resolveMediaUrl } from '../lib/utils';
+
 export type ReceiptPaperWidth = '58mm' | '80mm';
 
 export type ReceiptRestaurant = {
@@ -96,6 +98,7 @@ export function generateReceiptHtml(args: {
   const { restaurant, order, paperWidth } = args;
   const rName = (restaurant?.name || 'SERVIO').toString();
   const rPhone = formatReceiptPhone(restaurant?.phone || '');
+  const logoUrl = resolveMediaUrl(restaurant?.logo_url || '');
   const created = formatReceiptDate(order.created_at || '');
   const customerName = (order.customer_name || 'Guest').toString();
   const customerPhone = formatReceiptPhone(order.customer_phone || '');
@@ -155,6 +158,7 @@ export function generateReceiptHtml(args: {
   return `
     <div class="receipt paper-${paperWidth}">
       <div class="receipt-header">
+        ${logoUrl ? `<img class="receipt-logo" src="${logoUrl}" alt="Restaurant logo" />` : ''}
         <div class="receipt-title">${escapeHtml(rName)}</div>
         ${addressLine ? `<div class="receipt-subtitle">${escapeHtml(addressLine)}</div>` : ''}
         ${rPhone ? `<div class="receipt-subtitle">${escapeHtml(rPhone)}</div>` : ''}

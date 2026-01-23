@@ -314,12 +314,17 @@ router.put('/profile', upload.fields([
 
 /**
  * PUT /api/restaurant/settings
- * Update restaurant settings (payment options, etc.)
+ * Update restaurant settings (payment options, printer settings, etc.)
  */
 router.put('/settings', asyncHandler(async (req: Request, res: Response) => {
   const db = DatabaseService.getInstance().getDatabase();
   const restaurantId = req.user?.restaurantId;
-  const { online_payments_enabled } = req.body;
+  const {
+    online_payments_enabled,
+    printer_auto_print_enabled,
+    printer_paper_width,
+    printer_mode
+  } = req.body;
 
   if (!restaurantId) {
     return res.status(400).json({
@@ -349,6 +354,15 @@ router.put('/settings', asyncHandler(async (req: Request, res: Response) => {
   if (online_payments_enabled !== undefined) {
     (settings as any).online_payments_enabled = Boolean(online_payments_enabled);
   }
+  if (printer_auto_print_enabled !== undefined) {
+    (settings as any).printer_auto_print_enabled = Boolean(printer_auto_print_enabled);
+  }
+  if (printer_paper_width !== undefined) {
+    (settings as any).printer_paper_width = String(printer_paper_width);
+  }
+  if (printer_mode !== undefined) {
+    (settings as any).printer_mode = String(printer_mode);
+  }
 
   // Save updated settings
   await db.run(
@@ -362,7 +376,7 @@ router.put('/settings', asyncHandler(async (req: Request, res: Response) => {
     'update_restaurant_settings',
     'restaurant',
     restaurantId,
-    { online_payments_enabled }
+    { online_payments_enabled, printer_auto_print_enabled, printer_paper_width, printer_mode }
   );
 
   logger.info(`Restaurant settings updated for ${restaurantId}`);
@@ -371,6 +385,39 @@ router.put('/settings', asyncHandler(async (req: Request, res: Response) => {
     success: true,
     data: { settings }
   });
+}));
+
+/**
+ * POST /api/restaurant/printer-test
+ * Trigger a test print on the tablet
+ */
+router.post('/printer-test', asyncHandler(async (req: Request, res: Response) => {
+  const restaurantId = req.user?.restaurantId;
+  if (!restaurantId) {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'Restaurant ID is required' }
+    });
+  }
+
+  const io = req.app.get('socketio');
+  if (io) {
+    io.to(`restaurant-${restaurantId}`).emit('printer.test', {
+      restaurantId,
+      requestedAt: new Date().toISOString()
+    });
+  }
+
+  await DatabaseService.getInstance().logAudit(
+    restaurantId,
+    req.user?.id || 'system',
+    'printer_test',
+    'restaurant',
+    restaurantId,
+    { source: 'dashboard' }
+  );
+
+  return res.json({ success: true });
 }));
 
 // ============================================================================

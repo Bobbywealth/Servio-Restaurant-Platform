@@ -266,12 +266,12 @@ const DashboardIndex = memo(() => {
           >
             {/* Multi-layer gradient background */}
             <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900" />
-            <div className="absolute inset-0 bg-gradient-to-r from-teal-500/20 via-transparent to-orange-500/20" />
+            <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/20 via-transparent to-orange-500/20" />
             
             {/* Animated mesh gradient */}
             <div className="absolute inset-0 overflow-hidden">
               <motion.div 
-                className="absolute -top-1/2 -left-1/2 w-full h-full bg-gradient-to-br from-teal-400/30 to-transparent rounded-full blur-3xl"
+                className="absolute -top-1/2 -left-1/2 w-full h-full bg-gradient-to-br from-emerald-400/30 to-transparent rounded-full blur-3xl"
                 animate={{ 
                   x: [0, 100, 0],
                   y: [0, 50, 0],
@@ -383,8 +383,8 @@ const DashboardIndex = memo(() => {
                     />
                     
                     {/* Inner glowing orb */}
-                    <motion.div
-                      className="w-36 h-36 rounded-full bg-gradient-to-br from-teal-400 via-teal-500 to-orange-500 flex items-center justify-center shadow-2xl shadow-teal-500/30"
+                      <motion.div
+                      className="w-36 h-36 rounded-full bg-gradient-to-br from-emerald-400 via-emerald-500 to-orange-500 flex items-center justify-center shadow-2xl shadow-emerald-500/30"
                       animate={{ 
                         boxShadow: [
                           "0 0 60px rgba(20,184,166,0.4)",

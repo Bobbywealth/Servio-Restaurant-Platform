@@ -21,6 +21,7 @@ import {
   Clock,
   DollarSign,
   Tag,
+  Sparkles,
   X,
   Copy
 } from 'lucide-react';
@@ -28,6 +29,7 @@ import DashboardLayout from '../../components/Layout/DashboardLayout';
 import { useUser } from '../../contexts/UserContext';
 import { api } from '../../lib/api';
 import toast from 'react-hot-toast';
+import { resolveMediaUrl } from '../../lib/utils';
 
 interface MenuCategory {
   id: string;
@@ -80,6 +82,12 @@ const MenuManagement: React.FC = () => {
   const [showAddCategoryModal, setShowAddCategoryModal] = useState(false);
   const [showEditItemModal, setShowEditItemModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [isGeneratingNewDescription, setIsGeneratingNewDescription] = useState(false);
+  const [isGeneratingEditDescription, setIsGeneratingEditDescription] = useState(false);
+  const [newItemImages, setNewItemImages] = useState<File[]>([]);
+  const [editItemImages, setEditItemImages] = useState<File[]>([]);
+  const [editItemExistingImages, setEditItemExistingImages] = useState<string[]>([]);
   const [newCategory, setNewCategory] = useState({
     name: '',
     description: '',
@@ -223,6 +231,87 @@ const MenuManagement: React.FC = () => {
     }
   };
 
+  const handleImportFile = async (file: File) => {
+    setIsImporting(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const resp = await api.post('/api/menu/import', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      const data = resp.data?.data;
+      toast.success(`Import completed: ${data?.successCount ?? 0} items`);
+      await loadMenuData();
+    } catch (error: any) {
+      const message = error?.response?.data?.error?.message || 'Failed to import menu';
+      toast.error(message);
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  const fetchModifierSummaries = async (itemId: string): Promise<string[]> => {
+    try {
+      const resp = await api.get(`/api/menu/items/${itemId}/modifiers`);
+      const groups = resp.data?.data || [];
+      return groups.map((group: any) => {
+        const options = Array.isArray(group.options)
+          ? group.options.map((opt: any) => opt?.name).filter(Boolean)
+          : [];
+        return options.length > 0 ? `${group.name}: ${options.join(', ')}` : group.name;
+      }).filter(Boolean);
+    } catch {
+      return [];
+    }
+  };
+
+  const handleGenerateNewDescription = async () => {
+    if (!newItem.name.trim()) {
+      toast.error('Enter an item name first');
+      return;
+    }
+    setIsGeneratingNewDescription(true);
+    try {
+      const categoryName = categories.find((cat) => cat.id === newItem.categoryId)?.name;
+      const resp = await api.post('/api/menu/items/describe', {
+        name: newItem.name.trim(),
+        category: categoryName || undefined,
+        modifiers: []
+      });
+      const description = resp.data?.data?.description || '';
+      setNewItem((prev) => ({ ...prev, description }));
+    } catch (error: any) {
+      const message = error?.response?.data?.error?.message || 'Failed to generate description';
+      toast.error(message);
+    } finally {
+      setIsGeneratingNewDescription(false);
+    }
+  };
+
+  const handleGenerateEditDescription = async () => {
+    if (!editItem.name.trim()) {
+      toast.error('Enter an item name first');
+      return;
+    }
+    setIsGeneratingEditDescription(true);
+    try {
+      const categoryName = categories.find((cat) => cat.id === editItem.categoryId)?.name;
+      const modifiers = editingItem?.id ? await fetchModifierSummaries(editingItem.id) : [];
+      const resp = await api.post('/api/menu/items/describe', {
+        name: editItem.name.trim(),
+        category: categoryName || undefined,
+        modifiers
+      });
+      const description = resp.data?.data?.description || '';
+      setEditItem((prev) => ({ ...prev, description }));
+    } catch (error: any) {
+      const message = error?.response?.data?.error?.message || 'Failed to generate description';
+      toast.error(message);
+    } finally {
+      setIsGeneratingEditDescription(false);
+    }
+  };
+
   const openAddCategoryModal = () => {
     setNewCategory({ name: '', description: '', sortOrder: 0 });
     setShowAddCategoryModal(true);
@@ -237,6 +326,7 @@ const MenuManagement: React.FC = () => {
       preparationTime: '',
       isAvailable: true
     });
+    setNewItemImages([]);
     setShowAddItemModal(true);
   };
 
@@ -280,17 +370,22 @@ const MenuManagement: React.FC = () => {
 
     setIsSaving(true);
     try {
-      await api.post('/api/menu/items', {
-        name: newItem.name.trim(),
-        description: newItem.description.trim(),
-        price: Number(newItem.price),
-        categoryId: newItem.categoryId,
-        preparationTime: newItem.preparationTime ? Number(newItem.preparationTime) : 0,
-        sortOrder: 0,
-        isAvailable: newItem.isAvailable
+      const formData = new FormData();
+      formData.append('name', newItem.name.trim());
+      formData.append('description', newItem.description.trim());
+      formData.append('price', String(Number(newItem.price)));
+      formData.append('categoryId', newItem.categoryId);
+      formData.append('preparationTime', newItem.preparationTime ? String(Number(newItem.preparationTime)) : '0');
+      formData.append('sortOrder', '0');
+      formData.append('isAvailable', newItem.isAvailable ? '1' : '');
+      newItemImages.forEach((file) => formData.append('images', file));
+
+      await api.post('/api/menu/items', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
       });
       toast.success('Menu item created');
       setShowAddItemModal(false);
+      setNewItemImages([]);
       await loadMenuData();
     } catch (error) {
       console.error('Failed to create menu item:', error);
@@ -311,6 +406,8 @@ const MenuManagement: React.FC = () => {
       isAvailable: item.is_available
     });
     setEditingItem(item);
+    setEditItemImages([]);
+    setEditItemExistingImages(item.images || []);
     setShowEditItemModal(true);
   };
 
@@ -330,17 +427,24 @@ const MenuManagement: React.FC = () => {
 
     setIsSaving(true);
     try {
-      await api.put(`/api/menu/items/${editItem.id}`, {
-        name: editItem.name.trim(),
-        description: editItem.description.trim(),
-        price: Number(editItem.price),
-        categoryId: editItem.categoryId,
-        preparationTime: editItem.preparationTime ? Number(editItem.preparationTime) : 0,
-        isAvailable: editItem.isAvailable
+      const formData = new FormData();
+      formData.append('name', editItem.name.trim());
+      formData.append('description', editItem.description.trim());
+      formData.append('price', String(Number(editItem.price)));
+      formData.append('categoryId', editItem.categoryId);
+      formData.append('preparationTime', editItem.preparationTime ? String(Number(editItem.preparationTime)) : '0');
+      formData.append('isAvailable', editItem.isAvailable ? '1' : '');
+      formData.append('existingImages', JSON.stringify(editItemExistingImages));
+      editItemImages.forEach((file) => formData.append('images', file));
+
+      await api.put(`/api/menu/items/${editItem.id}`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
       });
       toast.success('Menu item updated');
       setShowEditItemModal(false);
       setEditingItem(null);
+      setEditItemImages([]);
+      setEditItemExistingImages([]);
       await loadMenuData();
     } catch (error) {
       console.error('Failed to update menu item:', error);
@@ -427,6 +531,28 @@ const MenuManagement: React.FC = () => {
                   <Settings className="w-4 h-4" />
                   Add Category
                 </button>
+
+                <label className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors cursor-pointer ${
+                  isImporting
+                    ? 'bg-gray-200 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+                    : 'bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200'
+                }`}>
+                  <Upload className="w-4 h-4" />
+                  {isImporting ? 'Importing…' : 'Import Menu'}
+                  <input
+                    type="file"
+                    accept=".csv,.xls,.xlsx,.pdf,.docx"
+                    className="hidden"
+                    disabled={isImporting}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        handleImportFile(file);
+                      }
+                      e.currentTarget.value = '';
+                    }}
+                  />
+                </label>
                 
                 <button
                   onClick={() => openAddItemModal()}
@@ -666,7 +792,18 @@ const MenuManagement: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Description</label>
+                  <div className="flex items-center justify-between">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Description</label>
+                    <button
+                      type="button"
+                      onClick={handleGenerateNewDescription}
+                      disabled={isGeneratingNewDescription}
+                      className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 hover:text-red-700 disabled:text-gray-400"
+                    >
+                      <Sparkles className="w-3 h-3" />
+                      {isGeneratingNewDescription ? 'Generating...' : 'Generate with AI'}
+                    </button>
+                  </div>
                   <textarea
                     value={newItem.description}
                     onChange={(e) => setNewItem((prev) => ({ ...prev, description: e.target.value }))}
@@ -712,6 +849,30 @@ const MenuManagement: React.FC = () => {
                       </option>
                     ))}
                   </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Images</label>
+                  <div className="mt-1 flex flex-col gap-2">
+                    <label className="inline-flex items-center gap-2 px-3 py-2 border border-dashed border-gray-300 rounded-lg text-sm text-gray-600 hover:text-gray-900 hover:border-gray-400 cursor-pointer dark:border-gray-600 dark:text-gray-300 dark:hover:text-white">
+                      <Upload className="w-4 h-4" />
+                      Upload images (up to 5)
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        className="hidden"
+                        onChange={(e) => {
+                          const files = Array.from(e.target.files || []).slice(0, 5);
+                          setNewItemImages(files);
+                        }}
+                      />
+                    </label>
+                    {newItemImages.length > 0 && (
+                      <div className="text-xs text-gray-500">
+                        {newItemImages.length} file{newItemImages.length > 1 ? 's' : ''} selected
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <input
@@ -777,7 +938,18 @@ const MenuManagement: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Description</label>
+                  <div className="flex items-center justify-between">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Description</label>
+                    <button
+                      type="button"
+                      onClick={handleGenerateEditDescription}
+                      disabled={isGeneratingEditDescription}
+                      className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 hover:text-red-700 disabled:text-gray-400"
+                    >
+                      <Sparkles className="w-3 h-3" />
+                      {isGeneratingEditDescription ? 'Generating...' : 'Generate with AI'}
+                    </button>
+                  </div>
                   <textarea
                     value={editItem.description}
                     onChange={(e) => setEditItem((prev) => ({ ...prev, description: e.target.value }))}
@@ -823,6 +995,30 @@ const MenuManagement: React.FC = () => {
                       </option>
                     ))}
                   </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Images</label>
+                  <div className="mt-1 flex flex-col gap-2">
+                    <label className="inline-flex items-center gap-2 px-3 py-2 border border-dashed border-gray-300 rounded-lg text-sm text-gray-600 hover:text-gray-900 hover:border-gray-400 cursor-pointer dark:border-gray-600 dark:text-gray-300 dark:hover:text-white">
+                      <Upload className="w-4 h-4" />
+                      Add images (up to 5)
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        className="hidden"
+                        onChange={(e) => {
+                          const files = Array.from(e.target.files || []).slice(0, 5);
+                          setEditItemImages(files);
+                        }}
+                      />
+                    </label>
+                    {(editItemExistingImages.length > 0 || editItemImages.length > 0) && (
+                      <div className="text-xs text-gray-500">
+                        {editItemExistingImages.length} existing, {editItemImages.length} new
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <input
@@ -989,7 +1185,7 @@ const MenuItemCard: React.FC<MenuItemCardProps> = ({ item, onEdit, onToggleAvail
       <div className="w-12 h-12 bg-gray-200 dark:bg-gray-600 rounded-lg flex-shrink-0 overflow-hidden">
         {item.image ? (
           <img 
-            src={item.image} 
+            src={resolveMediaUrl(item.image)} 
             alt={item.name}
             className="w-full h-full object-cover"
           />
@@ -1122,7 +1318,7 @@ const MenuPreviewModal: React.FC<MenuPreviewModalProps> = ({ categories, onClose
                     <div key={item.id} className="flex gap-4 p-4 border border-gray-200 dark:border-gray-700 rounded-lg">
                       {item.image && (
                         <img 
-                          src={item.image} 
+                          src={resolveMediaUrl(item.image)} 
                           alt={item.name}
                           className="w-20 h-20 object-cover rounded-lg flex-shrink-0"
                         />

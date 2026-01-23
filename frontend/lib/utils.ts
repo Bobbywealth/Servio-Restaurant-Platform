@@ -191,6 +191,18 @@ export function getErrorMessage(error: any, fallback: string = 'An unexpected er
   }
 }
 
+// Resolve backend-served media URLs (e.g., /uploads/...)
+export function resolveMediaUrl(url?: string | null): string {
+  if (!url) return ''
+  if (url.startsWith('http://') || url.startsWith('https://')) return url
+  const baseUrl =
+    process.env.NEXT_PUBLIC_API_URL ||
+    process.env.NEXT_PUBLIC_BACKEND_URL ||
+    'http://localhost:3002'
+  if (url.startsWith('/')) return `${baseUrl}${url}`
+  return `${baseUrl}/${url}`
+}
+
 // API error handling
 export interface ApiError {
   message: string
