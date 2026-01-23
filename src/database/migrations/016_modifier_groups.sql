@@ -32,10 +32,6 @@ ALTER TABLE modifier_groups ADD COLUMN IF NOT EXISTS max_selections INTEGER;
 ALTER TABLE modifier_groups ADD COLUMN IF NOT EXISTS is_required BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE modifier_groups ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_modifier_groups_restaurant_name_unique
-  ON modifier_groups(restaurant_id, name)
-  WHERE deleted_at IS NULL;
-
 -- Deduplicate existing modifier_groups before enforcing unique index
 WITH dupes AS (
   SELECT id,
@@ -45,6 +41,10 @@ WITH dupes AS (
 )
 DELETE FROM modifier_groups
 WHERE id IN (SELECT id FROM dupes WHERE rn > 1);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_modifier_groups_restaurant_name_unique
+  ON modifier_groups(restaurant_id, name)
+  WHERE deleted_at IS NULL;
 
 CREATE INDEX IF NOT EXISTS idx_modifier_groups_restaurant
   ON modifier_groups(restaurant_id);
