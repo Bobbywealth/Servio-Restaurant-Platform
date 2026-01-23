@@ -269,9 +269,18 @@ export default function AssistantPage() {
       // **ALWAYS LISTENING: Check for wake word in transcript**
       if (stateRef.current.alwaysListening && transcript) {
         const lowerTranscript = transcript.toLowerCase().trim();
+        // Include common phonetic misrecognitions of "Servio"
         const hasWakeWord = lowerTranscript.includes('servio') || 
                             lowerTranscript.includes('sergio') ||
-                            lowerTranscript.includes('serveio');
+                            lowerTranscript.includes('serveio') ||
+                            lowerTranscript.includes('service') ||
+                            lowerTranscript.includes('servile') ||
+                            lowerTranscript.includes('cervio') ||
+                            lowerTranscript.includes('serbio') ||
+                            lowerTranscript.includes('survio') ||
+                            lowerTranscript.includes('servia') ||
+                            lowerTranscript.includes('serve yo') ||
+                            lowerTranscript.includes('serve io');
         
         // Check if we're in an active conversation window
         const inConversationWindow = inConversationWindowRef.current;
