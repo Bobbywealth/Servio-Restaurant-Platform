@@ -166,14 +166,49 @@ export class VapiService {
     return { results };
   }
 
-  private getRestaurantIdFromParams(parameters: any): string | null {
-    return parameters?.restaurantId || process.env.VAPI_RESTAURANT_ID || null;
+  private getRestaurantIdFromParams(parameters: any, message?: any): { restaurantId: string | null; source: string } {
+    // 1) explicit tool parameters (preferred)
+    const fromParams = parameters?.restaurantId;
+    if (typeof fromParams === 'string' && fromParams.trim()) {
+      return { restaurantId: fromParams.trim(), source: 'parameters.restaurantId' };
+    }
+
+    // 2) webhook payload metadata (no JWT for Vapi)
+    const fromPayload =
+      message?.restaurantId ||
+      message?.metadata?.restaurantId ||
+      message?.call?.restaurantId ||
+      message?.call?.metadata?.restaurantId;
+    if (typeof fromPayload === 'string' && fromPayload.trim()) {
+      return { restaurantId: fromPayload.trim(), source: 'payload.metadata' };
+    }
+
+    // 3) map phoneNumberId -> restaurantId (optional)
+    const phoneNumberId = message?.call?.phoneNumberId;
+    const mapRaw = process.env.VAPI_PHONE_NUMBER_RESTAURANT_MAP;
+    if (phoneNumberId && mapRaw) {
+      try {
+        const parsed = JSON.parse(mapRaw) as Record<string, string>;
+        const mapped = parsed?.[String(phoneNumberId)];
+        if (mapped) return { restaurantId: String(mapped), source: 'env.VAPI_PHONE_NUMBER_RESTAURANT_MAP' };
+      } catch {
+        // ignore map parse errors
+      }
+    }
+
+    // 4) assistant config fallback (environment)
+    const fromEnv = process.env.VAPI_RESTAURANT_ID;
+    if (typeof fromEnv === 'string' && fromEnv.trim()) {
+      return { restaurantId: fromEnv.trim(), source: 'env.VAPI_RESTAURANT_ID' };
+    }
+
+    return { restaurantId: null, source: 'missing' };
   }
 
   private async executeToolCall(name: string, parameters: any, message: any): Promise<{ result?: any; error?: string }> {
     const callId = message.call?.id;
     const requestId = callId || `vapi_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    const restaurantId = this.getRestaurantIdFromParams(parameters);
+    const { restaurantId, source: restaurantIdSource } = this.getRestaurantIdFromParams(parameters, message);
     const startedAt = Date.now();
 
     logger.info('[vapi] tool_call_start', { requestId, callId, toolName: name });
@@ -195,13 +230,36 @@ export class VapiService {
             parameters?.name ??
             parameters?.itemName ??
             '';
-          const items = await VoiceOrderingService.getInstance().searchMenuLive(String(q || ''), restaurantId);
-          // Always return an object so Vapi never reports "No result returned".
+          const query = String(q || '').trim();
+          logger.info('[vapi] searchMenu', { requestId, callId, restaurantId, restaurantIdSource, query });
+
+          // Requirement: restaurantId must be present.
+          if (!restaurantId) {
+            result = {
+              ok: false,
+              reason: 'bad_restaurant_id',
+              message: 'restaurantId is required for searchMenu',
+              query
+            };
+            break;
+          }
+
+          const { items, debug } = await VoiceOrderingService.getInstance().searchMenuLiveWithDebug(query, restaurantId);
+          const reason =
+            !debug.rowsBeforeFiltering
+              ? 'no_rows'
+              : items.length
+                ? null
+                : 'no_match';
+
           result = {
             ok: true,
-            query: String(q || ''),
-            count: Array.isArray(items) ? items.length : 0,
-            items: Array.isArray(items) ? items : []
+            restaurantId,
+            query,
+            count: items.length,
+            items,
+            ...(reason ? { reason } : {}),
+            debug
           };
           break;
         }
