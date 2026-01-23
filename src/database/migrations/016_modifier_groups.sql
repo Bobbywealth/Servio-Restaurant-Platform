@@ -33,27 +33,7 @@ ALTER TABLE modifier_groups ADD COLUMN IF NOT EXISTS is_required BOOLEAN NOT NUL
 ALTER TABLE modifier_groups ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;
 
 -- Deduplicate existing modifier_groups before enforcing unique index
-WITH dupes AS (
-  SELECT id,
-         ROW_NUMBER() OVER (PARTITION BY restaurant_id, name ORDER BY created_at DESC, id DESC) AS rn
-  FROM modifier_groups
-  WHERE deleted_at IS NULL
-)
-DELETE FROM modifier_options
-WHERE group_id IN (SELECT id FROM dupes WHERE rn > 1);
-
-WITH dupes AS (
-  SELECT id,
-         ROW_NUMBER() OVER (PARTITION BY restaurant_id, name ORDER BY created_at DESC, id DESC) AS rn
-  FROM modifier_groups
-  WHERE deleted_at IS NULL
-)
-DELETE FROM modifier_groups
-WHERE id IN (SELECT id FROM dupes WHERE rn > 1);
-
-CREATE UNIQUE INDEX IF NOT EXISTS idx_modifier_groups_restaurant_name_unique
-  ON modifier_groups(restaurant_id, name)
-  WHERE deleted_at IS NULL;
+-- NOTE: executed after options table/columns are normalized below
 
 CREATE INDEX IF NOT EXISTS idx_modifier_groups_restaurant
   ON modifier_groups(restaurant_id);
@@ -78,6 +58,32 @@ ALTER TABLE modifier_options ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
 ALTER TABLE modifier_options ADD COLUMN IF NOT EXISTS display_order INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE modifier_options ADD COLUMN IF NOT EXISTS price_delta DOUBLE PRECISION NOT NULL DEFAULT 0;
 ALTER TABLE modifier_options ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;
+-- Backward compatibility: old schema used modifier_group_id
+ALTER TABLE modifier_options RENAME COLUMN modifier_group_id TO group_id;
+ALTER TABLE modifier_options ADD COLUMN IF NOT EXISTS group_id TEXT;
+
+-- Now that group_id exists, safely dedupe groups and dependent options
+WITH dupes AS (
+  SELECT id,
+         ROW_NUMBER() OVER (PARTITION BY restaurant_id, name ORDER BY created_at DESC, id DESC) AS rn
+  FROM modifier_groups
+  WHERE deleted_at IS NULL
+)
+DELETE FROM modifier_options
+WHERE group_id IN (SELECT id FROM dupes WHERE rn > 1);
+
+WITH dupes AS (
+  SELECT id,
+         ROW_NUMBER() OVER (PARTITION BY restaurant_id, name ORDER BY created_at DESC, id DESC) AS rn
+  FROM modifier_groups
+  WHERE deleted_at IS NULL
+)
+DELETE FROM modifier_groups
+WHERE id IN (SELECT id FROM dupes WHERE rn > 1);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_modifier_groups_restaurant_name_unique
+  ON modifier_groups(restaurant_id, name)
+  WHERE deleted_at IS NULL;
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_modifier_options_group_name_unique
   ON modifier_options(group_id, name)
