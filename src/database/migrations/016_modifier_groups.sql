@@ -39,6 +39,15 @@ WITH dupes AS (
   FROM modifier_groups
   WHERE deleted_at IS NULL
 )
+DELETE FROM modifier_options
+WHERE group_id IN (SELECT id FROM dupes WHERE rn > 1);
+
+WITH dupes AS (
+  SELECT id,
+         ROW_NUMBER() OVER (PARTITION BY restaurant_id, name ORDER BY created_at DESC, id DESC) AS rn
+  FROM modifier_groups
+  WHERE deleted_at IS NULL
+)
 DELETE FROM modifier_groups
 WHERE id IN (SELECT id FROM dupes WHERE rn > 1);
 
