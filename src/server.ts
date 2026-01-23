@@ -33,6 +33,12 @@ if (process.env.NODE_ENV === 'production') {
 const app = express();
 const server = createServer(app);
 
+// Health check endpoint - MUST be before any middleware that might fail
+// This handles Render health checks and prevents 502s during startup
+app.get('/health', (_req, res) => {
+  res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
 // Get CORS origins from environment (FRONTEND_URL + ALLOWED_ORIGINS)
 const corsOrigins = getCorsOrigins();
 logger.info(`CORS origins: ${corsOrigins.join(', ')}`);
@@ -44,8 +50,8 @@ const corsOriginSet = new Set(corsOrigins);
 const io = new SocketIOServer(server, {
   cors: {
     origin: (origin, callback) => {
+      // Missing origin is normal for websocket upgrades and health checks - allow it
       if (!origin) {
-        logger.warn('[socket.io] missing origin header');
         return callback(null, true);
       }
       if (corsOriginSet.has(origin)) {
@@ -60,7 +66,10 @@ const io = new SocketIOServer(server, {
   transports: ['polling', 'websocket'],
   allowEIO3: true,
   pingTimeout: 60000,
-  pingInterval: 25000
+  pingInterval: 25000,
+  // Handle bad upgrade requests gracefully (health checks hitting /socket.io)
+  allowUpgrades: true,
+  httpCompression: true
 });
 
 io.engine.on('connection_error', (err) => {
