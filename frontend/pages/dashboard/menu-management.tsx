@@ -679,7 +679,6 @@ const MenuManagement: React.FC = () => {
       : [];
     setEditItemAttachedGroups(attached);
     setEditItemExistingAttachedGroups(attached);
-    setEditItemModifierGroupIds(attached.map((g) => g.groupId));
     setShowEditItemModal(true);
   };
 
