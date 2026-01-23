@@ -39,7 +39,10 @@ export class VoiceOrderingService {
   }
 
   private resolveRestaurantId(input?: string | null) {
-    return input || process.env.VAPI_RESTAURANT_ID || null;
+    // TEMP FIX for testing: fallback to Sashey's Kitchen if restaurantId missing
+    // TODO: Remove this fallback once multi-restaurant metadata is configured
+    const fallback = 'sasheys-kitchen-union';
+    return input || process.env.VAPI_RESTAURANT_ID || fallback;
   }
 
   // Live DB: get open/closed info; for now always "open" if DB reachable
