@@ -66,6 +66,25 @@ interface CategoryWithItems extends MenuCategory {
   items: MenuItem[];
 }
 
+interface ModifierGroup {
+  id: string;
+  name: string;
+  description?: string | null;
+  min_selections: number;
+  max_selections: number;
+  is_required: boolean;
+  option_count?: number;
+  is_active?: boolean;
+}
+
+interface ModifierOption {
+  id: string;
+  name: string;
+  description?: string | null;
+  price_modifier: number;
+  is_available?: boolean;
+}
+
 const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024;
 const formatFileSize = (bytes: number) => {
   if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
@@ -88,13 +107,18 @@ const MenuManagement: React.FC = () => {
   const [showAddItemModal, setShowAddItemModal] = useState(false);
   const [showAddCategoryModal, setShowAddCategoryModal] = useState(false);
   const [showEditItemModal, setShowEditItemModal] = useState(false);
+  const [showAddModifierGroupModal, setShowAddModifierGroupModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSavingModifier, setIsSavingModifier] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [isGeneratingNewDescription, setIsGeneratingNewDescription] = useState(false);
   const [isGeneratingEditDescription, setIsGeneratingEditDescription] = useState(false);
   const [newItemImages, setNewItemImages] = useState<File[]>([]);
   const [editItemImages, setEditItemImages] = useState<File[]>([]);
   const [editItemExistingImages, setEditItemExistingImages] = useState<string[]>([]);
+  const [modifierGroups, setModifierGroups] = useState<ModifierGroup[]>([]);
+  const [modifierOptions, setModifierOptions] = useState<Record<string, ModifierOption[]>>({});
+  const [expandedModifierGroups, setExpandedModifierGroups] = useState<Set<string>>(new Set());
   const [newCategory, setNewCategory] = useState({
     name: '',
     description: '',
@@ -108,6 +132,7 @@ const MenuManagement: React.FC = () => {
     preparationTime: '',
     isAvailable: true
   });
+  const [newItemModifierGroupIds, setNewItemModifierGroupIds] = useState<string[]>([]);
   const [editItem, setEditItem] = useState({
     id: '',
     name: '',
@@ -117,6 +142,15 @@ const MenuManagement: React.FC = () => {
     preparationTime: '',
     isAvailable: true
   });
+  const [editItemModifierGroupIds, setEditItemModifierGroupIds] = useState<string[]>([]);
+  const [newModifierGroup, setNewModifierGroup] = useState({
+    name: '',
+    description: '',
+    minSelections: 0,
+    maxSelections: 1,
+    isRequired: false
+  });
+  const [newModifierOptionDrafts, setNewModifierOptionDrafts] = useState<Record<string, { name: string; description: string; priceModifier: string }>>({});
 
   // Load menu data
   const loadMenuData = useCallback(async () => {
@@ -195,6 +229,21 @@ const MenuManagement: React.FC = () => {
     loadMenuData();
   }, [loadMenuData]);
 
+  const loadModifierGroups = useCallback(async () => {
+    try {
+      const resp = await api.get('/api/menu/modifier-groups');
+      const groups = resp.data?.data || [];
+      setModifierGroups(groups);
+    } catch (error) {
+      console.error('Error loading modifier groups:', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    loadModifierGroups();
+  }, [user?.id, loadModifierGroups]);
+
   // Load restaurant slug for public ordering link
   useEffect(() => {
     if (!user?.id) return;
@@ -245,6 +294,92 @@ const MenuManagement: React.FC = () => {
       toast.error(`Images must be ${formatFileSize(MAX_IMAGE_SIZE_BYTES)} or smaller.`);
     }
     return valid;
+  };
+
+  const toggleModifierGroupExpanded = async (groupId: string) => {
+    setExpandedModifierGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupId)) {
+        next.delete(groupId);
+      } else {
+        next.add(groupId);
+      }
+      return next;
+    });
+
+    if (!modifierOptions[groupId]) {
+      try {
+        const resp = await api.get(`/api/menu/modifier-groups/${groupId}/options`);
+        const options = resp.data?.data || [];
+        setModifierOptions((prev) => ({ ...prev, [groupId]: options }));
+      } catch (error) {
+        console.error('Failed to load modifier options:', error);
+        toast.error('Failed to load modifier options');
+      }
+    }
+  };
+
+  const handleCreateModifierGroup = async () => {
+    if (!newModifierGroup.name.trim()) {
+      toast.error('Modifier group name is required');
+      return;
+    }
+    if (newModifierGroup.maxSelections < newModifierGroup.minSelections) {
+      toast.error('Max selections must be >= min selections');
+      return;
+    }
+    setIsSavingModifier(true);
+    try {
+      await api.post('/api/menu/modifier-groups', {
+        name: newModifierGroup.name.trim(),
+        description: newModifierGroup.description.trim(),
+        minSelections: Number(newModifierGroup.minSelections || 0),
+        maxSelections: Number(newModifierGroup.maxSelections || 1),
+        isRequired: Boolean(newModifierGroup.isRequired)
+      });
+      toast.success('Modifier group created');
+      setNewModifierGroup({
+        name: '',
+        description: '',
+        minSelections: 0,
+        maxSelections: 1,
+        isRequired: false
+      });
+      setShowAddModifierGroupModal(false);
+      await loadModifierGroups();
+    } catch (error) {
+      console.error('Failed to create modifier group:', error);
+      toast.error('Failed to create modifier group');
+    } finally {
+      setIsSavingModifier(false);
+    }
+  };
+
+  const handleAddModifierOption = async (groupId: string) => {
+    const draft = newModifierOptionDrafts[groupId] || { name: '', description: '', priceModifier: '' };
+    if (!draft.name.trim()) {
+      toast.error('Option name is required');
+      return;
+    }
+    setIsSavingModifier(true);
+    try {
+      await api.post(`/api/menu/modifier-groups/${groupId}/options`, {
+        name: draft.name.trim(),
+        description: draft.description.trim(),
+        priceModifier: draft.priceModifier ? Number(draft.priceModifier) : 0
+      });
+      toast.success('Option added');
+      setNewModifierOptionDrafts((prev) => ({ ...prev, [groupId]: { name: '', description: '', priceModifier: '' } }));
+      const resp = await api.get(`/api/menu/modifier-groups/${groupId}/options`);
+      const options = resp.data?.data || [];
+      setModifierOptions((prev) => ({ ...prev, [groupId]: options }));
+      await loadModifierGroups();
+    } catch (error) {
+      console.error('Failed to add modifier option:', error);
+      toast.error('Failed to add modifier option');
+    } finally {
+      setIsSavingModifier(false);
+    }
   };
 
   const handleImportFile = async (file: File) => {
@@ -343,6 +478,7 @@ const MenuManagement: React.FC = () => {
       isAvailable: true
     });
     setNewItemImages([]);
+    setNewItemModifierGroupIds([]);
     setShowAddItemModal(true);
   };
 
@@ -396,12 +532,19 @@ const MenuManagement: React.FC = () => {
       formData.append('isAvailable', newItem.isAvailable ? '1' : '');
       newItemImages.forEach((file) => formData.append('images', file));
 
-      await api.post('/api/menu/items', formData, {
+      const resp = await api.post('/api/menu/items', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
+      const createdId = resp.data?.data?.id as string | undefined;
+      if (createdId && newItemModifierGroupIds.length > 0) {
+        await api.post(`/api/menu/items/${createdId}/modifiers`, {
+          modifierGroupIds: newItemModifierGroupIds
+        });
+      }
       toast.success('Menu item created');
       setShowAddItemModal(false);
       setNewItemImages([]);
+      setNewItemModifierGroupIds([]);
       await loadMenuData();
     } catch (error) {
       console.error('Failed to create menu item:', error);
@@ -424,7 +567,18 @@ const MenuManagement: React.FC = () => {
     setEditingItem(item);
     setEditItemImages([]);
     setEditItemExistingImages(item.images || []);
+    setEditItemModifierGroupIds([]);
     setShowEditItemModal(true);
+    (async () => {
+      try {
+        const resp = await api.get(`/api/menu/items/${item.id}/modifiers`);
+        const groups = resp.data?.data || [];
+        const ids = groups.map((group: any) => group.id).filter(Boolean);
+        setEditItemModifierGroupIds(ids);
+      } catch (error) {
+        console.error('Failed to load item modifiers:', error);
+      }
+    })();
   };
 
   const handleUpdateItem = async () => {
@@ -456,11 +610,15 @@ const MenuManagement: React.FC = () => {
       await api.put(`/api/menu/items/${editItem.id}`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
+      await api.post(`/api/menu/items/${editItem.id}/modifiers`, {
+        modifierGroupIds: editItemModifierGroupIds
+      });
       toast.success('Menu item updated');
       setShowEditItemModal(false);
       setEditingItem(null);
       setEditItemImages([]);
       setEditItemExistingImages([]);
+      setEditItemModifierGroupIds([]);
       await loadMenuData();
     } catch (error) {
       console.error('Failed to update menu item:', error);
@@ -546,6 +704,14 @@ const MenuManagement: React.FC = () => {
                 >
                   <Settings className="w-4 h-4" />
                   Add Category
+                </button>
+
+                <button
+                  onClick={() => setShowAddModifierGroupModal(true)}
+                  className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-colors"
+                >
+                  <Tag className="w-4 h-4" />
+                  Add Modifier Group
                 </button>
 
                 <label className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors cursor-pointer ${
@@ -676,6 +842,117 @@ const MenuManagement: React.FC = () => {
             </div>
           ) : (
             <div className="space-y-6">
+              <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Add-ons & Modifiers</h2>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Create modifier groups and options, then assign them to menu items.</p>
+                  </div>
+                  <button
+                    onClick={() => setShowAddModifierGroupModal(true)}
+                    className="flex items-center gap-2 px-3 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-colors"
+                  >
+                    <Plus className="w-4 h-4" />
+                    New Group
+                  </button>
+                </div>
+                {modifierGroups.length === 0 ? (
+                  <div className="text-sm text-gray-500 dark:text-gray-400">No modifier groups yet.</div>
+                ) : (
+                  <div className="space-y-3">
+                    {modifierGroups.map((group) => {
+                      const options = modifierOptions[group.id] || [];
+                      const isExpanded = expandedModifierGroups.has(group.id);
+                      const draft = newModifierOptionDrafts[group.id] || { name: '', description: '', priceModifier: '' };
+                      return (
+                        <div key={group.id} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                          <button
+                            className="w-full flex items-center justify-between text-left"
+                            onClick={() => toggleModifierGroupExpanded(group.id)}
+                            type="button"
+                          >
+                            <div>
+                              <div className="font-semibold text-gray-900 dark:text-white">{group.name}</div>
+                              <div className="text-xs text-gray-500 dark:text-gray-400">
+                                {group.min_selections}-{group.max_selections} selections
+                                {group.is_required ? ' • Required' : ''} • {group.option_count ?? options.length} options
+                              </div>
+                            </div>
+                            <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                          </button>
+                          {isExpanded && (
+                            <div className="mt-3 space-y-3">
+                              {options.length > 0 ? (
+                                <div className="space-y-2">
+                                  {options.map((opt) => (
+                                    <div key={opt.id} className="flex items-center justify-between text-sm text-gray-700 dark:text-gray-300">
+                                      <div>
+                                        <span className="font-medium">{opt.name}</span>
+                                        {opt.description ? <span className="text-xs text-gray-500 ml-2">{opt.description}</span> : null}
+                                      </div>
+                                      <span className="text-xs text-gray-500">+{Number(opt.price_modifier || 0).toFixed(2)}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="text-xs text-gray-500 dark:text-gray-400">No options yet.</div>
+                              )}
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                                <input
+                                  type="text"
+                                  value={draft.name}
+                                  onChange={(e) =>
+                                    setNewModifierOptionDrafts((prev) => ({
+                                      ...prev,
+                                      [group.id]: { ...draft, name: e.target.value }
+                                    }))
+                                  }
+                                  placeholder="Option name"
+                                  className="px-3 py-2 border border-gray-200 rounded-lg text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                />
+                                <input
+                                  type="text"
+                                  value={draft.description}
+                                  onChange={(e) =>
+                                    setNewModifierOptionDrafts((prev) => ({
+                                      ...prev,
+                                      [group.id]: { ...draft, description: e.target.value }
+                                    }))
+                                  }
+                                  placeholder="Description (optional)"
+                                  className="px-3 py-2 border border-gray-200 rounded-lg text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                />
+                                <div className="flex gap-2">
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    value={draft.priceModifier}
+                                    onChange={(e) =>
+                                      setNewModifierOptionDrafts((prev) => ({
+                                        ...prev,
+                                        [group.id]: { ...draft, priceModifier: e.target.value }
+                                      }))
+                                    }
+                                    placeholder="Price +"
+                                    className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                  />
+                                  <button
+                                    onClick={() => handleAddModifierOption(group.id)}
+                                    className="px-3 py-2 bg-slate-900 text-white rounded-lg text-sm hover:bg-slate-800"
+                                    disabled={isSavingModifier}
+                                  >
+                                    Add
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
               {filteredCategories.map((category) => (
                 <CategorySection
                   key={category.id}
@@ -780,6 +1057,100 @@ const MenuManagement: React.FC = () => {
       </AnimatePresence>
 
       <AnimatePresence>
+        {showAddModifierGroupModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+            onClick={() => setShowAddModifierGroupModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white dark:bg-gray-800 rounded-lg max-w-lg w-full p-6"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white">Add Modifier Group</h2>
+              <div className="mt-4 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Name</label>
+                  <input
+                    type="text"
+                    value={newModifierGroup.name}
+                    onChange={(e) => setNewModifierGroup((prev) => ({ ...prev, name: e.target.value }))}
+                    className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                    placeholder="e.g. Sides, Add-ons"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Description</label>
+                  <textarea
+                    value={newModifierGroup.description}
+                    onChange={(e) => setNewModifierGroup((prev) => ({ ...prev, description: e.target.value }))}
+                    className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                    rows={3}
+                    placeholder="Optional description"
+                  />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Min selections</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={newModifierGroup.minSelections}
+                      onChange={(e) => setNewModifierGroup((prev) => ({ ...prev, minSelections: Number(e.target.value) }))}
+                      className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Max selections</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={newModifierGroup.maxSelections}
+                      onChange={(e) => setNewModifierGroup((prev) => ({ ...prev, maxSelections: Number(e.target.value) }))}
+                      className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                    />
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    id="modifier-required"
+                    type="checkbox"
+                    checked={newModifierGroup.isRequired}
+                    onChange={(e) => setNewModifierGroup((prev) => ({ ...prev, isRequired: e.target.checked }))}
+                    className="h-4 w-4 text-red-600 border-gray-300 rounded"
+                  />
+                  <label htmlFor="modifier-required" className="text-sm text-gray-700 dark:text-gray-300">
+                    Required group
+                  </label>
+                </div>
+              </div>
+              <div className="mt-6 flex justify-end gap-3">
+                <button
+                  onClick={() => setShowAddModifierGroupModal(false)}
+                  className="px-4 py-2 rounded-lg border border-gray-200 text-gray-600 hover:text-gray-900 dark:border-gray-600 dark:text-gray-300"
+                  disabled={isSavingModifier}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleCreateModifierGroup}
+                  className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white"
+                  disabled={isSavingModifier}
+                >
+                  {isSavingModifier ? 'Saving...' : 'Create'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
         {showAddItemModal && (
           <motion.div
             initial={{ opacity: 0 }}
@@ -866,6 +1237,36 @@ const MenuManagement: React.FC = () => {
                     ))}
                   </select>
                 </div>
+                {modifierGroups.length > 0 && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Add-ons & Modifiers</label>
+                    <div className="mt-2 space-y-2">
+                      {modifierGroups.map((group) => (
+                        <label key={group.id} className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                          <input
+                            type="checkbox"
+                            checked={newItemModifierGroupIds.includes(group.id)}
+                            onChange={(e) => {
+                              setNewItemModifierGroupIds((prev) =>
+                                e.target.checked
+                                  ? [...prev, group.id]
+                                  : prev.filter((id) => id !== group.id)
+                              );
+                            }}
+                            className="h-4 w-4 text-red-600 border-gray-300 rounded"
+                          />
+                          <span>
+                            {group.name}
+                            <span className="text-xs text-gray-500 ml-2">
+                              {group.min_selections}-{group.max_selections} selections
+                              {group.is_required ? ' • Required' : ''}
+                            </span>
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Images</label>
                   <div className="mt-1 flex flex-col gap-2">
@@ -936,7 +1337,7 @@ const MenuManagement: React.FC = () => {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
-            onClick={() => { setShowEditItemModal(false); setEditingItem(null); }}
+            onClick={() => { setShowEditItemModal(false); setEditingItem(null); setEditItemModifierGroupIds([]); }}
           >
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
@@ -1016,6 +1417,36 @@ const MenuManagement: React.FC = () => {
                     ))}
                   </select>
                 </div>
+                {modifierGroups.length > 0 && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Add-ons & Modifiers</label>
+                    <div className="mt-2 space-y-2">
+                      {modifierGroups.map((group) => (
+                        <label key={group.id} className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                          <input
+                            type="checkbox"
+                            checked={editItemModifierGroupIds.includes(group.id)}
+                            onChange={(e) => {
+                              setEditItemModifierGroupIds((prev) =>
+                                e.target.checked
+                                  ? [...prev, group.id]
+                                  : prev.filter((id) => id !== group.id)
+                              );
+                            }}
+                            className="h-4 w-4 text-red-600 border-gray-300 rounded"
+                          />
+                          <span>
+                            {group.name}
+                            <span className="text-xs text-gray-500 ml-2">
+                              {group.min_selections}-{group.max_selections} selections
+                              {group.is_required ? ' • Required' : ''}
+                            </span>
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Images</label>
                   <div className="mt-1 flex flex-col gap-2">
@@ -1059,7 +1490,7 @@ const MenuManagement: React.FC = () => {
               </div>
               <div className="mt-6 flex justify-end gap-3">
                 <button
-                  onClick={() => { setShowEditItemModal(false); setEditingItem(null); }}
+                  onClick={() => { setShowEditItemModal(false); setEditingItem(null); setEditItemModifierGroupIds([]); }}
                   className="px-4 py-2 rounded-lg border border-gray-200 text-gray-600 hover:text-gray-900 dark:border-gray-600 dark:text-gray-300"
                   disabled={isSaving}
                 >
