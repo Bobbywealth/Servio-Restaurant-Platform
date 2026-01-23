@@ -55,7 +55,8 @@ router.post('/webhook', requireVapiWebhookAuth, async (req: Request, res: Respon
 
 // Tool endpoint for Vapi tool server calls (apiRequest/function tools)
 router.post('/tool/:toolName', requireVapiWebhookAuth, async (req: Request, res: Response) => {
-  const toolName = req.params.toolName;
+  const toolNameParam = req.params.toolName;
+  const toolName = Array.isArray(toolNameParam) ? toolNameParam[0] : toolNameParam;
   const body = req.body && typeof req.body === 'object' ? req.body : {};
   const parameters =
     (body as any)?.parameters ??
