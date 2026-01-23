@@ -62,13 +62,22 @@ router.post('/tool/:toolName', requireVapiWebhookAuth, async (req: Request, res:
   // Log raw request to diagnose what Vapi is sending (use console.log to avoid logger truncation)
   const bodyStr = JSON.stringify(body);
   const queryStr = JSON.stringify(req.query);
-  console.log(`[VAPI_DEBUG] toolName=${toolName} body=${bodyStr} query=${queryStr}`);
+  const bodyKeys = Object.keys(body);
+  console.log(`[VAPI_DEBUG] POST /tool/${toolName}`);
+  console.log(`[VAPI_DEBUG] body_keys=${JSON.stringify(bodyKeys)}`);
+  console.log(`[VAPI_DEBUG] body=${bodyStr.slice(0, 1500)}`);
+  console.log(`[VAPI_DEBUG] query=${queryStr}`);
+  console.log(`[VAPI_DEBUG] url=${req.originalUrl}`);
+
+  // Merge query params into body for tools that send via URL
+  const mergedParams = { ...req.query, ...body };
 
   const parameters =
-    (body as any)?.parameters ??
-    (body as any)?.args ??
-    (body as any)?.input ??
-    body;
+    (mergedParams as any)?.parameters ??
+    (mergedParams as any)?.args ??
+    (mergedParams as any)?.input ??
+    (mergedParams as any)?.message?.toolCalls?.[0]?.function?.arguments ??
+    mergedParams;
   const headerCallId = req.headers['x-vapi-call-id'];
   const headerCallIdValue = Array.isArray(headerCallId) ? headerCallId[0] : headerCallId;
   const callIdRaw = (body as any)?.callId || (body as any)?.call?.id || headerCallIdValue;
