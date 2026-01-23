@@ -532,6 +532,7 @@ export default function TabletOrdersPage() {
   async function setStatus(orderId: string, nextStatus: string) {
     setBusyId(orderId);
     setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, status: nextStatus } : o)));
+    setSelectedOrder((prev) => (prev?.id === orderId ? { ...prev, status: nextStatus } : prev));
     try {
       await apiPost(`/api/orders/${encodeURIComponent(orderId)}/status`, { status: nextStatus });
       if (socket) {
@@ -550,6 +551,7 @@ export default function TabletOrdersPage() {
       // Set status to preparing
       await apiPost(`/api/orders/${encodeURIComponent(order.id)}/status`, { status: 'preparing' });
       setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, status: 'preparing' } : o)));
+      setSelectedOrder((prev) => (prev?.id === order.id ? { ...prev, status: 'preparing' } : prev));
       if (socket) {
         socket.emit('order:status_changed', { orderId: order.id, status: 'preparing', timestamp: new Date() });
       }
