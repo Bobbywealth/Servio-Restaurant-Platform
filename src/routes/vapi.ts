@@ -53,6 +53,40 @@ router.post('/webhook', requireVapiWebhookAuth, async (req: Request, res: Respon
   }
 });
 
+// Tool endpoint for Vapi tool server calls (apiRequest/function tools)
+router.post('/tool/:toolName', requireVapiWebhookAuth, async (req: Request, res: Response) => {
+  const toolName = req.params.toolName;
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  const parameters =
+    (body as any)?.parameters ??
+    (body as any)?.args ??
+    (body as any)?.input ??
+    body;
+  const callId = (body as any)?.callId || (body as any)?.call?.id || (req.headers['x-vapi-call-id'] as string | undefined);
+  const customerNumber =
+    (body as any)?.customerNumber || (body as any)?.customer?.number || (body as any)?.call?.customer?.number;
+
+  try {
+    const exec = await vapiService.executeToolRequest(toolName, parameters, {
+      callId,
+      customerNumber
+    });
+
+    if (exec.error) {
+      return res.status(200).json({ error: exec.error });
+    }
+
+    return res.status(200).json(exec.result ?? { ok: true });
+  } catch (error) {
+    logger.error('[vapi:tool] handler_error', {
+      toolName,
+      callId,
+      error: error instanceof Error ? error.message : String(error)
+    });
+    return res.status(200).json({ error: 'Internal server error' });
+  }
+});
+
 // Get Vapi assistant configuration
 router.get('/assistant-config', async (req: Request, res: Response) => {
   try {

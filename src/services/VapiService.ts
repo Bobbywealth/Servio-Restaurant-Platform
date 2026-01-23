@@ -221,6 +221,20 @@ export class VapiService {
     }
   }
 
+  public async executeToolRequest(
+    toolName: string,
+    parameters: any,
+    context?: { callId?: string | null; customerNumber?: string | null }
+  ): Promise<{ result?: any; error?: string }> {
+    const callId = context?.callId || undefined;
+    const customerNumber = context?.customerNumber || undefined;
+    const message = {
+      call: callId || customerNumber ? { id: callId, customer: customerNumber ? { number: customerNumber } : undefined } : undefined
+    };
+
+    return this.executeToolCall(toolName, parameters, message);
+  }
+
   private async handleEndOfCall(message: any): Promise<VapiResponse> {
     const callId = message.call?.id;
     const customerNumber = message.call?.customer?.number;

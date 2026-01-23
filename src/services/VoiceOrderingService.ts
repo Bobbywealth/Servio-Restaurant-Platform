@@ -79,9 +79,11 @@ export class VoiceOrderingService {
   // Live DB search (availability-aware)
   public async searchMenuLive(query: string, restaurantId?: string | null) {
     const resolvedRestaurantId = this.resolveRestaurantId(restaurantId);
-    if (!resolvedRestaurantId) return [];
+    const trimmedQuery = (query || '').trim();
+    const fallbackResults = () => this.searchMenu(trimmedQuery).slice(0, 20);
+    if (!resolvedRestaurantId) return fallbackResults();
 
-    const q = `%${(query || '').trim()}%`;
+    const q = `%${trimmedQuery.toLowerCase()}%`;
     try {
       const db = DatabaseService.getInstance().getDatabase();
       const rows = await db.all(
@@ -89,28 +91,48 @@ export class VoiceOrderingService {
         SELECT mi.id, mi.name, mi.price, mc.name as category
         FROM menu_items mi
         LEFT JOIN menu_categories mc ON mc.id = mi.category_id
-        WHERE mi.restaurant_id = ? AND mi.is_available = TRUE AND mi.name ILIKE ?
+        WHERE mi.restaurant_id = ? AND mi.is_available = TRUE AND LOWER(mi.name) LIKE ?
         ORDER BY mi.name ASC
         LIMIT 20
         `,
         [resolvedRestaurantId, q]
       );
-      return rows.map((r: any) => ({
+      const mapped = rows.map((r: any) => ({
         id: r.id,
         name: r.name,
         price: Number(r.price || 0),
         category: r.category || 'Menu'
       }));
+      if (mapped.length) return mapped;
+      return fallbackResults();
     } catch (err) {
       logger.error('[vapi] searchMenuLive failed', { error: err instanceof Error ? err.message : String(err) });
-      return [];
+      return fallbackResults();
     }
   }
 
   // Live DB get item by id or name (availability-aware)
   public async getMenuItemLive(idOrName: string, restaurantId?: string | null) {
     const resolvedRestaurantId = this.resolveRestaurantId(restaurantId);
-    if (!resolvedRestaurantId || !idOrName) return null;
+    const trimmed = String(idOrName || '').trim();
+    const fallbackItem = () => {
+      const byId = this.getMenuItem(trimmed);
+      if (byId) return byId;
+      const bySearch = this.searchMenu(trimmed)[0];
+      if (!bySearch) return null;
+      return {
+        id: bySearch.id,
+        name: bySearch.name,
+        basePrice: Number(bySearch.price || 0),
+        modifierGroups: [],
+        tags: [],
+        category: bySearch.category || 'Menu'
+      };
+    };
+    if (!trimmed) return null;
+    if (!resolvedRestaurantId) {
+      return fallbackItem();
+    }
 
     try {
       const db = DatabaseService.getInstance().getDatabase();
@@ -119,12 +141,12 @@ export class VoiceOrderingService {
         SELECT mi.*, mc.name as category
         FROM menu_items mi
         LEFT JOIN menu_categories mc ON mc.id = mi.category_id
-        WHERE mi.restaurant_id = ? AND mi.is_available = TRUE AND (mi.id = ? OR mi.name ILIKE ?)
+        WHERE mi.restaurant_id = ? AND mi.is_available = TRUE AND (mi.id = ? OR LOWER(mi.name) LIKE ?)
         LIMIT 1
         `,
-        [resolvedRestaurantId, idOrName, idOrName]
+        [resolvedRestaurantId, trimmed, `%${trimmed.toLowerCase()}%`]
       );
-      if (!row) return null;
+      if (!row) return fallbackItem();
 
       return {
         id: row.id,
@@ -136,7 +158,7 @@ export class VoiceOrderingService {
       };
     } catch (err) {
       logger.error('[vapi] getMenuItemLive failed', { error: err instanceof Error ? err.message : String(err) });
-      return null;
+      return fallbackItem();
     }
   }
 
