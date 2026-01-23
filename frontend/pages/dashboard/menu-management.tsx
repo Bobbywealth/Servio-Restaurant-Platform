@@ -117,7 +117,6 @@ const MenuManagement: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
-  const [showPreview, setShowPreview] = useState(false);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [editorTab, setEditorTab] = useState<'basics' | 'availability' | 'modifiers' | 'preview'>('basics');
   const [basicsDirty, setBasicsDirty] = useState(false);
@@ -579,6 +578,14 @@ const MenuManagement: React.FC = () => {
       // Fallback
       toast.error('Failed to copy. Please copy manually.');
     }
+  };
+
+  const handlePreviewMenu = () => {
+    if (!publicOrderUrl) {
+      toast.error('Public menu link unavailable. Set your restaurant slug first.');
+      return;
+    }
+    window.open(publicOrderUrl, '_blank', 'noopener,noreferrer');
   };
 
   const handleToggleCategoryHidden = async (categoryId: string, nextHidden: boolean) => {
@@ -1174,7 +1181,7 @@ const MenuManagement: React.FC = () => {
               
               <div className="flex items-center gap-3">
                 <button
-                  onClick={() => setShowPreview(!showPreview)}
+                  onClick={handlePreviewMenu}
                   className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 rounded-lg transition-colors"
                 >
                   <Eye className="w-4 h-4" />
@@ -1782,16 +1789,6 @@ const MenuManagement: React.FC = () => {
               </div>
             </motion.div>
           </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Menu Preview Modal */}
-      <AnimatePresence>
-        {showPreview && (
-          <MenuPreviewModal 
-            categories={categories}
-            onClose={() => setShowPreview(false)}
-          />
         )}
       </AnimatePresence>
 
@@ -3106,106 +3103,6 @@ const MenuItemCard: React.FC<MenuItemCardProps> = ({ item, onEdit, onToggleAvail
         </button>
       </div>
     </div>
-  );
-};
-
-// Menu Preview Modal Component
-interface MenuPreviewModalProps {
-  categories: CategoryWithItems[];
-  onClose: () => void;
-}
-
-const MenuPreviewModal: React.FC<MenuPreviewModalProps> = ({ categories, onClose }) => {
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
-      onClick={onClose}
-    >
-      <motion.div
-        initial={{ scale: 0.9, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.9, opacity: 0 }}
-        className="bg-white dark:bg-gray-800 rounded-lg max-w-4xl w-full max-h-[80vh] overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Preview Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
-          <div>
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white">Menu Preview</h2>
-            <p className="text-gray-600 dark:text-gray-400 text-sm mt-1">
-              How your menu appears to customers
-            </p>
-          </div>
-          
-          <div className="flex items-center gap-3">
-            <button className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-colors">
-              <ExternalLink className="w-4 h-4" />
-              Open in new tab
-            </button>
-            <button
-              onClick={onClose}
-              className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
-
-        {/* Preview Content */}
-        <div className="p-6 overflow-y-auto max-h-[60vh]">
-          <div className="space-y-8">
-            {categories.filter(cat => cat.is_active).map((category) => (
-              <div key={category.id}>
-                <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
-                  {category.name}
-                </h3>
-                {category.description && (
-                  <p className="text-gray-600 dark:text-gray-400 mb-6">
-                    {category.description}
-                  </p>
-                )}
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {category.items?.filter(item => item.is_available).map((item) => (
-                    <div key={item.id} className="flex gap-4 p-4 border border-gray-200 dark:border-gray-700 rounded-lg">
-                      {item.image && (
-                        <img 
-                          src={resolveMediaUrl(item.image)} 
-                          alt={item.name}
-                          className="w-20 h-20 object-cover rounded-lg flex-shrink-0"
-                        />
-                      )}
-                      <div className="flex-1">
-                        <div className="flex items-start justify-between">
-                          <h4 className="font-semibold text-gray-900 dark:text-white">
-                            {item.name}
-                          </h4>
-                          <span className="font-bold text-green-600">
-                            {(item.sizes && item.sizes.length > 0 ? 'From ' : '')}${(Number(item.fromPrice ?? item.price) || 0).toFixed(2)}
-                          </span>
-                        </div>
-                        <p className="text-gray-600 dark:text-gray-400 text-sm mt-1">
-                          {item.description}
-                        </p>
-                        {item.preparation_time && (
-                          <div className="flex items-center gap-1 text-xs text-gray-500 mt-2">
-                            <Clock className="w-3 h-3" />
-                            {item.preparation_time} mins
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </motion.div>
-    </motion.div>
   );
 };
 
