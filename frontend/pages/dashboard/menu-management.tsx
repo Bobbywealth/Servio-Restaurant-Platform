@@ -66,6 +66,13 @@ interface CategoryWithItems extends MenuCategory {
   items: MenuItem[];
 }
 
+const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024;
+const formatFileSize = (bytes: number) => {
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+  if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)}KB`;
+  return `${bytes}B`;
+};
+
 const MenuManagement: React.FC = () => {
   const { user } = useUser();
   const [categories, setCategories] = useState<CategoryWithItems[]>([]);
@@ -229,6 +236,15 @@ const MenuManagement: React.FC = () => {
       // Fallback
       toast.error('Failed to copy. Please copy manually.');
     }
+  };
+
+  const filterImageFiles = (files: File[]) => {
+    const valid = files.filter((file) => file.size <= MAX_IMAGE_SIZE_BYTES);
+    const rejected = files.filter((file) => file.size > MAX_IMAGE_SIZE_BYTES);
+    if (rejected.length > 0) {
+      toast.error(`Images must be ${formatFileSize(MAX_IMAGE_SIZE_BYTES)} or smaller.`);
+    }
+    return valid;
   };
 
   const handleImportFile = async (file: File) => {
@@ -862,11 +878,15 @@ const MenuManagement: React.FC = () => {
                         multiple
                         className="hidden"
                         onChange={(e) => {
-                          const files = Array.from(e.target.files || []).slice(0, 5);
-                          setNewItemImages(files);
+                          const files = Array.from(e.target.files || []);
+                          const validFiles = filterImageFiles(files).slice(0, 5);
+                          setNewItemImages(validFiles);
                         }}
                       />
                     </label>
+                    <div className="text-xs text-gray-500">
+                      Max file size: {formatFileSize(MAX_IMAGE_SIZE_BYTES)} each.
+                    </div>
                     {newItemImages.length > 0 && (
                       <div className="text-xs text-gray-500">
                         {newItemImages.length} file{newItemImages.length > 1 ? 's' : ''} selected
@@ -1008,11 +1028,15 @@ const MenuManagement: React.FC = () => {
                         multiple
                         className="hidden"
                         onChange={(e) => {
-                          const files = Array.from(e.target.files || []).slice(0, 5);
-                          setEditItemImages(files);
+                          const files = Array.from(e.target.files || []);
+                          const validFiles = filterImageFiles(files).slice(0, 5);
+                          setEditItemImages(validFiles);
                         }}
                       />
                     </label>
+                    <div className="text-xs text-gray-500">
+                      Max file size: {formatFileSize(MAX_IMAGE_SIZE_BYTES)} each.
+                    </div>
                     {(editItemExistingImages.length > 0 || editItemImages.length > 0) && (
                       <div className="text-xs text-gray-500">
                         {editItemExistingImages.length} existing, {editItemImages.length} new

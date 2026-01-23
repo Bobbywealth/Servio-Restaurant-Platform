@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import toast from 'react-hot-toast';
+import { resolveMediaUrl } from '../../lib/utils';
 
 interface MenuItem {
   id: string;
@@ -28,6 +29,8 @@ interface MenuItem {
   price: number;
   is_available: boolean;
   category_name: string;
+  images?: string[];
+  image?: string;
 }
 
 interface RestaurantInfo {
@@ -78,7 +81,26 @@ export default function PublicProfile() {
       try {
         const resp = await api.get(`/api/menu/public/${restaurantSlug}`);
         setRestaurant(resp.data.data.restaurant);
-        setItems(resp.data.data.items);
+        const rawItems = resp.data.data.items || [];
+        const normalized = rawItems.map((item: any) => {
+          let images: string[] = [];
+          if (Array.isArray(item.images)) {
+            images = item.images;
+          } else if (typeof item.images === 'string') {
+            try {
+              images = JSON.parse(item.images);
+            } catch {
+              images = [];
+            }
+          }
+          return {
+            ...item,
+            description: item.description || '',
+            images,
+            image: images[0]
+          } as MenuItem;
+        });
+        setItems(normalized);
         // Check if online payments are enabled
         const settings = resp.data.data.restaurant?.settings;
         if (settings?.online_payments_enabled) {
@@ -356,10 +378,22 @@ export default function PublicProfile() {
                     whileHover={{ y: -2 }}
                   >
                     <div className="flex justify-between items-start gap-4">
-                      <div className="flex-1">
+                      <div className="flex-1 flex gap-4">
+                        {item.image && (
+                          <div className="w-20 h-20 rounded-xl overflow-hidden bg-slate-100 border border-slate-200 flex-shrink-0">
+                            <img
+                              src={resolveMediaUrl(item.image)}
+                              alt={item.name}
+                              className="w-full h-full object-cover"
+                              loading="lazy"
+                            />
+                          </div>
+                        )}
+                        <div className="min-w-0">
                         <h3 className="font-bold text-lg text-slate-900 group-hover:text-blue-600 transition-colors">{item.name}</h3>
                         <p className="text-slate-500 text-sm mt-1 line-clamp-2">{item.description}</p>
                         <p className="font-black text-xl text-slate-900 mt-3">${item.price.toFixed(2)}</p>
+                        </div>
                       </div>
                       <button 
                         onClick={() => addToCart(item)}
