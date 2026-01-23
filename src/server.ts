@@ -104,6 +104,7 @@ async function initializeServer() {
     const { default: timeclockRoutes } = await import('./routes/timeclock');
     const { default: marketingRoutes } = await import('./routes/marketing');
     const { default: restaurantRoutes } = await import('./routes/restaurant');
+    const { default: restaurantsRoutes } = await import('./routes/restaurants');
     const { default: integrationsRoutes } = await import('./routes/integrations');
     const { default: vapiRoutes } = await import('./routes/vapi');
     const { default: voiceRoutes } = await import('./routes/voice');
@@ -141,6 +142,7 @@ async function initializeServer() {
     app.use('/api/timeclock', requireAuth, timeclockRoutes);
     app.use('/api/marketing', requireAuth, marketingRoutes);
     app.use('/api/restaurant', requireAuth, restaurantRoutes);
+    app.use('/api/restaurants', requireAuth, restaurantsRoutes);
     app.use('/api/integrations', requireAuth, integrationsRoutes);
     app.use('/api/notifications', requireAuth, notificationsRoutes);
 
