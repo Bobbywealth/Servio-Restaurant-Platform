@@ -119,22 +119,51 @@ export class VapiService {
     return res.error ? { error: res.error } : { result: this.formatActionResultForVoice(res.result) };
   }
 
-  private async handleToolCalls(message: any): Promise<VapiResponse> {
-    const toolCalls = Array.isArray(message.toolCalls) ? message.toolCalls : [];
-    if (!toolCalls.length) {
-      logger.warn('[vapi] tool-calls missing toolCalls array', { callId: message.call?.id });
-      return { result: 'acknowledged' };
+  /**
+   * Handle Vapi "tool-calls" server message.
+   *
+   * Docs expect a response like:
+   *   { results: [{ name, toolCallId, result: "<json-string>" }] }
+   * where toolCallId is the id from the incoming tool call.
+   */
+  private async handleToolCalls(message: any): Promise<any> {
+    const toolCallList: Array<{ id?: string; name?: string; parameters?: any }> =
+      (Array.isArray(message.toolCallList) ? message.toolCallList : null) ||
+      (Array.isArray(message.toolCalls) ? message.toolCalls : null) ||
+      (Array.isArray(message.toolWithToolCallList)
+        ? message.toolWithToolCallList
+            .map((t: any) => ({ id: t?.toolCall?.id, name: t?.name, parameters: t?.toolCall?.parameters }))
+            .filter(Boolean)
+        : []);
+
+    if (!toolCallList.length) {
+      logger.warn('[vapi] tool-calls missing toolCallList', {
+        callId: message.call?.id,
+        keys: message && typeof message === 'object' ? Object.keys(message) : undefined
+      });
+      // For tool-calls, returning an empty results array is safer than an arbitrary "ack".
+      return { results: [] };
     }
 
-    const results = [];
-    for (const tc of toolCalls) {
-      const name = tc?.name;
+    const results: Array<{ name: string; toolCallId?: string; result: string; error?: string }> = [];
+
+    for (const tc of toolCallList) {
+      const name = String(tc?.name || '');
+      const toolCallId = typeof tc?.id === 'string' ? tc.id : undefined;
       const params = tc?.parameters || {};
       const exec = await this.executeToolCall(name, params, message);
-      results.push({ name, ok: !exec.error, result: exec.result, error: exec.error, callId: message.call?.id });
+
+      // Vapi expects `result` to be a string (often JSON-stringified).
+      const payload = exec.error ? { ok: false, error: exec.error } : exec.result ?? { ok: true };
+      results.push({
+        name,
+        toolCallId,
+        result: JSON.stringify(payload),
+        ...(exec.error ? { error: exec.error } : {})
+      });
     }
 
-    return { result: { toolResults: results } };
+    return { results };
   }
 
   private getRestaurantIdFromParams(parameters: any): string | null {
