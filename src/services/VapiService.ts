@@ -149,9 +149,12 @@ export class VapiService {
 
     logger.info('[vapi] tool_call_start', { requestId, callId, toolName: name });
 
+    // Normalize tool name to handle different casing from Vapi (PascalCase vs camelCase)
+    const normalizedName = name.charAt(0).toLowerCase() + name.slice(1);
+
     try {
       let result;
-      switch (name) {
+      switch (normalizedName) {
         case 'getStoreStatus':
           result = await VoiceOrderingService.getInstance().getStoreStatus(restaurantId);
           break;
@@ -183,9 +186,11 @@ export class VapiService {
           break;
         }
         case 'check_order_status':
+        case 'checkOrderStatus':
           result = await this.handleCheckOrderStatus(parameters, this.getPhoneUserId(message.call?.customer?.number));
           break;
         default: {
+          logger.warn('[vapi] unknown_tool', { requestId, callId, toolName: name, normalizedName });
           const mockToolCall = {
             id: 'phone_call',
             type: 'function' as const,

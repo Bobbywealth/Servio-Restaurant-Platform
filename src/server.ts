@@ -117,7 +117,7 @@ async function initializeServer() {
 
     // Vapi and Voice routes (no auth or special auth)
     app.use('/api/vapi', vapiRoutes);
-    app.use('/api', voiceRoutes); // Mount voice ordering APIs under /api
+    app.use('/api/voice', voiceRoutes); // Mount voice ordering APIs under /api/voice
 
 
     // 404 handler (must be last)
