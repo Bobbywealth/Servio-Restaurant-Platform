@@ -40,9 +40,20 @@ if (process.env.FRONTEND_URL && process.env.FRONTEND_URL !== FRONTEND_ORIGIN) {
   logger.warn(`FRONTEND_URL env does not match expected origin: ${process.env.FRONTEND_URL} (expected ${FRONTEND_ORIGIN})`);
 }
 
+const corsOriginSet = new Set(corsOrigins);
 const io = new SocketIOServer(server, {
   cors: {
-    origin: corsOrigins,
+    origin: (origin, callback) => {
+      if (!origin) {
+        logger.warn('[socket.io] missing origin header');
+        return callback(null, true);
+      }
+      if (corsOriginSet.has(origin)) {
+        return callback(null, true);
+      }
+      logger.warn('[socket.io] origin not allowed', { origin, allowed: corsOrigins });
+      return callback(new Error('Socket.IO CORS blocked'));
+    },
     methods: ["GET", "POST"],
     credentials: true
   },
@@ -50,6 +61,14 @@ const io = new SocketIOServer(server, {
   allowEIO3: true,
   pingTimeout: 60000,
   pingInterval: 25000
+});
+
+io.engine.on('connection_error', (err) => {
+  logger.error('[socket.io] connection_error', {
+    code: err.code,
+    message: err.message,
+    context: err.context
+  });
 });
 
 const PORT = process.env.PORT || 3002;
