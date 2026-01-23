@@ -522,6 +522,7 @@ router.get('/analytics', asyncHandler(async (req: Request, res: Response) => {
   const { timeframe = '30d' } = req.query;
   const db = DatabaseService.getInstance().getDatabase();
   const restaurantId = req.user?.restaurantId;
+  const optedInValue = db.dialect === 'postgres' ? true : 1;
 
   // Calculate date range
   const daysBack = timeframe === '7d' ? 7 : timeframe === '30d' ? 30 : 90;
@@ -538,12 +539,12 @@ router.get('/analytics', asyncHandler(async (req: Request, res: Response) => {
     db.get(`
       SELECT 
         COUNT(*) as total_customers,
-        COUNT(CASE WHEN opt_in_sms = 1 THEN 1 END) as sms_subscribers,
-        COUNT(CASE WHEN opt_in_email = 1 THEN 1 END) as email_subscribers,
+        COUNT(CASE WHEN opt_in_sms = ? THEN 1 END) as sms_subscribers,
+        COUNT(CASE WHEN opt_in_email = ? THEN 1 END) as email_subscribers,
         COUNT(CASE WHEN created_at >= ? THEN 1 END) as new_customers
       FROM customers 
       WHERE restaurant_id = ?
-    `, [startDate.toISOString(), restaurantId]),
+    `, [optedInValue, optedInValue, startDate.toISOString(), restaurantId]),
 
     // Campaign statistics
     db.get(`
@@ -564,22 +565,26 @@ router.get('/analytics', asyncHandler(async (req: Request, res: Response) => {
         COUNT(CASE WHEN type = 'sms' AND status = 'sent' THEN 1 END) as sms_sent,
         COUNT(CASE WHEN type = 'email' AND status = 'sent' THEN 1 END) as emails_sent
       FROM marketing_sends 
-      WHERE created_at >= ?
-    `, [startDate.toISOString()]),
+      INNER JOIN customers ON marketing_sends.customer_id = customers.id
+      WHERE marketing_sends.created_at >= ?
+        AND customers.restaurant_id = ?
+    `, [startDate.toISOString(), restaurantId]),
 
     // Recent send activity
     db.all(`
       SELECT 
-        type,
-        recipient,
-        subject,
-        status,
-        created_at
+        marketing_sends.type,
+        marketing_sends.recipient,
+        marketing_sends.subject,
+        marketing_sends.status,
+        marketing_sends.created_at
       FROM marketing_sends 
-      WHERE created_at >= ?
-      ORDER BY created_at DESC
+      INNER JOIN customers ON marketing_sends.customer_id = customers.id
+      WHERE marketing_sends.created_at >= ?
+        AND customers.restaurant_id = ?
+      ORDER BY marketing_sends.created_at DESC
       LIMIT 10
-    `, [startDate.toISOString()])
+    `, [startDate.toISOString(), restaurantId])
   ]);
 
   res.json({
@@ -603,6 +608,7 @@ router.get('/analytics', asyncHandler(async (req: Request, res: Response) => {
  */
 async function sendCampaign(campaignId: string) {
   const db = DatabaseService.getInstance().getDatabase();
+  const optedInValue = db.dialect === 'postgres' ? true : 1;
   
   try {
     const campaign = await db.get('SELECT * FROM marketing_campaigns WHERE id = ?', [campaignId]);
@@ -615,17 +621,24 @@ async function sendCampaign(campaignId: string) {
     const queryParams = [campaign.restaurant_id];
 
     if (campaign.type === 'sms') {
-      customerQuery += ' AND opt_in_sms = 1 AND phone IS NOT NULL';
+      customerQuery += ' AND opt_in_sms = ? AND phone IS NOT NULL';
+      queryParams.push(optedInValue);
     } else if (campaign.type === 'email') {
-      customerQuery += ' AND opt_in_email = 1 AND email IS NOT NULL';
+      customerQuery += ' AND opt_in_email = ? AND email IS NOT NULL';
+      queryParams.push(optedInValue);
     }
 
     if (targetCriteria.tags && targetCriteria.tags.length > 0) {
       customerQuery += ' AND (';
       targetCriteria.tags.forEach((tag: string, index: number) => {
         if (index > 0) customerQuery += ' OR ';
-        customerQuery += 'JSON_EXTRACT(tags, ?) LIKE ?';
-        queryParams.push(`$[*]`, `%${tag}%`);
+        if (db.dialect === 'postgres') {
+          customerQuery += 'tags ILIKE ?';
+          queryParams.push(`%\"${tag}\"%`);
+        } else {
+          customerQuery += 'JSON_EXTRACT(tags, ?) LIKE ?';
+          queryParams.push(`$[*]`, `%${tag}%`);
+        }
       });
       customerQuery += ')';
     }
