@@ -36,6 +36,16 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_modifier_groups_restaurant_name_unique
   ON modifier_groups(restaurant_id, name)
   WHERE deleted_at IS NULL;
 
+-- Deduplicate existing modifier_groups before enforcing unique index
+WITH dupes AS (
+  SELECT id,
+         ROW_NUMBER() OVER (PARTITION BY restaurant_id, name ORDER BY created_at DESC, id DESC) AS rn
+  FROM modifier_groups
+  WHERE deleted_at IS NULL
+)
+DELETE FROM modifier_groups
+WHERE id IN (SELECT id FROM dupes WHERE rn > 1);
+
 CREATE INDEX IF NOT EXISTS idx_modifier_groups_restaurant
   ON modifier_groups(restaurant_id);
 
