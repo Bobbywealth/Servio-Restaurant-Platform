@@ -9,7 +9,7 @@ const service = VoiceOrderingService.getInstance();
 
 // 1) Store Status
 router.get('/store/status', requireVapiAuth, asyncHandler(async (req: Request, res: Response) => {
-  const status = service.getStoreStatus();
+  const status = await service.getStoreStatus(req.user?.restaurantId);
   res.json(status);
 }));
 
@@ -20,12 +20,13 @@ router.get('/menu', requireVapiAuth, asyncHandler(async (req: Request, res: Resp
 
 router.get('/menu/search', requireVapiAuth, asyncHandler(async (req: Request, res: Response) => {
   const { q } = req.query;
-  res.json(service.searchMenu(String(q || '')));
+  const items = await service.searchMenuLive(String(q || ''), req.user?.restaurantId);
+  res.json(items);
 }));
 
 router.get('/menu/items/:id', requireVapiAuth, asyncHandler(async (req: Request, res: Response) => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const item = service.getMenuItem(id);
+  const item = await service.getMenuItemLive(id, req.user?.restaurantId);
   if (!item) return res.status(404).json({ error: 'Item not found' });
   res.json(item);
 }));

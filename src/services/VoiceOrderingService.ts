@@ -36,20 +36,106 @@ export class VoiceOrderingService {
     }
   }
 
-  public getStoreStatus() {
-    if (!this.menuData) return null;
-    return {
-      status: "open", // Simplified for now, could be dynamic
-      closedMessage: "We’re temporarily closed right now...",
-      hours: { 
-        "tue": ["09:00","21:00"], 
-        "wed": ["09:00","21:00"], 
-        "thu": ["09:00","21:00"], 
-        "fri": ["09:00","21:00"], 
-        "sat": ["09:00","21:00"] 
-      },
-      timezone: "America/New_York"
-    };
+  private resolveRestaurantId(input?: string | null) {
+    return input || process.env.VAPI_RESTAURANT_ID || null;
+  }
+
+  // Live DB: get open/closed info; for now always "open" if DB reachable
+  public async getStoreStatus(restaurantId?: string | null) {
+    const resolvedRestaurantId = this.resolveRestaurantId(restaurantId);
+    if (!resolvedRestaurantId) {
+      return {
+        status: 'open',
+        closedMessage: 'Restaurant ID missing; assuming open',
+        timezone: 'America/New_York'
+      };
+    }
+
+    try {
+      const db = DatabaseService.getInstance().getDatabase();
+      const row = await db.get(
+        'SELECT settings FROM restaurants WHERE id = ?',
+        [resolvedRestaurantId]
+      );
+      const settings = row?.settings ? JSON.parse(row.settings) : {};
+      return {
+        status: 'open',
+        closedMessage: 'We’re temporarily closed right now...',
+        hours: settings.operating_hours || {},
+        timezone: settings.timezone || 'America/New_York'
+      };
+    } catch (err) {
+      logger.warn('[vapi] getStoreStatus fallback to open', { error: err instanceof Error ? err.message : String(err) });
+      return {
+        status: 'open',
+        closedMessage: 'We’re temporarily closed right now...',
+        timezone: 'America/New_York'
+      };
+    }
+  }
+
+  // Live DB search (availability-aware)
+  public async searchMenuLive(query: string, restaurantId?: string | null) {
+    const resolvedRestaurantId = this.resolveRestaurantId(restaurantId);
+    if (!resolvedRestaurantId) return [];
+
+    const q = `%${(query || '').trim()}%`;
+    try {
+      const db = DatabaseService.getInstance().getDatabase();
+      const rows = await db.all(
+        `
+        SELECT mi.id, mi.name, mi.price, mc.name as category
+        FROM menu_items mi
+        LEFT JOIN menu_categories mc ON mc.id = mi.category_id
+        WHERE mi.restaurant_id = ? AND mi.is_available = TRUE AND mi.name ILIKE ?
+        ORDER BY mi.name ASC
+        LIMIT 20
+        `,
+        [resolvedRestaurantId, q]
+      );
+      return rows.map((r: any) => ({
+        id: r.id,
+        name: r.name,
+        price: Number(r.price || 0),
+        category: r.category || 'Menu'
+      }));
+    } catch (err) {
+      logger.error('[vapi] searchMenuLive failed', { error: err instanceof Error ? err.message : String(err) });
+      return [];
+    }
+  }
+
+  // Live DB get item by id or name (availability-aware)
+  public async getMenuItemLive(idOrName: string, restaurantId?: string | null) {
+    const resolvedRestaurantId = this.resolveRestaurantId(restaurantId);
+    if (!resolvedRestaurantId || !idOrName) return null;
+
+    try {
+      const db = DatabaseService.getInstance().getDatabase();
+      const row = await db.get(
+        `
+        SELECT mi.*, mc.name as category
+        FROM menu_items mi
+        LEFT JOIN menu_categories mc ON mc.id = mi.category_id
+        WHERE mi.restaurant_id = ? AND mi.is_available = TRUE AND (mi.id = ? OR mi.name ILIKE ?)
+        LIMIT 1
+        `,
+        [resolvedRestaurantId, idOrName, idOrName]
+      );
+      if (!row) return null;
+
+      return {
+        id: row.id,
+        name: row.name,
+        basePrice: Number(row.price || 0),
+        modifierGroups: [], // could be populated later if needed
+        tags: [],
+        category: row.category || 'Menu'
+      };
+    } catch (err) {
+      logger.error('[vapi] getMenuItemLive failed', { error: err instanceof Error ? err.message : String(err) });
+      return null;
+    }
   }
 
   public getFullMenu() {

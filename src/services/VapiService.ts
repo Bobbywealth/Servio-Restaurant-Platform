@@ -111,13 +111,18 @@ export class VapiService {
     const { name, parameters } = message.functionCall;
     const userId = this.getPhoneUserId(message.call?.customer?.number);
     const callId = message.call?.id;
+    const requestId = callId || `vapi_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const startedAt = Date.now();
+    const restaurantId = parameters?.restaurantId || process.env.VAPI_RESTAURANT_ID || null;
 
     // Structured logging for tool calls
     logger.info('[vapi] tool_call_start', { 
+      requestId,
       callId, 
       toolName: name, 
       parameters: JSON.stringify(parameters).slice(0, 500),
-      customerNumber: message.call?.customer?.number
+      customerNumber: message.call?.customer?.number,
+      restaurantId
     });
 
     try {
@@ -126,13 +131,16 @@ export class VapiService {
       // Handle phone-specific functions
       switch (name) {
         case 'getStoreStatus':
-          result = VoiceOrderingService.getInstance().getStoreStatus();
+          result = await VoiceOrderingService.getInstance().getStoreStatus(restaurantId);
           break;
         case 'searchMenu':
-          result = VoiceOrderingService.getInstance().searchMenu(parameters.q || '');
+          result = await VoiceOrderingService.getInstance().searchMenuLive(parameters.q || '', restaurantId);
           break;
         case 'getMenuItem':
-          result = VoiceOrderingService.getInstance().getMenuItem(parameters.id);
+          result = await VoiceOrderingService.getInstance().getMenuItemLive(parameters.id || parameters.name, restaurantId);
+          break;
+        case 'getMenuItemByName':
+          result = await VoiceOrderingService.getInstance().getMenuItemLive(parameters.name, restaurantId);
           break;
         case 'quoteOrder':
           result = VoiceOrderingService.getInstance().validateQuote(parameters);
@@ -195,22 +203,43 @@ export class VapiService {
           }
       }
       
-      if (result.status === 'error') {
+      const durationMs = Date.now() - startedAt;
+      const responseSize = result ? JSON.stringify(result).length : 0;
+
+      if (result?.status === 'error') {
         logger.warn('[vapi] tool_call_error_result', { 
+          requestId,
           callId, 
           toolName: name, 
-          error: result.error 
+          error: result.error,
+          durationMs,
+          responseSize
         });
         return {
           result: `I'm sorry, ${result.error}. Is there something else I can help you with?`
         };
       }
 
+      if (result === null || result === undefined) {
+        logger.warn('[vapi] tool_call_empty_result', {
+          requestId,
+          callId,
+          toolName: name,
+          durationMs
+        });
+        return {
+          result: "I'm sorry, I couldn't find that right now. Do you want to try something else?"
+        };
+      }
+
       // Log successful tool call completion
       logger.info('[vapi] tool_call_success', { 
+        requestId,
         callId, 
         toolName: name,
-        resultType: result.type || result.status || 'unknown'
+        resultType: result.type || result.status || 'unknown',
+        durationMs,
+        responseSize
       });
 
       // Format the result for voice response
@@ -220,6 +249,7 @@ export class VapiService {
       
     } catch (error) {
       logger.error('[vapi] tool_call_exception', { 
+        requestId,
         callId,
         toolName: name,
         error: error instanceof Error ? error.message : String(error),
@@ -424,7 +454,10 @@ export class VapiService {
   private async handleGetMenuInfo(parameters: any, _userId: string): Promise<any> {
     try {
       const voiceService = VoiceOrderingService.getInstance();
-      const items = voiceService.searchMenu(parameters.itemName || parameters.category || '');
+      const items = await voiceService.searchMenuLive(
+        parameters.itemName || parameters.category || '',
+        parameters.restaurantId || process.env.VAPI_RESTAURANT_ID
+      );
 
       if (items.length === 0) {
         return {

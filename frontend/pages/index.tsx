@@ -28,7 +28,7 @@ export default function HomePage() {
         {/* Navigation */}
         <nav className="fixed top-0 left-0 right-0 bg-gray-900/95 backdrop-blur-md border-b border-gray-800 z-50">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between items-center h-16">
+            <div className="flex justify-between items-center h-16" id="top">
               <div className="flex items-center">
                 <img
                   src="/images/servio_logo_transparent_tight.png"
@@ -37,6 +37,7 @@ export default function HomePage() {
                 />
               </div>
               <div className="hidden md:flex items-center space-x-8">
+                <a href="#top" className="text-gray-300 hover:text-white font-medium transition-colors">Home</a>
                 <a href="#services" className="text-gray-300 hover:text-white font-medium transition-colors">Services</a>
                 <a href="#features" className="text-gray-300 hover:text-white font-medium transition-colors">Features</a>
                 <a href="#pricing" className="text-gray-300 hover:text-white font-medium transition-colors">Pricing</a>

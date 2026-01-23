@@ -671,7 +671,7 @@ router.post('/items/set-unavailable', asyncHandler(async (req: Request, res: Res
 
   // Update availability
   await db.run(
-    'UPDATE menu_items SET is_available = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+    'UPDATE menu_items SET is_available = FALSE, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
     [itemId]
   );
 
@@ -748,7 +748,7 @@ router.post('/items/set-available', asyncHandler(async (req: Request, res: Respo
 
   // Update availability
   await db.run(
-    'UPDATE menu_items SET is_available = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+    'UPDATE menu_items SET is_available = TRUE, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
     [itemId]
   );
 
@@ -841,8 +841,8 @@ router.get('/categories', asyncHandler(async (req: Request, res: Response) => {
       mc.sort_order,
       mc.is_active,
       COUNT(mi.id) as total_items,
-      COUNT(CASE WHEN mi.is_available = 1 THEN 1 END) as available_items,
-      COUNT(CASE WHEN mi.is_available = 0 THEN 1 END) as unavailable_items
+      COUNT(CASE WHEN mi.is_available = TRUE THEN 1 END) as available_items,
+      COUNT(CASE WHEN mi.is_available = FALSE THEN 1 END) as unavailable_items
     FROM menu_categories mc
     LEFT JOIN menu_items mi ON mc.id = mi.category_id
     WHERE mc.restaurant_id = ?
