@@ -64,7 +64,13 @@ router.post('/tool/:toolName', requireVapiWebhookAuth, async (req: Request, res:
     body;
   const headerCallId = req.headers['x-vapi-call-id'];
   const headerCallIdValue = Array.isArray(headerCallId) ? headerCallId[0] : headerCallId;
-  const callId = (body as any)?.callId || (body as any)?.call?.id || headerCallIdValue;
+  const callIdRaw = (body as any)?.callId || (body as any)?.call?.id || headerCallIdValue;
+  const callId =
+    typeof callIdRaw === 'string'
+      ? callIdRaw
+      : Array.isArray(callIdRaw)
+        ? callIdRaw[0]
+        : undefined;
   const customerNumberRaw =
     (body as any)?.customerNumber || (body as any)?.customer?.number || (body as any)?.call?.customer?.number;
   const customerNumber =
