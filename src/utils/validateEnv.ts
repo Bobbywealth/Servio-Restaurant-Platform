@@ -131,25 +131,29 @@ export function failFastIfInvalid(): void {
  * Uses FRONTEND_URL as primary, ALLOWED_ORIGINS for additional domains.
  */
 export function getCorsOrigins(): string[] {
-  const origins: string[] = [];
+  const origins = new Set<string>();
+
+  // Canonical production origins (hardcoded safety net)
+  // Keep in sync with src/server.ts + middleware/errorHandler.ts
+  origins.add('https://servio-app.onrender.com');
   
   // Primary: FRONTEND_URL
   const frontendUrl = process.env.FRONTEND_URL;
   if (frontendUrl) {
-    origins.push(frontendUrl);
+    origins.add(frontendUrl);
   }
   
   // Additional: ALLOWED_ORIGINS (comma-separated)
   const allowedOrigins = process.env.ALLOWED_ORIGINS;
   if (allowedOrigins) {
     const additional = allowedOrigins.split(',').map(o => o.trim()).filter(Boolean);
-    origins.push(...additional);
+    for (const o of additional) origins.add(o);
   }
   
   // Fallback for development
-  if (origins.length === 0) {
-    origins.push('http://localhost:3000');
+  if (origins.size === 0) {
+    origins.add('http://localhost:3000');
   }
   
-  return origins;
+  return Array.from(origins);
 }
