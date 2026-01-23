@@ -6,6 +6,9 @@ import { logger } from '../utils/logger';
 
 const router = Router();
 
+const asString = (value: string | string[] | undefined): string | undefined =>
+  Array.isArray(value) ? value[0] : value;
+
 function ensureRestaurantAccess(req: Request, restaurantId: string) {
   if (!req.user?.restaurantId || req.user.restaurantId !== restaurantId) {
     throw new UnauthorizedError('Restaurant access denied');
@@ -17,7 +20,8 @@ function ensureRestaurantAccess(req: Request, restaurantId: string) {
 // ---------------------------------------------------------------------------
 
 router.post('/restaurants/:restaurantId/modifier-groups', asyncHandler(async (req: Request, res: Response) => {
-  const { restaurantId } = req.params;
+  const restaurantId = asString(req.params.restaurantId);
+  if (!restaurantId) return res.status(400).json({ success: false, error: { message: 'restaurantId is required' } });
   ensureRestaurantAccess(req, restaurantId);
 
   const {
@@ -105,7 +109,8 @@ router.post('/restaurants/:restaurantId/modifier-groups', asyncHandler(async (re
 }));
 
 router.get('/restaurants/:restaurantId/modifier-groups', asyncHandler(async (req: Request, res: Response) => {
-  const { restaurantId } = req.params;
+  const restaurantId = asString(req.params.restaurantId);
+  if (!restaurantId) return res.status(400).json({ success: false, error: { message: 'restaurantId is required' } });
   ensureRestaurantAccess(req, restaurantId);
 
   const includeOptions = String(req.query.includeOptions || '').toLowerCase() === 'true' || req.query.includeOptions === '1';
@@ -233,7 +238,8 @@ router.delete('/modifier-groups/:groupId', asyncHandler(async (req: Request, res
 // ---------------------------------------------------------------------------
 
 router.post('/modifier-groups/:groupId/options', asyncHandler(async (req: Request, res: Response) => {
-  const { groupId } = req.params;
+  const groupId = asString(req.params.groupId);
+  if (!groupId) return res.status(400).json({ success: false, error: { message: 'groupId is required' } });
   const db = DatabaseService.getInstance().getDatabase();
   const group = await db.get(`SELECT * FROM modifier_groups WHERE id = ? AND deleted_at IS NULL`, [groupId]);
   if (!group) {
@@ -277,7 +283,8 @@ router.post('/modifier-groups/:groupId/options', asyncHandler(async (req: Reques
 }));
 
 router.put('/modifier-options/:optionId', asyncHandler(async (req: Request, res: Response) => {
-  const { optionId } = req.params;
+  const optionId = asString(req.params.optionId);
+  if (!optionId) return res.status(400).json({ success: false, error: { message: 'optionId is required' } });
   const db = DatabaseService.getInstance().getDatabase();
   const existing = await db.get(`SELECT * FROM modifier_options WHERE id = ? AND deleted_at IS NULL`, [optionId]);
   if (!existing) {
@@ -322,7 +329,8 @@ router.put('/modifier-options/:optionId', asyncHandler(async (req: Request, res:
 }));
 
 router.delete('/modifier-options/:optionId', asyncHandler(async (req: Request, res: Response) => {
-  const { optionId } = req.params;
+  const optionId = asString(req.params.optionId);
+  if (!optionId) return res.status(400).json({ success: false, error: { message: 'optionId is required' } });
   const db = DatabaseService.getInstance().getDatabase();
   const existing = await db.get(`SELECT * FROM modifier_options WHERE id = ? AND deleted_at IS NULL`, [optionId]);
   if (!existing) {
@@ -351,7 +359,8 @@ async function assertItemRestaurant(db: any, itemId: string, restaurantId: strin
 }
 
 router.post('/menu-items/:itemId/modifier-groups', asyncHandler(async (req: Request, res: Response) => {
-  const { itemId } = req.params;
+  const itemId = asString(req.params.itemId);
+  if (!itemId) return res.status(400).json({ success: false, error: { message: 'itemId is required' } });
   const { groupId, overrideMin = null, overrideMax = null, overrideRequired = null, displayOrder = 0 } = req.body || {};
   if (!groupId) {
     return res.status(400).json({ success: false, error: { message: 'groupId is required' } });
@@ -395,7 +404,9 @@ router.post('/menu-items/:itemId/modifier-groups', asyncHandler(async (req: Requ
 }));
 
 router.delete('/menu-items/:itemId/modifier-groups/:groupId', asyncHandler(async (req: Request, res: Response) => {
-  const { itemId, groupId } = req.params;
+  const itemId = asString(req.params.itemId);
+  const groupId = asString(req.params.groupId);
+  if (!itemId || !groupId) return res.status(400).json({ success: false, error: { message: 'itemId and groupId are required' } });
   const db = DatabaseService.getInstance().getDatabase();
   const group = await db.get(`SELECT * FROM modifier_groups WHERE id = ? AND deleted_at IS NULL`, [groupId]);
   if (!group) {
