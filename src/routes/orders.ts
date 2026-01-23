@@ -575,16 +575,33 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
 
   // Validate modifiers (new schema) per item if selections provided
   const normalizedItems = [];
+  const isTestOrder = String(channel || '').toLowerCase() === 'test';
   if (Array.isArray(items)) {
+    let idx = 0;
     for (const line of items) {
       const lineItemId = line?.itemId || line?.id;
+      const selections = Array.isArray(line?.selections) ? line.selections : [];
+
+      // For dashboard "Create Test Order", allow orders without menu item IDs or modifier selections.
+      // This keeps the demo button working even when menu items have required modifier groups.
+      if (isTestOrder) {
+        normalizedItems.push({
+          ...line,
+          itemId: lineItemId || `test_item_${idx}`,
+          modifiersSnapshot: [],
+          modifiersPriceDelta: 0
+        });
+        idx += 1;
+        continue;
+      }
+
       if (!lineItemId) {
         return res.status(400).json({
           success: false,
           error: { message: 'Each item must include itemId' }
         });
       }
-      const selections = Array.isArray(line?.selections) ? line.selections : [];
+
       const validation = await validateItemSelections(lineItemId, selections);
       if (!validation.valid) {
         const err = validation.errors?.[0];
@@ -605,6 +622,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
         modifiersSnapshot: validation.snapshot || [],
         modifiersPriceDelta: validation.priceDeltaTotal || 0
       });
+      idx += 1;
     }
   }
 
