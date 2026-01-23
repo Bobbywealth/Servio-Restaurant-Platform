@@ -121,14 +121,6 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       roles: ['manager', 'owner', 'admin']
     },
     {
-      name: 'Profile',
-      href: '/dashboard/restaurant-profile',
-      icon: Store,
-      description: 'Restaurant branding',
-      color: 'text-indigo-500',
-      roles: ['manager', 'owner', 'admin']
-    },
-    {
       name: 'Inventory',
       href: '/dashboard/inventory',
       icon: Package,

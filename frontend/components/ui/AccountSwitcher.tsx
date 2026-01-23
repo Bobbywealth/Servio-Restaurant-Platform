@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useUser } from '../../contexts/UserContext'
 import { 
@@ -10,7 +11,8 @@ import {
   Settings,
   CheckCircle,
   Loader2,
-  AlertCircle
+  AlertCircle,
+  Store
 } from 'lucide-react'
 
 interface AccountSwitcherProps {
@@ -184,6 +186,17 @@ export function AccountSwitcher({ className = '' }: AccountSwitcherProps) {
                   ))}
                 </div>
               )}
+            </div>
+
+            <div className="px-3 pb-3">
+              <Link
+                href="/dashboard/restaurant-profile"
+                className="mt-3 inline-flex items-center gap-2 w-full justify-center px-3 py-2 rounded-lg bg-primary-600 hover:bg-primary-700 text-white text-sm font-semibold transition-colors"
+                onClick={() => setIsOpen(false)}
+              >
+                <Store className="w-4 h-4" />
+                Restaurant Profile
+              </Link>
             </div>
           </motion.div>
         )}
