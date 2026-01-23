@@ -91,7 +91,9 @@ router.post('/tool/:toolName', requireVapiWebhookAuth, async (req: Request, res:
       return res.status(200).json({ error: exec.error });
     }
 
-    return res.status(200).json(exec.result ?? { ok: true });
+    // Vapi tool servers expect a top-level `result` for successful tool calls.
+    // Returning raw JSON can be interpreted as "No result returned" depending on tool type.
+    return res.status(200).json({ result: exec.result ?? { ok: true } });
   } catch (error) {
     logger.error('[vapi:tool] handler_error', {
       toolName,
@@ -136,7 +138,7 @@ router.get('/tool/:toolName', requireVapiWebhookAuth, async (req: Request, res: 
       return res.status(200).json({ error: exec.error });
     }
 
-    return res.status(200).json(exec.result ?? { ok: true });
+    return res.status(200).json({ result: exec.result ?? { ok: true } });
   } catch (error) {
     logger.error('[vapi:tool] handler_error', {
       toolName,
