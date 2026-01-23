@@ -580,7 +580,7 @@ const MenuManagement: React.FC = () => {
       isAvailable: true
     });
     setNewItemImages([]);
-    setNewItemModifierGroupIds([]);
+    setNewItemAttachedGroups([]);
     setShowAddItemModal(true);
   };
 
