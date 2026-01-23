@@ -9,6 +9,7 @@ import type { ReceiptPaperWidth, ReceiptOrder, ReceiptRestaurant } from '../../u
 import { generateReceiptHtml } from '../../utils/receiptGenerator';
 import { api } from '../../lib/api';
 import { generateEscPosReceipt, printViaRawBT, type ReceiptData } from '../../utils/escpos';
+import { useUser } from '../../contexts/UserContext';
 
 type OrderItem = {
   id?: string;
@@ -174,6 +175,7 @@ function beepSequence() {
 
 export default function TabletOrdersPage() {
   const router = useRouter();
+  const { user, isLoading: authLoading } = useUser();
   const socket = useSocket();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
@@ -199,13 +201,20 @@ export default function TabletOrdersPage() {
   const [showPrintPrompt, setShowPrintPrompt] = useState<string | null>(null);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const token = window.localStorage.getItem('servio_access_token');
-    if (!token) {
-      setLoading(false);
-      router.replace('/login');
+    if (authLoading) return;
+    if (!user) {
+      const next = router.asPath || '/tablet/orders';
+      router.replace(`/tablet/login?next=${encodeURIComponent(next)}`);
     }
-  }, [router]);
+  }, [authLoading, user, router]);
+
+  if (authLoading || !user) {
+    return (
+      <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
+        <p className="text-sm text-gray-300">Redirecting to login…</p>
+      </div>
+    );
+  }
 
   // Initialize audio on mount
   useEffect(() => {
