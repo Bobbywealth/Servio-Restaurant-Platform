@@ -5,7 +5,7 @@ import { logger } from '../utils/logger';
 
 export interface VapiWebhookPayload {
   message: {
-    type: 'assistant-request' | 'function-call' | 'hang' | 'speech-update' | 'transcript' | 'end-of-call-report';
+    type: 'assistant-request' | 'function-call' | 'tool-calls' | 'hang' | 'speech-update' | 'transcript' | 'end-of-call-report';
     call?: {
       id: string;
       orgId: string;
@@ -23,6 +23,10 @@ export interface VapiWebhookPayload {
       name: string;
       parameters: Record<string, any>;
     };
+    toolCalls?: Array<{
+      name: string;
+      parameters: Record<string, any>;
+    }>;
     endedReason?: 'assistant-error' | 'pipeline-error-openai-llm-failed' | 'db-error' | 'assistant-not-found' | 'license-check-failed' | 'pipeline-error-voice-model-failed' | 'assistant-not-invalid' | 'assistant-request-failed' | 'unknown-error' | 'vonage-disconnected' | 'vonage-failed-to-connect-call' | 'phone-call-provider-bypass-enabled-but-no-call-received' | 'vapid-not-found' | 'assistant-ended-call' | 'customer-ended-call' | 'customer-did-not-answer' | 'customer-did-not-give-microphone-permission' | 'assistant-said-end-call-phrase' | 'customer-was-idle' | 'reached-max-duration' | 'reached-max-function-calls' | 'exceeded-max-duration' | 'cancelled' | 'pipeline-error-exceeded-tokens' | 'sip-gateway-failed-to-connect-call' | 'twilio-failed-to-connect-call' | 'assistant-said-message-with-end-call-enabled' | 'silence-timed-out';
   };
 }
@@ -45,8 +49,7 @@ export class VapiService {
     
     logger.info('Vapi webhook received:', { 
       type: message.type, 
-      callId: message.call?.id,
-      customerNumber: message.call?.customer?.number 
+      callId: message.call?.id
     });
 
     try {
@@ -56,6 +59,9 @@ export class VapiService {
         
         case 'function-call':
           return await this.handleFunctionCall(message);
+
+        case 'tool-calls':
+          return await this.handleToolCalls(message);
         
         case 'end-of-call-report':
           return await this.handleEndOfCall(message);
@@ -109,26 +115,42 @@ export class VapiService {
     }
 
     const { name, parameters } = message.functionCall;
-    const userId = this.getPhoneUserId(message.call?.customer?.number);
+    const res = await this.executeToolCall(name, parameters, message);
+    return res.error ? { error: res.error } : { result: this.formatActionResultForVoice(res.result) };
+  }
+
+  private async handleToolCalls(message: any): Promise<VapiResponse> {
+    const toolCalls = Array.isArray(message.toolCalls) ? message.toolCalls : [];
+    if (!toolCalls.length) {
+      logger.warn('[vapi] tool-calls missing toolCalls array', { callId: message.call?.id });
+      return { result: 'acknowledged' };
+    }
+
+    const results = [];
+    for (const tc of toolCalls) {
+      const name = tc?.name;
+      const params = tc?.parameters || {};
+      const exec = await this.executeToolCall(name, params, message);
+      results.push({ name, ok: !exec.error, result: exec.result, error: exec.error, callId: message.call?.id });
+    }
+
+    return { result: { toolResults: results } };
+  }
+
+  private getRestaurantIdFromParams(parameters: any): string | null {
+    return parameters?.restaurantId || process.env.VAPI_RESTAURANT_ID || null;
+  }
+
+  private async executeToolCall(name: string, parameters: any, message: any): Promise<{ result?: any; error?: string }> {
     const callId = message.call?.id;
     const requestId = callId || `vapi_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const restaurantId = this.getRestaurantIdFromParams(parameters);
     const startedAt = Date.now();
-    const restaurantId = parameters?.restaurantId || process.env.VAPI_RESTAURANT_ID || null;
 
-    // Structured logging for tool calls
-    logger.info('[vapi] tool_call_start', { 
-      requestId,
-      callId, 
-      toolName: name, 
-      parameters: JSON.stringify(parameters).slice(0, 500),
-      customerNumber: message.call?.customer?.number,
-      restaurantId
-    });
+    logger.info('[vapi] tool_call_start', { requestId, callId, toolName: name });
 
     try {
       let result;
-
-      // Handle phone-specific functions
       switch (name) {
         case 'getStoreStatus':
           result = await VoiceOrderingService.getInstance().getStoreStatus(restaurantId);
@@ -143,10 +165,10 @@ export class VapiService {
           result = await VoiceOrderingService.getInstance().getMenuItemLive(parameters.name, restaurantId);
           break;
         case 'quoteOrder':
+          parameters.restaurantId = restaurantId;
           result = VoiceOrderingService.getInstance().validateQuote(parameters);
           break;
-        case 'createOrder':
-          // Ensure the order is linked to the inbound call for matching later in Voice Hub
+        case 'createOrder': {
           parameters.callId = parameters.callId || message.call?.id;
           parameters.source = parameters.source || 'vapi';
           if (!parameters.customer) parameters.customer = {};
@@ -156,108 +178,41 @@ export class VapiService {
             const last = parts[parts.length - 1];
             parameters.customer.lastInitial = last ? last[0]?.toUpperCase() : undefined;
           }
-          
-          logger.info('[vapi] createOrder_attempt', {
-            callId,
-            customerName: parameters.customer?.name,
-            customerPhone: parameters.customer?.phone,
-            itemCount: parameters.items?.length,
-            orderType: parameters.orderType,
-            total: parameters.totals?.total
-          });
-          
+          parameters.restaurantId = restaurantId;
           result = await VoiceOrderingService.getInstance().createOrder(parameters);
-          
-          // Log successful order creation
-          if (result.orderId) {
-            logger.info('[vapi] createOrder_success', {
-              callId,
-              orderId: result.orderId,
-              total: result.total,
-              status: result.status,
-              customerName: parameters.customer?.name
-            });
-          } else {
-            logger.warn('[vapi] createOrder_failed', {
-              callId,
-              errors: result.errors,
-              customerName: parameters.customer?.name
-            });
-          }
           break;
+        }
         case 'check_order_status':
-          result = await this.handleCheckOrderStatus(parameters, userId);
+          result = await this.handleCheckOrderStatus(parameters, this.getPhoneUserId(message.call?.customer?.number));
           break;
-        default:
-          {
-            // Fall back to existing assistant service functions
-            const mockToolCall = {
-              id: 'phone_call',
-              type: 'function' as const,
-              function: {
-                name,
-                arguments: JSON.stringify(parameters)
-              }
-            };
-            result = await (this.assistantService as any).executeTool(mockToolCall, userId);
-          }
+        default: {
+          const mockToolCall = {
+            id: 'phone_call',
+            type: 'function' as const,
+            function: {
+              name,
+              arguments: JSON.stringify(parameters)
+            }
+          };
+          result = await (this.assistantService as any).executeTool(mockToolCall, this.getPhoneUserId(message.call?.customer?.number));
+        }
       }
-      
+
       const durationMs = Date.now() - startedAt;
-      const responseSize = result ? JSON.stringify(result).length : 0;
-
       if (result?.status === 'error') {
-        logger.warn('[vapi] tool_call_error_result', { 
-          requestId,
-          callId, 
-          toolName: name, 
-          error: result.error,
-          durationMs,
-          responseSize
-        });
-        return {
-          result: `I'm sorry, ${result.error}. Is there something else I can help you with?`
-        };
+        logger.warn('[vapi] tool_call_error_result', { requestId, callId, toolName: name });
+        return { result };
       }
-
       if (result === null || result === undefined) {
-        logger.warn('[vapi] tool_call_empty_result', {
-          requestId,
-          callId,
-          toolName: name,
-          durationMs
-        });
-        return {
-          result: "I'm sorry, I couldn't find that right now. Do you want to try something else?"
-        };
+        logger.warn('[vapi] tool_call_empty_result', { requestId, callId, toolName: name, durationMs });
+        return { result: { message: 'no result' } };
       }
 
-      // Log successful tool call completion
-      logger.info('[vapi] tool_call_success', { 
-        requestId,
-        callId, 
-        toolName: name,
-        resultType: result.type || result.status || 'unknown',
-        durationMs,
-        responseSize
-      });
-
-      // Format the result for voice response
-      const voiceResponse = this.formatActionResultForVoice(result);
-      
-      return { result: voiceResponse };
-      
+      logger.info('[vapi] tool_call_success', { requestId, callId, toolName: name, durationMs });
+      return { result };
     } catch (error) {
-      logger.error('[vapi] tool_call_exception', { 
-        requestId,
-        callId,
-        toolName: name,
-        error: error instanceof Error ? error.message : String(error),
-        stack: error instanceof Error ? error.stack : undefined
-      });
-      return {
-        result: "I'm sorry, I wasn't able to complete that action. What else can I help you with?"
-      };
+      logger.error('[vapi] tool_call_error', { callId, requestId, toolName: name, error: error instanceof Error ? error.message : String(error) });
+      return { error: 'Internal server error' };
     }
   }
 

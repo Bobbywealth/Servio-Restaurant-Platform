@@ -35,6 +35,28 @@ async function run() {
   await callTool('searchMenu', { q: 'available', restaurantId: RESTAURANT_ID });
   await callTool('getStoreStatus', { restaurantId: RESTAURANT_ID });
   await callTool('getMenuItem', { id: 'jerk-chicken', restaurantId: RESTAURANT_ID });
+
+  // tool-calls batch example
+  const toolCallsPayload = {
+    message: {
+      type: 'tool-calls',
+      call: { id: `test_toolcalls_${Date.now()}`, customer: { number: '+15555555555' } },
+      toolCalls: [
+        {
+          name: 'searchMenu',
+          parameters: { q: 'available', restaurantId: RESTAURANT_ID }
+        }
+      ]
+    }
+  };
+  const res = await fetch(WEBHOOK_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(toolCallsPayload)
+  });
+  const text = await res.text();
+  console.log(`\n== tool-calls searchMenu status ${res.status} ==`);
+  console.log(text);
 }
 
 run().catch((err) => {

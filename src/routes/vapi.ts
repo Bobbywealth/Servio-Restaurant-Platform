@@ -40,8 +40,7 @@ router.post('/webhook', async (req: Request, res: Response) => {
     // Log incoming webhook for debugging (avoid PII)
     log('info', 'received', {
       type: message.type,
-      callId: message.call?.id,
-      customerNumber: message.call?.customer?.number
+    callId: message.call?.id
     });
 
     const response = await vapiService.handleWebhook(payload);
