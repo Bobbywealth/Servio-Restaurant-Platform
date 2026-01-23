@@ -67,7 +67,12 @@ router.post('/tool/:toolName', requireVapiWebhookAuth, async (req: Request, res:
   const callId = (body as any)?.callId || (body as any)?.call?.id || headerCallIdValue;
   const customerNumberRaw =
     (body as any)?.customerNumber || (body as any)?.customer?.number || (body as any)?.call?.customer?.number;
-  const customerNumber = Array.isArray(customerNumberRaw) ? customerNumberRaw[0] : customerNumberRaw;
+  const customerNumber =
+    typeof customerNumberRaw === 'string'
+      ? customerNumberRaw
+      : Array.isArray(customerNumberRaw)
+        ? customerNumberRaw[0]
+        : undefined;
 
   try {
     const exec = await vapiService.executeToolRequest(toolName, parameters, {
