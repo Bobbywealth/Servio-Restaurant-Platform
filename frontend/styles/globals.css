@@ -75,6 +75,8 @@ img, video {
     overflow-x: hidden;
     width: 100%;
     position: relative;
+    overscroll-behavior-y: contain;
+    -webkit-tap-highlight-color: transparent;
   }
   
   .dark body {
@@ -278,6 +280,24 @@ img, video {
   
   .nav-mobile {
     @apply touch-manipulation mobile-tap-highlight min-h-[44px] flex items-center;
+  }
+
+  /* Tablet PWA primitives */
+  .tablet-pressable {
+    @apply touch-manipulation mobile-tap-highlight select-none;
+  }
+
+  .tablet-header {
+    @apply shadow-sm;
+  }
+
+  .tablet-nav {
+    @apply shadow-sm;
+  }
+
+  .tablet-card {
+    @apply bg-white dark:bg-surface-800 rounded-2xl shadow-sm
+           border border-surface-200 dark:border-surface-700;
   }
   
   .sidebar-mobile {
