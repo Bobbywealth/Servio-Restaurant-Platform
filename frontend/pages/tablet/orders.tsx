@@ -120,9 +120,7 @@ export default function TabletOrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState<number | null>(null);
-  const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
   const [autoPrintEnabled, setAutoPrintEnabled] = useState<boolean>(false);
   const [paperWidth, setPaperWidth] = useState<ReceiptPaperWidth>('80mm');
   const [printMode, setPrintMode] = useState<'bluetooth' | 'system' | 'bridge' | 'rawbt'>('system');
@@ -139,6 +137,8 @@ export default function TabletOrdersPage() {
   const [restaurantProfile, setRestaurantProfile] = useState<ReceiptRestaurant | null>(null);
   const [receiptHtml, setReceiptHtml] = useState<string | null>(null);
   const lastRefreshAt = useRef<number>(0);
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [showPrintPrompt, setShowPrintPrompt] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -341,6 +341,48 @@ export default function TabletOrdersPage() {
     }
   }
 
+  async function acceptOrder(order: Order) {
+    setBusyId(order.id);
+    setSelectedOrder(null);
+    try {
+      // Set status to preparing
+      await apiPost(`/api/orders/${encodeURIComponent(order.id)}/status`, { status: 'preparing' });
+      setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, status: 'preparing' } : o)));
+      if (socket) {
+        socket.emit('order:status_changed', { orderId: order.id, status: 'preparing', timestamp: new Date() });
+      }
+      
+      // Handle printing based on auto-print setting
+      if (autoPrintEnabled) {
+        // Auto-print is ON - print automatically
+        await printOrder(order.id, { markAsPrinted: true });
+      } else {
+        // Auto-print is OFF - ask if they want to print
+        setShowPrintPrompt(order.id);
+      }
+    } catch (e) {
+      await refresh();
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function declineOrder(order: Order) {
+    setBusyId(order.id);
+    setSelectedOrder(null);
+    try {
+      await apiPost(`/api/orders/${encodeURIComponent(order.id)}/status`, { status: 'cancelled' });
+      setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, status: 'cancelled' } : o)));
+      if (socket) {
+        socket.emit('order:status_changed', { orderId: order.id, status: 'cancelled', timestamp: new Date() });
+      }
+    } catch (e) {
+      await refresh();
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function setPrepTime(orderId: string, minutes: number) {
     setBusyId(orderId);
     try {
@@ -451,7 +493,7 @@ export default function TabletOrdersPage() {
   return (
     <div className="min-h-screen bg-white text-black font-sans">
       <Head>
-        <title>Kitchen Display • Servio</title>
+        <title>Orders • Servio</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0" />
         <link rel="manifest" href="/manifest-tablet.webmanifest" />
       </Head>
@@ -462,228 +504,119 @@ export default function TabletOrdersPage() {
       </div>
 
       {/* Header */}
-      <div className="no-print sticky top-0 z-20 bg-black text-white px-6 py-4 flex items-center justify-between shadow-lg">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-3">
-            <div className="bg-white rounded-lg p-1.5">
-              <img
-                src="/images/servio_icon_tight.png"
-                alt="Servio"
-                className="h-9 w-9"
-              />
-            </div>
-            <div className="bg-white text-black font-black px-3 py-1 rounded text-xl italic">SERVIO</div>
+      <div className="no-print sticky top-0 z-20 bg-black text-white px-4 py-3 flex items-center justify-between shadow-lg">
+        <div className="flex items-center gap-3">
+          <div className="bg-white rounded-lg p-1">
+            <img
+              src="/images/servio_icon_tight.png"
+              alt="Servio"
+              className="h-8 w-8"
+            />
           </div>
-          <div className="h-8 w-px bg-white/20 hidden sm:block" />
-          <div className="text-2xl font-bold tracking-tight">KITCHEN DISPLAY</div>
+          <div className="bg-white text-black font-black px-2 py-0.5 rounded text-lg italic">SERVIO</div>
         </div>
-        <div className="flex items-center gap-6">
-          <div className="text-right hidden sm:block">
-            <div className="text-xs font-bold text-white/50 uppercase tracking-widest">Local Time</div>
-            <div className="text-xl font-mono font-bold">
+        <div className="flex items-center gap-4">
+          <div className="text-right">
+            <div className="text-2xl font-mono font-bold">
               {now ? new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}
             </div>
           </div>
           <button
             type="button"
             onClick={() => router.push('/tablet/settings')}
-            className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-black uppercase tracking-widest bg-white/10 hover:bg-white/20 transition-colors"
+            className="flex items-center gap-2 rounded-lg px-3 py-2 text-base font-black uppercase bg-white/10 hover:bg-white/20 transition-colors"
             title="Settings"
           >
-            <Settings2 className="h-5 w-5" />
-            Settings
+            <Settings2 className="h-6 w-6" />
           </button>
           <button 
             onClick={refresh}
             className="bg-white/10 hover:bg-white/20 p-3 rounded-full transition-colors"
           >
-            <RefreshCcw className={clsx("h-6 w-6", loading && "animate-spin")} />
+            <RefreshCcw className={clsx("h-7 w-7", loading && "animate-spin")} />
           </button>
         </div>
       </div>
 
-      <div className="no-print p-4 sm:p-6">
+      <div className="no-print p-4">
         {filtered.length === 0 && !loading ? (
           <div className="flex flex-col items-center justify-center py-32 text-slate-400">
-            <CheckCircle2 className="h-24 w-24 mb-6 opacity-20" />
-            <h2 className="text-3xl font-bold">ALL CLEAR</h2>
-            <p className="text-xl mt-2 font-medium uppercase tracking-widest">No active orders</p>
+            <CheckCircle2 className="h-32 w-32 mb-6 opacity-20" />
+            <h2 className="text-5xl font-black">ALL CLEAR</h2>
+            <p className="text-2xl mt-3 font-bold uppercase tracking-widest">No active orders</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
             {filtered.map((o) => {
               const status = normalizeStatus(o.status);
               const isNew = status === 'received';
               const isPreparing = status === 'preparing';
               const isReady = status === 'ready';
               const timeStr = formatTimeAgo(o.created_at, now);
-              const isExpanded = expandedOrderId === o.id;
+              const itemCount = (o.items || []).reduce((sum, it) => sum + (it.quantity || 1), 0);
 
               return (
                 <div 
                   key={o.id} 
+                  onClick={() => setSelectedOrder(o)}
                   className={clsx(
-                    "flex flex-col rounded-[2rem] border-[4px] bg-white overflow-hidden shadow-2xl transition-all hover:shadow-[0_25px_60px_-35px_rgba(15,23,42,0.55)] hover:-translate-y-1",
-                    isNew ? "border-blue-600 ring-8 ring-blue-50" : "border-black",
-                    isReady && "opacity-50 grayscale"
+                    "flex flex-col rounded-3xl border-[5px] bg-white overflow-hidden shadow-2xl transition-all cursor-pointer active:scale-[0.98]",
+                    isNew ? "border-blue-600 ring-8 ring-blue-100 animate-pulse" : "border-black",
+                    isReady && "opacity-60 grayscale"
                   )}
                 >
                   {/* Card Header */}
                   <div 
                     className={clsx(
-                      "px-6 py-4 flex items-center justify-between border-b-[4px] cursor-pointer",
-                      isNew ? "bg-blue-600 text-white border-blue-600" : "bg-black text-white border-black"
+                      "px-5 py-4 flex items-center justify-between",
+                      isNew ? "bg-blue-600 text-white" : isPreparing ? "bg-amber-500 text-white" : "bg-black text-white"
                     )}
-                    onClick={() => setExpandedOrderId(isExpanded ? null : o.id)}
                   >
                     <div className="flex flex-col">
-                      <span className="text-xs font-black uppercase tracking-widest opacity-70">Order</span>
-                      <span className="text-4xl font-black font-mono leading-none tracking-tighter">
+                      <span className="text-base font-black uppercase tracking-wider opacity-80">Order</span>
+                      <span className="text-5xl font-black font-mono leading-none tracking-tighter">
                         #{o.external_id ? o.external_id.slice(-4).toUpperCase() : o.id.slice(-4).toUpperCase()}
                       </span>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          printOrder(o.id);
-                        }}
-                        className={clsx(
-                          'rounded-xl px-3 py-2 bg-white/10 hover:bg-white/20 transition-colors',
-                          printingOrderId === o.id && 'opacity-60'
-                        )}
-                        title="Print receipt"
-                      >
-                        <Printer className={clsx('h-6 w-6', printingOrderId === o.id && 'animate-pulse')} />
-                      </button>
                     <div className="text-right">
-                      <span className="text-xs font-black uppercase tracking-widest opacity-70">Elapsed</span>
+                      <span className="text-base font-black uppercase tracking-wider opacity-80">
+                        {isNew ? 'NEW' : isPreparing ? 'PREP' : 'READY'}
+                      </span>
                       <div className={clsx(
-                        "text-3xl font-black tabular-nums leading-none",
-                        timeStr.includes('m') && parseInt(timeStr) > 20 ? "text-red-400" : "text-white"
+                        "text-4xl font-black tabular-nums leading-none",
+                        timeStr.includes('m') && parseInt(timeStr) > 15 ? "text-red-300" : ""
                       )}>
                         {timeStr}
                       </div>
                     </div>
-                    <ChevronDown className={clsx(
-                      "h-6 w-6 transition-transform ml-2",
-                      isExpanded && "rotate-180"
-                    )} />
-                    </div>
                   </div>
 
-                  {/* Customer Info */}
-                  <div className="px-6 py-4 bg-slate-50 border-b-[2px] border-slate-200">
-                    <div className="flex items-center gap-2">
-                      <span className="text-2xl font-black text-black truncate uppercase">
+                  {/* Customer & Summary */}
+                  <div className="px-5 py-4 flex-grow">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-3xl font-black text-black truncate uppercase">
                         {o.customer_name || 'GUEST'}
                       </span>
-                      <div className="flex-shrink-0 ml-auto bg-black text-white px-2 py-1 rounded-md text-[10px] font-black uppercase">
+                      <div className="flex-shrink-0 bg-slate-200 text-black px-3 py-1 rounded-lg text-lg font-black uppercase">
                         {o.channel || 'POS'}
                       </div>
                     </div>
-                  </div>
-
-                  {/* Items List */}
-                  <div className="flex-grow p-6 space-y-4">
-                    {(o.items || []).map((it, idx) => (
-                      <div key={idx} className="flex items-start gap-4">
-                        <div className="flex-shrink-0 bg-black text-white w-10 h-10 rounded-xl flex items-center justify-center text-xl font-black">
-                          {it.quantity || 1}
-                        </div>
-                        <div className="flex-grow">
-                          <div className="text-2xl font-bold leading-tight text-black break-words uppercase">
-                            {it.name}
-                          </div>
-                          {isExpanded && it.unit_price && (
-                            <div className="text-sm text-slate-600 mt-1">
-                              ${(it.unit_price || it.price || 0).toFixed(2)} each
-                            </div>
-                          )}
-                        </div>
-                        {isExpanded && (
-                          <div className="text-lg font-black text-black">
-                            ${((it.unit_price || it.price || 0) * (it.quantity || 1)).toFixed(2)}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Expanded Details */}
-                  {isExpanded && (
-                    <div className="px-6 py-4 bg-slate-50 border-t-[2px] border-slate-200 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2 text-sm font-bold text-slate-700">
-                          <User className="h-4 w-4" />
-                          {o.customer_name || 'Guest'}
-                        </div>
-                        <div className="text-sm font-bold text-slate-700">
-                          Order ID: {o.external_id || shortId(o.id)}
-                        </div>
-                      </div>
-                      {o.customer_phone ? (
-                        <div className="text-sm font-bold text-slate-700">
-                          Phone: {o.customer_phone}
-                        </div>
-                      ) : null}
-                      {o.order_type ? (
-                        <div className="text-sm font-bold text-slate-700">
-                          Type: {o.order_type}
-                        </div>
-                      ) : null}
-                      {o.pickup_time ? (
-                        <div className="text-sm font-bold text-slate-700">
-                          Pickup: {new Date(o.pickup_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </div>
-                      ) : null}
-                      <div className="flex items-center justify-between pt-3 border-t border-slate-300">
-                        <div className="text-lg font-black text-black">TOTAL</div>
-                        <div className="text-2xl font-black text-black">
-                          ${(o.total_amount || 0).toFixed(2)}
-                        </div>
-                      </div>
-                      <div className="text-xs text-slate-500">
-                        Created: {o.created_at ? new Date(o.created_at).toLocaleString() : '--'}
-                      </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-2xl font-bold text-slate-600">
+                        {itemCount} item{itemCount !== 1 ? 's' : ''}
+                      </span>
+                      <span className="text-3xl font-black text-black">
+                        {formatMoney(o.total_amount)}
+                      </span>
                     </div>
-                  )}
+                  </div>
 
-                  {/* Action Button */}
-                  <div className="p-4 bg-slate-100 mt-auto">
-                    {isNew && (
-                      <button
-                        disabled={busyId === o.id}
-                        onClick={() => {
-                          setPrepMinutes(15);
-                          setPrepModalOrder(o);
-                        }}
-                        className="w-full bg-blue-600 hover:bg-blue-700 active:scale-95 text-white py-8 rounded-[1.5rem] flex items-center justify-center gap-4 transition-all shadow-xl disabled:opacity-50"
-                      >
-                        <span className="text-4xl font-black uppercase tracking-tighter">START PREP</span>
-                        <ArrowRight className="h-10 w-10 stroke-[4px]" />
-                      </button>
-                    )}
-                    {isPreparing && (
-                      <button
-                        disabled={busyId === o.id}
-                        onClick={() => setStatus(o.id, 'ready')}
-                        className="w-full bg-black hover:bg-slate-900 active:scale-95 text-white py-8 rounded-[1.5rem] flex items-center justify-center gap-4 transition-all shadow-xl disabled:opacity-50"
-                      >
-                        <span className="text-4xl font-black uppercase tracking-tighter">MARK READY</span>
-                        <CheckCircle2 className="h-10 w-10 stroke-[4px]" />
-                      </button>
-                    )}
-                    {isReady && (
-                      <button
-                        disabled={busyId === o.id}
-                        onClick={() => setStatus(o.id, 'completed')}
-                        className="w-full bg-slate-400 hover:bg-slate-500 active:scale-95 text-white py-6 rounded-[1.5rem] flex items-center justify-center gap-4 transition-all disabled:opacity-50"
-                      >
-                        <span className="text-3xl font-black uppercase tracking-tighter">BUMP ORDER</span>
-                      </button>
-                    )}
+                  {/* Quick Action Footer */}
+                  <div className={clsx(
+                    "px-5 py-4 text-center font-black text-2xl uppercase tracking-wide",
+                    isNew ? "bg-blue-100 text-blue-700" : isPreparing ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-600"
+                  )}>
+                    {isNew ? 'TAP TO VIEW & ACCEPT' : isPreparing ? 'TAP FOR DETAILS' : 'TAP TO COMPLETE'}
                   </div>
                 </div>
               );
@@ -692,70 +625,185 @@ export default function TabletOrdersPage() {
         )}
       </div>
 
-      {autoPrintPendingId && (
-        <div className="no-print fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-          <div className="bg-white rounded-3xl shadow-2xl p-8 w-full max-w-lg mx-6">
-            <h3 className="text-2xl font-black mb-2">Print now?</h3>
-            <p className="text-slate-600 mb-6">Auto-print is on. Do you want to print this new order?</p>
-            <div className="flex items-center justify-end gap-3">
+      {/* Order Detail Modal */}
+      {selectedOrder && (
+        <div className="no-print fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+            {/* Modal Header */}
+            <div className={clsx(
+              "px-6 py-5 flex items-center justify-between",
+              normalizeStatus(selectedOrder.status) === 'received' ? "bg-blue-600 text-white" : 
+              normalizeStatus(selectedOrder.status) === 'preparing' ? "bg-amber-500 text-white" : "bg-black text-white"
+            )}>
+              <div>
+                <span className="text-lg font-black uppercase tracking-wider opacity-80">Order Details</span>
+                <div className="text-5xl font-black font-mono leading-none tracking-tighter">
+                  #{selectedOrder.external_id ? selectedOrder.external_id.slice(-4).toUpperCase() : selectedOrder.id.slice(-4).toUpperCase()}
+                </div>
+              </div>
               <button
-                className="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 font-bold"
-                onClick={() => setAutoPrintPendingId(null)}
+                onClick={() => setSelectedOrder(null)}
+                className="bg-white/20 hover:bg-white/30 p-3 rounded-xl transition-colors"
               >
-                Not now
+                <span className="text-3xl font-black">✕</span>
+              </button>
+            </div>
+
+            {/* Customer Info */}
+            <div className="px-6 py-4 bg-slate-100 border-b-2 border-slate-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-lg font-bold text-slate-500 uppercase">Customer</div>
+                  <div className="text-3xl font-black text-black uppercase">{selectedOrder.customer_name || 'GUEST'}</div>
+                  {selectedOrder.customer_phone && (
+                    <div className="text-xl font-bold text-slate-600 mt-1">{selectedOrder.customer_phone}</div>
+                  )}
+                </div>
+                <div className="text-right">
+                  <div className="bg-black text-white px-4 py-2 rounded-xl text-xl font-black uppercase">
+                    {selectedOrder.channel || 'POS'}
+                  </div>
+                  {selectedOrder.order_type && (
+                    <div className="text-lg font-bold text-slate-600 mt-2">{selectedOrder.order_type}</div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Items List */}
+            <div className="flex-grow overflow-y-auto px-6 py-4">
+              <div className="text-lg font-black text-slate-500 uppercase mb-3">Items</div>
+              <div className="space-y-4">
+                {(selectedOrder.items || []).map((it, idx) => (
+                  <div key={idx} className="flex items-start gap-4 py-3 border-b border-slate-200 last:border-0">
+                    <div className="flex-shrink-0 bg-black text-white w-14 h-14 rounded-xl flex items-center justify-center text-2xl font-black">
+                      {it.quantity || 1}
+                    </div>
+                    <div className="flex-grow">
+                      <div className="text-2xl font-black leading-tight text-black break-words uppercase">
+                        {it.name}
+                      </div>
+                    </div>
+                    <div className="text-2xl font-black text-black">
+                      {formatMoney((it.unit_price || it.price || 0) * (it.quantity || 1))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              
+              {selectedOrder.special_instructions && (
+                <div className="mt-4 p-4 bg-yellow-50 border-2 border-yellow-200 rounded-xl">
+                  <div className="text-lg font-black text-yellow-700 uppercase mb-1">Special Instructions</div>
+                  <div className="text-xl font-bold text-yellow-900">{selectedOrder.special_instructions}</div>
+                </div>
+              )}
+            </div>
+
+            {/* Total */}
+            <div className="px-6 py-4 bg-slate-100 border-t-2 border-slate-200">
+              <div className="flex items-center justify-between">
+                <span className="text-2xl font-black text-black uppercase">Total</span>
+                <span className="text-4xl font-black text-black">{formatMoney(selectedOrder.total_amount)}</span>
+              </div>
+              {selectedOrder.pickup_time && (
+                <div className="text-xl font-bold text-slate-600 mt-2">
+                  Pickup: {new Date(selectedOrder.pickup_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </div>
+              )}
+            </div>
+
+            {/* Action Buttons */}
+            <div className="px-6 py-5 bg-white border-t-2 border-slate-200">
+              {normalizeStatus(selectedOrder.status) === 'received' && (
+                <div className="flex gap-4">
+                  <button
+                    disabled={busyId === selectedOrder.id}
+                    onClick={() => declineOrder(selectedOrder)}
+                    className="flex-1 bg-red-600 hover:bg-red-700 active:scale-95 text-white py-6 rounded-2xl flex items-center justify-center gap-3 transition-all shadow-xl disabled:opacity-50"
+                  >
+                    <span className="text-3xl font-black uppercase">DECLINE</span>
+                  </button>
+                  <button
+                    disabled={busyId === selectedOrder.id}
+                    onClick={() => acceptOrder(selectedOrder)}
+                    className="flex-[2] bg-green-600 hover:bg-green-700 active:scale-95 text-white py-6 rounded-2xl flex items-center justify-center gap-3 transition-all shadow-xl disabled:opacity-50"
+                  >
+                    <span className="text-3xl font-black uppercase">ACCEPT ORDER</span>
+                    <CheckCircle2 className="h-8 w-8 stroke-[3px]" />
+                  </button>
+                </div>
+              )}
+              {normalizeStatus(selectedOrder.status) === 'preparing' && (
+                <div className="flex gap-4">
+                  <button
+                    onClick={() => printOrder(selectedOrder.id)}
+                    disabled={printingOrderId === selectedOrder.id}
+                    className="flex-1 bg-slate-200 hover:bg-slate-300 active:scale-95 text-black py-6 rounded-2xl flex items-center justify-center gap-3 transition-all disabled:opacity-50"
+                  >
+                    <Printer className="h-7 w-7" />
+                    <span className="text-2xl font-black uppercase">PRINT</span>
+                  </button>
+                  <button
+                    disabled={busyId === selectedOrder.id}
+                    onClick={() => {
+                      setStatus(selectedOrder.id, 'ready');
+                      setSelectedOrder(null);
+                    }}
+                    className="flex-[2] bg-black hover:bg-slate-800 active:scale-95 text-white py-6 rounded-2xl flex items-center justify-center gap-3 transition-all shadow-xl disabled:opacity-50"
+                  >
+                    <span className="text-3xl font-black uppercase">MARK READY</span>
+                    <CheckCircle2 className="h-8 w-8 stroke-[3px]" />
+                  </button>
+                </div>
+              )}
+              {normalizeStatus(selectedOrder.status) === 'ready' && (
+                <button
+                  disabled={busyId === selectedOrder.id}
+                  onClick={() => {
+                    setStatus(selectedOrder.id, 'completed');
+                    setSelectedOrder(null);
+                  }}
+                  className="w-full bg-slate-500 hover:bg-slate-600 active:scale-95 text-white py-6 rounded-2xl flex items-center justify-center gap-3 transition-all disabled:opacity-50"
+                >
+                  <span className="text-3xl font-black uppercase">COMPLETE ORDER</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Print Prompt Modal (when auto-print is OFF) */}
+      {showPrintPrompt && (
+        <div className="no-print fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="bg-white rounded-3xl shadow-2xl p-8 w-full max-w-md">
+            <div className="text-center mb-6">
+              <Printer className="h-16 w-16 mx-auto text-slate-400 mb-4" />
+              <h3 className="text-3xl font-black mb-2">Print Receipt?</h3>
+              <p className="text-xl text-slate-600">Order has been accepted. Would you like to print it?</p>
+            </div>
+            <div className="flex gap-4">
+              <button
+                className="flex-1 px-6 py-5 rounded-2xl bg-slate-200 hover:bg-slate-300 text-2xl font-black transition-colors"
+                onClick={() => setShowPrintPrompt(null)}
+              >
+                NO
               </button>
               <button
-                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold"
+                className="flex-1 px-6 py-5 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white text-2xl font-black transition-colors"
                 onClick={() => {
-                  const orderId = autoPrintPendingId;
-                  setAutoPrintPendingId(null);
+                  const orderId = showPrintPrompt;
+                  setShowPrintPrompt(null);
                   printOrder(orderId, { markAsPrinted: true });
                 }}
               >
-                Print now
+                YES, PRINT
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {prepModalOrder && (
-        <div className="no-print fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-          <div className="bg-white rounded-3xl shadow-2xl p-8 w-full max-w-lg mx-6">
-            <h3 className="text-2xl font-black mb-2">Set prep time</h3>
-            <p className="text-slate-600 mb-6">Enter prep time before starting this order.</p>
-            <div className="flex items-center gap-3 mb-6">
-              <input
-                type="number"
-                min={1}
-                max={180}
-                value={prepMinutes}
-                onChange={(e) => setPrepMinutes(Number(e.target.value || 0))}
-                className="w-28 px-4 py-3 rounded-xl border-2 border-slate-200 text-xl font-black"
-              />
-              <span className="text-lg font-bold text-slate-700">minutes</span>
-            </div>
-            <div className="flex items-center justify-end gap-3">
-              <button
-                className="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 font-bold"
-                onClick={() => setPrepModalOrder(null)}
-              >
-                Cancel
-              </button>
-              <button
-                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold"
-                onClick={() => {
-                  const orderId = prepModalOrder.id;
-                  setPrepModalOrder(null);
-                  setPrepTime(orderId, prepMinutes);
-                }}
-              >
-                Start prep
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       <style jsx global>{`
         body {
