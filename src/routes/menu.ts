@@ -8,7 +8,6 @@ import sharp from 'sharp';
 import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
 import OpenAI from 'openai';
-import pdfParse from 'pdf-parse';
 import mammoth from 'mammoth';
 
 const router = Router();
@@ -50,6 +49,7 @@ const importUpload = multer({
 });
 
 const openai = process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;
+const pdfParse = require('pdf-parse');
 
 type ParsedMenuRow = {
   name: string;
