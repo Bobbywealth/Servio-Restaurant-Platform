@@ -334,7 +334,15 @@ router.get('/stats/summary', asyncHandler(async (req: Request, res: Response) =>
  */
 router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) => {
   const { slug } = req.params;
-  const { items, customerName, customerPhone, customerEmail } = req.body;
+  const { 
+    items, 
+    customerName, 
+    customerPhone, 
+    customerEmail,
+    orderType,
+    specialInstructions,
+    paymentMethod 
+  } = req.body;
   const db = DatabaseService.getInstance().getDatabase();
   const requestId = getRequestId(req);
 
@@ -351,6 +359,8 @@ router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) =>
     customerName,
     customerPhone,
     customerEmail,
+    orderType,
+    paymentMethod,
     itemsCount: Array.isArray(parsedItems) ? parsedItems.length : 0
   };
 
@@ -395,15 +405,17 @@ router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) =>
     await db.run(`
       INSERT INTO orders (
         id, restaurant_id, channel, status, total_amount, payment_status,
-        items, customer_name, customer_phone, created_at, updated_at
-      ) VALUES (?, ?, 'website', 'received', ?, 'unpaid', ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        items, customer_name, customer_phone, order_type, special_instructions, created_at, updated_at
+      ) VALUES (?, ?, 'website', 'received', ?, 'unpaid', ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     `, [
       orderId,
       restaurantId,
       totalAmount,
       JSON.stringify(parsedItems),
       customerName || null,
-      customerPhone || null
+      customerPhone || null,
+      orderType || 'pickup',
+      specialInstructions || null
     ]);
 
     // Create order items

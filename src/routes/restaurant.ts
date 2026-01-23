@@ -309,6 +309,71 @@ router.put('/profile', upload.fields([
 }));
 
 // ============================================================================
+// RESTAURANT SETTINGS (Payment, etc.)
+// ============================================================================
+
+/**
+ * PUT /api/restaurant/settings
+ * Update restaurant settings (payment options, etc.)
+ */
+router.put('/settings', asyncHandler(async (req: Request, res: Response) => {
+  const db = DatabaseService.getInstance().getDatabase();
+  const restaurantId = req.user?.restaurantId;
+  const { online_payments_enabled } = req.body;
+
+  if (!restaurantId) {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'Restaurant ID is required' }
+    });
+  }
+
+  // Get current settings
+  const restaurant = await db.get('SELECT settings FROM restaurants WHERE id = ?', [restaurantId]);
+  if (!restaurant) {
+    return res.status(404).json({
+      success: false,
+      error: { message: 'Restaurant not found' }
+    });
+  }
+
+  // Parse existing settings
+  let settings = {};
+  try {
+    settings = restaurant.settings ? JSON.parse(restaurant.settings) : {};
+  } catch {
+    settings = {};
+  }
+
+  // Update settings
+  if (online_payments_enabled !== undefined) {
+    (settings as any).online_payments_enabled = Boolean(online_payments_enabled);
+  }
+
+  // Save updated settings
+  await db.run(
+    'UPDATE restaurants SET settings = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+    [JSON.stringify(settings), restaurantId]
+  );
+
+  await DatabaseService.getInstance().logAudit(
+    restaurantId,
+    req.user?.id || 'system',
+    'update_restaurant_settings',
+    'restaurant',
+    restaurantId,
+    { online_payments_enabled }
+  );
+
+  logger.info(`Restaurant settings updated for ${restaurantId}`);
+
+  return res.json({
+    success: true,
+    data: { settings }
+  });
+}));
+
+// ============================================================================
 // RESTAURANT THEMES
 // ============================================================================
 

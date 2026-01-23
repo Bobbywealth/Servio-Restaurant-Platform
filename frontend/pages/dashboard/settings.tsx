@@ -21,7 +21,10 @@ import {
   UserCog,
   Mail,
   Calendar,
-  Phone
+  Phone,
+  CreditCard,
+  Wallet,
+  DollarSign
 } from 'lucide-react'
 
 const DashboardLayout = dynamic(() => import('../../components/Layout/DashboardLayout'), {
@@ -79,12 +82,55 @@ export default function SettingsPage() {
     phoneNumber: ''
   })
 
+  // Payment Settings State
+  const [paymentSettings, setPaymentSettings] = useState({
+    onlinePaymentsEnabled: false,
+    payAtPickupEnabled: true // Always enabled by default
+  })
+  const [isSavingPayments, setIsSavingPayments] = useState(false)
+
   // Load Vapi settings when phone tab is active
   useEffect(() => {
     if (activeTab === 'phone' && user?.restaurantId) {
       loadVapiSettings()
     }
   }, [activeTab, user?.restaurantId])
+
+  // Load Payment settings when payments tab is active
+  useEffect(() => {
+    if (activeTab === 'payments' && user?.restaurantId) {
+      loadPaymentSettings()
+    }
+  }, [activeTab, user?.restaurantId])
+
+  const loadPaymentSettings = async () => {
+    if (!user?.restaurantId) return
+    try {
+      const response = await api.get('/api/restaurant/profile')
+      const settings = response.data?.data?.settings || {}
+      setPaymentSettings({
+        onlinePaymentsEnabled: settings.online_payments_enabled || false,
+        payAtPickupEnabled: true // Always enabled
+      })
+    } catch (err) {
+      console.error('Failed to load payment settings:', err)
+    }
+  }
+
+  const savePaymentSettings = async () => {
+    if (!user?.restaurantId) return
+    setIsSavingPayments(true)
+    try {
+      await api.put('/api/restaurant/settings', {
+        online_payments_enabled: paymentSettings.onlinePaymentsEnabled
+      })
+      alert('Payment settings saved!')
+    } catch (err: any) {
+      alert(getErrorMessage(err, 'Failed to save payment settings'))
+    } finally {
+      setIsSavingPayments(false)
+    }
+  }
 
   const loadVapiSettings = async () => {
     if (!user?.restaurantId) return
@@ -141,6 +187,7 @@ export default function SettingsPage() {
   const tabs = [
     { id: 'account', name: 'Account', icon: User },
     { id: 'general', name: 'General', icon: SettingsIcon },
+    { id: 'payments', name: 'Payments', icon: CreditCard },
     { id: 'phone', name: 'Phone System', icon: Phone },
     { id: 'notifications', name: 'Notifications', icon: Bell },
     { id: 'security', name: 'Security', icon: Shield },
@@ -335,6 +382,115 @@ export default function SettingsPage() {
                   <option value="GBP">GBP (£)</option>
                 </select>
               </div>
+            </div>
+          </div>
+        )
+
+      case 'payments':
+        return (
+          <div className="space-y-6">
+            <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
+              <div className="flex items-start">
+                <DollarSign className="w-5 h-5 text-green-600 dark:text-green-400 mr-3 mt-0.5" />
+                <div>
+                  <h3 className="text-sm font-medium text-green-900 dark:text-green-300">
+                    Online Ordering Payment Options
+                  </h3>
+                  <p className="text-xs text-green-700 dark:text-green-400 mt-1">
+                    Configure how customers can pay for their orders when ordering from your public menu page.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Pay at Pickup - Always enabled */}
+            <div className="flex items-start justify-between py-4 border-b border-surface-200 dark:border-surface-700">
+              <div className="flex items-start space-x-4">
+                <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-xl">
+                  <Wallet className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+                </div>
+                <div>
+                  <h4 className="font-semibold text-surface-900 dark:text-surface-100">Pay at Pickup</h4>
+                  <p className="text-sm text-surface-600 dark:text-surface-400 mt-1">
+                    Customers pay with cash or card when they arrive to pick up their order
+                  </p>
+                  <span className="inline-block mt-2 px-2 py-1 bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 text-xs font-medium rounded-full">
+                    Always Enabled
+                  </span>
+                </div>
+              </div>
+              <div className="flex items-center">
+                <Check className="w-6 h-6 text-green-500" />
+              </div>
+            </div>
+
+            {/* Online Payments - Toggleable */}
+            <div className="flex items-start justify-between py-4 border-b border-surface-200 dark:border-surface-700">
+              <div className="flex items-start space-x-4">
+                <div className="p-3 bg-purple-100 dark:bg-purple-900/30 rounded-xl">
+                  <CreditCard className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+                </div>
+                <div>
+                  <h4 className="font-semibold text-surface-900 dark:text-surface-100">Online Card Payments</h4>
+                  <p className="text-sm text-surface-600 dark:text-surface-400 mt-1">
+                    Allow customers to pay securely with credit/debit cards during checkout
+                  </p>
+                  {!paymentSettings.onlinePaymentsEnabled && (
+                    <span className="inline-block mt-2 px-2 py-1 bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 text-xs font-medium rounded-full">
+                      Coming Soon - Stripe Integration
+                    </span>
+                  )}
+                </div>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="sr-only"
+                  checked={paymentSettings.onlinePaymentsEnabled}
+                  onChange={(e) => setPaymentSettings(prev => ({ ...prev, onlinePaymentsEnabled: e.target.checked }))}
+                />
+                <div className={`w-11 h-6 rounded-full transition-colors ${
+                  paymentSettings.onlinePaymentsEnabled ? 'bg-primary-500' : 'bg-surface-300 dark:bg-surface-600'
+                }`}>
+                  <div className={`w-4 h-4 bg-white rounded-full shadow-sm transform transition-transform ${
+                    paymentSettings.onlinePaymentsEnabled ? 'translate-x-6' : 'translate-x-1'
+                  } mt-1`} />
+                </div>
+              </label>
+            </div>
+
+            {paymentSettings.onlinePaymentsEnabled && (
+              <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
+                <div className="flex items-start">
+                  <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 mr-3 mt-0.5" />
+                  <div>
+                    <h3 className="text-sm font-medium text-amber-900 dark:text-amber-300">
+                      Stripe Integration Required
+                    </h3>
+                    <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">
+                      To accept online payments, you'll need to connect your Stripe account. 
+                      This feature is coming soon. For now, customers will see "Pay at Pickup" as the only option.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="pt-4">
+              <motion.button
+                onClick={savePaymentSettings}
+                disabled={isSavingPayments}
+                className="btn-primary inline-flex items-center space-x-2"
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+              >
+                {isSavingPayments ? (
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <Save className="w-4 h-4" />
+                )}
+                <span>{isSavingPayments ? 'Saving...' : 'Save Payment Settings'}</span>
+              </motion.button>
             </div>
           </div>
         )
