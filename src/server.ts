@@ -86,6 +86,11 @@ async function initializeServer() {
 
     // API Routes
     app.use('/api/auth', authRoutes);
+
+    // Vapi and Voice routes MUST be before the catch-all /api route (no auth)
+    app.use('/api/vapi', vapiRoutes);
+    app.use('/api/voice', voiceRoutes);
+    app.use('/api/voice-hub', voiceHubRoutes);
     
     // Protected routes
     app.use('/api/assistant', requireAuth, assistantRoutes);
@@ -103,7 +108,6 @@ async function initializeServer() {
       return requireAuth(req, res, next);
     }, menuRoutes);
 
-    app.use('/api', requireAuth, modifiersRoutes);
     app.use('/api/tasks', requireAuth, tasksRoutes);
     app.use('/api/sync', requireAuth, syncRoutes);
     app.use('/api/receipts', requireAuth, receiptsRoutes);
@@ -113,11 +117,9 @@ async function initializeServer() {
     app.use('/api/restaurant', requireAuth, restaurantRoutes);
     app.use('/api/integrations', requireAuth, integrationsRoutes);
     app.use('/api/notifications', requireAuth, notificationsRoutes);
-    app.use('/api/voice-hub', voiceHubRoutes);
 
-    // Vapi and Voice routes (no auth or special auth)
-    app.use('/api/vapi', vapiRoutes);
-    app.use('/api/voice', voiceRoutes); // Mount voice ordering APIs under /api/voice
+    // Modifiers routes - MUST be last since it uses /api catch-all
+    app.use('/api', requireAuth, modifiersRoutes);
 
 
     // 404 handler (must be last)
