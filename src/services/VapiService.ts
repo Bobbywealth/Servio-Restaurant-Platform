@@ -171,12 +171,10 @@ export class VapiService {
     return { results };
   }
 
-  private getRestaurantIdFromParams(parameters: any, message?: any): {
-    restaurantId: string | null;
-    restaurantSlug: string | null;
-    source: string;
-  } {
-  private async getRestaurantIdFromParams(parameters: any, message?: any): Promise<{ restaurantId: string | null; source: string }> {
+  private async getRestaurantIdFromParams(
+    parameters: any,
+    message?: any
+  ): Promise<{ restaurantId: string | null; restaurantSlug: string | null; source: string }> {
     // 1) explicit tool parameters (preferred)
     const fromParams =
       parameters?.restaurantId ??
