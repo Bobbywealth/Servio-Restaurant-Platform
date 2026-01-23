@@ -110,13 +110,14 @@ router.post('/tool/:toolName', requireVapiWebhookAuth, async (req: Request, res:
       customerNumber
     });
 
-    if (exec.error) {
-      return res.status(200).json({ error: exec.error });
-    }
+    const resultPayload = exec.error ? { ok: false, error: exec.error } : exec.result ?? { ok: true };
+    const result = typeof resultPayload === 'string' ? resultPayload : JSON.stringify(resultPayload);
 
-    // Vapi tool servers expect a top-level `result` for successful tool calls.
-    // Returning raw JSON can be interpreted as "No result returned" depending on tool type.
-    return res.status(200).json({ result: exec.result ?? { ok: true } });
+    // Vapi tool servers expect a top-level `result` string.
+    return res.status(200).json({
+      result,
+      ...(exec.error ? { error: exec.error } : {})
+    });
   } catch (error) {
     logger.error('[vapi:tool] handler_error', {
       toolName,
@@ -161,11 +162,13 @@ router.get('/tool/:toolName', requireVapiWebhookAuth, async (req: Request, res: 
       customerNumber
     });
 
-    if (exec.error) {
-      return res.status(200).json({ error: exec.error });
-    }
+    const resultPayload = exec.error ? { ok: false, error: exec.error } : exec.result ?? { ok: true };
+    const result = typeof resultPayload === 'string' ? resultPayload : JSON.stringify(resultPayload);
 
-    return res.status(200).json({ result: exec.result ?? { ok: true } });
+    return res.status(200).json({
+      result,
+      ...(exec.error ? { error: exec.error } : {})
+    });
   } catch (error) {
     logger.error('[vapi:tool] handler_error', {
       toolName,
