@@ -990,7 +990,7 @@ const MenuManagement: React.FC = () => {
                                         <span className="font-medium">{opt.name}</span>
                                         {opt.description ? <span className="text-xs text-gray-500 ml-2">{opt.description}</span> : null}
                                       </div>
-                                      <span className="text-xs text-gray-500">+{Number((opt as any).priceDelta ?? opt.priceDelta ?? opt.price_modifier ?? 0).toFixed(2)}</span>
+                                      <span className="text-xs text-gray-500">+{Number((opt as any).priceDelta ?? 0).toFixed(2)}</span>
                                     </div>
                                   ))}
                                 </div>
