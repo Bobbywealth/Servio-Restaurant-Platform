@@ -16,6 +16,14 @@ type VapiSettings = {
 
 const ADMIN_ROLES = new Set(['admin', 'platform-admin']);
 
+const getRouteParam = (req: Request, name: string) => {
+  const value = req.params[name];
+  if (Array.isArray(value)) {
+    return value[0] ?? '';
+  }
+  return value ?? '';
+};
+
 const canAccessRestaurant = (req: Request, restaurantId: string) => {
   const user = req.user;
   if (!user) return false;
@@ -57,7 +65,13 @@ const normalizeVapiSettings = (settings: any): Required<Pick<VapiSettings, 'enab
  * Get per-restaurant Vapi settings
  */
 router.get('/:id/vapi', asyncHandler(async (req: Request, res: Response) => {
-  const restaurantId = req.params.id;
+  const restaurantId = getRouteParam(req, 'id');
+  if (!restaurantId) {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'Restaurant id is required.' }
+    });
+  }
   if (!canAccessRestaurant(req, restaurantId)) {
     return res.status(403).json({
       success: false,
@@ -85,7 +99,13 @@ router.get('/:id/vapi', asyncHandler(async (req: Request, res: Response) => {
  * Update per-restaurant Vapi settings
  */
 router.put('/:id/vapi', asyncHandler(async (req: Request, res: Response) => {
-  const restaurantId = req.params.id;
+  const restaurantId = getRouteParam(req, 'id');
+  if (!restaurantId) {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'Restaurant id is required.' }
+    });
+  }
   if (!canAccessRestaurant(req, restaurantId)) {
     return res.status(403).json({
       success: false,
@@ -167,7 +187,13 @@ router.put('/:id/vapi', asyncHandler(async (req: Request, res: Response) => {
  * Test Vapi configuration connectivity
  */
 router.post('/:id/vapi/test', asyncHandler(async (req: Request, res: Response) => {
-  const restaurantId = req.params.id;
+  const restaurantId = getRouteParam(req, 'id');
+  if (!restaurantId) {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'Restaurant id is required.' }
+    });
+  }
   if (!canAccessRestaurant(req, restaurantId)) {
     return res.status(403).json({
       success: false,
