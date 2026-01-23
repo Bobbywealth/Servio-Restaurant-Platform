@@ -835,47 +835,64 @@ export default function AssistantPage() {
 
       <DashboardLayout>
         <div className="max-w-7xl mx-auto">
-          {/* Enhanced Header with Status Bar */}
-          <div className="mb-4 sm:mb-6">
-            <div className="flex items-start justify-between">
+          {/* Premium Header */}
+          <div className="mb-6">
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
               <div>
-                <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                  <span className="text-3xl">🤖</span>
-                  Servio AI Assistant
-                  {state.isProcessing && <span className="ml-2 px-2 py-1 text-xs bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300 rounded-full animate-pulse">Processing...</span>}
-                  {state.isSpeaking && <span className="ml-2 px-2 py-1 text-xs bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 rounded-full animate-pulse">🔊 Speaking</span>}
-                  {state.isRecording && <span className="ml-2 px-2 py-1 text-xs bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300 rounded-full animate-pulse">🎤 Recording</span>}
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-sm font-semibold text-surface-500 dark:text-surface-400 uppercase tracking-widest">AI Assistant</span>
+                </div>
+                <h1 className="text-3xl md:text-4xl font-black text-surface-900 dark:text-white tracking-tight">
+                  Talk to Servio
                 </h1>
-                <p className="mt-2 text-sm sm:text-base text-gray-600 dark:text-gray-400">
-                  Your intelligent AI-powered restaurant operations assistant. Talk naturally to manage orders, inventory, and tasks.
+                <p className="mt-2 text-surface-600 dark:text-surface-400 max-w-lg">
+                  Manage orders, inventory, and tasks with natural voice commands.
                 </p>
               </div>
-            </div>
-            
-            {/* Compact Stats Bar */}
-            <div className="flex items-center gap-3 mt-3 text-sm">
-              <div className="flex items-center gap-1.5">
-                <span className="text-lg">💬</span>
-                <span className="font-semibold">{state.messages.length}</span>
-              </div>
-              <div className="h-4 w-px bg-gray-300 dark:bg-gray-600"></div>
-              <div className="flex items-center gap-1.5">
-                <span className="text-lg">{state.alwaysListening ? state.inConversationWindow ? '💬' : '🎯' : '🔇'}</span>
-                <span className="text-sm font-medium">{state.alwaysListening ? state.inConversationWindow ? 'In Conversation' : 'Say "Servio"' : 'Inactive'}</span>
-              </div>
-              <div className="h-4 w-px bg-gray-300 dark:bg-gray-600"></div>
-              <div className="flex items-center gap-1.5">
-                <span className="text-lg">{state.isProcessing ? '🧠' : state.isSpeaking ? '🗣️' : state.isRecording ? '🎤' : '✅'}</span>
-                <span className="text-sm font-medium">{state.isProcessing ? 'Thinking' : state.isSpeaking ? 'Speaking' : state.isRecording ? 'Listening' : 'Ready'}</span>
+              
+              {/* Status Pills */}
+              <div className="flex flex-wrap items-center gap-2">
+                {state.isRecording && (
+                  <span className="inline-flex items-center gap-2 px-4 py-2 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded-full text-sm font-semibold">
+                    <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+                    Recording
+                  </span>
+                )}
+                {state.isProcessing && (
+                  <span className="inline-flex items-center gap-2 px-4 py-2 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 rounded-full text-sm font-semibold">
+                    <span className="w-2 h-2 bg-amber-500 rounded-full animate-pulse"></span>
+                    Processing
+                  </span>
+                )}
+                {state.isSpeaking && (
+                  <span className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 rounded-full text-sm font-semibold">
+                    <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
+                    Speaking
+                  </span>
+                )}
+                {!state.isRecording && !state.isProcessing && !state.isSpeaking && (
+                  <span className="inline-flex items-center gap-2 px-4 py-2 bg-surface-100 dark:bg-surface-800 text-surface-600 dark:text-surface-400 rounded-full text-sm font-semibold">
+                    <span className="w-2 h-2 bg-emerald-500 rounded-full"></span>
+                    Ready
+                  </span>
+                )}
+                {state.alwaysListening && (
+                  <span className="inline-flex items-center gap-2 px-4 py-2 bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 rounded-full text-sm font-semibold">
+                    <span className="w-2 h-2 bg-violet-500 rounded-full animate-pulse"></span>
+                    {state.inConversationWindow ? 'Conversation Active' : 'Listening for "Servio"'}
+                  </span>
+                )}
               </div>
             </div>
           </div>
 
 
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-            {/* Left Panel - Compact Controls */}
-            <div className="lg:col-span-1">
-              <div className="card-mobile space-y-3 bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900">
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-5">
+            {/* Left Panel - Controls */}
+            <div className="lg:col-span-1 space-y-4">
+              {/* Avatar Card */}
+              <div className="relative bg-white/80 dark:bg-surface-800/80 backdrop-blur-xl rounded-3xl p-6 shadow-xl border border-white/50 dark:border-surface-700/50 overflow-hidden">
+                <div className="absolute -top-20 -right-20 w-40 h-40 rounded-full bg-gradient-to-br from-teal-400/20 to-violet-400/20 blur-2xl" />
                 
                 <RealisticAvatar
                   isTalking={state.isSpeaking}
@@ -887,36 +904,38 @@ export default function AssistantPage() {
                   audioLevel={talkIntensity * 100}
                 />
 
-                <MicrophoneButton
-                  isRecording={state.isRecording}
-                  isProcessing={state.isProcessing}
-                  onStartRecording={startRecording}
-                  onStopRecording={stopRecording}
-                  disabled={!mediaRecorder}
-                  toggleMode={state.micToggleMode}
-                />
-                
+                <div className="mt-4">
+                  <MicrophoneButton
+                    isRecording={state.isRecording}
+                    isProcessing={state.isProcessing}
+                    onStartRecording={startRecording}
+                    onStopRecording={stopRecording}
+                    disabled={!mediaRecorder}
+                    toggleMode={state.micToggleMode}
+                  />
+                </div>
+              </div>
 
-                {/* Always Listening Mode - Compact */}
-                <div className="p-3 bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 rounded-lg border-2 border-purple-300 dark:border-purple-700">
-                  <div className="flex items-center justify-between mb-2">
-                    <div>
-                      <h3 className="text-sm font-bold text-purple-900 dark:text-purple-100 flex items-center gap-2">
-                        <span className="text-lg">🎯</span>
-                        Always Listening Mode
-                        {state.alwaysListening && <span className="px-2 py-0.5 bg-purple-600 text-white text-xs rounded-full animate-pulse">ACTIVE</span>}
-                      </h3>
-                      <p className="text-xs text-purple-700 dark:text-purple-300 mt-1">
-                        {state.alwaysListening 
-                          ? '🎤 Continuously listening and processing your commands' 
-                          : 'Enable for hands-free continuous operation'
-                        }
-                      </p>
-                    </div>
+              {/* Always Listening Card */}
+              <div className="relative bg-gradient-to-br from-violet-500/10 to-fuchsia-500/10 dark:from-violet-900/30 dark:to-fuchsia-900/30 backdrop-blur-xl rounded-3xl p-5 shadow-xl border border-violet-200/50 dark:border-violet-800/50 overflow-hidden">
+                <div className="absolute -bottom-10 -left-10 w-32 h-32 rounded-full bg-violet-500/20 blur-2xl" />
+                
+                <div className="relative">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-bold text-violet-900 dark:text-violet-100">
+                      Always Listening
+                    </h3>
                     <div className={`w-3 h-3 rounded-full ${
-                      state.alwaysListening ? 'bg-purple-500 animate-pulse' : 'bg-gray-300'
+                      state.alwaysListening ? 'bg-violet-500 animate-pulse shadow-lg shadow-violet-500/50' : 'bg-surface-300 dark:bg-surface-600'
                     }`} />
                   </div>
+                  
+                  <p className="text-xs text-violet-700 dark:text-violet-300 mb-4">
+                    {state.alwaysListening 
+                      ? 'Continuously listening for commands' 
+                      : 'Enable hands-free voice control'
+                    }
+                  </p>
 
                   <button
                     onClick={() => {
@@ -924,26 +943,22 @@ export default function AssistantPage() {
                       setState(prev => ({ ...prev, alwaysListening: newAlwaysListening }));
                       
                       if (newAlwaysListening) {
-                        // Start recording immediately using ref
                         addMessageRef.current?.({
                           type: 'system',
-                          content: '🎯 Always Listening activated! I\'ll continuously process everything you say.',
+                          content: 'Always Listening activated! Say "Servio" to start a command.',
                           metadata: { action: { type: 'always_listening', status: 'completed' } }
                         });
                         
-                        // Start recording after a brief moment using ref
                         setTimeout(() => {
                           if (startRecordingRef.current && !stateRef.current.isRecording && !stateRef.current.isProcessing) {
                             startRecordingRef.current();
                           }
                         }, 500);
                       } else {
-                        // Stop recording if active using ref
                         if (stateRef.current.isRecording && stopRecordingRef.current) {
                           stopRecordingRef.current();
                         }
                         
-                        // Clear conversation window
                         if (conversationWindowRef.current) {
                           clearTimeout(conversationWindowRef.current);
                           conversationWindowRef.current = null;
@@ -953,90 +968,91 @@ export default function AssistantPage() {
                         
                         addMessageRef.current?.({
                           type: 'system',
-                          content: '🎯 Always Listening deactivated.',
+                          content: 'Always Listening deactivated.',
                           metadata: { action: { type: 'always_listening', status: 'completed' } }
                         });
                       }
                     }}
                     disabled={state.isProcessing}
-                    className={`w-full px-4 py-2.5 text-sm font-bold rounded-lg transition-all transform hover:scale-105 ${
+                    className={`w-full py-3 text-sm font-bold rounded-xl transition-all ${
                       state.alwaysListening
-                        ? 'bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white shadow-lg'
-                        : 'bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white shadow-lg'
-                    } disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none`}
+                        ? 'bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 text-white shadow-lg shadow-rose-500/30'
+                        : 'bg-gradient-to-r from-violet-500 to-fuchsia-600 hover:from-violet-600 hover:to-fuchsia-700 text-white shadow-lg shadow-violet-500/30'
+                    } disabled:opacity-50 disabled:cursor-not-allowed`}
                   >
-                    {state.alwaysListening ? '⏸️ Stop Always Listening' : '🎯 Start Always Listening'}
+                    {state.alwaysListening ? 'Stop Listening' : 'Start Listening'}
                   </button>
 
                   {state.alwaysListening && state.inConversationWindow && (
-                    <div className="mt-2 p-2 bg-green-100 dark:bg-green-900/30 rounded text-xs">
-                      <span className="font-bold text-green-700 dark:text-green-300">💬 IN CONVERSATION</span>
-                      <span className="text-green-600 dark:text-green-400 ml-2">- Talk freely for 30s</span>
+                    <div className="mt-3 p-3 bg-emerald-100 dark:bg-emerald-900/30 rounded-xl">
+                      <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-300">
+                        Conversation active - speak freely
+                      </p>
                     </div>
                   )}
                 </div>
-
               </div>
             </div>
 
-            {/* Right Panel - Transcript & Actions */}
-            <div className="lg:col-span-3 space-y-3">
+            {/* Right Panel - Conversation */}
+            <div className="lg:col-span-3 space-y-4">
               {/* Conversation History */}
-              <div className="card-mobile h-[45vh] lg:h-[400px]">
+              <div className="relative bg-white/80 dark:bg-surface-800/80 backdrop-blur-xl rounded-3xl p-6 shadow-xl border border-white/50 dark:border-surface-700/50 h-[50vh] lg:h-[420px] flex flex-col">
                 <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100">
+                  <h2 className="text-lg font-bold text-surface-900 dark:text-white">
                     Conversation
                   </h2>
-                  <div className="flex items-center space-x-2 text-xs sm:text-sm text-gray-500 dark:text-gray-400">
-                    <div className="flex items-center space-x-1">
-                      <div className={`w-2 h-2 rounded-full ${
-                        state.isRecording ? 'bg-red-500' :
-                        state.isProcessing ? 'bg-yellow-500' :
-                        state.isSpeaking ? 'bg-green-500' :
-                        'bg-gray-300 dark:bg-gray-600'
-                      }`} />
-                      <span className="hidden sm:inline">
-                        {state.isRecording && 'Recording'}
-                        {state.isProcessing && 'Processing'}
-                        {state.isSpeaking && 'Speaking'}
-                        {!state.isRecording && !state.isProcessing && !state.isSpeaking && 'Ready'}
-                      </span>
-                      <span className="sm:hidden">
-                        {state.isRecording && 'Rec'}
-                        {state.isProcessing && 'Proc'}
-                        {state.isSpeaking && 'Talk'}
-                        {!state.isRecording && !state.isProcessing && !state.isSpeaking && 'Ready'}
-                      </span>
-                    </div>
-                  </div>
+                  <span className="text-sm text-surface-500 dark:text-surface-400">
+                    {state.messages.length} messages
+                  </span>
                 </div>
 
                 <TranscriptFeed
                   messages={state.messages}
-                  className="h-full mobile-scrolling"
+                  className="flex-1 overflow-y-auto"
                 />
               </div>
 
               {/* Chat Input */}
-              <div className="card-mobile">
-                <div className="mb-3">
-                  <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">
-                    💬 Type Command
-                  </h3>
-                  <ChatInput
-                    onSendMessage={handleQuickCommand}
-                    disabled={state.isProcessing || state.isRecording}
-                    placeholder="Type your command... (e.g., 'no more jerk chicken', 'check orders')"
-                  />
-                </div>
+              <div className="relative bg-white/80 dark:bg-surface-800/80 backdrop-blur-xl rounded-3xl p-5 shadow-xl border border-white/50 dark:border-surface-700/50">
+                <ChatInput
+                  onSendMessage={handleQuickCommand}
+                  disabled={state.isProcessing || state.isRecording}
+                  placeholder="Type a command... (e.g., '86 the chicken', 'check orders')"
+                />
 
-                {/* Compact Suggestions */}
-                <div className="mt-3">
-                  <p className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-2">💡 Quick Examples:</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    <button onClick={() => handleQuickCommand('check current orders')} disabled={state.isProcessing || state.isRecording} className="px-2 py-1 text-xs bg-gray-100 dark:bg-gray-700 rounded hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50">Check orders</button>
-                    <button onClick={() => handleQuickCommand('what items are 86\'d')} disabled={state.isProcessing || state.isRecording} className="px-2 py-1 text-xs bg-gray-100 dark:bg-gray-700 rounded hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50">What's 86'd?</button>
-                    <button onClick={() => handleQuickCommand('show inventory levels')} disabled={state.isProcessing || state.isRecording} className="px-2 py-1 text-xs bg-gray-100 dark:bg-gray-700 rounded hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50">Inventory</button>
+                {/* Quick Commands */}
+                <div className="mt-4 pt-4 border-t border-surface-200/50 dark:border-surface-700/50">
+                  <p className="text-xs font-semibold text-surface-500 dark:text-surface-400 uppercase tracking-wider mb-3">Quick Commands</p>
+                  <div className="flex flex-wrap gap-2">
+                    <button 
+                      onClick={() => handleQuickCommand('check current orders')} 
+                      disabled={state.isProcessing || state.isRecording} 
+                      className="px-4 py-2 text-sm font-medium bg-surface-100 dark:bg-surface-700 text-surface-700 dark:text-surface-300 rounded-xl hover:bg-surface-200 dark:hover:bg-surface-600 transition-colors disabled:opacity-50"
+                    >
+                      Check orders
+                    </button>
+                    <button 
+                      onClick={() => handleQuickCommand("what items are 86'd")} 
+                      disabled={state.isProcessing || state.isRecording} 
+                      className="px-4 py-2 text-sm font-medium bg-surface-100 dark:bg-surface-700 text-surface-700 dark:text-surface-300 rounded-xl hover:bg-surface-200 dark:hover:bg-surface-600 transition-colors disabled:opacity-50"
+                    >
+                      What's 86'd?
+                    </button>
+                    <button 
+                      onClick={() => handleQuickCommand('show inventory levels')} 
+                      disabled={state.isProcessing || state.isRecording} 
+                      className="px-4 py-2 text-sm font-medium bg-surface-100 dark:bg-surface-700 text-surface-700 dark:text-surface-300 rounded-xl hover:bg-surface-200 dark:hover:bg-surface-600 transition-colors disabled:opacity-50"
+                    >
+                      Inventory
+                    </button>
+                    <button 
+                      onClick={() => handleQuickCommand('show pending tasks')} 
+                      disabled={state.isProcessing || state.isRecording} 
+                      className="px-4 py-2 text-sm font-medium bg-surface-100 dark:bg-surface-700 text-surface-700 dark:text-surface-300 rounded-xl hover:bg-surface-200 dark:hover:bg-surface-600 transition-colors disabled:opacity-50"
+                    >
+                      Tasks
+                    </button>
                   </div>
                 </div>
               </div>

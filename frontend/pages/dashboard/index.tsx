@@ -96,24 +96,23 @@ const DashboardIndex = memo(() => {
   const { user, isManagerOrOwner } = useUser()
   const socket = useSocket()
   const [activeOrders, setActiveOrders] = useState(0)
+  const [totalOrders, setTotalOrders] = useState(0)
   const [recentOrders, setRecentOrders] = useState<any[]>([])
-  const [pendingTasks, setPendingTasks] = useState(0)
   const [todaySales, setTodaySales] = useState(0)
   const [isFetching, setIsFetching] = useState(true)
 
   const fetchStats = async () => {
     setIsFetching(true)
     try {
-      const [ordersRes, summaryRes, tasksRes] = await Promise.all([
+      const [ordersRes, summaryRes] = await Promise.all([
         api.get('/api/orders', { params: { limit: 5 } }),
-        api.get('/api/orders/stats/summary'),
-        api.get('/api/tasks/stats')
+        api.get('/api/orders/stats/summary')
       ])
       
       setRecentOrders(ordersRes.data.data.orders)
       setActiveOrders(summaryRes.data.data.activeOrders)
-      setTodaySales(summaryRes.data.data.completedTodaySales || 0) // adjusted field
-      setPendingTasks(tasksRes.data.data.pending)
+      setTotalOrders(summaryRes.data.data.totalOrders || 0)
+      setTodaySales(summaryRes.data.data.completedTodaySales || 0)
     } catch (err) {
       console.error('Failed to fetch dashboard stats', err)
     } finally {
@@ -148,22 +147,22 @@ const DashboardIndex = memo(() => {
       glowColor: 'bg-blue-500/40'
     },
     {
+      name: 'Total Orders',
+      value: totalOrders.toString(),
+      change: '8.2%',
+      changeType: 'increase' as const,
+      icon: Package,
+      color: 'bg-gradient-to-br from-violet-500 to-purple-600',
+      glowColor: 'bg-violet-500/40'
+    },
+    {
       name: 'Items 86\'d',
       value: '0',
       change: '0',
       changeType: 'increase' as const,
-      icon: Package,
+      icon: CheckSquare,
       color: 'bg-gradient-to-br from-rose-500 to-pink-600',
       glowColor: 'bg-rose-500/40'
-    },
-    {
-      name: 'Pending Tasks',
-      value: pendingTasks.toString(),
-      change: '3',
-      changeType: 'decrease' as const,
-      icon: CheckSquare,
-      color: 'bg-gradient-to-br from-amber-500 to-orange-600',
-      glowColor: 'bg-amber-500/40'
     },
     {
       name: 'Today\'s Sales',
@@ -174,7 +173,7 @@ const DashboardIndex = memo(() => {
       color: 'bg-gradient-to-br from-emerald-500 to-teal-600',
       glowColor: 'bg-emerald-500/40'
     }
-  ], [activeOrders, pendingTasks, todaySales])
+  ], [activeOrders, totalOrders, todaySales])
 
   // MEMOIZED QUICK ACTIONS FOR PERFORMANCE
   const quickActions = useMemo(() => [

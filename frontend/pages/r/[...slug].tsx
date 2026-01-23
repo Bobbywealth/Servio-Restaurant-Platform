@@ -258,13 +258,13 @@ export default function PublicProfile() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-20">
+    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white pb-24">
       <Head>
         <title>{restaurant.name} - Online Ordering</title>
       </Head>
 
-      {/* Hero Section with Cover Image */}
-      <div className="relative h-48 md:h-64 bg-gray-200 overflow-hidden">
+      {/* Premium Hero Section */}
+      <div className="relative h-56 md:h-72 overflow-hidden">
         {restaurant.cover_image_url ? (
           <img 
             src={restaurant.cover_image_url} 
@@ -272,83 +272,133 @@ export default function PublicProfile() {
             className="w-full h-full object-cover"
           />
         ) : (
-          <div className="w-full h-full bg-gradient-to-r from-blue-600 to-indigo-700 flex items-center justify-center">
-            <h1 className="text-4xl font-bold text-white opacity-20">{restaurant.name}</h1>
-          </div>
+          <div className="w-full h-full bg-gradient-to-br from-slate-800 via-slate-900 to-black" />
         )}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-        <div className="absolute bottom-0 left-0 right-0 p-6 text-white max-w-4xl mx-auto w-full">
-          <div className="flex items-end gap-4">
-            {restaurant.logo_url && (
-              <div className="w-20 h-20 bg-white rounded-2xl p-1 shadow-lg shrink-0">
-                <img src={restaurant.logo_url} alt="Logo" className="w-full h-full object-contain rounded-xl" />
-              </div>
-            )}
-            <div className="mb-2">
-              <h1 className="text-3xl font-bold">{restaurant.name}</h1>
-              <p className="text-white/80 text-sm line-clamp-1 mt-1">{restaurant.description}</p>
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
+        
+        {/* Restaurant Info Overlay */}
+        <div className="absolute bottom-0 left-0 right-0 p-6 md:p-8">
+          <div className="max-w-4xl mx-auto">
+            <div className="flex items-end gap-5">
+              {restaurant.logo_url && (
+                <motion.div 
+                  className="w-20 h-20 md:w-24 md:h-24 bg-white rounded-2xl p-2 shadow-2xl shrink-0"
+                  initial={{ scale: 0.8, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ delay: 0.2 }}
+                >
+                  <img src={restaurant.logo_url} alt="Logo" className="w-full h-full object-contain rounded-xl" />
+                </motion.div>
+              )}
+              <motion.div 
+                className="mb-1"
+                initial={{ y: 20, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ delay: 0.3 }}
+              >
+                <h1 className="text-3xl md:text-4xl font-black text-white tracking-tight">{restaurant.name}</h1>
+                {restaurant.description && (
+                  <p className="text-white/70 text-sm md:text-base mt-1 line-clamp-2 max-w-md">{restaurant.description}</p>
+                )}
+              </motion.div>
             </div>
           </div>
         </div>
       </div>
 
-      <div className="bg-white shadow-sm border-b sticky top-0 z-10">
-        <div className="max-w-4xl mx-auto px-4 py-4 flex flex-wrap gap-4 text-sm text-gray-600">
-          <span className="flex items-center"><Clock className="w-4 h-4 mr-1 text-blue-600" /> Pickup in 20-30 mins</span>
-          {restaurant.address?.city && (
-            <span className="flex items-center"><MapPin className="w-4 h-4 mr-1 text-blue-600" /> {restaurant.address.city}, {restaurant.address.state}</span>
-          )}
-          {restaurant.phone && (
-            <span className="flex items-center"><Phone className="w-4 h-4 mr-1 text-blue-600" /> {restaurant.phone}</span>
-          )}
+      {/* Info Bar */}
+      <div className="bg-white/80 backdrop-blur-xl shadow-sm border-b border-slate-200/50 sticky top-0 z-10">
+        <div className="max-w-4xl mx-auto px-4 py-3">
+          <div className="flex flex-wrap items-center gap-3 md:gap-6 text-sm">
+            <span className="inline-flex items-center gap-2 px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-full font-medium">
+              <Clock className="w-4 h-4" /> 20-30 min
+            </span>
+            {restaurant.address?.city && (
+              <span className="inline-flex items-center gap-1.5 text-slate-600">
+                <MapPin className="w-4 h-4 text-slate-400" /> {restaurant.address.city}, {restaurant.address.state}
+              </span>
+            )}
+            {restaurant.phone && (
+              <span className="inline-flex items-center gap-1.5 text-slate-600">
+                <Phone className="w-4 h-4 text-slate-400" /> {restaurant.phone}
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
+      {/* Menu */}
       <div className="max-w-4xl mx-auto px-4 py-8">
-        <div className="grid grid-cols-1 gap-8">
-          {Array.from(new Set(items.map(i => i.category_name))).map(cat => (
-            <div key={cat}>
-              <h2 className="text-xl font-bold mb-4 border-b pb-2">{cat}</h2>
+        <div className="space-y-10">
+          {Array.from(new Set(items.map(i => i.category_name))).map((cat, catIndex) => (
+            <motion.div 
+              key={cat}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: catIndex * 0.1 }}
+            >
+              <h2 className="text-2xl font-black text-slate-900 mb-5">{cat}</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {items.filter(i => i.category_name === cat).map(item => (
-                  <div key={item.id} className="bg-white p-4 rounded-xl border hover:shadow-md transition-all flex justify-between items-center">
-                    <div>
-                      <h3 className="font-semibold text-lg">{item.name}</h3>
-                      <p className="text-gray-500 text-sm mb-2">{item.description}</p>
-                      <p className="font-bold text-blue-600">${item.price.toFixed(2)}</p>
+                {items.filter(i => i.category_name === cat).map((item, itemIndex) => (
+                  <motion.div 
+                    key={item.id} 
+                    className="group bg-white rounded-2xl p-5 shadow-sm border border-slate-100 hover:shadow-xl hover:border-slate-200 transition-all duration-300"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: (catIndex * 0.1) + (itemIndex * 0.05) }}
+                    whileHover={{ y: -2 }}
+                  >
+                    <div className="flex justify-between items-start gap-4">
+                      <div className="flex-1">
+                        <h3 className="font-bold text-lg text-slate-900 group-hover:text-blue-600 transition-colors">{item.name}</h3>
+                        <p className="text-slate-500 text-sm mt-1 line-clamp-2">{item.description}</p>
+                        <p className="font-black text-xl text-slate-900 mt-3">${item.price.toFixed(2)}</p>
+                      </div>
+                      <button 
+                        onClick={() => addToCart(item)}
+                        className="shrink-0 p-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-600/20"
+                      >
+                        <Plus className="w-5 h-5" />
+                      </button>
                     </div>
-                    <button 
-                      onClick={() => addToCart(item)}
-                      className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
-                    >
-                      <Plus className="w-6 h-6" />
-                    </button>
-                  </div>
+                  </motion.div>
                 ))}
               </div>
-            </div>
+            </motion.div>
           ))}
         </div>
       </div>
 
       {cart.length > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t shadow-lg z-50">
-          <div className="max-w-4xl mx-auto flex items-center justify-between">
-            <div className="flex items-center">
-              <div className="relative mr-4">
-                <ShoppingCart className="w-8 h-8 text-blue-600" />
-                <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center">{cart.reduce((s, i) => s + i.quantity, 0)}</span>
+        <motion.div 
+          className="fixed bottom-0 left-0 right-0 p-4 bg-white/90 backdrop-blur-xl border-t border-slate-200/50 shadow-2xl shadow-slate-900/10 z-50"
+          initial={{ y: 100 }}
+          animate={{ y: 0 }}
+          transition={{ type: "spring", bounce: 0.3 }}
+        >
+          <div className="max-w-4xl mx-auto flex items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="relative">
+                <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+                  <ShoppingCart className="w-6 h-6 text-blue-600" />
+                </div>
+                <span className="absolute -top-1 -right-1 bg-blue-600 text-white text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center">
+                  {cart.reduce((s, i) => s + i.quantity, 0)}
+                </span>
               </div>
-              <div className="font-bold text-lg">${cartTotal.toFixed(2)}</div>
+              <div>
+                <p className="text-sm text-slate-500 font-medium">Your Order</p>
+                <p className="text-xl font-black text-slate-900">${cartTotal.toFixed(2)}</p>
+              </div>
             </div>
             <button 
               onClick={() => setIsCartOpen(true)}
-              className="btn-primary px-8"
+              className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-xl font-bold text-lg shadow-lg shadow-blue-600/30 transition-all active:scale-95"
             >
               View Cart
             </button>
           </div>
-        </div>
+        </motion.div>
       )}
 
       <AnimatePresence>
