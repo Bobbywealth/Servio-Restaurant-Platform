@@ -1,3 +1,4 @@
+import { validateItemSelections } from '../services/modifierValidation';
 import { Router, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import { DatabaseService } from '../services/DatabaseService';
@@ -573,6 +574,41 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
   
   const orderId = `order_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
+  // Validate modifiers (new schema) per item if selections provided
+  const normalizedItems = [];
+  if (Array.isArray(items)) {
+    for (const line of items) {
+      const lineItemId = line?.itemId || line?.id;
+      if (!lineItemId) {
+        return res.status(400).json({
+          success: false,
+          error: { message: 'Each item must include itemId' }
+        });
+      }
+      const selections = Array.isArray(line?.selections) ? line.selections : [];
+      const validation = await validateItemSelections(lineItemId, selections);
+      if (!validation.valid) {
+        const err = validation.errors?.[0];
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: err?.code || 'MODIFIER_INVALID',
+            message: err?.message || 'Invalid modifier selection',
+            groupId: err?.groupId,
+            groupName: err?.groupName,
+            reason: err?.reason
+          }
+        });
+      }
+      normalizedItems.push({
+        ...line,
+        itemId: lineItemId,
+        modifiersSnapshot: validation.snapshot || [],
+        modifiersPriceDelta: validation.priceDeltaTotal || 0
+      });
+    }
+  }
+
   await db.run(`
     INSERT INTO orders (
       id, restaurant_id, external_id, channel, items, customer_name,
@@ -583,7 +619,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
     restaurantId,
     externalId,
     channel,
-    JSON.stringify(items),
+    JSON.stringify(normalizedItems),
     customerName || null,
     customerPhone || null,
     totalAmount,

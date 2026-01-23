@@ -70,19 +70,22 @@ interface ModifierGroup {
   id: string;
   name: string;
   description?: string | null;
-  min_selections: number;
-  max_selections: number;
-  is_required: boolean;
-  option_count?: number;
-  is_active?: boolean;
+  selectionType: 'single' | 'multiple' | 'quantity';
+  minSelections: number;
+  maxSelections: number | null;
+  isRequired: boolean;
+  displayOrder?: number;
+  isActive?: boolean;
+  options?: ModifierOption[];
 }
 
 interface ModifierOption {
   id: string;
   name: string;
   description?: string | null;
-  price_modifier: number;
-  is_available?: boolean;
+  priceDelta: number;
+  isActive?: boolean;
+  displayOrder?: number;
 }
 
 const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024;
@@ -132,7 +135,6 @@ const MenuManagement: React.FC = () => {
     preparationTime: '',
     isAvailable: true
   });
-  const [newItemModifierGroupIds, setNewItemModifierGroupIds] = useState<string[]>([]);
   const [editItem, setEditItem] = useState({
     id: '',
     name: '',
@@ -142,13 +144,24 @@ const MenuManagement: React.FC = () => {
     preparationTime: '',
     isAvailable: true
   });
-  const [editItemModifierGroupIds, setEditItemModifierGroupIds] = useState<string[]>([]);
+  type AttachedGroup = {
+    groupId: string;
+    name?: string;
+    overrideMin?: number | null;
+    overrideMax?: number | null;
+    overrideRequired?: boolean | null;
+    displayOrder?: number;
+  };
+  const [newItemAttachedGroups, setNewItemAttachedGroups] = useState<AttachedGroup[]>([]);
+  const [editItemAttachedGroups, setEditItemAttachedGroups] = useState<AttachedGroup[]>([]);
+  const [editItemExistingAttachedGroups, setEditItemExistingAttachedGroups] = useState<AttachedGroup[]>([]);
   const [newModifierGroup, setNewModifierGroup] = useState({
     name: '',
     description: '',
     minSelections: 0,
     maxSelections: 1,
-    isRequired: false
+    isRequired: false,
+    selectionType: 'single' as 'single' | 'multiple' | 'quantity'
   });
   const [newModifierOptionDrafts, setNewModifierOptionDrafts] = useState<Record<string, { name: string; description: string; priceModifier: string }>>({});
 
@@ -204,7 +217,35 @@ const MenuManagement: React.FC = () => {
           dietary_info: Array.isArray(item.dietary_info) ? item.dietary_info : [],
           sort_order: Number(item.sort_order || 0),
           created_at: item.created_at,
-          updated_at: item.updated_at
+          updated_at: item.updated_at,
+          modifierGroups: Array.isArray(item.modifierGroups)
+            ? item.modifierGroups.map((mg: any, idx: number) => ({
+                ...mg,
+                id: mg.id,
+                name: mg.name,
+                selectionType: mg.selectionType || mg.selection_type || 'single',
+                minSelections: mg.minSelections ?? mg.min_selections ?? 0,
+                maxSelections: mg.maxSelections ?? mg.max_selections ?? null,
+                isRequired: mg.isRequired ?? mg.is_required ?? false,
+                displayOrder: mg.displayOrder ?? idx,
+                overrides: mg.overrides || {
+                  overrideMin: mg.overrideMin ?? null,
+                  overrideMax: mg.overrideMax ?? null,
+                  overrideRequired: mg.overrideRequired ?? null,
+                  displayOrder: mg.displayOrder ?? idx
+                },
+                options: Array.isArray(mg.options)
+                  ? mg.options.map((opt: any) => ({
+                      id: opt.id,
+                      name: opt.name,
+                      description: opt.description,
+                      priceDelta: Number(opt.price_delta ?? opt.priceDelta ?? 0),
+                      isActive: opt.is_active ?? opt.isActive ?? true,
+                      displayOrder: opt.display_order ?? 0
+                    }))
+                  : []
+              }))
+            : []
         }));
 
         existing.items = items;
@@ -231,18 +272,48 @@ const MenuManagement: React.FC = () => {
 
   const loadModifierGroups = useCallback(async () => {
     try {
-      const resp = await api.get('/api/menu/modifier-groups');
-      const groups = resp.data?.data || [];
-      setModifierGroups(groups);
+      const restaurantId = user?.restaurantId;
+      if (!restaurantId) return;
+      const resp = await api.get(`/api/restaurants/${restaurantId}/modifier-groups`, {
+        params: { includeOptions: true, activeOnly: false }
+      });
+      const rawGroups = resp.data?.data || [];
+      const mappedGroups: ModifierGroup[] = rawGroups.map((g: any) => ({
+        id: g.id,
+        name: g.name,
+        description: g.description,
+        selectionType: g.selectionType || g.selection_type || 'single',
+        minSelections: Number(g.minSelections ?? g.min_selections ?? 0),
+        maxSelections: g.maxSelections === undefined ? g.max_selections ?? null : g.maxSelections,
+        isRequired: g.isRequired ?? g.is_required ?? false,
+        displayOrder: g.display_order ?? 0,
+        isActive: g.is_active ?? g.isActive ?? true,
+        options: g.options
+      }));
+      setModifierGroups(mappedGroups);
+      const optionsMap: Record<string, ModifierOption[]> = {};
+      mappedGroups.forEach((g: any) => {
+        if (Array.isArray(g.options)) {
+          optionsMap[g.id] = g.options.map((opt: any) => ({
+            id: opt.id,
+            name: opt.name,
+            description: opt.description,
+            priceDelta: Number(opt.price_delta ?? opt.priceDelta ?? 0),
+            isActive: opt.is_active ?? opt.isActive ?? true,
+            displayOrder: opt.display_order ?? 0
+          }));
+        }
+      });
+      setModifierOptions(optionsMap);
     } catch (error) {
       console.error('Error loading modifier groups:', error);
     }
-  }, []);
+  }, [user?.restaurantId]);
 
   useEffect(() => {
-    if (!user?.id) return;
+    if (!user?.restaurantId) return;
     loadModifierGroups();
-  }, [user?.id, loadModifierGroups]);
+  }, [user?.restaurantId, loadModifierGroups]);
 
   // Load restaurant slug for public ordering link
   useEffect(() => {
@@ -306,17 +377,6 @@ const MenuManagement: React.FC = () => {
       }
       return next;
     });
-
-    if (!modifierOptions[groupId]) {
-      try {
-        const resp = await api.get(`/api/menu/modifier-groups/${groupId}/options`);
-        const options = resp.data?.data || [];
-        setModifierOptions((prev) => ({ ...prev, [groupId]: options }));
-      } catch (error) {
-        console.error('Failed to load modifier options:', error);
-        toast.error('Failed to load modifier options');
-      }
-    }
   };
 
   const handleCreateModifierGroup = async () => {
@@ -328,13 +388,25 @@ const MenuManagement: React.FC = () => {
       toast.error('Max selections must be >= min selections');
       return;
     }
+    if (newModifierGroup.selectionType === 'single') {
+      newModifierGroup.maxSelections = 1;
+      if (newModifierGroup.isRequired && newModifierGroup.minSelections < 1) {
+        newModifierGroup.minSelections = 1;
+      }
+      if (!newModifierGroup.isRequired && newModifierGroup.minSelections > 1) {
+        newModifierGroup.minSelections = 0;
+      }
+    }
     setIsSavingModifier(true);
     try {
-      await api.post('/api/menu/modifier-groups', {
+      const restaurantId = user?.restaurantId;
+      if (!restaurantId) throw new Error('Missing restaurant id');
+      await api.post(`/api/restaurants/${restaurantId}/modifier-groups`, {
         name: newModifierGroup.name.trim(),
         description: newModifierGroup.description.trim(),
+        selectionType: newModifierGroup.selectionType || 'single',
         minSelections: Number(newModifierGroup.minSelections || 0),
-        maxSelections: Number(newModifierGroup.maxSelections || 1),
+        maxSelections: newModifierGroup.maxSelections === null ? null : Number(newModifierGroup.maxSelections || 1),
         isRequired: Boolean(newModifierGroup.isRequired)
       });
       toast.success('Modifier group created');
@@ -343,7 +415,8 @@ const MenuManagement: React.FC = () => {
         description: '',
         minSelections: 0,
         maxSelections: 1,
-        isRequired: false
+        isRequired: false,
+        selectionType: 'single'
       });
       setShowAddModifierGroupModal(false);
       await loadModifierGroups();
@@ -363,22 +436,51 @@ const MenuManagement: React.FC = () => {
     }
     setIsSavingModifier(true);
     try {
-      await api.post(`/api/menu/modifier-groups/${groupId}/options`, {
+      await api.post(`/api/modifier-groups/${groupId}/options`, {
         name: draft.name.trim(),
         description: draft.description.trim(),
-        priceModifier: draft.priceModifier ? Number(draft.priceModifier) : 0
+        priceDelta: draft.priceModifier ? Number(draft.priceModifier) : 0
       });
       toast.success('Option added');
       setNewModifierOptionDrafts((prev) => ({ ...prev, [groupId]: { name: '', description: '', priceModifier: '' } }));
-      const resp = await api.get(`/api/menu/modifier-groups/${groupId}/options`);
-      const options = resp.data?.data || [];
-      setModifierOptions((prev) => ({ ...prev, [groupId]: options }));
       await loadModifierGroups();
     } catch (error) {
       console.error('Failed to add modifier option:', error);
       toast.error('Failed to add modifier option');
     } finally {
       setIsSavingModifier(false);
+    }
+  };
+
+  const syncItemModifierGroups = async (
+    itemId: string,
+    attachments: AttachedGroup[],
+    existingAttachments: AttachedGroup[]
+  ) => {
+    // Detach existing
+    for (const existing of existingAttachments) {
+      if (existing.groupId) {
+        try {
+          await api.delete(`/api/menu-items/${itemId}/modifier-groups/${existing.groupId}`);
+        } catch (err) {
+          console.warn('Failed to detach modifier group', existing.groupId, err);
+        }
+      }
+    }
+
+    // Attach current list
+    for (const [idx, att] of attachments.entries()) {
+      try {
+        await api.post(`/api/menu-items/${itemId}/modifier-groups`, {
+          groupId: att.groupId,
+          overrideMin: att.overrideMin ?? null,
+          overrideMax: att.overrideMax ?? null,
+          overrideRequired: att.overrideRequired ?? null,
+          displayOrder: att.displayOrder ?? idx
+        });
+      } catch (err) {
+        console.warn('Failed to attach modifier group', att.groupId, err);
+      }
     }
   };
 
@@ -536,15 +638,13 @@ const MenuManagement: React.FC = () => {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       const createdId = resp.data?.data?.id as string | undefined;
-      if (createdId && newItemModifierGroupIds.length > 0) {
-        await api.post(`/api/menu/items/${createdId}/modifiers`, {
-          modifierGroupIds: newItemModifierGroupIds
-        });
+      if (createdId && newItemAttachedGroups.length > 0) {
+        await syncItemModifierGroups(createdId, newItemAttachedGroups, []);
       }
       toast.success('Menu item created');
       setShowAddItemModal(false);
       setNewItemImages([]);
-      setNewItemModifierGroupIds([]);
+      setNewItemAttachedGroups([]);
       await loadMenuData();
     } catch (error) {
       console.error('Failed to create menu item:', error);
@@ -567,18 +667,20 @@ const MenuManagement: React.FC = () => {
     setEditingItem(item);
     setEditItemImages([]);
     setEditItemExistingImages(item.images || []);
-    setEditItemModifierGroupIds([]);
+    const attached = Array.isArray((item as any).modifierGroups)
+      ? (item as any).modifierGroups.map((g: any, idx: number) => ({
+          groupId: g.id,
+          name: g.name,
+          overrideMin: g.overrides?.overrideMin ?? null,
+          overrideMax: g.overrides?.overrideMax ?? null,
+          overrideRequired: g.overrides?.overrideRequired ?? null,
+          displayOrder: g.overrides?.displayOrder ?? g.displayOrder ?? idx
+        }))
+      : [];
+    setEditItemAttachedGroups(attached);
+    setEditItemExistingAttachedGroups(attached);
+    setEditItemModifierGroupIds(attached.map((g) => g.groupId));
     setShowEditItemModal(true);
-    (async () => {
-      try {
-        const resp = await api.get(`/api/menu/items/${item.id}/modifiers`);
-        const groups = resp.data?.data || [];
-        const ids = groups.map((group: any) => group.id).filter(Boolean);
-        setEditItemModifierGroupIds(ids);
-      } catch (error) {
-        console.error('Failed to load item modifiers:', error);
-      }
-    })();
   };
 
   const handleUpdateItem = async () => {
@@ -610,14 +712,14 @@ const MenuManagement: React.FC = () => {
       await api.put(`/api/menu/items/${editItem.id}`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
-      await api.post(`/api/menu/items/${editItem.id}/modifiers`, {
-        modifierGroupIds: editItemModifierGroupIds
-      });
+      await syncItemModifierGroups(editItem.id, editItemAttachedGroups, editItemExistingAttachedGroups);
       toast.success('Menu item updated');
       setShowEditItemModal(false);
       setEditingItem(null);
       setEditItemImages([]);
       setEditItemExistingImages([]);
+      setEditItemAttachedGroups([]);
+      setEditItemExistingAttachedGroups([]);
       setEditItemModifierGroupIds([]);
       await loadMenuData();
     } catch (error) {
@@ -874,8 +976,8 @@ const MenuManagement: React.FC = () => {
                             <div>
                               <div className="font-semibold text-gray-900 dark:text-white">{group.name}</div>
                               <div className="text-xs text-gray-500 dark:text-gray-400">
-                                {group.min_selections}-{group.max_selections} selections
-                                {group.is_required ? ' • Required' : ''} • {group.option_count ?? options.length} options
+                                {group.selectionType} • {group.minSelections}-{group.maxSelections ?? '∞'} selections
+                                {group.isRequired ? ' • Required' : ''} • {options.length} options
                               </div>
                             </div>
                             <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
@@ -890,7 +992,7 @@ const MenuManagement: React.FC = () => {
                                         <span className="font-medium">{opt.name}</span>
                                         {opt.description ? <span className="text-xs text-gray-500 ml-2">{opt.description}</span> : null}
                                       </div>
-                                      <span className="text-xs text-gray-500">+{Number(opt.price_modifier || 0).toFixed(2)}</span>
+                                      <span className="text-xs text-gray-500">+{Number((opt as any).priceDelta ?? opt.priceDelta ?? opt.price_modifier ?? 0).toFixed(2)}</span>
                                     </div>
                                   ))}
                                 </div>
@@ -1096,6 +1198,21 @@ const MenuManagement: React.FC = () => {
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Selection type</label>
+                    <select
+                      value={newModifierGroup.selectionType}
+                      onChange={(e) => setNewModifierGroup((prev) => ({ ...prev, selectionType: e.target.value as any }))}
+                      className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                    >
+                      <option value="single">Single</option>
+                      <option value="multiple">Multiple</option>
+                      <option value="quantity">Quantity</option>
+                    </select>
+                  </div>
+                  <div></div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Min selections</label>
                     <input
                       type="number"
@@ -1238,33 +1355,136 @@ const MenuManagement: React.FC = () => {
                   </select>
                 </div>
                 {modifierGroups.length > 0 && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Add-ons & Modifiers</label>
-                    <div className="mt-2 space-y-2">
-                      {modifierGroups.map((group) => (
-                        <label key={group.id} className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-                          <input
-                            type="checkbox"
-                            checked={newItemModifierGroupIds.includes(group.id)}
-                            onChange={(e) => {
-                              setNewItemModifierGroupIds((prev) =>
-                                e.target.checked
-                                  ? [...prev, group.id]
-                                  : prev.filter((id) => id !== group.id)
-                              );
-                            }}
-                            className="h-4 w-4 text-red-600 border-gray-300 rounded"
-                          />
-                          <span>
-                            {group.name}
-                            <span className="text-xs text-gray-500 ml-2">
-                              {group.min_selections}-{group.max_selections} selections
-                              {group.is_required ? ' • Required' : ''}
-                            </span>
-                          </span>
-                        </label>
-                      ))}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Attached Modifier Groups
+                      </label>
                     </div>
+                    <div className="flex gap-2">
+                      <select
+                        className="flex-1 px-3 py-2 border border-gray-200 rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (!val) return;
+                          setNewItemAttachedGroups((prev) => {
+                            if (prev.some((p) => p.groupId === val)) return prev;
+                            const found = modifierGroups.find((g) => g.id === val);
+                            return [
+                              ...prev,
+                              {
+                                groupId: val,
+                                name: found?.name,
+                                displayOrder: prev.length
+                              }
+                            ];
+                          });
+                          e.target.value = '';
+                        }}
+                        defaultValue=""
+                      >
+                        <option value="">Select group to attach</option>
+                        {modifierGroups
+                          .filter((g) => !newItemAttachedGroups.some((a) => a.groupId === g.id))
+                          .map((g) => (
+                            <option key={g.id} value={g.id}>
+                              {g.name} ({g.selectionType})
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                    {newItemAttachedGroups.length > 0 && (
+                      <div className="space-y-2">
+                        {newItemAttachedGroups.map((att, idx) => (
+                          <div
+                            key={att.groupId}
+                            className="border border-gray-200 dark:border-gray-700 rounded-lg p-3 text-sm flex flex-col gap-2"
+                          >
+                            <div className="flex justify-between items-center">
+                              <div className="font-semibold text-gray-900 dark:text-white">
+                                {att.name || att.groupId}
+                              </div>
+                              <button
+                                type="button"
+                                className="text-red-600 text-xs"
+                                onClick={() =>
+                                  setNewItemAttachedGroups((prev) =>
+                                    prev.filter((p) => p.groupId !== att.groupId)
+                                  )
+                                }
+                              >
+                                Detach
+                              </button>
+                            </div>
+                            <div className="grid grid-cols-3 gap-2">
+                              <div>
+                                <label className="block text-xs text-gray-500">Override Min</label>
+                                <input
+                                  type="number"
+                                  value={att.overrideMin ?? ''}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setNewItemAttachedGroups((prev) =>
+                                      prev.map((p) =>
+                                        p.groupId === att.groupId ? { ...p, overrideMin: val === '' ? null : Number(val) } : p
+                                      )
+                                    );
+                                  }}
+                                  className="w-full px-2 py-1 border border-gray-200 rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs text-gray-500">Override Max</label>
+                                <input
+                                  type="number"
+                                  value={att.overrideMax ?? ''}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setNewItemAttachedGroups((prev) =>
+                                      prev.map((p) =>
+                                        p.groupId === att.groupId ? { ...p, overrideMax: val === '' ? null : Number(val) } : p
+                                      )
+                                    );
+                                  }}
+                                  className="w-full px-2 py-1 border border-gray-200 rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs text-gray-500">Display Order</label>
+                                <input
+                                  type="number"
+                                  value={att.displayOrder ?? idx}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setNewItemAttachedGroups((prev) =>
+                                      prev.map((p) =>
+                                        p.groupId === att.groupId ? { ...p, displayOrder: val === '' ? idx : Number(val) } : p
+                                      )
+                                    );
+                                  }}
+                                  className="w-full px-2 py-1 border border-gray-200 rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                />
+                              </div>
+                            </div>
+                            <label className="inline-flex items-center gap-2 text-xs text-gray-700 dark:text-gray-300">
+                              <input
+                                type="checkbox"
+                                checked={att.overrideRequired ?? false}
+                                onChange={(e) =>
+                                  setNewItemAttachedGroups((prev) =>
+                                    prev.map((p) =>
+                                      p.groupId === att.groupId ? { ...p, overrideRequired: e.target.checked } : p
+                                    )
+                                  )
+                                }
+                                className="h-4 w-4 text-red-600 border-gray-300 rounded"
+                              />
+                              Required
+                            </label>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
                 <div>
@@ -1337,7 +1557,7 @@ const MenuManagement: React.FC = () => {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
-            onClick={() => { setShowEditItemModal(false); setEditingItem(null); setEditItemModifierGroupIds([]); }}
+            onClick={() => { setShowEditItemModal(false); setEditingItem(null); setEditItemAttachedGroups([]); setEditItemExistingAttachedGroups([]); }}
           >
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
@@ -1418,33 +1638,132 @@ const MenuManagement: React.FC = () => {
                   </select>
                 </div>
                 {modifierGroups.length > 0 && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Add-ons & Modifiers</label>
-                    <div className="mt-2 space-y-2">
-                      {modifierGroups.map((group) => (
-                        <label key={group.id} className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-                          <input
-                            type="checkbox"
-                            checked={editItemModifierGroupIds.includes(group.id)}
-                            onChange={(e) => {
-                              setEditItemModifierGroupIds((prev) =>
-                                e.target.checked
-                                  ? [...prev, group.id]
-                                  : prev.filter((id) => id !== group.id)
-                              );
-                            }}
-                            className="h-4 w-4 text-red-600 border-gray-300 rounded"
-                          />
-                          <span>
-                            {group.name}
-                            <span className="text-xs text-gray-500 ml-2">
-                              {group.min_selections}-{group.max_selections} selections
-                              {group.is_required ? ' • Required' : ''}
-                            </span>
-                          </span>
-                        </label>
-                      ))}
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Attached Modifier Groups</label>
+                    <div className="flex gap-2">
+                      <select
+                        className="flex-1 px-3 py-2 border border-gray-200 rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (!val) return;
+                          setEditItemAttachedGroups((prev) => {
+                            if (prev.some((p) => p.groupId === val)) return prev;
+                            const found = modifierGroups.find((g) => g.id === val);
+                            return [
+                              ...prev,
+                              {
+                                groupId: val,
+                                name: found?.name,
+                                displayOrder: prev.length
+                              }
+                            ];
+                          });
+                          e.target.value = '';
+                        }}
+                        defaultValue=""
+                      >
+                        <option value="">Select group to attach</option>
+                        {modifierGroups
+                          .filter((g) => !editItemAttachedGroups.some((a) => a.groupId === g.id))
+                          .map((g) => (
+                            <option key={g.id} value={g.id}>
+                              {g.name} ({g.selectionType})
+                            </option>
+                          ))}
+                      </select>
                     </div>
+                    {editItemAttachedGroups.length > 0 && (
+                      <div className="space-y-2">
+                        {editItemAttachedGroups.map((att, idx) => (
+                          <div
+                            key={att.groupId}
+                            className="border border-gray-200 dark:border-gray-700 rounded-lg p-3 text-sm flex flex-col gap-2"
+                          >
+                            <div className="flex justify-between items-center">
+                              <div className="font-semibold text-gray-900 dark:text-white">
+                                {att.name || att.groupId}
+                              </div>
+                              <button
+                                type="button"
+                                className="text-red-600 text-xs"
+                                onClick={() =>
+                                  setEditItemAttachedGroups((prev) =>
+                                    prev.filter((p) => p.groupId !== att.groupId)
+                                  )
+                                }
+                              >
+                                Detach
+                              </button>
+                            </div>
+                            <div className="grid grid-cols-3 gap-2">
+                              <div>
+                                <label className="block text-xs text-gray-500">Override Min</label>
+                                <input
+                                  type="number"
+                                  value={att.overrideMin ?? ''}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setEditItemAttachedGroups((prev) =>
+                                      prev.map((p) =>
+                                        p.groupId === att.groupId ? { ...p, overrideMin: val === '' ? null : Number(val) } : p
+                                      )
+                                    );
+                                  }}
+                                  className="w-full px-2 py-1 border border-gray-200 rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs text-gray-500">Override Max</label>
+                                <input
+                                  type="number"
+                                  value={att.overrideMax ?? ''}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setEditItemAttachedGroups((prev) =>
+                                      prev.map((p) =>
+                                        p.groupId === att.groupId ? { ...p, overrideMax: val === '' ? null : Number(val) } : p
+                                      )
+                                    );
+                                  }}
+                                  className="w-full px-2 py-1 border border-gray-200 rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs text-gray-500">Display Order</label>
+                                <input
+                                  type="number"
+                                  value={att.displayOrder ?? idx}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setEditItemAttachedGroups((prev) =>
+                                      prev.map((p) =>
+                                        p.groupId === att.groupId ? { ...p, displayOrder: val === '' ? idx : Number(val) } : p
+                                      )
+                                    );
+                                  }}
+                                  className="w-full px-2 py-1 border border-gray-200 rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                />
+                              </div>
+                            </div>
+                            <label className="inline-flex items-center gap-2 text-xs text-gray-700 dark:text-gray-300">
+                              <input
+                                type="checkbox"
+                                checked={att.overrideRequired ?? false}
+                                onChange={(e) =>
+                                  setEditItemAttachedGroups((prev) =>
+                                    prev.map((p) =>
+                                      p.groupId === att.groupId ? { ...p, overrideRequired: e.target.checked } : p
+                                    )
+                                  )
+                                }
+                                className="h-4 w-4 text-red-600 border-gray-300 rounded"
+                              />
+                              Required
+                            </label>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
                 <div>
@@ -1490,7 +1809,7 @@ const MenuManagement: React.FC = () => {
               </div>
               <div className="mt-6 flex justify-end gap-3">
                 <button
-                  onClick={() => { setShowEditItemModal(false); setEditingItem(null); setEditItemModifierGroupIds([]); }}
+                  onClick={() => { setShowEditItemModal(false); setEditingItem(null); setEditItemAttachedGroups([]); setEditItemExistingAttachedGroups([]); }}
                   className="px-4 py-2 rounded-lg border border-gray-200 text-gray-600 hover:text-gray-900 dark:border-gray-600 dark:text-gray-300"
                   disabled={isSaving}
                 >

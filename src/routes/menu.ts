@@ -639,6 +639,93 @@ router.get('/items/full', asyncHandler(async (req: Request, res: Response) => {
     is_available: Boolean(item.is_available)
   }));
 
+  // Attach modifier groups/options from new schema
+  const itemIds = formattedItems.map((i: any) => i.id);
+  let itemGroupsMap: Record<string, any[]> = {};
+  if (itemIds.length) {
+    // Load active groups/options for the restaurant
+    const groups = await db.all(
+      `
+      SELECT *
+      FROM modifier_groups
+      WHERE restaurant_id = ?
+        AND deleted_at IS NULL
+      `,
+      [restaurantId]
+    );
+    const groupById = groups.reduce((acc: Record<string, any>, g: any) => {
+      acc[g.id] = g;
+      return acc;
+    }, {});
+
+    const options = await db.all(
+      `
+      SELECT *
+      FROM modifier_options
+      WHERE restaurant_id = ?
+        AND deleted_at IS NULL
+      ORDER BY display_order ASC, name ASC
+      `,
+      [restaurantId]
+    );
+    const optionsByGroup = options.reduce((acc: Record<string, any[]>, opt: any) => {
+      if (!acc[opt.group_id]) acc[opt.group_id] = [];
+      acc[opt.group_id].push(opt);
+      return acc;
+    }, {});
+
+    const placeholders = itemIds.map(() => '?').join(',');
+    const itemJoins = await db.all(
+      `
+      SELECT *
+      FROM item_modifier_groups
+      WHERE item_id IN (${placeholders})
+        AND deleted_at IS NULL
+      ORDER BY display_order ASC
+      `,
+      itemIds
+    );
+
+    itemGroupsMap = itemJoins.reduce((acc: Record<string, any[]>, row: any) => {
+      const baseGroup = groupById[row.group_id];
+      if (!baseGroup) return acc;
+      const effectiveMin =
+        row.override_min !== null && row.override_min !== undefined
+          ? row.override_min
+          : baseGroup.min_selections;
+      const effectiveMax =
+        row.override_max !== null && row.override_max !== undefined
+          ? row.override_max
+          : baseGroup.max_selections;
+      const effectiveRequired =
+        row.override_required !== null && row.override_required !== undefined
+          ? row.override_required
+          : baseGroup.is_required;
+
+      const enriched = {
+        id: baseGroup.id,
+        name: baseGroup.name,
+        description: baseGroup.description,
+        selectionType: baseGroup.selection_type,
+        minSelections: effectiveMin,
+        maxSelections: effectiveMax,
+        isRequired: effectiveRequired,
+        displayOrder: row.display_order ?? baseGroup.display_order ?? 0,
+        overrides: {
+          overrideMin: row.override_min,
+          overrideMax: row.override_max,
+          overrideRequired: row.override_required,
+          displayOrder: row.display_order ?? 0
+        },
+        options: optionsByGroup[baseGroup.id] || []
+      };
+
+      if (!acc[row.item_id]) acc[row.item_id] = [];
+      acc[row.item_id].push(enriched);
+      return acc;
+    }, {});
+  }
+
   // Group by categories
   const categorizedItems = formattedItems.reduce((acc: any, item: any) => {
     const categoryName = item.category_name || 'Uncategorized';
@@ -650,7 +737,10 @@ router.get('/items/full', asyncHandler(async (req: Request, res: Response) => {
         items: []
       };
     }
-    acc[categoryName].items.push(item);
+    acc[categoryName].items.push({
+      ...item,
+      modifierGroups: itemGroupsMap[item.id] || []
+    });
     return acc;
   }, {});
 
@@ -942,6 +1032,7 @@ router.get('/categories', asyncHandler(async (req: Request, res: Response) => {
  * Get all modifier groups for a restaurant
  */
 router.get('/modifier-groups', asyncHandler(async (req: Request, res: Response) => {
+  // TODO: Legacy endpoint - prefer /api/restaurants/:restaurantId/modifier-groups (modifiers.ts)
   const db = DatabaseService.getInstance().getDatabase();
   const restaurantId = req.user?.restaurantId;
 
