@@ -40,9 +40,9 @@ export class VoiceOrderingService {
 
   private resolveRestaurantId(input?: string | null) {
     // TEMP FIX for testing: fallback to Sashey's Kitchen if restaurantId missing
+    // Try: input → env var → ID from menu JSON → slug from dashboard
     // TODO: Remove this fallback once multi-restaurant metadata is configured
-    const fallback = 'sasheys-kitchen-union';
-    return input || process.env.VAPI_RESTAURANT_ID || fallback;
+    return input || process.env.VAPI_RESTAURANT_ID || 'sasheys-kitchen-union';
   }
 
   // Live DB: get open/closed info; for now always "open" if DB reachable
@@ -174,6 +174,9 @@ export class VoiceOrderingService {
         rowsAfterFiltering: kept.length,
         wouldFilterUnavailable
       });
+
+      // Also use console.log to avoid Render truncation
+      console.log(`[MENU_SEARCH_RESULT] restaurantId=${resolvedRestaurantId} query="${trimmedQuery}" before=${rowsBefore} after=${kept.length} unavailable=${wouldFilterUnavailable}`);
 
       const items = kept.map((r: any) => ({
         id: r.id,
