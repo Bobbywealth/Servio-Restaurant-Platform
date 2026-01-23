@@ -93,7 +93,6 @@ BEGIN
 END $$;
 
 -- Backfill restaurant_id for legacy modifier_groups using menu_item_modifiers + menu_items
--- Only run if both tables and columns exist
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'menu_item_modifiers')
@@ -110,11 +109,23 @@ BEGIN
   END IF;
 END $$;
 
-CREATE INDEX IF NOT EXISTS idx_modifier_groups_restaurant
-  ON modifier_groups(restaurant_id);
+-- Create index on restaurant_id only if column exists
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'modifier_groups' AND column_name = 'restaurant_id'
+  ) THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_indexes 
+      WHERE tablename = 'modifier_groups' AND indexname = 'idx_modifier_groups_restaurant'
+    ) THEN
+      CREATE INDEX idx_modifier_groups_restaurant ON modifier_groups(restaurant_id);
+    END IF;
+  END IF;
+END $$;
 
--- If you want options reusable across groups, add a separate join table.
--- For now, options belong to a single group.
+-- modifier_options table
 CREATE TABLE IF NOT EXISTS modifier_options (
   id TEXT PRIMARY KEY,
   restaurant_id TEXT REFERENCES restaurants(id),
@@ -214,7 +225,6 @@ BEGIN
     SELECT 1 FROM information_schema.columns 
     WHERE table_name = 'modifier_options' AND column_name = 'group_id'
   ) THEN
-    -- Delete duplicate modifier_options
     DELETE FROM modifier_options
     WHERE group_id IN (
       SELECT id FROM (
@@ -238,7 +248,6 @@ BEGIN
     SELECT 1 FROM information_schema.columns 
     WHERE table_name = 'menu_item_modifiers' AND column_name = 'group_id'
   ) THEN
-    -- Delete duplicate menu_item_modifiers
     DELETE FROM menu_item_modifiers
     WHERE group_id IN (
       SELECT id FROM (
@@ -257,7 +266,6 @@ BEGIN
     SELECT 1 FROM information_schema.columns 
     WHERE table_name = 'modifier_groups' AND column_name = 'restaurant_id'
   ) THEN
-    -- Delete duplicate modifier_groups
     DELETE FROM modifier_groups
     WHERE id IN (
       SELECT id FROM (
@@ -270,20 +278,71 @@ BEGIN
   END IF;
 END $$;
 
--- Create indexes (these are safe with IF NOT EXISTS)
-CREATE UNIQUE INDEX IF NOT EXISTS idx_modifier_groups_restaurant_name_unique
-  ON modifier_groups(restaurant_id, name)
-  WHERE deleted_at IS NULL;
-
-CREATE UNIQUE INDEX IF NOT EXISTS idx_modifier_options_group_name_unique
-  ON modifier_options(group_id, name)
-  WHERE deleted_at IS NULL;
-
-CREATE INDEX IF NOT EXISTS idx_modifier_options_group
-  ON modifier_options(group_id);
-
-CREATE INDEX IF NOT EXISTS idx_modifier_options_restaurant
-  ON modifier_options(restaurant_id);
+-- Create indexes only if required columns exist
+DO $$
+BEGIN
+  -- idx_modifier_groups_restaurant_name_unique
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'modifier_groups' AND column_name = 'restaurant_id'
+  ) AND EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'modifier_groups' AND column_name = 'deleted_at'
+  ) THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_indexes 
+      WHERE tablename = 'modifier_groups' AND indexname = 'idx_modifier_groups_restaurant_name_unique'
+    ) THEN
+      CREATE UNIQUE INDEX idx_modifier_groups_restaurant_name_unique
+        ON modifier_groups(restaurant_id, name)
+        WHERE deleted_at IS NULL;
+    END IF;
+  END IF;
+  
+  -- idx_modifier_options_group_name_unique
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'modifier_options' AND column_name = 'group_id'
+  ) AND EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'modifier_options' AND column_name = 'deleted_at'
+  ) THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_indexes 
+      WHERE tablename = 'modifier_options' AND indexname = 'idx_modifier_options_group_name_unique'
+    ) THEN
+      CREATE UNIQUE INDEX idx_modifier_options_group_name_unique
+        ON modifier_options(group_id, name)
+        WHERE deleted_at IS NULL;
+    END IF;
+  END IF;
+  
+  -- idx_modifier_options_group
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'modifier_options' AND column_name = 'group_id'
+  ) THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_indexes 
+      WHERE tablename = 'modifier_options' AND indexname = 'idx_modifier_options_group'
+    ) THEN
+      CREATE INDEX idx_modifier_options_group ON modifier_options(group_id);
+    END IF;
+  END IF;
+  
+  -- idx_modifier_options_restaurant
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'modifier_options' AND column_name = 'restaurant_id'
+  ) THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_indexes 
+      WHERE tablename = 'modifier_options' AND indexname = 'idx_modifier_options_restaurant'
+    ) THEN
+      CREATE INDEX idx_modifier_options_restaurant ON modifier_options(restaurant_id);
+    END IF;
+  END IF;
+END $$;
 
 -- Join table to attach groups to items (per-item overrides)
 CREATE TABLE IF NOT EXISTS item_modifier_groups (
@@ -338,15 +397,37 @@ BEGIN
   END IF;
 END $$;
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_item_modifier_groups_unique
-  ON item_modifier_groups(item_id, group_id)
-  WHERE deleted_at IS NULL;
-
-CREATE INDEX IF NOT EXISTS idx_item_modifier_groups_item
-  ON item_modifier_groups(item_id);
-
-CREATE INDEX IF NOT EXISTS idx_item_modifier_groups_group
-  ON item_modifier_groups(group_id);
+-- Create item_modifier_groups indexes
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'item_modifier_groups' AND column_name = 'deleted_at'
+  ) THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_indexes 
+      WHERE tablename = 'item_modifier_groups' AND indexname = 'idx_item_modifier_groups_unique'
+    ) THEN
+      CREATE UNIQUE INDEX idx_item_modifier_groups_unique
+        ON item_modifier_groups(item_id, group_id)
+        WHERE deleted_at IS NULL;
+    END IF;
+  END IF;
+  
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_indexes 
+    WHERE tablename = 'item_modifier_groups' AND indexname = 'idx_item_modifier_groups_item'
+  ) THEN
+    CREATE INDEX idx_item_modifier_groups_item ON item_modifier_groups(item_id);
+  END IF;
+  
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_indexes 
+    WHERE tablename = 'item_modifier_groups' AND indexname = 'idx_item_modifier_groups_group'
+  ) THEN
+    CREATE INDEX idx_item_modifier_groups_group ON item_modifier_groups(group_id);
+  END IF;
+END $$;
 
 -- Order items already have modifiers_json (see migration 011). No schema change needed here,
 -- but ensure application code stores snapshots of modifier selections.
