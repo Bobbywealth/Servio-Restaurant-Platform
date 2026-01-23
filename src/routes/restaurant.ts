@@ -133,34 +133,48 @@ router.put('/profile', upload.fields([
   if (req.files) {
     type UploadedFile = { buffer: Buffer; mimetype: string; originalname: string };
     const files = req.files as Record<string, UploadedFile[]>;
-    const uploadsPath = await ensureUploadsDir('restaurants');
+    
+    try {
+      const uploadsPath = await ensureUploadsDir('restaurants');
+      logger.info(`Restaurant uploads path: ${uploadsPath}`);
 
-    // Process logo upload
-    if (files.logo && files.logo[0]) {
-      const logoFile = files.logo[0];
-      const logoFileName = `logo-${restaurantId}-${Date.now()}.webp`;
-      const logoPath = path.join(uploadsPath, logoFileName);
-      
-      await sharp(logoFile.buffer)
-        .resize(300, 300, { fit: 'inside', withoutEnlargement: true })
-        .webp({ quality: 90 })
-        .toFile(logoPath);
-      
-      logoUrl = `/uploads/restaurants/${logoFileName}`;
-    }
+      // Process logo upload
+      if (files.logo && files.logo[0]) {
+        const logoFile = files.logo[0];
+        logger.info(`Processing logo upload: ${logoFile.originalname}, size: ${logoFile.buffer.length}`);
+        const logoFileName = `logo-${restaurantId}-${Date.now()}.webp`;
+        const logoPath = path.join(uploadsPath, logoFileName);
+        
+        await sharp(logoFile.buffer)
+          .resize(300, 300, { fit: 'inside', withoutEnlargement: true })
+          .webp({ quality: 90 })
+          .toFile(logoPath);
+        
+        logoUrl = `/uploads/restaurants/${logoFileName}`;
+        logger.info(`Logo saved: ${logoUrl}`);
+      }
 
-    // Process cover image upload
-    if (files.coverImage && files.coverImage[0]) {
-      const coverFile = files.coverImage[0];
-      const coverFileName = `cover-${restaurantId}-${Date.now()}.webp`;
-      const coverPath = path.join(uploadsPath, coverFileName);
-      
-      await sharp(coverFile.buffer)
-        .resize(1200, 600, { fit: 'cover' })
-        .webp({ quality: 85 })
-        .toFile(coverPath);
-      
-      coverImageUrl = `/uploads/restaurants/${coverFileName}`;
+      // Process cover image upload
+      if (files.coverImage && files.coverImage[0]) {
+        const coverFile = files.coverImage[0];
+        logger.info(`Processing cover upload: ${coverFile.originalname}, size: ${coverFile.buffer.length}`);
+        const coverFileName = `cover-${restaurantId}-${Date.now()}.webp`;
+        const coverPath = path.join(uploadsPath, coverFileName);
+        
+        await sharp(coverFile.buffer)
+          .resize(1200, 600, { fit: 'cover' })
+          .webp({ quality: 85 })
+          .toFile(coverPath);
+        
+        coverImageUrl = `/uploads/restaurants/${coverFileName}`;
+        logger.info(`Cover image saved: ${coverImageUrl}`);
+      }
+    } catch (uploadError) {
+      logger.error('Image upload failed:', uploadError);
+      return res.status(500).json({
+        success: false,
+        error: { message: 'Failed to process image upload. Please try again.' }
+      });
     }
   }
 
