@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 
 import { DatabaseService } from '../services/DatabaseService';
-import { logger } from '../utils/logger';
 
 async function ensureDemoRestaurant() {
   console.log('🏢 Ensuring demo restaurant exists...');

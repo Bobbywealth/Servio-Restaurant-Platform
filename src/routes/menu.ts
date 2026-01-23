@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { DatabaseService } from '../services/DatabaseService';
-import { asyncHandler, NotFoundError, UnauthorizedError } from '../middleware/errorHandler';
+import { asyncHandler, UnauthorizedError } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
 import { ensureUploadsDir } from '../utils/uploads';
 import multer from 'multer';
@@ -137,6 +137,7 @@ router.get('/public/:slug', asyncHandler(async (req: Request, res: Response) => 
   let sizesByItem: Record<string, any[]> = {};
 
   if (itemIds.length) {
+    const itemIdPlaceholders = itemIds.map(() => '?').join(',');
     const modifierGroups = await db.all(`
       SELECT *
       FROM modifier_groups
@@ -167,11 +168,10 @@ router.get('/public/:slug', asyncHandler(async (req: Request, res: Response) => 
         return acc;
       }, {});
 
-      const placeholders = itemIds.map(() => '?').join(',');
       const itemModifierRows = await db.all(`
         SELECT *
         FROM item_modifier_groups
-        WHERE item_id IN (${placeholders})
+        WHERE item_id IN (${itemIdPlaceholders})
           AND deleted_at IS NULL
         ORDER BY display_order ASC
       `, itemIds);
@@ -261,7 +261,7 @@ router.get('/public/:slug', asyncHandler(async (req: Request, res: Response) => 
       `
         SELECT *
         FROM item_sizes
-        WHERE item_id IN (${placeholders})
+        WHERE item_id IN (${itemIdPlaceholders})
         ORDER BY display_order ASC, size_name ASC
       `,
       itemIds
@@ -442,7 +442,7 @@ router.put('/categories/:id/visibility', asyncHandler(async (req: Request, res: 
 
   await db.run(
     'UPDATE menu_categories SET is_hidden = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND restaurant_id = ?',
-    [Boolean(isHidden) ? 1 : 0, id, restaurantId]
+    [isHidden ? 1 : 0, id, restaurantId]
   );
 
   await DatabaseService.getInstance().logAudit(
@@ -1021,7 +1021,7 @@ router.post('/items/:id/sizes', asyncHandler(async (req: Request, res: Response)
   const sizeId = uuidv4();
 
   // If this size is preselected, clear other preselected sizes first.
-  if (Boolean(isPreselected)) {
+  if (isPreselected) {
     await db.run('UPDATE item_sizes SET is_preselected = FALSE WHERE item_id = ?', [itemId]);
   }
 
@@ -1030,7 +1030,7 @@ router.post('/items/:id/sizes', asyncHandler(async (req: Request, res: Response)
       INSERT INTO item_sizes (id, item_id, size_name, price, is_preselected, display_order)
       VALUES (?, ?, ?, ?, ?, ?)
     `,
-    [sizeId, itemId, sizeName.trim(), parsedPrice, Boolean(isPreselected) ? 1 : 0, Number(displayOrder) || 0]
+    [sizeId, itemId, sizeName.trim(), parsedPrice, isPreselected ? 1 : 0, Number(displayOrder) || 0]
   );
 
   const created = await db.get('SELECT * FROM item_sizes WHERE id = ?', [sizeId]);
@@ -1459,7 +1459,7 @@ router.get('/items/search', asyncHandler(async (req: Request, res: Response) => 
  * 86 (make unavailable) menu items
  */
 router.post('/items/set-unavailable', asyncHandler(async (req: Request, res: Response) => {
-  const { itemId, channels = ['all'], userId } = req.body;
+  const { itemId, channels = ['all'] } = req.body;
 
   if (!itemId) {
     return res.status(400).json({
@@ -1536,7 +1536,7 @@ router.post('/items/set-unavailable', asyncHandler(async (req: Request, res: Res
  * Restore menu item availability
  */
 router.post('/items/set-available', asyncHandler(async (req: Request, res: Response) => {
-  const { itemId, channels = ['all'], userId } = req.body;
+  const { itemId, channels = ['all'] } = req.body;
 
   if (!itemId) {
     return res.status(400).json({

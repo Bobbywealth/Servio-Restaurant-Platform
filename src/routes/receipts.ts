@@ -249,7 +249,6 @@ router.post('/:id/items', requireAuth, asyncHandler(async (req: Request, res: Re
   // Support both 'description' and 'itemName' for backwards compatibility
   const { description, itemName, quantity, unitCost, inventoryItemId } = req.body;
   const itemDescription = description || itemName;
-  const user = req.user!;
 
   const db = DatabaseService.getInstance().getDatabase();
   const itemId = uuidv4();

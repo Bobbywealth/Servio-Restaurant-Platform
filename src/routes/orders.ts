@@ -33,7 +33,7 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
     const token = authHeader.slice('Bearer '.length).trim();
     try {
       decodedToken = jwt.decode(token);
-    } catch (err) {
+    } catch {
       decodedToken = { error: 'decode_failed' };
     }
   }
@@ -87,7 +87,7 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
     let items: any[] = [];
     try {
       items = JSON.parse(order.items || '[]');
-    } catch (err) {
+    } catch {
       logger.warn(
         `[orders.list] invalid_items_json ${JSON.stringify({
           requestId,
@@ -161,7 +161,7 @@ router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
  */
 router.post('/:id/status', asyncHandler(async (req: Request, res: Response) => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const { status, userId } = req.body;
+  const { status } = req.body;
 
   const validStatuses = ['received', 'preparing', 'ready', 'completed', 'cancelled'];
 
@@ -550,7 +550,6 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
     customerName,
     customerPhone,
     totalAmount,
-    userId,
     restaurantId: bodyRestaurantId
   } = req.body;
 

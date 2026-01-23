@@ -2,7 +2,6 @@ import { Router, Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { DatabaseService } from '../services/DatabaseService';
 import { asyncHandler, UnauthorizedError } from '../middleware/errorHandler';
-import { logger } from '../utils/logger';
 
 const router = Router();
 
@@ -54,10 +53,10 @@ router.post('/restaurants/:restaurantId/modifier-groups', asyncHandler(async (re
     name.trim(),
     description,
     selectionType,
-    Number(minSelections) ?? 0,
+    Number(minSelections ?? 0),
     maxSelections !== null && maxSelections !== undefined ? Number(maxSelections) : null,
     Boolean(isRequired),
-    Number(displayOrder) ?? 0,
+    Number(displayOrder ?? 0),
     Boolean(isActive)
   ]);
 
@@ -97,10 +96,10 @@ router.post('/restaurants/:restaurantId/modifier-groups', asyncHandler(async (re
         name: name.trim(),
         description,
         selectionType,
-        minSelections: Number(minSelections) ?? 0,
+        minSelections: Number(minSelections ?? 0),
         maxSelections: maxSelections !== null && maxSelections !== undefined ? Number(maxSelections) : null,
         isRequired: Boolean(isRequired),
-        displayOrder: Number(displayOrder) ?? 0,
+        displayOrder: Number(displayOrder ?? 0),
         isActive: Boolean(isActive),
       },
       options: createdOptions,
@@ -262,9 +261,9 @@ router.post('/modifier-groups/:groupId/options', asyncHandler(async (req: Reques
     group.restaurant_id,
     groupId,
     name.trim(),
-    Number(priceDelta) ?? 0,
+    Number(priceDelta ?? 0),
     Boolean(isActive),
-    Number(displayOrder) ?? 0,
+    Number(displayOrder ?? 0),
   ]);
 
   res.status(201).json({
@@ -274,9 +273,9 @@ router.post('/modifier-groups/:groupId/options', asyncHandler(async (req: Reques
         id: optionId,
         groupId,
         name: name.trim(),
-        priceDelta: Number(priceDelta) ?? 0,
+        priceDelta: Number(priceDelta ?? 0),
         isActive: Boolean(isActive),
-        displayOrder: Number(displayOrder) ?? 0,
+        displayOrder: Number(displayOrder ?? 0),
       }
     }
   });
@@ -386,7 +385,7 @@ router.post('/menu-items/:itemId/modifier-groups', asyncHandler(async (req: Requ
     overrideMin === null || overrideMin === undefined ? null : Number(overrideMin),
     overrideMax === null || overrideMax === undefined ? null : Number(overrideMax),
     overrideRequired === null || overrideRequired === undefined ? null : Boolean(overrideRequired),
-    Number(displayOrder) ?? 0,
+    Number(displayOrder ?? 0),
   ]);
 
   res.status(201).json({
@@ -398,7 +397,7 @@ router.post('/menu-items/:itemId/modifier-groups', asyncHandler(async (req: Requ
       overrideMin: overrideMin ?? null,
       overrideMax: overrideMax ?? null,
       overrideRequired: overrideRequired ?? null,
-      displayOrder: Number(displayOrder) ?? 0,
+      displayOrder: Number(displayOrder ?? 0),
     }
   });
 }));

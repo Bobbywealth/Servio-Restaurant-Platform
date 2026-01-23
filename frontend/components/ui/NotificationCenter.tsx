@@ -43,6 +43,22 @@ export default function NotificationCenter({ className = '' }: NotificationCente
   const socket = useSocket()
   const [alertAudio, setAlertAudio] = useState<HTMLAudioElement | null>(null)
 
+  const normalizeTimestamp = (value: unknown): Date => {
+    if (value instanceof Date) return value
+    if (typeof value === 'string' || typeof value === 'number') {
+      const parsed = new Date(value)
+      if (!Number.isNaN(parsed.getTime())) return parsed
+    }
+    return new Date()
+  }
+
+  const normalizeNotifications = (items: any[]): Notification[] => (
+    items.map(item => ({
+      ...item,
+      timestamp: normalizeTimestamp(item?.timestamp)
+    }))
+  )
+
   const markAsRead = useCallback((id: string) => {
     setNotifications(prev => {
       const updated = prev.map(n =>
@@ -85,8 +101,9 @@ export default function NotificationCenter({ className = '' }: NotificationCente
     if (savedNotifications) {
       try {
         const parsed = JSON.parse(savedNotifications)
-        setNotifications(parsed)
-        setUnreadCount(parsed.filter((n: Notification) => !n.read).length)
+        const normalized = Array.isArray(parsed) ? normalizeNotifications(parsed) : []
+        setNotifications(normalized)
+        setUnreadCount(normalized.filter((n: Notification) => !n.read).length)
       } catch (error) {
         console.error('Failed to parse saved notifications:', error)
       }

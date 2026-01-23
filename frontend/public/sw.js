@@ -177,7 +177,7 @@ async function handleAPIRequest(request) {
     const response = await fetch(request)
 
     // Cache successful GET responses
-    if (response.ok && request.method === 'GET') {
+    if (request.method === 'GET' && isCacheableResponse(response)) {
       const cache = await caches.open(API_CACHE_NAME)
       cache.put(request, response.clone())
     }
@@ -220,7 +220,7 @@ async function handleStaticAsset(request) {
 
   try {
     const response = await fetch(request)
-    if (response.ok) {
+    if (isCacheableResponse(response)) {
       cache.put(request, response.clone())
     }
     return response
@@ -239,7 +239,7 @@ async function handleImageRequest(request) {
 
   try {
     const response = await fetch(request)
-    if (response.ok) {
+    if (isCacheableResponse(response)) {
       cache.put(request, response.clone())
     }
     return response
@@ -257,7 +257,7 @@ async function handleNavigation(request) {
   try {
     const response = await fetch(request)
 
-    if (response.ok) {
+    if (isCacheableResponse(response)) {
       // Cache successful navigations
       const cache = await caches.open(DYNAMIC_CACHE_NAME)
       cache.put(request, response.clone())
@@ -289,7 +289,7 @@ async function staleWhileRevalidate(request, cacheName, maxAge) {
 
   // Always try to fetch in the background
   const fetchPromise = fetch(request).then(response => {
-    if (response.ok) {
+    if (isCacheableResponse(response)) {
       cache.put(request, response.clone())
     }
     return response
@@ -325,6 +325,12 @@ function isImageRequest(url) {
   return url.pathname.match(/\.(jpg|jpeg|png|gif|webp|svg|ico)$/i)
 }
 
+function isCacheableResponse(response) {
+  if (!response) return false
+  if (response.status === 206) return false
+  return response.ok
+}
+
 function isCacheExpired(response, maxAge) {
   const dateHeader = response.headers.get('date')
   if (!dateHeader) return true
@@ -336,7 +342,7 @@ function isCacheExpired(response, maxAge) {
 async function updateCacheInBackground(request, cacheName) {
   try {
     const response = await fetch(request)
-    if (response.ok) {
+    if (isCacheableResponse(response)) {
       const cache = await caches.open(cacheName)
       cache.put(request, response.clone())
     }

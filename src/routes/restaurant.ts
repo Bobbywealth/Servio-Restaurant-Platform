@@ -61,7 +61,7 @@ router.get('/profile', asyncHandler(async (req: Request, res: Response) => {
     if (!str) return fallback;
     try {
       return JSON.parse(str);
-    } catch (_e) {
+    } catch {
       logger.warn(`Failed to parse JSON: ${str.substring(0, 50)}...`);
       return fallback;
     }
@@ -305,7 +305,7 @@ router.put('/profile', upload.fields([
     if (!str) return fallback;
     try {
       return JSON.parse(str);
-    } catch (_e) {
+    } catch {
       return fallback;
     }
   };
@@ -863,7 +863,7 @@ router.delete('/links/:id', asyncHandler(async (req: Request, res: Response) => 
     const qrFilePath = getUploadsPath('restaurants', 'qr-codes', path.basename(link.qr_code_url));
     try {
       await fs.unlink(qrFilePath);
-    } catch (_error) {
+    } catch {
       logger.warn(`Failed to delete QR code file: ${qrFilePath}`);
     }
   }

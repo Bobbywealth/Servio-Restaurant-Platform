@@ -18,7 +18,6 @@ import { requireAuth } from './middleware/auth';
 import { initializeNotifications } from './notifications/initNotifications';
 import { validateEnvironment, failFastIfInvalid, getCorsOrigins } from './utils/validateEnv';
 import { UPLOADS_DIR, checkUploadsHealth } from './utils/uploads';
-import rateLimit from 'express-rate-limit';
 
 const FRONTEND_ORIGIN = 'https://servio-app.onrender.com';
 
@@ -81,7 +80,6 @@ async function initializeServer() {
     const { default: vapiRoutes } = await import('./routes/vapi');
     const { default: voiceRoutes } = await import('./routes/voice');
     const { default: voiceHubRoutes } = await import('./routes/voice-hub');
-    const { default: adminRoutes } = await import('./routes/admin');
     const { default: notificationsRoutes } = await import('./routes/notifications');
 
     // API Routes

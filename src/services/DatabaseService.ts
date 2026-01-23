@@ -75,7 +75,7 @@ function splitSqlStatements(sql: string): string[] {
 }
 
 function normalizeIdentifier(value: string): string {
-  return value.replace(/^[`"\[]/, '').replace(/[`\]"]$/, '');
+  return value.replace(/^(?:`|"|\[)/, '').replace(/(?:`|"|])$/, '');
 }
 
 function isIgnorableSqliteError(error: any, statement: string): boolean {
@@ -515,7 +515,9 @@ export class DatabaseService {
             JSON.stringify(item.tags || [])
           ]
         );
-      } catch (err) {}
+      } catch {
+        // Ignore duplicate seed entries.
+      }
     }
 
     for (const item of inventory) {
@@ -524,7 +526,9 @@ export class DatabaseService {
           'INSERT INTO inventory_items (id, restaurant_id, name, sku, unit, on_hand_qty, low_stock_threshold) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO NOTHING',
           [item.id, item.restaurant_id, item.name, item.sku, item.unit, item.on_hand_qty, item.low_stock_threshold]
         );
-      } catch (err) {}
+      } catch {
+        // Ignore duplicate seed entries.
+      }
     }
 
     for (const order of orders) {
@@ -533,7 +537,9 @@ export class DatabaseService {
           'INSERT INTO orders (id, restaurant_id, channel, status, total_amount) VALUES (?, ?, ?, ?, ?) ON CONFLICT (id) DO NOTHING',
           [order.id, order.restaurant_id, order.channel, order.status, order.total_amount]
         );
-      } catch (err) {}
+      } catch {
+        // Ignore duplicate seed entries.
+      }
     }
 
     logger.info('Database seeded with sample data');

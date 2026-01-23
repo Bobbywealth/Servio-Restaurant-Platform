@@ -14,6 +14,8 @@ export class VoiceOrderingService {
   private static instance: VoiceOrderingService;
   private menuData: any = null;
 
+  private static readonly ALLOWED_ORDER_TYPES = new Set(['pickup', 'delivery', 'dine-in']);
+
   private constructor() {
     this.loadMenuData();
   }
@@ -201,6 +203,19 @@ export class VoiceOrderingService {
   }
 
   public validateQuote(input: any) {
+    const orderType = String(input?.orderType || 'pickup').toLowerCase();
+    if (!VoiceOrderingService.ALLOWED_ORDER_TYPES.has(orderType)) {
+      return {
+        valid: false,
+        subtotal: 0,
+        tax: 0,
+        fees: 0,
+        total: 0,
+        errors: [`Invalid orderType: ${orderType}`],
+        items: []
+      };
+    }
+
     const { items } = input;
     const errors: string[] = [];
     let subtotal = 0;
@@ -287,6 +302,17 @@ export class VoiceOrderingService {
   }
 
   public async createOrder(input: any) {
+    const orderType = String(input?.orderType || 'pickup').toLowerCase();
+    if (!VoiceOrderingService.ALLOWED_ORDER_TYPES.has(orderType)) {
+      logger.warn('createOrder invalid orderType', { callId: input?.callId, orderType });
+      return { success: false, errors: [`Invalid orderType: ${orderType}`] };
+    }
+    input.orderType = orderType;
+    if (orderType === 'dine-in') {
+      // No pickup time required/used for dine-in.
+      input.pickupTime = null;
+    }
+
     if (!input?.items || !Array.isArray(input.items) || input.items.length === 0) {
       logger.warn('createOrder missing items', { callId: input?.callId });
       return { success: false, errors: ['Missing items'] };

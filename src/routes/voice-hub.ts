@@ -249,7 +249,6 @@ router.get('/calls', async (req: Request, res: Response) => {
   try {
     const {
       dateRange = 'today',
-      statusFilter = 'all',
       search = '',
       page = '1',
       limit = '50'

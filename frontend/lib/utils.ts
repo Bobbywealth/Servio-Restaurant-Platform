@@ -17,9 +17,11 @@ export function formatCurrency(
 }
 
 // Format relative time
-export function formatRelativeTime(date: Date): string {
+export function formatRelativeTime(date: Date | string | number): string {
+  const parsedDate = date instanceof Date ? date : new Date(date)
+  if (Number.isNaN(parsedDate.getTime())) return '—'
   const now = new Date()
-  const diff = now.getTime() - date.getTime()
+  const diff = now.getTime() - parsedDate.getTime()
 
   const seconds = Math.floor(diff / 1000)
   const minutes = Math.floor(seconds / 60)

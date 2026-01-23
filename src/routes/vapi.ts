@@ -4,12 +4,13 @@ import { logger } from '../utils/logger';
 import { DatabaseService } from '../services/DatabaseService';
 import { validateEnvironment } from '../utils/validateEnv';
 import { checkUploadsHealth, UPLOADS_DIR } from '../utils/uploads';
+import { requireVapiWebhookAuth } from '../middleware/vapiAuth';
 
 const router = Router();
 const vapiService = new VapiService();
 
 // Webhook endpoint for Vapi
-router.post('/webhook', async (req: Request, res: Response) => {
+router.post('/webhook', requireVapiWebhookAuth, async (req: Request, res: Response) => {
   const requestId = (req.headers['x-request-id'] as string) || `vapi_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   const contentType = req.headers['content-type'];
 
@@ -40,7 +41,7 @@ router.post('/webhook', async (req: Request, res: Response) => {
     // Log incoming webhook for debugging (avoid PII)
     log('info', 'received', {
       type: message.type,
-    callId: message.call?.id
+      callId: message.call?.id
     });
 
     const response = await vapiService.handleWebhook(payload);
@@ -142,7 +143,7 @@ router.get('/assistant-config', async (req: Request, res: Response) => {
                   required: ['itemId', 'qty']
                 }
               },
-              orderType: { type: 'string', enum: ['pickup', 'delivery'] }
+              orderType: { type: 'string', enum: ['pickup', 'delivery', 'dine-in'] }
             },
             required: ['items', 'orderType']
           }
@@ -185,7 +186,7 @@ router.get('/assistant-config', async (req: Request, res: Response) => {
                 },
                 required: ['subtotal', 'tax', 'fees', 'total']
               },
-              orderType: { type: 'string', enum: ['pickup', 'delivery'] },
+              orderType: { type: 'string', enum: ['pickup', 'delivery', 'dine-in'] },
               pickupTime: { type: 'string' },
               callId: { type: 'string' }
             },
