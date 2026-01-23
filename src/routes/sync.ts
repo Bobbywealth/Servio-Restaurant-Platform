@@ -105,13 +105,14 @@ router.post('/manual', asyncHandler(async (req: Request, res: Response) => {
     const jobId = `sync_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
     await db.run(`
-      INSERT INTO sync_jobs (id, type, status, channels, details)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO sync_jobs (id, restaurant_id, job_type, status, payload, metadata)
+      VALUES (?, ?, ?, ?, ?, ?)
     `, [
       jobId,
+      req.user?.restaurantId || null,
       type,
       'pending',
-      JSON.stringify([channel]),
+      JSON.stringify({ channels: [channel] }),
       JSON.stringify({ triggeredBy: userId || 'manual', triggerTime: new Date().toISOString() })
     ]);
 
@@ -164,7 +165,7 @@ router.get('/history', asyncHandler(async (req: Request, res: Response) => {
   }
 
   if (type) {
-    conditions.push('type = ?');
+    conditions.push('job_type = ?');
     params.push(type);
   }
 
@@ -177,11 +178,29 @@ router.get('/history', asyncHandler(async (req: Request, res: Response) => {
 
   const jobs = await db.all(query, params);
 
-  const formattedJobs = jobs.map((job: any) => ({
-    ...job,
-    channels: JSON.parse(job.channels || '[]'),
-    details: JSON.parse(job.details || '{}')
-  }));
+  const formattedJobs = jobs.map((job: any) => {
+    const payload = (() => {
+      try {
+        return JSON.parse(job.payload || '{}');
+      } catch {
+        return {};
+      }
+    })();
+    const metadata = (() => {
+      try {
+        return JSON.parse(job.metadata || '{}');
+      } catch {
+        return {};
+      }
+    })();
+    return {
+      ...job,
+      payload,
+      metadata,
+      channels: Array.isArray(payload.channels) ? payload.channels : [],
+      details: payload
+    };
+  });
 
   res.json({
     success: true,

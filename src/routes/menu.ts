@@ -685,14 +685,15 @@ router.post('/items/set-unavailable', asyncHandler(async (req: Request, res: Res
     const jobId = `sync_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
     await db.run(`
-      INSERT INTO sync_jobs (id, type, status, channels, details)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO sync_jobs (id, restaurant_id, job_type, status, payload, metadata)
+      VALUES (?, ?, ?, ?, ?, ?)
     `, [
       jobId,
+      req.user?.restaurantId || null,
       'set_unavailable',
       'completed', // In real app, this would be 'pending' initially
-      JSON.stringify([channel]),
-      JSON.stringify({ itemId, itemName: item.name, action: 'set_unavailable' })
+      JSON.stringify({ channels: [channel], itemId, itemName: item.name, action: 'set_unavailable' }),
+      JSON.stringify({ source: 'menu_toggle' })
     ]);
 
     syncJobs.push({ channel, jobId, status: 'completed' });
@@ -761,14 +762,15 @@ router.post('/items/set-available', asyncHandler(async (req: Request, res: Respo
     const jobId = `sync_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
     await db.run(`
-      INSERT INTO sync_jobs (id, type, status, channels, details)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO sync_jobs (id, restaurant_id, job_type, status, payload, metadata)
+      VALUES (?, ?, ?, ?, ?, ?)
     `, [
       jobId,
+      req.user?.restaurantId || null,
       'set_available',
       'completed',
-      JSON.stringify([channel]),
-      JSON.stringify({ itemId, itemName: item.name, action: 'set_available' })
+      JSON.stringify({ channels: [channel], itemId, itemName: item.name, action: 'set_available' }),
+      JSON.stringify({ source: 'menu_toggle' })
     ]);
 
     syncJobs.push({ channel, jobId, status: 'completed' });
