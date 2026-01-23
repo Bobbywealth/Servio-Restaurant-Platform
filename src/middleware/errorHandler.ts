@@ -70,6 +70,24 @@ export const errorHandler = (
   let message = error.message || 'Internal Server Error';
   let isOperational = error.isOperational || false;
 
+  // Handle specific error types
+  if (error.name === 'ValidationError') {
+    statusCode = 400;
+    message = error.message;
+  } else if (error.name === 'CastError') {
+    statusCode = 400;
+    message = 'Invalid ID format';
+  } else if (error.name === 'JsonWebTokenError' || (error.message && error.message.includes('secret or public key must be provided'))) {
+    statusCode = 401;
+    message = 'Invalid token';
+  } else if (error.name === 'TokenExpiredError') {
+    statusCode = 401;
+    message = 'Token expired';
+  } else if (error.code === 'SQLITE_CONSTRAINT' || (error.message && error.message.includes('duplicate key'))) {
+    statusCode = 400;
+    message = 'Database constraint violation';
+  }
+
   // Log error details
   const errorInfo = {
     message: error.message,
@@ -89,24 +107,6 @@ export const errorHandler = (
     logger.error('Server Error:', errorInfo);
   } else {
     logger.warn('Client Error:', errorInfo);
-  }
-
-  // Handle specific error types
-  if (error.name === 'ValidationError') {
-    statusCode = 400;
-    message = error.message;
-  } else if (error.name === 'CastError') {
-    statusCode = 400;
-    message = 'Invalid ID format';
-  } else if (error.name === 'JsonWebTokenError' || (error.message && error.message.includes('secret or public key must be provided'))) {
-    statusCode = 401;
-    message = 'Invalid token';
-  } else if (error.name === 'TokenExpiredError') {
-    statusCode = 401;
-    message = 'Token expired';
-  } else if (error.code === 'SQLITE_CONSTRAINT' || (error.message && error.message.includes('duplicate key'))) {
-    statusCode = 400;
-    message = 'Database constraint violation';
   }
 
   // Prepare error response
