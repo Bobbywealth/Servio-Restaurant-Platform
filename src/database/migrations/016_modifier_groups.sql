@@ -23,6 +23,15 @@ CREATE TABLE IF NOT EXISTS modifier_groups (
   deleted_at TIMESTAMP
 );
 
+-- Safety for partially-created tables
+ALTER TABLE modifier_groups ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
+ALTER TABLE modifier_groups ADD COLUMN IF NOT EXISTS display_order INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE modifier_groups ADD COLUMN IF NOT EXISTS selection_type TEXT NOT NULL DEFAULT 'single';
+ALTER TABLE modifier_groups ADD COLUMN IF NOT EXISTS min_selections INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE modifier_groups ADD COLUMN IF NOT EXISTS max_selections INTEGER;
+ALTER TABLE modifier_groups ADD COLUMN IF NOT EXISTS is_required BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE modifier_groups ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;
+
 CREATE UNIQUE INDEX IF NOT EXISTS idx_modifier_groups_restaurant_name_unique
   ON modifier_groups(restaurant_id, name)
   WHERE deleted_at IS NULL;
@@ -44,6 +53,12 @@ CREATE TABLE IF NOT EXISTS modifier_options (
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   deleted_at TIMESTAMP
 );
+
+-- Safety for partially-created tables
+ALTER TABLE modifier_options ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
+ALTER TABLE modifier_options ADD COLUMN IF NOT EXISTS display_order INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE modifier_options ADD COLUMN IF NOT EXISTS price_delta DOUBLE PRECISION NOT NULL DEFAULT 0;
+ALTER TABLE modifier_options ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_modifier_options_group_name_unique
   ON modifier_options(group_id, name)
@@ -68,6 +83,13 @@ CREATE TABLE IF NOT EXISTS item_modifier_groups (
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   deleted_at TIMESTAMP
 );
+
+-- Safety for partially-created tables
+ALTER TABLE item_modifier_groups ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
+ALTER TABLE item_modifier_groups ADD COLUMN IF NOT EXISTS display_order INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE item_modifier_groups ADD COLUMN IF NOT EXISTS override_min INTEGER;
+ALTER TABLE item_modifier_groups ADD COLUMN IF NOT EXISTS override_max INTEGER;
+ALTER TABLE item_modifier_groups ADD COLUMN IF NOT EXISTS override_required BOOLEAN;
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_item_modifier_groups_unique
   ON item_modifier_groups(item_id, group_id)
