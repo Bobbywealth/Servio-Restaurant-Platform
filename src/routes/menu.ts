@@ -870,13 +870,20 @@ router.get('/modifier-groups', asyncHandler(async (req: Request, res: Response) 
 
   const groups = await db.all(`
     SELECT 
-      mg.*,
+      mg.id,
+      mg.restaurant_id,
+      mg.name,
+      mg.min_selection as min_selections,
+      mg.max_selection as max_selections,
+      mg.is_required,
+      mg.created_at,
+      COALESCE(mg.description, '') as description,
       COUNT(mo.id) as option_count
     FROM modifier_groups mg
-    LEFT JOIN modifier_options mo ON mg.id = mo.modifier_group_id AND mo.is_available = 1
-    WHERE mg.restaurant_id = ? AND mg.is_active = TRUE
-    GROUP BY mg.id
-    ORDER BY mg.sort_order ASC, mg.name ASC
+    LEFT JOIN modifier_options mo ON mg.id = mo.modifier_group_id AND mo.is_available = true
+    WHERE mg.restaurant_id = ?
+    GROUP BY mg.id, mg.restaurant_id, mg.name, mg.min_selection, mg.max_selection, mg.is_required, mg.created_at, mg.description
+    ORDER BY mg.name ASC
   `, [restaurantId]);
 
   res.json({
@@ -904,7 +911,7 @@ router.post('/modifier-groups', asyncHandler(async (req: Request, res: Response)
   const groupId = uuidv4();
 
   await db.run(`
-    INSERT INTO modifier_groups (id, restaurant_id, name, description, min_selections, max_selections, is_required)
+    INSERT INTO modifier_groups (id, restaurant_id, name, description, min_selection, max_selection, is_required)
     VALUES (?, ?, ?, ?, ?, ?, ?)
   `, [groupId, restaurantId, name.trim(), description?.trim() || null, minSelections, maxSelections, isRequired]);
 
@@ -938,9 +945,10 @@ router.get('/modifier-groups/:id/options', asyncHandler(async (req: Request, res
   const db = DatabaseService.getInstance().getDatabase();
 
   const options = await db.all(`
-    SELECT * FROM modifier_options 
-    WHERE modifier_group_id = ? AND is_available = 1
-    ORDER BY sort_order ASC, name ASC
+    SELECT id, name, COALESCE(description, '') as description, price_modifier, is_available
+    FROM modifier_options 
+    WHERE modifier_group_id = ? AND is_available = true
+    ORDER BY name ASC
   `, [id]);
 
   res.json({
@@ -999,34 +1007,31 @@ router.get('/items/:id/modifiers', asyncHandler(async (req: Request, res: Respon
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const db = DatabaseService.getInstance().getDatabase();
 
-  const modifiers = await db.all(`
+  // Fetch modifier groups assigned to this item
+  const groups = await db.all(`
     SELECT 
-      mg.*,
-      mim.sort_order as assignment_order,
-      (
-        SELECT json_group_array(
-          json_object(
-            'id', mo.id,
-            'name', mo.name,
-            'description', mo.description,
-            'price_modifier', mo.price_modifier,
-            'sort_order', mo.sort_order
-          )
-        )
-        FROM modifier_options mo 
-        WHERE mo.modifier_group_id = mg.id AND mo.is_available = 1
-        ORDER BY mo.sort_order ASC, mo.name ASC
-      ) as options
+      mg.id,
+      mg.name,
+      mg.min_selection as min_selections,
+      mg.max_selection as max_selections,
+      mg.is_required,
+      COALESCE(mg.description, '') as description,
+      mim.sort_order as assignment_order
     FROM modifier_groups mg
     INNER JOIN menu_item_modifiers mim ON mg.id = mim.modifier_group_id
-    WHERE mim.menu_item_id = ? AND mg.is_active = TRUE
-    ORDER BY mim.sort_order ASC, mg.sort_order ASC
+    WHERE mim.menu_item_id = ?
+    ORDER BY mim.sort_order ASC, mg.name ASC
   `, [id]);
 
-  // Parse JSON options for each modifier group
-  const formattedModifiers = modifiers.map((mod: any) => ({
-    ...mod,
-    options: JSON.parse(mod.options || '[]')
+  // Fetch options for each group
+  const formattedModifiers = await Promise.all(groups.map(async (group: any) => {
+    const options = await db.all(`
+      SELECT id, name, COALESCE(description, '') as description, price_modifier
+      FROM modifier_options
+      WHERE modifier_group_id = ? AND is_available = true
+      ORDER BY name ASC
+    `, [group.id]);
+    return { ...group, options };
   }));
 
   res.json({
