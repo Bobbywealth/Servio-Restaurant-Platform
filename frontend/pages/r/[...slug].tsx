@@ -199,19 +199,23 @@ export default function PublicProfile() {
   if (error || !restaurant) return <div className="min-h-screen flex items-center justify-center font-bold text-red-600">{error || 'Restaurant not found'}</div>;
 
   if (orderComplete) {
+    const normalizedStatus = (orderStatus || '').toLowerCase();
+    const isCancelled = normalizedStatus === 'cancelled' || normalizedStatus === 'canceled' || normalizedStatus === 'declined';
+    const headline = isCancelled ? 'Order Cancelled' : 'Order Confirmed!';
+    const subcopy = isCancelled
+      ? 'Your order was declined by the restaurant.'
+      : 'Thank you for your order';
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center bg-gradient-to-b from-green-50 to-white">
+      <div className={`min-h-screen flex flex-col items-center justify-center p-6 text-center bg-gradient-to-b ${isCancelled ? 'from-red-50 to-white' : 'from-green-50 to-white'}`}>
         <motion.div
           initial={{ scale: 0 }}
           animate={{ scale: 1 }}
           transition={{ type: "spring", bounce: 0.5 }}
         >
-          <CheckCircle2 className="h-24 w-24 text-green-500 mb-6" />
+          <CheckCircle2 className={`h-24 w-24 mb-6 ${isCancelled ? 'text-red-500' : 'text-green-500'}`} />
         </motion.div>
-        <h1 className="text-4xl font-bold mb-2">Order Confirmed!</h1>
-        <p className="text-xl text-gray-600 mb-6">
-          Thank you for your order
-        </p>
+        <h1 className="text-4xl font-bold mb-2">{headline}</h1>
+        <p className="text-xl text-gray-600 mb-6">{subcopy}</p>
         
         <div className="bg-white rounded-2xl shadow-lg p-6 mb-6 w-full max-w-sm">
           <div className="text-sm text-gray-500 uppercase tracking-widest mb-1">Order Number</div>
@@ -219,7 +223,7 @@ export default function PublicProfile() {
             #{orderComplete.slice(-6).toUpperCase()}
           </div>
           
-          {pickupTime && (
+          {pickupTime && !isCancelled && (
             <div className="border-t pt-4 mt-4">
               <div className="text-sm text-gray-500 uppercase tracking-widest mb-1">Ready For Pickup</div>
               <div className="text-2xl font-bold text-gray-900">
@@ -232,9 +236,10 @@ export default function PublicProfile() {
             <div className="border-t pt-4 mt-4">
               <div className="text-sm text-gray-500 uppercase tracking-widest mb-1">Status</div>
               <div className={`inline-block px-3 py-1 rounded-full text-sm font-bold uppercase ${
-                orderStatus === 'received' ? 'bg-blue-100 text-blue-700' :
-                orderStatus === 'preparing' ? 'bg-amber-100 text-amber-700' :
-                orderStatus === 'ready' ? 'bg-green-100 text-green-700' :
+                normalizedStatus === 'received' ? 'bg-blue-100 text-blue-700' :
+                normalizedStatus === 'preparing' ? 'bg-amber-100 text-amber-700' :
+                normalizedStatus === 'ready' ? 'bg-green-100 text-green-700' :
+                normalizedStatus === 'cancelled' || normalizedStatus === 'canceled' || normalizedStatus === 'declined' ? 'bg-red-100 text-red-700' :
                 'bg-gray-100 text-gray-700'
               }`}>
                 {orderStatus}
@@ -243,9 +248,11 @@ export default function PublicProfile() {
           )}
         </div>
 
-        <p className="text-gray-500 mb-6 max-w-sm">
-          We'll send you a text when your order is ready for pickup!
-        </p>
+        {!isCancelled && (
+          <p className="text-gray-500 mb-6 max-w-sm">
+            We'll send you a text when your order is ready for pickup!
+          </p>
+        )}
         
         <button 
           onClick={() => setOrderComplete(null)} 

@@ -252,6 +252,34 @@ export default function TabletOrdersPage() {
     }
   }, []);
 
+  useEffect(() => {
+    const loadPrinterSettings = async () => {
+      try {
+        const resp = await apiGet<{ success: boolean; data?: any }>('/api/restaurant/profile');
+        const settings = resp?.data?.settings || {};
+        if (settings.printer_auto_print_enabled !== undefined) {
+          const enabled = Boolean(settings.printer_auto_print_enabled);
+          setAutoPrintEnabled(enabled);
+          window.localStorage.setItem('servio_auto_print_enabled', enabled ? 'true' : 'false');
+        }
+        if (settings.printer_paper_width === '58mm' || settings.printer_paper_width === '80mm') {
+          const width = settings.printer_paper_width as ReceiptPaperWidth;
+          setPaperWidth(width);
+          window.localStorage.setItem('servio_thermal_paper_width', width);
+        }
+        if (['system', 'rawbt', 'bluetooth', 'bridge'].includes(settings.printer_mode)) {
+          const mode = settings.printer_mode as 'bluetooth' | 'system' | 'bridge' | 'rawbt';
+          setPrintMode(mode);
+          window.localStorage.setItem('servio_print_mode', mode);
+        }
+      } catch (e) {
+        // ignore printer settings load failures
+      }
+    };
+
+    loadPrinterSettings();
+  }, []);
+
   async function refresh() {
     try {
       if (typeof window !== 'undefined' && !window.localStorage.getItem('servio_access_token')) {
@@ -405,6 +433,102 @@ export default function TabletOrdersPage() {
     }
   }
 
+  async function printTestReceipt() {
+    if (printingOrderId) return;
+    setPrintingOrderId('test');
+
+    try {
+      let restaurant = restaurantProfile;
+      if (!restaurant) {
+        await fetchRestaurantProfile();
+        restaurant = restaurantProfile;
+      }
+
+      const now = new Date();
+      const testOrder: ReceiptOrder = {
+        id: `test_${now.getTime()}`,
+        external_id: 'TEST',
+        channel: 'POS',
+        status: 'received',
+        customer_name: 'Test Customer',
+        customer_phone: '(555) 123-4567',
+        order_type: 'pickup',
+        created_at: now.toISOString(),
+        items: [
+          { name: 'Test Burger', quantity: 1, price: 9.99, modifiers: ['No onions', 'Extra cheese'] },
+          { name: 'Fries', quantity: 1, price: 3.49 },
+          { name: 'Soda', quantity: 2, price: 1.75 }
+        ],
+        special_instructions: 'Test print from dashboard'
+      };
+
+      if (printMode === 'rawbt') {
+        const receiptData: ReceiptData = {
+          restaurantName: restaurant?.name || undefined,
+          restaurantPhone: restaurant?.phone || undefined,
+          restaurantAddress: restaurant?.address || undefined,
+          orderId: testOrder.id,
+          orderNumber: testOrder.external_id || testOrder.id.slice(-4).toUpperCase(),
+          customerName: testOrder.customer_name || undefined,
+          customerPhone: testOrder.customer_phone || undefined,
+          orderType: testOrder.order_type || undefined,
+          items: (testOrder.items || []).map((it: any) => ({
+            name: it.name,
+            quantity: it.quantity || 1,
+            price: it.unit_price || it.price || 0,
+            modifiers: it.modifiers || []
+          })),
+          total: (testOrder.items || []).reduce((sum: number, it: any) => {
+            const qty = it.quantity || 1;
+            const price = it.unit_price || it.price || 0;
+            return sum + qty * price;
+          }, 0),
+          createdAt: testOrder.created_at || undefined,
+          specialInstructions: testOrder.special_instructions || undefined
+        };
+
+        const escPosData = generateEscPosReceipt(receiptData, paperWidth);
+        const success = printViaRawBT(escPosData);
+        if (success) {
+          setLastPrintResult({ status: 'success' });
+          window.localStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'success' }));
+        } else {
+          setLastPrintResult({ status: 'error', message: 'RawBT not available. Is the app installed?' });
+          window.localStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'error', message: 'RawBT not available' }));
+        }
+        return;
+      }
+
+      if (printMode === 'system') {
+        const html = generateReceiptHtml({
+          restaurant: restaurant || null,
+          order: testOrder,
+          paperWidth
+        });
+
+        setReceiptHtml(html);
+        await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+        window.print();
+        setLastPrintResult({ status: 'success' });
+        window.localStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'success' }));
+        return;
+      }
+
+      const message = printMode === 'bluetooth'
+        ? 'WebBluetooth mode requires BLE printer. Try RawBT or System Print instead.'
+        : 'Print Bridge mode is not configured';
+      setLastPrintResult({ status: 'error', message });
+      window.localStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'error', message }));
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Test print failed';
+      setLastPrintResult({ status: 'error', message });
+      window.localStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'error', message }));
+    } finally {
+      setPrintingOrderId(null);
+      window.setTimeout(() => setReceiptHtml(null), 250);
+    }
+  }
+
   async function setStatus(orderId: string, nextStatus: string) {
     setBusyId(orderId);
     setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, status: nextStatus } : o)));
@@ -504,9 +628,15 @@ export default function TabletOrdersPage() {
       }
     };
 
+    const handlePrinterTest = () => {
+      printTestReceipt();
+    };
+
     socket.on('notifications.new', handleNewNotification);
+    socket.on('printer.test', handlePrinterTest);
     return () => {
       socket.off('notifications.new', handleNewNotification);
+      socket.off('printer.test', handlePrinterTest);
     };
   }, [socket]);
 
