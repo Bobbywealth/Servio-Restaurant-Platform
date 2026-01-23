@@ -158,15 +158,47 @@ export class VapiService {
         case 'getStoreStatus':
           result = await VoiceOrderingService.getInstance().getStoreStatus(restaurantId);
           break;
-        case 'searchMenu':
-          result = await VoiceOrderingService.getInstance().searchMenuLive(parameters.q || '', restaurantId);
+        case 'searchMenu': {
+          const q =
+            parameters?.q ??
+            parameters?.query ??
+            parameters?.text ??
+            parameters?.name ??
+            parameters?.itemName ??
+            '';
+          const items = await VoiceOrderingService.getInstance().searchMenuLive(String(q || ''), restaurantId);
+          // Always return an object so Vapi never reports "No result returned".
+          result = {
+            ok: true,
+            query: String(q || ''),
+            count: Array.isArray(items) ? items.length : 0,
+            items: Array.isArray(items) ? items : []
+          };
           break;
-        case 'getMenuItem':
-          result = await VoiceOrderingService.getInstance().getMenuItemLive(parameters.id || parameters.name, restaurantId);
+        }
+        case 'getMenuItem': {
+          const idOrName =
+            parameters?.id ??
+            parameters?.itemId ??
+            parameters?.menuItemId ??
+            parameters?.name ??
+            parameters?.itemName ??
+            '';
+          const item = await VoiceOrderingService.getInstance().getMenuItemLive(String(idOrName || ''), restaurantId);
+          // Always return an object so Vapi never reports "No result returned".
+          result = item
+            ? { ok: true, found: true, item }
+            : { ok: true, found: false, message: 'Menu item not found', idOrName: String(idOrName || '') };
           break;
-        case 'getMenuItemByName':
-          result = await VoiceOrderingService.getInstance().getMenuItemLive(parameters.name, restaurantId);
+        }
+        case 'getMenuItemByName': {
+          const idOrName = parameters?.name ?? parameters?.id ?? parameters?.itemId ?? '';
+          const item = await VoiceOrderingService.getInstance().getMenuItemLive(String(idOrName || ''), restaurantId);
+          result = item
+            ? { ok: true, found: true, item }
+            : { ok: true, found: false, message: 'Menu item not found', idOrName: String(idOrName || '') };
           break;
+        }
         case 'quoteOrder':
           parameters.restaurantId = restaurantId;
           result = VoiceOrderingService.getInstance().validateQuote(parameters);
