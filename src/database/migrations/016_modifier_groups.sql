@@ -25,12 +25,21 @@ CREATE TABLE IF NOT EXISTS modifier_groups (
 
 -- Safety for partially-created tables
 ALTER TABLE modifier_groups ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
+ALTER TABLE modifier_groups ADD COLUMN IF NOT EXISTS restaurant_id TEXT;
 ALTER TABLE modifier_groups ADD COLUMN IF NOT EXISTS display_order INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE modifier_groups ADD COLUMN IF NOT EXISTS selection_type TEXT NOT NULL DEFAULT 'single';
 ALTER TABLE modifier_groups ADD COLUMN IF NOT EXISTS min_selections INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE modifier_groups ADD COLUMN IF NOT EXISTS max_selections INTEGER;
 ALTER TABLE modifier_groups ADD COLUMN IF NOT EXISTS is_required BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE modifier_groups ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;
+
+-- Backfill restaurant_id for legacy modifier_groups using menu_item_modifiers + menu_items
+UPDATE modifier_groups mg
+SET restaurant_id = mi.restaurant_id
+FROM menu_item_modifiers mim
+JOIN menu_items mi ON mi.id = mim.menu_item_id
+WHERE mim.modifier_group_id = mg.id
+  AND mg.restaurant_id IS NULL;
 
 -- Deduplicate existing modifier_groups before enforcing unique index
 -- NOTE: executed after options table/columns are normalized below
