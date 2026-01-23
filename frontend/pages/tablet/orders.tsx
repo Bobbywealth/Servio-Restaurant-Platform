@@ -546,7 +546,6 @@ export default function TabletOrdersPage() {
 
   async function acceptOrder(order: Order) {
     setBusyId(order.id);
-    setSelectedOrder(null);
     try {
       // Set status to preparing
       await apiPost(`/api/orders/${encodeURIComponent(order.id)}/status`, { status: 'preparing' });
@@ -834,12 +833,12 @@ export default function TabletOrdersPage() {
         )}
       </div>
 
-      {/* Order Detail Modal - Optimized for landscape tablets */}
+      {/* Order Detail Modal - Fullscreen for tablet clarity */}
       {selectedOrder && (
         <div className="no-print fixed inset-0 z-50 flex items-stretch bg-black/70">
-          {/* Left side - scrollable order details */}
-          <div className="flex-1 flex items-center justify-center p-3 overflow-hidden">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl h-full max-h-full overflow-hidden flex flex-col">
+          {/* Fullscreen order details */}
+          <div className="flex-1 w-full h-full overflow-hidden">
+            <div className="bg-white w-full h-full overflow-hidden flex flex-col">
               {/* Modal Header - compact */}
               <div className={clsx(
                 "px-4 py-3 flex items-center justify-between flex-shrink-0",
@@ -959,7 +958,6 @@ export default function TabletOrdersPage() {
                     disabled={busyId === selectedOrder.id}
                     onClick={() => {
                       setStatus(selectedOrder.id, 'ready');
-                      setSelectedOrder(null);
                     }}
                     className="flex-[2] bg-black hover:bg-slate-800 active:scale-95 text-white py-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-xl disabled:opacity-50"
                   >
@@ -972,8 +970,10 @@ export default function TabletOrdersPage() {
                 <button
                   disabled={busyId === selectedOrder.id}
                   onClick={() => {
-                    setStatus(selectedOrder.id, 'completed');
-                    setSelectedOrder(null);
+                    if (window.confirm('Mark this order as completed?')) {
+                      setStatus(selectedOrder.id, 'completed');
+                      setSelectedOrder(null);
+                    }
                   }}
                   className="w-full bg-slate-500 hover:bg-slate-600 active:scale-95 text-white py-4 rounded-xl flex items-center justify-center gap-2 transition-all disabled:opacity-50"
                 >
