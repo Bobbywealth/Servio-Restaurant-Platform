@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 import Head from 'next/head'
 import { useRouter } from 'next/router'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -70,6 +70,10 @@ export default function ReceiptsPage() {
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false)
   const [uploadFile, setUploadFile] = useState<File | null>(null)
   const [uploadProgress, setUploadProgress] = useState<'idle' | 'generating' | 'uploading' | 'confirming' | 'success'>('idle')
+  const [uploadError, setUploadError] = useState<string | null>(null)
+  const [isDragging, setIsDragging] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const cameraInputRef = useRef<HTMLInputElement | null>(null)
   
   // Line Item Editing State
   const [isAddingItem, setIsAddingItem] = useState(false)
@@ -237,6 +241,52 @@ export default function ReceiptsPage() {
     }
   }
 
+  const resetUploadState = () => {
+    setUploadFile(null)
+    setUploadProgress('idle')
+    setUploadError(null)
+    setIsDragging(false)
+  }
+
+  const closeUploadModal = () => {
+    setIsUploadModalOpen(false)
+    resetUploadState()
+  }
+
+  const handleSelectedFile = (file: File | null) => {
+    if (!file) return
+    const maxBytes = 10 * 1024 * 1024
+    const isImage = file.type.startsWith('image/')
+    const isPdf = file.type === 'application/pdf'
+    if (!isImage && !isPdf) {
+      setUploadError('Unsupported file type. Please upload an image or PDF.')
+      setUploadFile(null)
+      return
+    }
+    if (file.size > maxBytes) {
+      setUploadError('File is too large. Max size is 10MB.')
+      setUploadFile(null)
+      return
+    }
+    setUploadError(null)
+    setUploadFile(file)
+  }
+
+  const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    setIsDragging(false)
+    const file = event.dataTransfer.files?.[0]
+    handleSelectedFile(file || null)
+  }
+
+  const handlePaste = (event: React.ClipboardEvent<HTMLDivElement>) => {
+    const file = event.clipboardData?.files?.[0]
+    if (file) {
+      event.preventDefault()
+      handleSelectedFile(file)
+    }
+  }
+
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'processed': return <CheckCircle2 className="w-4 h-4 text-servio-green-500" />
@@ -385,7 +435,7 @@ export default function ReceiptsPage() {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                onClick={() => setIsUploadModalOpen(false)}
+                onClick={closeUploadModal}
               />
               <motion.div 
                 className="card w-full max-w-md relative z-10"
@@ -395,31 +445,73 @@ export default function ReceiptsPage() {
               >
                 <div className="flex items-center justify-between mb-6">
                   <h2 className="text-xl font-bold text-surface-900 dark:text-surface-100">Upload Receipt</h2>
-                  <button onClick={() => setIsUploadModalOpen(false)} className="btn-icon">
+                  <button onClick={closeUploadModal} className="btn-icon">
                     <X className="w-5 h-5" />
                   </button>
                 </div>
 
                 <div className="space-y-6">
                   {uploadProgress === 'idle' ? (
-                    <div 
-                      className="border-2 border-dashed border-surface-200 dark:border-surface-700 rounded-xl p-10 text-center cursor-pointer hover:border-primary-500 transition-colors"
-                      onClick={() => document.getElementById('receipt-upload')?.click()}
-                    >
-                      <input 
-                        type="file" 
-                        id="receipt-upload" 
-                        className="hidden" 
-                        accept="image/*,application/pdf"
-                        onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
-                      />
-                      <Upload className="w-10 h-10 text-surface-300 mx-auto mb-4" />
-                      <p className="text-sm font-medium text-surface-700 dark:text-surface-300">
-                        {uploadFile ? uploadFile.name : 'Click to select or drag and drop'}
-                      </p>
-                      <p className="text-xs text-surface-500 mt-1">
-                        Supports JPEG, PNG, or PDF up to 10MB
-                      </p>
+                    <div className="space-y-4">
+                      <div 
+                        className={`border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-colors ${
+                          isDragging
+                            ? 'border-primary-500 bg-primary-50/60 dark:bg-primary-900/20'
+                            : 'border-surface-200 dark:border-surface-700 hover:border-primary-500'
+                        }`}
+                        onClick={() => fileInputRef.current?.click()}
+                        onDrop={handleDrop}
+                        onDragOver={(event) => {
+                          event.preventDefault()
+                          setIsDragging(true)
+                        }}
+                        onDragLeave={() => setIsDragging(false)}
+                        onPaste={handlePaste}
+                      >
+                        <input 
+                          type="file" 
+                          ref={fileInputRef}
+                          className="hidden" 
+                          accept="image/*,application/pdf"
+                          onChange={(e) => handleSelectedFile(e.target.files?.[0] || null)}
+                        />
+                        <Upload className="w-10 h-10 text-surface-300 mx-auto mb-4" />
+                        <p className="text-sm font-medium text-surface-700 dark:text-surface-300">
+                          {uploadFile ? uploadFile.name : 'Click to select, drag and drop, or paste a screenshot'}
+                        </p>
+                        <p className="text-xs text-surface-500 mt-1">
+                          Supports images or PDFs up to 10MB
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="file"
+                          ref={cameraInputRef}
+                          className="hidden"
+                          accept="image/*"
+                          capture="environment"
+                          onChange={(e) => handleSelectedFile(e.target.files?.[0] || null)}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => cameraInputRef.current?.click()}
+                          className="btn-secondary flex-1"
+                        >
+                          Take Photo
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => fileInputRef.current?.click()}
+                          className="btn-secondary flex-1"
+                        >
+                          Upload File
+                        </button>
+                      </div>
+
+                      {uploadError && (
+                        <p className="text-sm text-servio-red-500">{uploadError}</p>
+                      )}
                     </div>
                   ) : (
                     <div className="py-10 text-center space-y-4">
@@ -435,7 +527,7 @@ export default function ReceiptsPage() {
 
                   <div className="flex space-x-3">
                     <button 
-                      onClick={() => setIsUploadModalOpen(false)}
+                      onClick={closeUploadModal}
                       className="btn-secondary flex-1"
                       disabled={uploadProgress !== 'idle'}
                     >
@@ -444,7 +536,7 @@ export default function ReceiptsPage() {
                     <button 
                       onClick={handleUpload}
                       className="btn-primary flex-1"
-                      disabled={!uploadFile || uploadProgress !== 'idle'}
+                      disabled={!uploadFile || uploadProgress !== 'idle' || !!uploadError}
                     >
                       Upload
                     </button>
