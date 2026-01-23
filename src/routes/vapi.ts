@@ -72,12 +72,16 @@ router.post('/tool/:toolName', requireVapiWebhookAuth, async (req: Request, res:
   const headerRestaurantId =
     (req.headers['x-vapi-restaurant-id'] as string) ||
     (req.headers['x-restaurant-id'] as string);
+  const headerRestaurantSlug =
+    (req.headers['x-vapi-restaurant-slug'] as string) ||
+    (req.headers['x-restaurant-slug'] as string);
 
   // Merge query params into body for tools that send via URL
   const mergedParams = {
     ...req.query,
     ...body,
-    ...(headerRestaurantId ? { restaurantId: headerRestaurantId } : {})
+    ...(headerRestaurantId ? { restaurantId: headerRestaurantId } : {}),
+    ...(headerRestaurantSlug ? { restaurantSlug: headerRestaurantSlug } : {})
   };
 
   const parameters =
@@ -138,6 +142,9 @@ router.get('/tool/:toolName', requireVapiWebhookAuth, async (req: Request, res: 
   const headerRestaurantId =
     (req.headers['x-vapi-restaurant-id'] as string) ||
     (req.headers['x-restaurant-id'] as string);
+  const headerRestaurantSlug =
+    (req.headers['x-vapi-restaurant-slug'] as string) ||
+    (req.headers['x-restaurant-slug'] as string);
   const headerCallIdValue = Array.isArray(headerCallId) ? headerCallId[0] : headerCallId;
   const callIdRaw = (req.query as any)?.callId || headerCallIdValue;
   const callId =
@@ -156,7 +163,11 @@ router.get('/tool/:toolName', requireVapiWebhookAuth, async (req: Request, res: 
         : undefined;
 
   try {
-    const parameters = headerRestaurantId ? { ...req.query, restaurantId: headerRestaurantId } : req.query;
+    const parameters = {
+      ...req.query,
+      ...(headerRestaurantId ? { restaurantId: headerRestaurantId } : {}),
+      ...(headerRestaurantSlug ? { restaurantSlug: headerRestaurantSlug } : {})
+    };
     const exec = await vapiService.executeToolRequest(toolName, parameters, {
       callId,
       customerNumber
@@ -228,7 +239,13 @@ router.get('/assistant-config', async (req: Request, res: Response) => {
         {
           name: 'getStoreStatus',
           description: 'Check if the restaurant is currently open and get operating hours',
-          parameters: { type: 'object', properties: {} }
+          parameters: {
+            type: 'object',
+            properties: {
+              restaurantId: { type: 'string', description: 'Restaurant ID (optional if provided via metadata)' },
+              restaurantSlug: { type: 'string', description: 'Restaurant slug (optional fallback)' }
+            }
+          }
         },
         {
           name: 'searchMenu',
@@ -236,7 +253,9 @@ router.get('/assistant-config', async (req: Request, res: Response) => {
           parameters: {
             type: 'object',
             properties: {
-              q: { type: 'string', description: 'Search query' }
+              q: { type: 'string', description: 'Search query' },
+              restaurantId: { type: 'string', description: 'Restaurant ID (optional if provided via metadata)' },
+              restaurantSlug: { type: 'string', description: 'Restaurant slug (optional fallback)' }
             }
           }
         },
@@ -246,7 +265,9 @@ router.get('/assistant-config', async (req: Request, res: Response) => {
           parameters: {
             type: 'object',
             properties: {
-              id: { type: 'string', description: 'The item ID' }
+              id: { type: 'string', description: 'The item ID' },
+              restaurantId: { type: 'string', description: 'Restaurant ID (optional if provided via metadata)' },
+              restaurantSlug: { type: 'string', description: 'Restaurant slug (optional fallback)' }
             },
             required: ['id']
           }
@@ -269,7 +290,9 @@ router.get('/assistant-config', async (req: Request, res: Response) => {
                   required: ['itemId', 'qty']
                 }
               },
-              orderType: { type: 'string', enum: ['pickup', 'delivery', 'dine-in'] }
+              orderType: { type: 'string', enum: ['pickup', 'delivery', 'dine-in'] },
+              restaurantId: { type: 'string', description: 'Restaurant ID (optional if provided via metadata)' },
+              restaurantSlug: { type: 'string', description: 'Restaurant slug (optional fallback)' }
             },
             required: ['items', 'orderType']
           }
@@ -314,7 +337,9 @@ router.get('/assistant-config', async (req: Request, res: Response) => {
               },
               orderType: { type: 'string', enum: ['pickup', 'delivery', 'dine-in'] },
               pickupTime: { type: 'string' },
-              callId: { type: 'string' }
+              callId: { type: 'string' },
+              restaurantId: { type: 'string', description: 'Restaurant ID (optional if provided via metadata)' },
+              restaurantSlug: { type: 'string', description: 'Restaurant slug (optional fallback)' }
             },
             required: ['items', 'customer', 'orderType', 'totals']
           }
