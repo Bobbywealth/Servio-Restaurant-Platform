@@ -652,19 +652,15 @@ const MenuManagement: React.FC = () => {
     }
   };
 
-  const fetchModifierSummaries = async (itemId: string): Promise<string[]> => {
-    try {
-      const resp = await api.get(`/api/menu/items/${itemId}/modifiers`);
-      const groups = resp.data?.data || [];
-      return groups.map((group: any) => {
-        const options = Array.isArray(group.options)
-          ? group.options.map((opt: any) => opt?.name).filter(Boolean)
-          : [];
+  const getModifierSummariesFromItem = (item: MenuItem | null): string[] => {
+    if (!item) return [];
+    const groups = Array.isArray((item as any).modifierGroups) ? (item as any).modifierGroups : [];
+    return groups
+      .map((group: any) => {
+        const options = Array.isArray(group.options) ? group.options.map((opt: any) => opt?.name).filter(Boolean) : [];
         return options.length > 0 ? `${group.name}: ${options.join(', ')}` : group.name;
-      }).filter(Boolean);
-    } catch {
-      return [];
-    }
+      })
+      .filter(Boolean);
   };
 
   const handleGenerateNewDescription = async () => {
@@ -698,7 +694,7 @@ const MenuManagement: React.FC = () => {
     setIsGeneratingEditDescription(true);
     try {
       const categoryName = categories.find((cat) => cat.id === editItem.categoryId)?.name;
-      const modifiers = editingItem?.id ? await fetchModifierSummaries(editingItem.id) : [];
+      const modifiers = getModifierSummariesFromItem(editingItem);
       const resp = await api.post('/api/menu/items/describe', {
         name: editItem.name.trim(),
         category: categoryName || undefined,

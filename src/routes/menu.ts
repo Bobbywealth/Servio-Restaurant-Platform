@@ -124,7 +124,7 @@ router.get('/public/:slug', asyncHandler(async (req: Request, res: Response) => 
       AND mi.is_available = TRUE
       AND mc.is_active = TRUE
       AND COALESCE(mc.is_hidden, FALSE) = FALSE
-    ORDER BY mc.sort_order ASC, mi.name ASC
+    ORDER BY mc.sort_order ASC, mi.sort_order ASC, mi.name ASC
   `, [restaurant.id]);
 
   // Load modifier groups/options and attach to items
@@ -285,10 +285,15 @@ router.get('/public/:slug', asyncHandler(async (req: Request, res: Response) => 
     const inheritedGroups = (categoryGroupsMap[item.category_id] || []).filter((g: any) => !itemGroupIds.has(g.id));
 
     const sizes = sizesByItem[item.id] || [];
-    const fromPrice =
-      sizes.length > 0
-        ? Math.min(...sizes.map((s: any) => Number(s.price || 0)))
-        : Number(item.price || 0);
+    const fromPrice = (() => {
+      if (sizes.length > 0) {
+        const validPrices = sizes
+          .map((s: any) => Number(s.price))
+          .filter((p: any) => Number.isFinite(p) && p > 0);
+        if (validPrices.length > 0) return Math.min(...validPrices);
+      }
+      return Number(item.price || 0);
+    })();
 
     return {
       ...item,
@@ -1180,6 +1185,7 @@ router.get('/items/full', asyncHandler(async (req: Request, res: Response) => {
     FROM menu_items mi
     LEFT JOIN menu_categories mc ON mi.category_id = mc.id
     WHERE mi.restaurant_id = ?
+      AND (mc.is_active = TRUE OR mc.id IS NULL)
     ORDER BY mc.sort_order ASC, mi.sort_order ASC, mi.name ASC
   `, [restaurantId]);
 
@@ -1359,20 +1365,26 @@ router.get('/items/full', asyncHandler(async (req: Request, res: Response) => {
 
   // Group by categories
   const categorizedItems = formattedItems.reduce((acc: any, item: any) => {
+    const categoryId = item.category_id || 'uncategorized';
     const categoryName = item.category_name || 'Uncategorized';
-    if (!acc[categoryName]) {
-      acc[categoryName] = {
+    if (!acc[categoryId]) {
+      acc[categoryId] = {
         category_id: item.category_id,
         category_name: categoryName,
         category_sort_order: item.category_sort_order || 999,
         items: []
       };
     }
-    acc[categoryName].items.push({
+    acc[categoryId].items.push({
       ...item,
       fromPrice: (() => {
         const sizes = sizesByItem[item.id] || [];
-        if (sizes.length) return Math.min(...sizes.map((s: any) => Number(s.price || 0)));
+        if (sizes.length) {
+          const validPrices = sizes
+            .map((s: any) => Number(s.price))
+            .filter((p: any) => Number.isFinite(p) && p > 0);
+          if (validPrices.length > 0) return Math.min(...validPrices);
+        }
         return Number(item.price || 0);
       })(),
       sizes: sizesByItem[item.id] || [],
@@ -1669,240 +1681,14 @@ router.get('/categories', asyncHandler(async (req: Request, res: Response) => {
 // ============================================================================
 // MODIFIERS MANAGEMENT
 // ============================================================================
-
-/**
- * GET /api/menu/modifier-groups
- * Get all modifier groups for a restaurant
- */
-router.get('/modifier-groups', asyncHandler(async (req: Request, res: Response) => {
-  // TODO: Legacy endpoint - prefer /api/restaurants/:restaurantId/modifier-groups (modifiers.ts)
-  const db = DatabaseService.getInstance().getDatabase();
-  const restaurantId = req.user?.restaurantId;
-
-  const groups = await db.all(`
-    SELECT 
-      mg.id,
-      mg.restaurant_id,
-      mg.name,
-      mg.min_selection as min_selections,
-      mg.max_selection as max_selections,
-      mg.is_required,
-      mg.created_at,
-      COALESCE(mg.description, '') as description,
-      COUNT(mo.id) as option_count
-    FROM modifier_groups mg
-    LEFT JOIN modifier_options mo ON mg.id = mo.modifier_group_id AND mo.is_available = true
-    WHERE mg.restaurant_id = ?
-    GROUP BY mg.id, mg.restaurant_id, mg.name, mg.min_selection, mg.max_selection, mg.is_required, mg.created_at, mg.description
-    ORDER BY mg.name ASC
-  `, [restaurantId]);
-
-  res.json({
-    success: true,
-    data: groups
-  });
-}));
-
-/**
- * POST /api/menu/modifier-groups
- * Create a new modifier group
- */
-router.post('/modifier-groups', asyncHandler(async (req: Request, res: Response) => {
-  const { name, description, minSelections = 0, maxSelections = 1, isRequired = false } = req.body;
-  const db = DatabaseService.getInstance().getDatabase();
-
-  if (!name?.trim()) {
-    return res.status(400).json({
-      success: false,
-      error: { message: 'Modifier group name is required' }
-    });
-  }
-
-  const restaurantId = req.user?.restaurantId;
-  const groupId = uuidv4();
-
-  await db.run(`
-    INSERT INTO modifier_groups (id, restaurant_id, name, description, min_selection, max_selection, is_required)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `, [groupId, restaurantId, name.trim(), description?.trim() || null, minSelections, maxSelections, isRequired]);
-
-  const newGroup = await db.get(`
-    SELECT * FROM modifier_groups WHERE id = ?
-  `, [groupId]);
-
-  await DatabaseService.getInstance().logAudit(
-    restaurantId!,
-    req.user?.id || 'system',
-    'create_modifier_group',
-    'modifier_group',
-    groupId,
-    { name, description, minSelections, maxSelections, isRequired }
-  );
-
-  logger.info(`Modifier group created: ${name}`);
-
-  res.status(201).json({
-    success: true,
-    data: newGroup
-  });
-}));
-
-/**
- * GET /api/menu/modifier-groups/:id/options
- * Get options for a modifier group
- */
-router.get('/modifier-groups/:id/options', asyncHandler(async (req: Request, res: Response) => {
-  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const db = DatabaseService.getInstance().getDatabase();
-
-  const options = await db.all(`
-    SELECT id, name, COALESCE(description, '') as description, price_modifier, is_available
-    FROM modifier_options 
-    WHERE modifier_group_id = ? AND is_available = true
-    ORDER BY name ASC
-  `, [id]);
-
-  res.json({
-    success: true,
-    data: options
-  });
-}));
-
-/**
- * POST /api/menu/modifier-groups/:id/options
- * Add option to a modifier group
- */
-router.post('/modifier-groups/:id/options', asyncHandler(async (req: Request, res: Response) => {
-  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const { name, description, priceModifier = 0 } = req.body;
-  const db = DatabaseService.getInstance().getDatabase();
-
-  if (!name?.trim()) {
-    return res.status(400).json({
-      success: false,
-      error: { message: 'Option name is required' }
-    });
-  }
-
-  const optionId = uuidv4();
-
-  await db.run(`
-    INSERT INTO modifier_options (id, modifier_group_id, name, description, price_modifier)
-    VALUES (?, ?, ?, ?, ?)
-  `, [optionId, id, name.trim(), description?.trim() || null, parseFloat(priceModifier)]);
-
-  const newOption = await db.get(`
-    SELECT * FROM modifier_options WHERE id = ?
-  `, [optionId]);
-
-  await DatabaseService.getInstance().logAudit(
-    req.user?.restaurantId!,
-    req.user?.id || 'system',
-    'create_modifier_option',
-    'modifier_option',
-    optionId,
-    { modifierGroupId: id, name, description, priceModifier }
-  );
-
-  res.status(201).json({
-    success: true,
-    data: newOption
-  });
-}));
-
-/**
- * GET /api/menu/items/:id/modifiers
- * Get modifiers assigned to a menu item
- */
-router.get('/items/:id/modifiers', asyncHandler(async (req: Request, res: Response) => {
-  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const db = DatabaseService.getInstance().getDatabase();
-
-  // Fetch modifier groups assigned to this item
-  const groups = await db.all(`
-    SELECT 
-      mg.id,
-      mg.name,
-      mg.min_selection as min_selections,
-      mg.max_selection as max_selections,
-      mg.is_required,
-      COALESCE(mg.description, '') as description,
-      mim.sort_order as assignment_order
-    FROM modifier_groups mg
-    INNER JOIN menu_item_modifiers mim ON mg.id = mim.modifier_group_id
-    WHERE mim.menu_item_id = ?
-    ORDER BY mim.sort_order ASC, mg.name ASC
-  `, [id]);
-
-  // Fetch options for each group
-  const formattedModifiers = await Promise.all(groups.map(async (group: any) => {
-    const options = await db.all(`
-      SELECT id, name, COALESCE(description, '') as description, price_modifier
-      FROM modifier_options
-      WHERE modifier_group_id = ? AND is_available = true
-      ORDER BY name ASC
-    `, [group.id]);
-    return { ...group, options };
-  }));
-
-  res.json({
-    success: true,
-    data: formattedModifiers
-  });
-}));
-
-/**
- * POST /api/menu/items/:id/modifiers
- * Assign modifier groups to a menu item
- */
-router.post('/items/:id/modifiers', asyncHandler(async (req: Request, res: Response) => {
-  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const { modifierGroupIds } = req.body;
-  const db = DatabaseService.getInstance().getDatabase();
-
-  if (!Array.isArray(modifierGroupIds)) {
-    return res.status(400).json({
-      success: false,
-      error: { message: 'modifierGroupIds must be an array' }
-    });
-  }
-
-  // Start transaction
-  await db.run('BEGIN TRANSACTION');
-
-  try {
-    // Remove existing assignments
-    await db.run('DELETE FROM menu_item_modifiers WHERE menu_item_id = ?', [id]);
-
-    // Add new assignments
-    for (let i = 0; i < modifierGroupIds.length; i++) {
-      await db.run(`
-        INSERT INTO menu_item_modifiers (id, menu_item_id, modifier_group_id, sort_order)
-        VALUES (?, ?, ?, ?)
-      `, [uuidv4(), id, modifierGroupIds[i], i]);
-    }
-
-    await db.run('COMMIT');
-
-    await DatabaseService.getInstance().logAudit(
-      req.user?.restaurantId!,
-      req.user?.id || 'system',
-      'update_item_modifiers',
-      'menu_item',
-      id,
-      { modifierGroupIds }
-    );
-
-    res.json({
-      success: true,
-      message: 'Menu item modifiers updated successfully'
-    });
-
-  } catch (error) {
-    await db.run('ROLLBACK');
-    throw error;
-  }
-}));
+// NOTE: Legacy modifier endpoints were removed from this router to avoid
+// confusion with the newer modifier schema.
+//
+// - Use `src/routes/modifiers.ts` for modifier group/option CRUD.
+// - Use this router's category-level modifier assignment endpoints:
+//   - GET/POST/DELETE `/api/menu/categories/:id/modifier-groups`
+// - Use `src/routes/modifiers.ts` for item-level modifier group attachments:
+//   - POST/DELETE `/api/menu-items/:itemId/modifier-groups`
 
 // ============================================================================
 // MENU BULK IMPORT
