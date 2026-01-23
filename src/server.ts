@@ -71,6 +71,7 @@ async function initializeServer() {
     const { default: menuRoutes } = await import('./routes/menu');
     const { default: tasksRoutes } = await import('./routes/tasks');
     const { default: syncRoutes } = await import('./routes/sync');
+    const { default: modifiersRoutes } = await import('./routes/modifiers');
     const { default: receiptsRoutes } = await import('./routes/receipts');
     const { default: auditRoutes } = await import('./routes/audit');
     const { default: timeclockRoutes } = await import('./routes/timeclock');
@@ -102,6 +103,7 @@ async function initializeServer() {
       return requireAuth(req, res, next);
     }, menuRoutes);
 
+    app.use('/api', requireAuth, modifiersRoutes);
     app.use('/api/tasks', requireAuth, tasksRoutes);
     app.use('/api/sync', requireAuth, syncRoutes);
     app.use('/api/receipts', requireAuth, receiptsRoutes);

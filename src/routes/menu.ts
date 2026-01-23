@@ -124,6 +124,83 @@ router.get('/public/:slug', asyncHandler(async (req: Request, res: Response) => 
     ORDER BY mc.sort_order ASC, mi.name ASC
   `, [restaurant.id]);
 
+  // Load modifier groups/options and attach to items
+  const itemIds = items.map((i: any) => i.id);
+  let optionsByGroup: Record<string, any[]> = {};
+  let groupsById: Record<string, any> = {};
+  let itemGroupsMap: Record<string, any[]> = {};
+
+  if (itemIds.length) {
+    const modifierGroups = await db.all(`
+      SELECT *
+      FROM modifier_groups
+      WHERE restaurant_id = ?
+        AND is_active = TRUE
+        AND deleted_at IS NULL
+      ORDER BY display_order ASC, name ASC
+    `, [restaurant.id]);
+
+    if (modifierGroups.length) {
+      groupsById = modifierGroups.reduce((acc: Record<string, any>, g: any) => {
+        acc[g.id] = g;
+        return acc;
+      }, {});
+
+      const modifierOptions = await db.all(`
+        SELECT *
+        FROM modifier_options
+        WHERE restaurant_id = ?
+          AND is_active = TRUE
+          AND deleted_at IS NULL
+        ORDER BY display_order ASC, name ASC
+      `, [restaurant.id]);
+
+      optionsByGroup = modifierOptions.reduce((acc: Record<string, any[]>, opt: any) => {
+        if (!acc[opt.group_id]) acc[opt.group_id] = [];
+        acc[opt.group_id].push(opt);
+        return acc;
+      }, {});
+
+      const placeholders = itemIds.map(() => '?').join(',');
+      const itemModifierRows = await db.all(`
+        SELECT *
+        FROM item_modifier_groups
+        WHERE item_id IN (${placeholders})
+          AND deleted_at IS NULL
+        ORDER BY display_order ASC
+      `, itemIds);
+
+      itemGroupsMap = itemModifierRows.reduce((acc: Record<string, any[]>, row: any) => {
+        const baseGroup = groupsById[row.group_id];
+        if (!baseGroup) return acc;
+        const effectiveMin = row.override_min !== null && row.override_min !== undefined ? row.override_min : baseGroup.min_selections;
+        const effectiveMax = row.override_max !== null && row.override_max !== undefined ? row.override_max : baseGroup.max_selections;
+        const effectiveRequired = row.override_required !== null && row.override_required !== undefined ? row.override_required : baseGroup.is_required;
+
+        const enriched = {
+          id: baseGroup.id,
+          name: baseGroup.name,
+          description: baseGroup.description,
+          selectionType: baseGroup.selection_type,
+          minSelections: effectiveMin,
+          maxSelections: effectiveMax,
+          isRequired: effectiveRequired,
+          displayOrder: row.display_order ?? baseGroup.display_order ?? 0,
+          options: optionsByGroup[baseGroup.id] || []
+        };
+
+        if (!acc[row.item_id]) acc[row.item_id] = [];
+        acc[row.item_id].push(enriched);
+        return acc;
+      }, {});
+    }
+  }
+
+  const itemsWithModifiers = items.map((item: any) => ({
+    ...item,
+    modifierGroups: itemGroupsMap[item.id] || []
+  }));
+
   res.json({
     success: true,
     data: {
@@ -136,7 +213,7 @@ router.get('/public/:slug', asyncHandler(async (req: Request, res: Response) => 
         phone: restaurant.phone,
         description: restaurant.description
       },
-      items
+      items: itemsWithModifiers
     }
   });
 }));
