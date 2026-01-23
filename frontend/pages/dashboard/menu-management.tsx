@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Head from 'next/head';
 import { motion, AnimatePresence } from 'framer-motion';
+import clsx from 'clsx';
 import {
   Plus,
   Search,
