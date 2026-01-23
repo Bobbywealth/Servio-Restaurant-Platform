@@ -985,6 +985,41 @@ router.put('/items/:id', upload.array('images', 5), asyncHandler(async (req: Req
 }));
 
 /**
+ * DELETE /api/menu/items/:id
+ * Delete a menu item
+ */
+router.delete('/items/:id', asyncHandler(async (req: Request, res: Response) => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const restaurantId = req.user?.restaurantId;
+  const db = DatabaseService.getInstance().getDatabase();
+
+  const item = await db.get('SELECT id, name FROM menu_items WHERE id = ? AND restaurant_id = ?', [id, restaurantId]);
+  if (!item) {
+    return res.status(404).json({
+      success: false,
+      error: { message: 'Menu item not found' }
+    });
+  }
+
+  await db.run('UPDATE order_items SET menu_item_id = NULL WHERE menu_item_id = ?', [id]);
+  await db.run('DELETE FROM item_sizes WHERE item_id = ?', [id]);
+  await db.run('DELETE FROM item_modifier_groups WHERE item_id = ?', [id]);
+  await db.run('DELETE FROM menu_item_modifiers WHERE menu_item_id = ?', [id]);
+  await db.run('DELETE FROM menu_items WHERE id = ?', [id]);
+
+  await DatabaseService.getInstance().logAudit(
+    restaurantId!,
+    req.user?.id || 'system',
+    'delete_menu_item',
+    'menu_item',
+    id,
+    { name: item.name }
+  );
+
+  res.json({ success: true });
+}));
+
+/**
  * POST /api/menu/items/describe
  * Generate a menu item description with AI
  */

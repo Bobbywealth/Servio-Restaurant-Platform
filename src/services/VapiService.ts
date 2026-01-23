@@ -5,7 +5,7 @@ import { logger } from '../utils/logger';
 
 export interface VapiWebhookPayload {
   message: {
-    type: 'assistant-request' | 'function-call' | 'tool-calls' | 'hang' | 'speech-update' | 'transcript' | 'end-of-call-report';
+    type: 'assistant-request' | 'function-call' | 'tool-calls' | 'hang' | 'speech-update' | 'transcript' | 'end-of-call-report' | 'conversation-update' | 'status-update';
     call?: {
       id: string;
       orgId: string;
@@ -70,6 +70,11 @@ export class VapiService {
           // Log transcript for analytics
           await this.logTranscript(message);
           return { result: 'transcript logged' };
+
+        case 'conversation-update':
+        case 'speech-update':
+        case 'status-update':
+          return { result: 'acknowledged' };
           
         default:
           logger.info(`Unhandled webhook type: ${message.type}`);
@@ -171,6 +176,7 @@ export class VapiService {
     restaurantSlug: string | null;
     source: string;
   } {
+  private async getRestaurantIdFromParams(parameters: any, message?: any): Promise<{ restaurantId: string | null; source: string }> {
     // 1) explicit tool parameters (preferred)
     const fromParams =
       parameters?.restaurantId ??
@@ -206,7 +212,38 @@ export class VapiService {
       }
     }
 
-    // 4) assistant config fallback (environment)
+    // 4) look up phoneNumberId in restaurant settings (db)
+    if (phoneNumberId) {
+      try {
+        const db = DatabaseService.getInstance().getDatabase();
+        const rows = await db.all('SELECT id, settings FROM restaurants');
+        for (const row of rows || []) {
+          const rawSettings = row?.settings;
+          if (!rawSettings) continue;
+          let parsed: any = null;
+          if (typeof rawSettings === 'object') {
+            parsed = rawSettings;
+          } else if (typeof rawSettings === 'string') {
+            try {
+              parsed = JSON.parse(rawSettings);
+            } catch {
+              parsed = null;
+            }
+          }
+          const storedPhoneNumberId = parsed?.vapi?.phoneNumberId;
+          if (storedPhoneNumberId && String(storedPhoneNumberId) === String(phoneNumberId)) {
+            return { restaurantId: String(row.id), source: 'db.vapi.phoneNumberId' };
+          }
+        }
+      } catch (error) {
+        logger.warn('[vapi] phoneNumberId lookup failed', {
+          callId: message?.call?.id,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+    }
+
+    // 5) assistant config fallback (environment)
     const fromEnv = process.env.VAPI_RESTAURANT_ID;
     if (typeof fromEnv === 'string' && fromEnv.trim()) {
       return { restaurantId: fromEnv.trim(), restaurantSlug: null, source: 'env.VAPI_RESTAURANT_ID' };
@@ -269,12 +306,7 @@ export class VapiService {
     const callId = message.call?.id;
     const requestId = callId || `vapi_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const normalizedParameters = this.normalizeToolParameters(parameters);
-    const { restaurantId: rawRestaurantId, restaurantSlug, source: restaurantIdSource } =
-      this.getRestaurantIdFromParams(normalizedParameters, message);
-    const resolvedFromSlug = !rawRestaurantId && restaurantSlug
-      ? await VoiceOrderingService.getInstance().resolveRestaurantIdFromSlug(restaurantSlug)
-      : null;
-    const restaurantId = rawRestaurantId || resolvedFromSlug;
+    const { restaurantId, source: restaurantIdSource } = await this.getRestaurantIdFromParams(normalizedParameters, message);
     const startedAt = Date.now();
 
     logger.info('[vapi] tool_call_start', { requestId, callId, toolName: name });
