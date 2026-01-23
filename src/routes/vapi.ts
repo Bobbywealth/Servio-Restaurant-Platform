@@ -102,6 +102,51 @@ router.post('/tool/:toolName', requireVapiWebhookAuth, async (req: Request, res:
   }
 });
 
+// Some tool-server configurations call tools via GET with query params.
+// Support both POST and GET to avoid 404s like: "Route GET /api/vapi/tool/searchMenu not found".
+router.get('/tool/:toolName', requireVapiWebhookAuth, async (req: Request, res: Response) => {
+  const toolNameParam = req.params.toolName;
+  const toolName = Array.isArray(toolNameParam) ? toolNameParam[0] : toolNameParam;
+
+  const headerCallId = req.headers['x-vapi-call-id'];
+  const headerCallIdValue = Array.isArray(headerCallId) ? headerCallId[0] : headerCallId;
+  const callIdRaw = (req.query as any)?.callId || headerCallIdValue;
+  const callId =
+    typeof callIdRaw === 'string'
+      ? callIdRaw
+      : Array.isArray(callIdRaw)
+        ? callIdRaw[0]
+        : undefined;
+
+  const customerNumberRaw = (req.query as any)?.customerNumber;
+  const customerNumber =
+    typeof customerNumberRaw === 'string'
+      ? customerNumberRaw
+      : Array.isArray(customerNumberRaw)
+        ? customerNumberRaw[0]
+        : undefined;
+
+  try {
+    const exec = await vapiService.executeToolRequest(toolName, req.query, {
+      callId,
+      customerNumber
+    });
+
+    if (exec.error) {
+      return res.status(200).json({ error: exec.error });
+    }
+
+    return res.status(200).json(exec.result ?? { ok: true });
+  } catch (error) {
+    logger.error('[vapi:tool] handler_error', {
+      toolName,
+      callId,
+      error: error instanceof Error ? error.message : String(error)
+    });
+    return res.status(200).json({ error: 'Internal server error' });
+  }
+});
+
 // Get Vapi assistant configuration
 router.get('/assistant-config', async (req: Request, res: Response) => {
   try {
