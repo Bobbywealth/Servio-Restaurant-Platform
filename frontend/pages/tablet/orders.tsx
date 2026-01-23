@@ -85,8 +85,51 @@ function normalizeStatus(s: string | null | undefined) {
   return lower;
 }
 
+// Audio handling with browser autoplay unlock
+let audioUnlocked = false;
+let notificationAudio: HTMLAudioElement | null = null;
+
+function initAudio() {
+  if (typeof window === 'undefined') return;
+  
+  // Try to load custom notification sound
+  try {
+    notificationAudio = new Audio('/sounds/order-alert.mp3');
+    notificationAudio.preload = 'auto';
+    notificationAudio.volume = 1.0;
+  } catch {
+    // Fallback to synthesized beep
+  }
+}
+
+function unlockAudio() {
+  if (audioUnlocked) return;
+  audioUnlocked = true;
+  
+  // Play silent audio to unlock
+  try {
+    const AudioContext = (window as any).AudioContext || (window as any).webkitAudioContext;
+    if (AudioContext) {
+      const ctx = new AudioContext();
+      const buffer = ctx.createBuffer(1, 1, 22050);
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(ctx.destination);
+      source.start(0);
+      ctx.resume?.();
+    }
+    
+    // Also try to load the audio element
+    if (notificationAudio) {
+      notificationAudio.load();
+    }
+  } catch {
+    // ignore
+  }
+}
+
 function beep() {
-  // Small in-browser beep; no asset files required.
+  // Louder, more noticeable synthesized beep
   try {
     const AudioContext = (window as any).AudioContext || (window as any).webkitAudioContext;
     if (!AudioContext) return;
@@ -94,23 +137,38 @@ function beep() {
     const o = ctx.createOscillator();
     const g = ctx.createGain();
     o.type = 'square';
-    o.frequency.value = 880;
-    g.gain.value = 0.2;
+    o.frequency.value = 1000; // Higher pitch
+    g.gain.value = 0.5; // Louder
     o.connect(g);
     g.connect(ctx.destination);
     o.start();
     window.setTimeout(() => {
       o.stop();
       ctx.close?.().catch(() => {});
-    }, 120);
+    }, 200); // Longer duration
   } catch {
     // ignore
   }
 }
 
 function playAlarmTone() {
+  // Try custom sound first, fallback to synthesized beep
+  if (notificationAudio) {
+    notificationAudio.currentTime = 0;
+    notificationAudio.play().catch(() => {
+      // Fallback to beep if audio file fails
+      beepSequence();
+    });
+  } else {
+    beepSequence();
+  }
+}
+
+function beepSequence() {
+  // Play a more noticeable beep pattern
   beep();
-  window.setTimeout(() => beep(), 220);
+  window.setTimeout(() => beep(), 300);
+  window.setTimeout(() => beep(), 600);
 }
 
 
@@ -148,6 +206,27 @@ export default function TabletOrdersPage() {
       router.replace('/login');
     }
   }, [router]);
+
+  // Initialize audio on mount
+  useEffect(() => {
+    initAudio();
+    
+    // Unlock audio on any user interaction
+    const handleInteraction = () => {
+      unlockAudio();
+      // Remove listeners after first interaction
+      document.removeEventListener('click', handleInteraction);
+      document.removeEventListener('touchstart', handleInteraction);
+    };
+    
+    document.addEventListener('click', handleInteraction);
+    document.addEventListener('touchstart', handleInteraction);
+    
+    return () => {
+      document.removeEventListener('click', handleInteraction);
+      document.removeEventListener('touchstart', handleInteraction);
+    };
+  }, []);
 
   useEffect(() => {
     const storedAuto = typeof window !== 'undefined' ? window.localStorage.getItem('servio_auto_print_enabled') : null;
