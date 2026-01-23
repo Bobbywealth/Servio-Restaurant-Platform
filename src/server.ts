@@ -198,7 +198,7 @@ app.use(morgan(morganFormat, {
 app.use(express.json({
   limit: '10mb',
   strict: true,
-  type: ['application/json', 'application/csp-report']
+  type: ['application/json', 'application/*+json', 'application/csp-report']
 }));
 app.use(express.urlencoded({
   extended: true,

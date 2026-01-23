@@ -10,25 +10,46 @@ const vapiService = new VapiService();
 
 // Webhook endpoint for Vapi
 router.post('/webhook', async (req: Request, res: Response) => {
+  const requestId = (req.headers['x-request-id'] as string) || `vapi_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const contentType = req.headers['content-type'];
+
+  const log = (level: 'info' | 'warn' | 'error', message: string, extra?: Record<string, unknown>) => {
+    logger[level](`[vapi:webhook] ${message}`, {
+      requestId,
+      contentType,
+      bodyKeys: req.body && typeof req.body === 'object' ? Object.keys(req.body) : undefined,
+      bodyType: (req.body as any)?.type ?? (req.body as any)?.message?.type,
+      ...extra,
+    });
+  };
+
   try {
+    if (!req.body || typeof req.body !== 'object') {
+      log('warn', 'missing_or_invalid_body');
+      return res.status(200).json({ ok: true });
+    }
+
     const payload: VapiWebhookPayload = req.body;
+    const message = (payload as any)?.message;
+
+    if (!message || !message.type) {
+      log('warn', 'missing_type_or_message');
+      return res.status(200).json({ ok: true });
+    }
     
-    // Log incoming webhook for debugging
-    logger.info('Vapi webhook received:', {
-      type: payload.message.type,
-      callId: payload.message.call?.id,
-      customerNumber: payload.message.call?.customer?.number
+    // Log incoming webhook for debugging (avoid PII)
+    log('info', 'received', {
+      type: message.type,
+      callId: message.call?.id,
+      customerNumber: message.call?.customer?.number
     });
 
     const response = await vapiService.handleWebhook(payload);
     
-    res.json(response);
+    res.status(200).json(response);
   } catch (error) {
-    logger.error('Vapi webhook error:', error);
-    res.status(500).json({ 
-      error: 'Internal server error',
-      result: 'I apologize, but I\'m experiencing technical difficulties. Please try again or hold for a human representative.'
-    });
+    log('error', 'handler_error', { error: error instanceof Error ? error.message : String(error) });
+    res.status(200).json({ ok: true });
   }
 });
 
