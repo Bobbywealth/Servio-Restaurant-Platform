@@ -62,6 +62,10 @@ ALTER TABLE modifier_options ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL
 ALTER TABLE modifier_options RENAME COLUMN modifier_group_id TO group_id;
 ALTER TABLE modifier_options ADD COLUMN IF NOT EXISTS group_id TEXT;
 
+-- Backward compatibility: old join table used menu_item_modifiers with modifier_group_id
+ALTER TABLE menu_item_modifiers RENAME COLUMN modifier_group_id TO group_id;
+ALTER TABLE menu_item_modifiers ADD COLUMN IF NOT EXISTS group_id TEXT;
+
 -- Now that group_id exists, safely dedupe groups and dependent options
 WITH dupes AS (
   SELECT id,
@@ -70,6 +74,15 @@ WITH dupes AS (
   WHERE deleted_at IS NULL
 )
 DELETE FROM modifier_options
+WHERE group_id IN (SELECT id FROM dupes WHERE rn > 1);
+
+WITH dupes AS (
+  SELECT id,
+         ROW_NUMBER() OVER (PARTITION BY restaurant_id, name ORDER BY created_at DESC, id DESC) AS rn
+  FROM modifier_groups
+  WHERE deleted_at IS NULL
+)
+DELETE FROM menu_item_modifiers
 WHERE group_id IN (SELECT id FROM dupes WHERE rn > 1);
 
 WITH dupes AS (
