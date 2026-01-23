@@ -230,7 +230,7 @@ export class VapiService {
           }
           const storedPhoneNumberId = parsed?.vapi?.phoneNumberId;
           if (storedPhoneNumberId && String(storedPhoneNumberId) === String(phoneNumberId)) {
-            return { restaurantId: String(row.id), source: 'db.vapi.phoneNumberId' };
+            return { restaurantId: String(row.id), restaurantSlug: null, source: 'db.vapi.phoneNumberId' };
           }
         }
       } catch (error) {
@@ -304,7 +304,10 @@ export class VapiService {
     const callId = message.call?.id;
     const requestId = callId || `vapi_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const normalizedParameters = this.normalizeToolParameters(parameters);
-    const { restaurantId, source: restaurantIdSource } = await this.getRestaurantIdFromParams(normalizedParameters, message);
+    const { restaurantId, restaurantSlug, source: restaurantIdSource } = await this.getRestaurantIdFromParams(
+      normalizedParameters,
+      message
+    );
     const startedAt = Date.now();
 
     logger.info('[vapi] tool_call_start', { requestId, callId, toolName: name });
