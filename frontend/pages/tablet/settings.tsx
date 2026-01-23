@@ -1,7 +1,7 @@
-import Head from 'next/head';
 import { useEffect, useMemo, useState, useRef } from 'react';
 import { useRouter } from 'next/router';
-import { ArrowLeft, Bluetooth, CheckCircle2, Printer, Settings2, XCircle, Loader2 } from 'lucide-react';
+import { Bluetooth, CheckCircle2, Printer, XCircle, Loader2 } from 'lucide-react';
+import { TabletShell } from '../../components/Layout/TabletShell';
 
 type PrintMode = 'bluetooth' | 'system' | 'bridge' | 'rawbt';
 type PrintResult = { status: 'success' | 'error'; message?: string } | null;
@@ -162,119 +162,109 @@ export default function TabletSettings() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-900">
-      <Head>
-        <title>Tablet Settings • Servio</title>
-      </Head>
-
-      <div className="sticky top-0 z-10 bg-black text-white px-6 py-4 flex items-center justify-between shadow-lg">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => router.push('/tablet/orders')}
-            className="bg-white/10 hover:bg-white/20 rounded-full p-2"
-          >
-            <ArrowLeft className="h-6 w-6" />
-          </button>
-          <div className="text-xl font-black uppercase tracking-widest">Settings</div>
-        </div>
-        <Settings2 className="h-6 w-6 text-white/70" />
-      </div>
-
-      <div className="max-w-4xl mx-auto p-6 space-y-6">
-        <section className="bg-white rounded-2xl shadow-lg p-6">
-          <h2 className="text-lg font-black mb-4">Auto-Print</h2>
+    <TabletShell title="Settings">
+      <div className="max-w-4xl mx-auto space-y-6">
+        <section className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6">
+          <h2 className="text-lg font-semibold mb-4">Auto-print</h2>
           <div className="flex items-center justify-between">
             <div>
-              <div className="font-bold">Auto-Print</div>
-              <div className="text-sm text-slate-500">Default OFF. Ask before printing.</div>
+              <div className="font-semibold text-slate-900">Auto-print</div>
+              <div className="text-sm text-slate-600">Default OFF. Ask before printing.</div>
             </div>
             <button
               onClick={() => saveAutoPrint(!autoPrintEnabled)}
-              className={`px-4 py-2 rounded-xl font-black uppercase tracking-widest ${
-                autoPrintEnabled ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-700'
+              className={`tablet-pressable px-4 py-2 rounded-2xl text-sm font-semibold ring-1 ring-inset transition-colors ${
+                autoPrintEnabled
+                  ? 'bg-primary-600 text-white ring-primary-600'
+                  : 'bg-white text-slate-700 ring-slate-200 hover:bg-slate-50'
               }`}
+              aria-pressed={autoPrintEnabled}
             >
               {autoPrintEnabled ? 'On' : 'Off'}
             </button>
           </div>
         </section>
 
-        <section className="bg-white rounded-2xl shadow-lg p-6 space-y-4">
-          <h2 className="text-lg font-black">Print Mode</h2>
+        <section className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 space-y-4">
+          <h2 className="text-lg font-semibold">Print mode</h2>
           <div className="grid gap-3">
-            <label className="flex items-center gap-3 p-3 rounded-xl border-2 border-transparent hover:bg-slate-50 cursor-pointer has-[:checked]:border-blue-500 has-[:checked]:bg-blue-50">
+            <label className="flex items-center gap-3 p-4 rounded-3xl border border-slate-200 hover:bg-slate-50 cursor-pointer has-[:checked]:border-primary-300 has-[:checked]:bg-primary-50">
               <input type="radio" checked={printMode === 'rawbt'} onChange={() => savePrintMode('rawbt')} className="w-5 h-5" />
               <div>
-                <span className="font-bold block">RawBT Auto-Print (Recommended)</span>
-                <span className="text-sm text-slate-500">Prints directly to Bluetooth printer - no dialogs!</span>
+                <span className="font-semibold block text-slate-900">RawBT auto-print (recommended)</span>
+                <span className="text-sm text-slate-600">Prints directly to a Bluetooth printer (no dialogs).</span>
               </div>
             </label>
-            <label className="flex items-center gap-3 p-3 rounded-xl border-2 border-transparent hover:bg-slate-50 cursor-pointer has-[:checked]:border-blue-500 has-[:checked]:bg-blue-50">
+            <label className="flex items-center gap-3 p-4 rounded-3xl border border-slate-200 hover:bg-slate-50 cursor-pointer has-[:checked]:border-primary-300 has-[:checked]:bg-primary-50">
               <input type="radio" checked={printMode === 'system'} onChange={() => savePrintMode('system')} className="w-5 h-5" />
               <div>
-                <span className="font-bold block">System Print Dialog</span>
-                <span className="text-sm text-slate-500">Uses Android print dialog - requires selecting printer each time</span>
+                <span className="font-semibold block text-slate-900">System print dialog</span>
+                <span className="text-sm text-slate-600">Uses the Android print dialog.</span>
               </div>
             </label>
-            <label className="flex items-center gap-3 p-3 rounded-xl border-2 border-transparent hover:bg-slate-50 cursor-pointer has-[:checked]:border-blue-500 has-[:checked]:bg-blue-50">
+            <label className="flex items-center gap-3 p-4 rounded-3xl border border-slate-200 hover:bg-slate-50 cursor-pointer has-[:checked]:border-primary-300 has-[:checked]:bg-primary-50">
               <input type="radio" checked={printMode === 'bluetooth'} onChange={() => savePrintMode('bluetooth')} className="w-5 h-5" />
               <div>
-                <span className="font-bold block">WebBluetooth ESC/POS</span>
-                <span className="text-sm text-slate-500">For BLE printers only (most thermal printers won't work)</span>
+                <span className="font-semibold block text-slate-900">WebBluetooth ESC/POS</span>
+                <span className="text-sm text-slate-600">For BLE printers only (many thermal printers won’t work).</span>
               </div>
             </label>
-            <label className="flex items-center gap-3 p-3 rounded-xl border-2 border-transparent hover:bg-slate-50 cursor-pointer has-[:checked]:border-blue-500 has-[:checked]:bg-blue-50">
+            <label className="flex items-center gap-3 p-4 rounded-3xl border border-slate-200 hover:bg-slate-50 cursor-pointer has-[:checked]:border-primary-300 has-[:checked]:bg-primary-50">
               <input type="radio" checked={printMode === 'bridge'} onChange={() => savePrintMode('bridge')} className="w-5 h-5" />
               <div>
-                <span className="font-bold block">Print Bridge (LAN/USB)</span>
-                <span className="text-sm text-slate-500">For network or USB connected printers via bridge service</span>
+                <span className="font-semibold block text-slate-900">Print bridge (LAN/USB)</span>
+                <span className="text-sm text-slate-600">For network or USB printers via a bridge service.</span>
               </div>
             </label>
           </div>
           {printMode === 'rawbt' && (
-            <div className="text-sm text-blue-700 bg-blue-50 border border-blue-200 p-3 rounded-xl">
+            <div className="text-sm text-primary-800 bg-primary-50 border border-primary-200 p-4 rounded-3xl">
               <strong>Requires RawBT app:</strong> Install "RawBT Printer" from the Play Store, then select your Bluetooth printer in RawBT's settings.
               <a 
                 href="https://play.google.com/store/apps/details?id=ru.a402d.rawbtprinter" 
                 target="_blank" 
                 rel="noopener noreferrer"
-                className="block mt-2 text-blue-600 underline"
+                className="block mt-2 text-primary-700 underline"
               >
                 Download RawBT from Play Store →
               </a>
             </div>
           )}
           {printMode === 'bluetooth' && bluetoothHelp ? (
-            <div className="text-sm text-amber-600 bg-amber-50 border border-amber-200 p-3 rounded-xl">
+            <div className="text-sm text-amber-800 bg-amber-50 border border-amber-200 p-4 rounded-3xl">
               {bluetoothHelp}
             </div>
           ) : null}
         </section>
 
-        <section className="bg-white rounded-2xl shadow-lg p-6 space-y-4">
-          <h2 className="text-lg font-black">Paper Width</h2>
+        <section className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 space-y-4">
+          <h2 className="text-lg font-semibold">Paper width</h2>
           <div className="flex items-center gap-4">
             <button
               onClick={() => savePaperWidth('80mm')}
-              className={`px-4 py-2 rounded-xl font-black ${paperWidth === '80mm' ? 'bg-black text-white' : 'bg-slate-200'}`}
+              className={`tablet-pressable px-4 py-2 rounded-2xl text-sm font-semibold ring-1 ring-inset ${
+                paperWidth === '80mm' ? 'bg-slate-900 text-white ring-slate-900' : 'bg-white text-slate-700 ring-slate-200 hover:bg-slate-50'
+              }`}
             >
               80mm
             </button>
             <button
               onClick={() => savePaperWidth('58mm')}
-              className={`px-4 py-2 rounded-xl font-black ${paperWidth === '58mm' ? 'bg-black text-white' : 'bg-slate-200'}`}
+              className={`tablet-pressable px-4 py-2 rounded-2xl text-sm font-semibold ring-1 ring-inset ${
+                paperWidth === '58mm' ? 'bg-slate-900 text-white ring-slate-900' : 'bg-white text-slate-700 ring-slate-200 hover:bg-slate-50'
+              }`}
             >
               58mm
             </button>
           </div>
         </section>
 
-        <section className="bg-white rounded-2xl shadow-lg p-6 space-y-4">
-          <h2 className="text-lg font-black">Printer Status</h2>
+        <section className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 space-y-4">
+          <h2 className="text-lg font-semibold">Printer status</h2>
           
           {/* Saved Printer Info */}
           {savedPrinter && printMode === 'bluetooth' && (
-            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+            <div className="bg-slate-50 border border-slate-200 rounded-3xl p-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className={`p-2 rounded-full ${
@@ -392,6 +382,6 @@ export default function TabletSettings() {
           </div>
         </section>
       </div>
-    </div>
+    </TabletShell>
   );
 }

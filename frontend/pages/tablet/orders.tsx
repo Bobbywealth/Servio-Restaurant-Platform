@@ -1,8 +1,7 @@
-import Head from 'next/head';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/router';
 import clsx from 'clsx';
-import { CheckCircle2, RefreshCcw, ArrowRight, ChevronDown, User, Printer, Settings2 } from 'lucide-react';
+import { CheckCircle2, Printer, RefreshCcw, Settings2 } from 'lucide-react';
 import { useSocket } from '../../lib/socket';
 import { PrintReceipt } from '../../components/PrintReceipt';
 import type { ReceiptPaperWidth, ReceiptOrder, ReceiptRestaurant } from '../../utils/receiptGenerator';
@@ -10,6 +9,7 @@ import { generateReceiptHtml } from '../../utils/receiptGenerator';
 import { api } from '../../lib/api';
 import { generateEscPosReceipt, printViaRawBT, type ReceiptData } from '../../utils/escpos';
 import { useUser } from '../../contexts/UserContext';
+import { TabletShell } from '../../components/Layout/TabletShell';
 
 type OrderItem = {
   id?: string;
@@ -710,59 +710,123 @@ export default function TabletOrdersPage() {
   }, [autoPrintEnabled, filtered, loading, autoPrintPendingId]);
 
   return (
-    <div className="min-h-screen bg-white text-black font-sans">
-      <Head>
-        <title>Orders • Servio</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0" />
-        <link rel="manifest" href="/manifest-tablet.webmanifest" />
-      </Head>
-
+    <TabletShell
+      title="Orders"
+      rightActions={
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={refresh}
+            className="btn-icon"
+            title="Refresh"
+            aria-label="Refresh orders"
+          >
+            <RefreshCcw className={clsx('h-5 w-5', loading && 'animate-spin')} />
+          </button>
+          <button
+            type="button"
+            onClick={() => router.push('/tablet/settings')}
+            className="btn-icon"
+            title="Settings"
+            aria-label="Open settings"
+          >
+            <Settings2 className="h-5 w-5" />
+          </button>
+        </div>
+      }
+    >
       {/* Print-only receipt (duplicate copies) */}
       <div id="print-root" className="print-only">
         {receiptHtml ? <PrintReceipt receiptHtml={receiptHtml} copies={2} paperWidth={paperWidth} /> : null}
       </div>
 
-      {/* Header */}
-      <div className="no-print sticky top-0 z-20 bg-black text-white px-4 py-3 flex items-center justify-between shadow-lg">
-        <div className="flex items-center gap-3">
-          <div className="bg-white rounded-lg p-1">
-            <img
-              src="/images/servio_icon_tight.png"
-              alt="Servio"
-              className="h-8 w-8"
-            />
-          </div>
-          <div className="bg-white text-black font-black px-2 py-0.5 rounded text-lg italic">SERVIO</div>
-        </div>
-        <div className="flex items-center gap-4">
-          <div className="text-right">
-            <div className="text-2xl font-mono font-bold">
-              {now ? new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}
+      {/* Featured / priority card */}
+      <div className="no-print mb-4">
+        <div className="rounded-3xl bg-white shadow-sm border border-slate-200 p-5">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <div className="text-2xl font-semibold text-slate-900">Order Feed</div>
+              <div className="mt-1 text-sm text-slate-600">
+                {filtered.length} active • {receivedOrders.length} new •{' '}
+                {now ? new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span
+                className={clsx(
+                  'inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ring-1 ring-inset',
+                  receivedOrders.length > 0
+                    ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
+                    : 'bg-slate-100 text-slate-700 ring-slate-200'
+                )}
+              >
+                {receivedOrders.length > 0 ? 'Live' : 'Quiet'}
+              </span>
+              <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold bg-primary-50 text-primary-700 ring-1 ring-inset ring-primary-200">
+                Thumb-first
+              </span>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Quick actions row */}
+      <div className="no-print mb-5">
+        <div className="flex items-center justify-between mb-2">
+          <div className="text-sm font-semibold text-slate-700">Quick Actions</div>
+        </div>
+        <div className="flex gap-3 overflow-x-auto mobile-scrolling pb-1">
+          <button
+            type="button"
+            onClick={refresh}
+            className="tablet-pressable flex-shrink-0 rounded-2xl bg-white border border-slate-200 shadow-sm px-4 py-3 text-left min-w-[220px] active:scale-[0.99] transition-transform"
+          >
+            <div className="text-xs uppercase tracking-[0.16em] text-slate-500">Action</div>
+            <div className="mt-1 font-semibold text-slate-900">Refresh orders</div>
+            <div className="mt-1 text-sm text-slate-600">Pull newest tickets into the feed.</div>
+          </button>
           <button
             type="button"
             onClick={() => router.push('/tablet/settings')}
-            className="flex items-center gap-2 rounded-lg px-3 py-2 text-base font-black uppercase bg-white/10 hover:bg-white/20 transition-colors"
-            title="Settings"
+            className="tablet-pressable flex-shrink-0 rounded-2xl bg-white border border-slate-200 shadow-sm px-4 py-3 text-left min-w-[220px] active:scale-[0.99] transition-transform"
           >
-            <Settings2 className="h-6 w-6" />
+            <div className="text-xs uppercase tracking-[0.16em] text-slate-500">Action</div>
+            <div className="mt-1 font-semibold text-slate-900">Printer settings</div>
+            <div className="mt-1 text-sm text-slate-600">Auto-print, mode, paper width.</div>
           </button>
-          <button 
-            onClick={refresh}
-            className="bg-white/10 hover:bg-white/20 p-3 rounded-full transition-colors"
+          <button
+            type="button"
+            onClick={() => router.push('/tablet/print/test')}
+            className="tablet-pressable flex-shrink-0 rounded-2xl bg-white border border-slate-200 shadow-sm px-4 py-3 text-left min-w-[220px] active:scale-[0.99] transition-transform"
           >
-            <RefreshCcw className={clsx("h-7 w-7", loading && "animate-spin")} />
+            <div className="text-xs uppercase tracking-[0.16em] text-slate-500">Action</div>
+            <div className="mt-1 font-semibold text-slate-900">Test print</div>
+            <div className="mt-1 text-sm text-slate-600">Print a sample receipt.</div>
           </button>
         </div>
       </div>
 
-      <div className="no-print p-4">
-        {filtered.length === 0 && !loading ? (
-          <div className="flex flex-col items-center justify-center py-32 text-slate-400">
-            <CheckCircle2 className="h-32 w-32 mb-6 opacity-20" />
-            <h2 className="text-5xl font-black">ALL CLEAR</h2>
-            <p className="text-2xl mt-3 font-bold uppercase tracking-widest">No active orders</p>
+      {/* Main feed */}
+      <div className="no-print">
+        {loading ? (
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {Array.from({ length: 6 }).map((_, idx) => (
+              <div key={idx} className="rounded-3xl bg-white border border-slate-200 shadow-sm p-5">
+                <div className="h-5 w-24 rounded-full bg-slate-100" />
+                <div className="mt-3 h-8 w-40 rounded-xl bg-slate-100" />
+                <div className="mt-4 h-4 w-52 rounded-full bg-slate-100" />
+                <div className="mt-2 h-4 w-36 rounded-full bg-slate-100" />
+                <div className="mt-6 h-11 w-full rounded-2xl bg-slate-100" />
+              </div>
+            ))}
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="rounded-3xl bg-white border border-slate-200 shadow-sm p-10 flex items-center justify-between">
+            <div>
+              <div className="text-2xl font-semibold text-slate-900">All clear</div>
+              <div className="mt-1 text-slate-600">No active orders right now.</div>
+            </div>
+            <CheckCircle2 className="h-14 w-14 text-slate-300" />
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -773,69 +837,50 @@ export default function TabletOrdersPage() {
               const isReady = status === 'ready';
               const timeStr = formatTimeAgo(o.created_at, now);
               const itemCount = (o.items || []).reduce((sum, it) => sum + (it.quantity || 1), 0);
+              const orderNumber = o.external_id ? o.external_id.slice(-4).toUpperCase() : o.id.slice(-4).toUpperCase();
+
+              const statusLabel = isNew ? 'New' : isPreparing ? 'Preparing' : isReady ? 'Ready' : status;
+              const statusClass = isNew
+                ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
+                : isPreparing
+                  ? 'bg-amber-50 text-amber-700 ring-amber-200'
+                  : 'bg-slate-100 text-slate-700 ring-slate-200';
 
               return (
-                <div 
-                  key={o.id} 
+                <div
+                  key={o.id}
                   onClick={() => setSelectedOrder(o)}
                   className={clsx(
-                    "flex flex-col rounded-3xl border-[5px] bg-white overflow-hidden shadow-2xl transition-all cursor-pointer active:scale-[0.98]",
-                    isNew ? "border-blue-600 ring-8 ring-blue-100 animate-pulse" : "border-black",
-                    isReady && "opacity-60 grayscale"
+                    'tablet-pressable rounded-3xl bg-white border shadow-sm p-5 cursor-pointer transition-all active:scale-[0.99]',
+                    isNew ? 'border-emerald-200 ring-2 ring-emerald-100' : 'border-slate-200',
+                    isReady && 'opacity-70'
                   )}
                 >
-                  {/* Card Header */}
-                  <div 
-                    className={clsx(
-                      "px-5 py-4 flex items-center justify-between",
-                      isNew ? "bg-blue-600 text-white" : isPreparing ? "bg-amber-500 text-white" : "bg-black text-white"
-                    )}
-                  >
-                    <div className="flex flex-col">
-                      <span className="text-base font-black uppercase tracking-wider opacity-80">Order</span>
-                      <span className="text-5xl font-black font-mono leading-none tracking-tighter">
-                        #{o.external_id ? o.external_id.slice(-4).toUpperCase() : o.id.slice(-4).toUpperCase()}
-                      </span>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-xs uppercase tracking-[0.16em] text-slate-500">Order</div>
+                      <div className="mt-1 text-2xl font-semibold text-slate-900">#{orderNumber}</div>
                     </div>
-                    <div className="text-right">
-                      <span className="text-base font-black uppercase tracking-wider opacity-80">
-                        {isNew ? 'NEW' : isPreparing ? 'PREP' : 'READY'}
+                    <div className="flex flex-col items-end gap-2">
+                      <span className={clsx('inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ring-1 ring-inset', statusClass)}>
+                        {statusLabel}
                       </span>
-                      <div className={clsx(
-                        "text-4xl font-black tabular-nums leading-none",
-                        timeStr.includes('m') && parseInt(timeStr) > 15 ? "text-red-300" : ""
-                      )}>
-                        {timeStr}
-                      </div>
+                      <div className="text-sm font-medium text-slate-500 tabular-nums">{timeStr}</div>
                     </div>
                   </div>
 
-                  {/* Customer & Summary */}
-                  <div className="px-5 py-4 flex-grow">
-                    <div className="flex items-center justify-between mb-3">
-                      <span className="text-3xl font-black text-black truncate uppercase">
-                        {o.customer_name || 'GUEST'}
-                      </span>
-                      <div className="flex-shrink-0 bg-slate-200 text-black px-3 py-1 rounded-lg text-lg font-black uppercase">
-                        {o.channel || 'POS'}
+                  <div className="mt-4 flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-lg font-semibold text-slate-900 truncate">{(o.customer_name || 'Guest').toString()}</div>
+                      <div className="mt-1 text-sm text-slate-600">
+                        {itemCount} item{itemCount !== 1 ? 's' : ''} • {(o.channel || 'POS').toString()}
                       </div>
                     </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-2xl font-bold text-slate-600">
-                        {itemCount} item{itemCount !== 1 ? 's' : ''}
-                      </span>
-                      <span className="text-3xl font-black text-black">
-                        {formatMoney(o.total_amount)}
-                      </span>
-                    </div>
+                    <div className="text-xl font-semibold text-slate-900">{formatMoney(o.total_amount)}</div>
                   </div>
 
-                  {/* Quick Action Footer */}
-                  <div className={clsx(
-                    "px-5 py-4 text-center font-black text-2xl uppercase tracking-wide",
-                    isNew ? "bg-blue-100 text-blue-700" : isPreparing ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-600"
-                  )}>
-                    {isNew ? 'TAP TO VIEW & ACCEPT' : isPreparing ? 'TAP FOR DETAILS' : 'TAP TO COMPLETE'}
+                  <div className="mt-5 rounded-2xl bg-slate-50 border border-slate-200 px-4 py-3 text-sm font-medium text-slate-700">
+                    {isNew ? 'Tap to view & accept' : isPreparing ? 'Tap for details' : 'Tap to complete'}
                   </div>
                 </div>
               );
@@ -846,47 +891,47 @@ export default function TabletOrdersPage() {
 
       {/* Order Detail Modal - Fullscreen for tablet clarity */}
       {selectedOrder && (
-        <div className="no-print fixed inset-0 z-50 flex items-stretch bg-black/70">
+        <div className="no-print fixed inset-0 z-50 flex items-stretch bg-slate-900/60 backdrop-blur-sm">
           {/* Fullscreen order details */}
           <div className="flex-1 w-full h-full overflow-hidden">
             <div className="bg-white w-full h-full overflow-hidden flex flex-col">
-              {/* Modal Header - compact */}
-              <div className={clsx(
-                "px-4 py-3 flex items-center justify-between flex-shrink-0",
-                normalizeStatus(selectedOrder.status) === 'received' ? "bg-blue-600 text-white" : 
-                normalizeStatus(selectedOrder.status) === 'preparing' ? "bg-amber-500 text-white" : "bg-black text-white"
-              )}>
-                <div className="flex items-center gap-4">
-                  <div className="text-4xl font-black font-mono leading-none tracking-tighter">
+              {/* Modal header */}
+              <div className="px-4 py-3 flex items-center justify-between flex-shrink-0 border-b border-slate-200">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="text-3xl font-semibold tabular-nums text-slate-900">
                     #{selectedOrder.external_id ? selectedOrder.external_id.slice(-4).toUpperCase() : selectedOrder.id.slice(-4).toUpperCase()}
                   </div>
-                  <div className="text-lg font-bold opacity-80 uppercase">
+                  <span className={clsx(
+                    'inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ring-1 ring-inset',
+                    normalizeStatus(selectedOrder.status) === 'received'
+                      ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
+                      : normalizeStatus(selectedOrder.status) === 'preparing'
+                        ? 'bg-amber-50 text-amber-700 ring-amber-200'
+                        : 'bg-slate-100 text-slate-700 ring-slate-200'
+                  )}>
                     {normalizeStatus(selectedOrder.status)}
-                  </div>
+                  </span>
                 </div>
-                <button
-                  onClick={() => setSelectedOrder(null)}
-                  className="bg-white/20 hover:bg-white/30 p-2 rounded-xl transition-colors"
-                >
-                  <span className="text-2xl font-black">✕</span>
+                <button onClick={() => setSelectedOrder(null)} className="btn-icon" aria-label="Close order details">
+                  <span className="text-2xl leading-none">×</span>
                 </button>
               </div>
 
               {/* Customer Info - compact */}
-              <div className="px-4 py-3 bg-slate-100 border-b-2 border-slate-200 flex-shrink-0">
+              <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex-shrink-0">
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="text-2xl font-black text-black uppercase">{selectedOrder.customer_name || 'GUEST'}</div>
+                    <div className="text-2xl font-semibold text-slate-900">{selectedOrder.customer_name || 'Guest'}</div>
                     {selectedOrder.customer_phone && (
-                      <div className="text-lg font-bold text-slate-600">{selectedOrder.customer_phone}</div>
+                      <div className="text-base text-slate-600">{selectedOrder.customer_phone}</div>
                     )}
                   </div>
                   <div className="text-right">
-                    <div className="bg-black text-white px-3 py-1 rounded-lg text-lg font-black uppercase">
+                    <div className="inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold bg-white text-slate-700 ring-1 ring-inset ring-slate-200">
                       {selectedOrder.channel || 'POS'}
                     </div>
                     {selectedOrder.order_type && (
-                      <div className="text-base font-bold text-slate-600 mt-1">{selectedOrder.order_type}</div>
+                      <div className="text-sm text-slate-600 mt-1">{selectedOrder.order_type}</div>
                     )}
                   </div>
                 </div>
@@ -894,19 +939,19 @@ export default function TabletOrdersPage() {
 
               {/* Items List - SCROLLABLE */}
               <div className="flex-1 overflow-y-auto px-4 py-3 min-h-0">
-                <div className="text-base font-black text-slate-500 uppercase mb-2">Items</div>
+                <div className="text-xs uppercase tracking-[0.16em] text-slate-500 mb-2">Items</div>
                 <div className="space-y-3">
                   {(selectedOrder.items || []).map((it, idx) => (
                     <div key={idx} className="flex items-center gap-3 py-2 border-b border-slate-200 last:border-0">
-                      <div className="flex-shrink-0 bg-black text-white w-10 h-10 rounded-lg flex items-center justify-center text-xl font-black">
+                      <div className="flex-shrink-0 bg-slate-900 text-white w-10 h-10 rounded-2xl flex items-center justify-center text-lg font-semibold">
                         {it.quantity || 1}
                       </div>
                       <div className="flex-grow min-w-0">
-                        <div className="text-xl font-black leading-tight text-black break-words uppercase truncate">
+                        <div className="text-lg font-semibold leading-tight text-slate-900 break-words truncate">
                           {it.name}
                         </div>
                       </div>
-                      <div className="text-xl font-black text-black flex-shrink-0">
+                      <div className="text-lg font-semibold text-slate-900 flex-shrink-0 tabular-nums">
                         {formatMoney((it.unit_price || it.price || 0) * (it.quantity || 1))}
                       </div>
                     </div>
@@ -914,21 +959,23 @@ export default function TabletOrdersPage() {
                 </div>
                 
                 {selectedOrder.special_instructions && (
-                  <div className="mt-3 p-3 bg-yellow-50 border-2 border-yellow-200 rounded-xl">
-                    <div className="text-base font-black text-yellow-700 uppercase mb-1">Special Instructions</div>
-                    <div className="text-lg font-bold text-yellow-900">{selectedOrder.special_instructions}</div>
+                  <div className="mt-3 p-4 bg-amber-50 border border-amber-200 rounded-3xl">
+                    <div className="text-xs font-semibold text-amber-700 uppercase tracking-[0.16em] mb-1">
+                      Special instructions
+                    </div>
+                    <div className="text-base text-amber-900">{selectedOrder.special_instructions}</div>
                   </div>
                 )}
               </div>
 
               {/* Total - compact */}
-              <div className="px-4 py-3 bg-slate-100 border-t-2 border-slate-200 flex-shrink-0">
+              <div className="px-4 py-3 bg-slate-50 border-t border-slate-200 flex-shrink-0">
                 <div className="flex items-center justify-between">
-                  <span className="text-xl font-black text-black uppercase">Total</span>
-                  <span className="text-3xl font-black text-black">{formatMoney(selectedOrder.total_amount)}</span>
+                  <span className="text-sm font-semibold text-slate-700 uppercase tracking-[0.14em]">Total</span>
+                  <span className="text-2xl font-semibold text-slate-900 tabular-nums">{formatMoney(selectedOrder.total_amount)}</span>
                 </div>
                 {selectedOrder.pickup_time && (
-                  <div className="text-lg font-bold text-slate-600 mt-1">
+                  <div className="text-sm text-slate-600 mt-1">
                     Pickup: {new Date(selectedOrder.pickup_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </div>
                 )}
@@ -941,17 +988,17 @@ export default function TabletOrdersPage() {
                   <button
                     disabled={busyId === selectedOrder.id}
                     onClick={() => declineOrder(selectedOrder)}
-                    className="flex-1 bg-red-600 hover:bg-red-700 active:scale-95 text-white py-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-xl disabled:opacity-50"
+                    className="flex-1 btn-danger py-4 rounded-2xl flex items-center justify-center gap-2 disabled:opacity-50"
                   >
-                    <span className="text-2xl font-black uppercase">DECLINE</span>
+                    <span className="text-lg font-semibold">Decline</span>
                   </button>
                   <button
                     disabled={busyId === selectedOrder.id}
                     onClick={() => acceptOrder(selectedOrder)}
-                    className="flex-[2] bg-green-600 hover:bg-green-700 active:scale-95 text-white py-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-xl disabled:opacity-50"
+                    className="flex-[2] btn-success py-4 rounded-2xl flex items-center justify-center gap-2 disabled:opacity-50"
                   >
-                    <span className="text-2xl font-black uppercase">ACCEPT</span>
-                    <CheckCircle2 className="h-7 w-7 stroke-[3px]" />
+                    <span className="text-lg font-semibold">Accept</span>
+                    <CheckCircle2 className="h-6 w-6" />
                   </button>
                 </div>
               )}
@@ -960,20 +1007,20 @@ export default function TabletOrdersPage() {
                   <button
                     onClick={() => printOrder(selectedOrder.id)}
                     disabled={printingOrderId === selectedOrder.id}
-                    className="flex-1 bg-slate-200 hover:bg-slate-300 active:scale-95 text-black py-4 rounded-xl flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+                    className="flex-1 btn-secondary py-4 rounded-2xl flex items-center justify-center gap-2 disabled:opacity-50"
                   >
                     <Printer className="h-6 w-6" />
-                    <span className="text-xl font-black uppercase">PRINT</span>
+                    <span className="text-lg font-semibold">Print</span>
                   </button>
                   <button
                     disabled={busyId === selectedOrder.id}
                     onClick={() => {
                       setStatus(selectedOrder.id, 'ready');
                     }}
-                    className="flex-[2] bg-black hover:bg-slate-800 active:scale-95 text-white py-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-xl disabled:opacity-50"
+                    className="flex-[2] btn-primary py-4 rounded-2xl flex items-center justify-center gap-2 disabled:opacity-50"
                   >
-                    <span className="text-2xl font-black uppercase">READY</span>
-                    <CheckCircle2 className="h-7 w-7 stroke-[3px]" />
+                    <span className="text-lg font-semibold">Ready</span>
+                    <CheckCircle2 className="h-6 w-6" />
                   </button>
                 </div>
               )}
@@ -986,9 +1033,9 @@ export default function TabletOrdersPage() {
                       setSelectedOrder(null);
                     }
                   }}
-                  className="w-full bg-slate-500 hover:bg-slate-600 active:scale-95 text-white py-4 rounded-xl flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+                  className="w-full btn-secondary py-4 rounded-2xl flex items-center justify-center gap-2 disabled:opacity-50"
                 >
-                  <span className="text-2xl font-black uppercase">COMPLETE</span>
+                  <span className="text-lg font-semibold">Complete</span>
                 </button>
               )}
             </div>
@@ -999,42 +1046,35 @@ export default function TabletOrdersPage() {
 
       {/* Print Prompt Modal (when auto-print is OFF) */}
       {showPrintPrompt && (
-        <div className="no-print fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="bg-white rounded-3xl shadow-2xl p-8 w-full max-w-md">
+        <div className="no-print fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-3xl shadow-xl border border-slate-200 p-8 w-full max-w-md">
             <div className="text-center mb-6">
               <Printer className="h-16 w-16 mx-auto text-slate-400 mb-4" />
-              <h3 className="text-3xl font-black mb-2">Print Receipt?</h3>
-              <p className="text-xl text-slate-600">Order has been accepted. Would you like to print it?</p>
+              <h3 className="text-2xl font-semibold mb-2">Print receipt?</h3>
+              <p className="text-slate-600">Order accepted. Want to print now?</p>
             </div>
             <div className="flex gap-4">
               <button
-                className="flex-1 px-6 py-5 rounded-2xl bg-slate-200 hover:bg-slate-300 text-2xl font-black transition-colors"
+                className="flex-1 btn-secondary py-4 rounded-2xl text-lg font-semibold"
                 onClick={() => setShowPrintPrompt(null)}
               >
-                NO
+                Not now
               </button>
               <button
-                className="flex-1 px-6 py-5 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white text-2xl font-black transition-colors"
+                className="flex-1 btn-primary py-4 rounded-2xl text-lg font-semibold"
                 onClick={() => {
                   const orderId = showPrintPrompt;
                   setShowPrintPrompt(null);
                   printOrder(orderId, { markAsPrinted: true });
                 }}
               >
-                YES, PRINT
+                Yes, print
               </button>
             </div>
           </div>
         </div>
       )}
 
-
-      <style jsx global>{`
-        body {
-          overscroll-behavior-y: contain;
-          -webkit-tap-highlight-color: transparent;
-        }
-      `}</style>
-    </div>
+    </TabletShell>
   );
 }
