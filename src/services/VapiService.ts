@@ -168,7 +168,11 @@ export class VapiService {
 
   private getRestaurantIdFromParams(parameters: any, message?: any): { restaurantId: string | null; source: string } {
     // 1) explicit tool parameters (preferred)
-    const fromParams = parameters?.restaurantId;
+    const fromParams =
+      parameters?.restaurantId ??
+      parameters?.restaurant_id ??
+      parameters?.restaurant?.id ??
+      parameters?.restaurant?.restaurantId;
     if (typeof fromParams === 'string' && fromParams.trim()) {
       return { restaurantId: fromParams.trim(), source: 'parameters.restaurantId' };
     }
@@ -205,10 +209,51 @@ export class VapiService {
     return { restaurantId: null, source: 'missing' };
   }
 
+  private normalizeToolParameters(raw: any): Record<string, any> {
+    if (!raw) return {};
+
+    if (typeof raw === 'string') {
+      try {
+        return JSON.parse(raw);
+      } catch {
+        return { q: raw };
+      }
+    }
+
+    const unwrapIfString = (value: any) => {
+      if (typeof value === 'string') {
+        try {
+          return JSON.parse(value);
+        } catch {
+          return value;
+        }
+      }
+      return value;
+    };
+
+    const fromArguments = unwrapIfString((raw as any)?.arguments);
+    if (fromArguments && typeof fromArguments === 'object') {
+      return fromArguments;
+    }
+
+    const fromParameters = unwrapIfString((raw as any)?.parameters);
+    if (fromParameters && typeof fromParameters === 'object') {
+      return fromParameters;
+    }
+
+    const fromInput = unwrapIfString((raw as any)?.input);
+    if (fromInput && typeof fromInput === 'object') {
+      return { ...raw, input: fromInput };
+    }
+
+    return raw;
+  }
+
   private async executeToolCall(name: string, parameters: any, message: any): Promise<{ result?: any; error?: string }> {
     const callId = message.call?.id;
     const requestId = callId || `vapi_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    const { restaurantId, source: restaurantIdSource } = this.getRestaurantIdFromParams(parameters, message);
+    const normalizedParameters = this.normalizeToolParameters(parameters);
+    const { restaurantId, source: restaurantIdSource } = this.getRestaurantIdFromParams(normalizedParameters, message);
     const startedAt = Date.now();
 
     logger.info('[vapi] tool_call_start', { requestId, callId, toolName: name });
@@ -224,18 +269,25 @@ export class VapiService {
           break;
         case 'searchMenu': {
           // Log raw parameters to diagnose what Vapi is actually sending
-          logger.info('[vapi] searchMenu raw_params', { requestId, callId, params: JSON.stringify(parameters) });
+          logger.info('[vapi] searchMenu raw_params', { requestId, callId, params: JSON.stringify(normalizedParameters) });
 
           const q =
-            parameters?.q ??
-            parameters?.query ??
-            parameters?.text ??
-            parameters?.name ??
-            parameters?.itemName ??
-            parameters?.search ??
-            parameters?.searchQuery ??
-            parameters?.item ??
-            parameters?.menuItem ??
+            normalizedParameters?.q ??
+            normalizedParameters?.query ??
+            normalizedParameters?.text ??
+            normalizedParameters?.name ??
+            normalizedParameters?.itemName ??
+            normalizedParameters?.search ??
+            normalizedParameters?.searchQuery ??
+            normalizedParameters?.searchTerm ??
+            normalizedParameters?.term ??
+            normalizedParameters?.item ??
+            normalizedParameters?.menuItem ??
+            normalizedParameters?.menuItemName ??
+            normalizedParameters?.food ??
+            normalizedParameters?.menu ??
+            normalizedParameters?.input?.query ??
+            normalizedParameters?.input?.text ??
             '';
           const query = String(q || '').trim();
           logger.info('[vapi] searchMenu', { requestId, callId, restaurantId, restaurantIdSource, query });
@@ -272,11 +324,13 @@ export class VapiService {
         }
         case 'getMenuItem': {
           const idOrName =
-            parameters?.id ??
-            parameters?.itemId ??
-            parameters?.menuItemId ??
-            parameters?.name ??
-            parameters?.itemName ??
+            normalizedParameters?.id ??
+            normalizedParameters?.itemId ??
+            normalizedParameters?.menuItemId ??
+            normalizedParameters?.name ??
+            normalizedParameters?.itemName ??
+            normalizedParameters?.input?.id ??
+            normalizedParameters?.input?.name ??
             '';
           const item = await VoiceOrderingService.getInstance().getMenuItemLive(String(idOrName || ''), restaurantId);
           // Always return an object so Vapi never reports "No result returned".
@@ -286,7 +340,13 @@ export class VapiService {
           break;
         }
         case 'getMenuItemByName': {
-          const idOrName = parameters?.name ?? parameters?.id ?? parameters?.itemId ?? '';
+          const idOrName =
+            normalizedParameters?.name ??
+            normalizedParameters?.id ??
+            normalizedParameters?.itemId ??
+            normalizedParameters?.input?.name ??
+            normalizedParameters?.input?.id ??
+            '';
           const item = await VoiceOrderingService.getInstance().getMenuItemLive(String(idOrName || ''), restaurantId);
           result = item
             ? { ok: true, found: true, item }
@@ -294,26 +354,30 @@ export class VapiService {
           break;
         }
         case 'quoteOrder':
-          parameters.restaurantId = restaurantId;
-          result = VoiceOrderingService.getInstance().validateQuote(parameters);
+          normalizedParameters.restaurantId = restaurantId;
+          result = VoiceOrderingService.getInstance().validateQuote(normalizedParameters);
           break;
         case 'createOrder': {
-          parameters.callId = parameters.callId || message.call?.id;
-          parameters.source = parameters.source || 'vapi';
-          if (!parameters.customer) parameters.customer = {};
-          parameters.customer.phone = parameters.customer.phone || message.call?.customer?.number;
-          if (!parameters.customer.lastInitial && parameters.customer.name) {
-            const parts = String(parameters.customer.name).trim().split(/\s+/);
+          normalizedParameters.callId = normalizedParameters.callId || message.call?.id;
+          normalizedParameters.source = normalizedParameters.source || 'vapi';
+          if (!normalizedParameters.customer) normalizedParameters.customer = {};
+          normalizedParameters.customer.phone =
+            normalizedParameters.customer.phone || message.call?.customer?.number;
+          if (!normalizedParameters.customer.lastInitial && normalizedParameters.customer.name) {
+            const parts = String(normalizedParameters.customer.name).trim().split(/\s+/);
             const last = parts[parts.length - 1];
-            parameters.customer.lastInitial = last ? last[0]?.toUpperCase() : undefined;
+            normalizedParameters.customer.lastInitial = last ? last[0]?.toUpperCase() : undefined;
           }
-          parameters.restaurantId = restaurantId;
-          result = await VoiceOrderingService.getInstance().createOrder(parameters);
+          normalizedParameters.restaurantId = restaurantId;
+          result = await VoiceOrderingService.getInstance().createOrder(normalizedParameters);
           break;
         }
         case 'check_order_status':
         case 'checkOrderStatus':
-          result = await this.handleCheckOrderStatus(parameters, this.getPhoneUserId(message.call?.customer?.number));
+          result = await this.handleCheckOrderStatus(
+            normalizedParameters,
+            this.getPhoneUserId(message.call?.customer?.number)
+          );
           break;
         default: {
           logger.warn('[vapi] unknown_tool', { requestId, callId, toolName: name, normalizedName });
@@ -322,7 +386,7 @@ export class VapiService {
             type: 'function' as const,
             function: {
               name,
-              arguments: JSON.stringify(parameters)
+              arguments: JSON.stringify(normalizedParameters)
             }
           };
           result = await (this.assistantService as any).executeTool(mockToolCall, this.getPhoneUserId(message.call?.customer?.number));
