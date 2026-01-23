@@ -76,42 +76,136 @@ export class VoiceOrderingService {
     }
   }
 
-  // Live DB search (availability-aware)
-  public async searchMenuLive(query: string, restaurantId?: string | null) {
+  /**
+   * Live DB search (restaurant-scoped).
+   *
+   * Requirements:
+   * - restaurantId must be provided (no JWT context for Vapi)
+   * - do NOT exclude items due to is_available/is_active/scheduling during debugging
+   * - fuzzy match against:
+   *   - item.name
+   *   - item.description
+   *   - category + item combined
+   */
+  public async searchMenuLiveWithDebug(query: string, restaurantId?: string | null): Promise<{
+    items: Array<{ id: string; name: string; price: number; category: string; is_available?: boolean }>;
+    debug: {
+      restaurantId: string | null;
+      query: string;
+      rowsBeforeFiltering: number;
+      rowsAfterFiltering: number;
+      wouldFilterUnavailable: number;
+    };
+  }> {
     const resolvedRestaurantId = this.resolveRestaurantId(restaurantId);
-    const trimmedQuery = (query || '').trim();
-    const fallbackResults = () => this.searchMenu(trimmedQuery).slice(0, 20);
-    if (!resolvedRestaurantId) return fallbackResults();
+    const trimmedQuery = String(query || '').trim();
 
-    const q = `%${trimmedQuery.toLowerCase()}%`;
+    const debugBase = {
+      restaurantId: resolvedRestaurantId,
+      query: trimmedQuery,
+      rowsBeforeFiltering: 0,
+      rowsAfterFiltering: 0,
+      wouldFilterUnavailable: 0
+    };
+
+    if (!resolvedRestaurantId) {
+      logger.error('[menu.search] missing restaurantId', { query: trimmedQuery });
+      return { items: [], debug: debugBase };
+    }
+
+    if (!trimmedQuery) {
+      logger.warn('[menu.search] empty query', { restaurantId: resolvedRestaurantId });
+      return { items: [], debug: debugBase };
+    }
+
+    // Fuzzy token matching: "curry chicken" -> match rows containing both tokens.
+    const tokens = trimmedQuery
+      .toLowerCase()
+      .split(/\s+/)
+      .map((t) => t.trim())
+      .filter(Boolean)
+      .slice(0, 6);
+
+    const combinedExpr = `LOWER(COALESCE(mc.name, '') || ' ' || mi.name || ' ' || COALESCE(mi.description, ''))`;
+    const tokenClauses = tokens.map(() => `${combinedExpr} LIKE ?`).join(' AND ');
+
+    const fullLike = `%${trimmedQuery.toLowerCase()}%`;
+    const tokenLikes = tokens.map((t) => `%${t}%`);
+
     try {
       const db = DatabaseService.getInstance().getDatabase();
       const rows = await db.all(
         `
-        SELECT mi.id, mi.name, mi.price, mc.name as category
+        SELECT
+          mi.id,
+          mi.name,
+          mi.description,
+          mi.price,
+          mi.is_available,
+          mc.name as category
         FROM menu_items mi
         LEFT JOIN menu_categories mc ON mc.id = mi.category_id
-        WHERE mi.restaurant_id = ? AND mi.is_available = TRUE AND LOWER(mi.name) LIKE ?
+        WHERE mi.restaurant_id = ?
+          AND (
+            LOWER(mi.name) LIKE ?
+            OR LOWER(COALESCE(mi.description, '')) LIKE ?
+            OR ${combinedExpr} LIKE ?
+            OR (${tokenClauses})
+          )
         ORDER BY mi.name ASC
-        LIMIT 20
+        LIMIT 50
         `,
-        [resolvedRestaurantId, q]
+        [resolvedRestaurantId, fullLike, fullLike, fullLike, ...tokenLikes]
       );
-      const mapped = rows.map((r: any) => ({
+
+      const rowsBefore = Array.isArray(rows) ? rows.length : 0;
+      const wouldFilterUnavailable = (rows || []).filter((r: any) => r && r.is_available === 0).length;
+
+      // TEMP: disable over-filtering. We keep everything, but log what WOULD have been excluded.
+      const kept = rows || [];
+
+      logger.info('[menu.search] db_rows', {
+        restaurantId: resolvedRestaurantId,
+        query: trimmedQuery,
+        rowsBeforeFiltering: rowsBefore,
+        rowsAfterFiltering: kept.length,
+        wouldFilterUnavailable
+      });
+
+      const items = kept.map((r: any) => ({
         id: r.id,
         name: r.name,
         price: Number(r.price || 0),
-        category: r.category || 'Menu'
+        category: r.category || 'Menu',
+        is_available: r.is_available
       }));
-      if (mapped.length) return mapped;
-      return fallbackResults();
+
+      return {
+        items,
+        debug: {
+          restaurantId: resolvedRestaurantId,
+          query: trimmedQuery,
+          rowsBeforeFiltering: rowsBefore,
+          rowsAfterFiltering: items.length,
+          wouldFilterUnavailable
+        }
+      };
     } catch (err) {
-      logger.error('[vapi] searchMenuLive failed', { error: err instanceof Error ? err.message : String(err) });
-      return fallbackResults();
+      logger.error('[menu.search] failed', {
+        restaurantId: resolvedRestaurantId,
+        query: trimmedQuery,
+        error: err instanceof Error ? err.message : String(err)
+      });
+      return { items: [], debug: debugBase };
     }
   }
 
-  // Live DB get item by id or name (availability-aware)
+  public async searchMenuLive(query: string, restaurantId?: string | null) {
+    const { items } = await this.searchMenuLiveWithDebug(query, restaurantId);
+    return items;
+  }
+
+  // Live DB get item by id or name (restaurant-scoped; do not filter by is_available during debugging)
   public async getMenuItemLive(idOrName: string, restaurantId?: string | null) {
     const resolvedRestaurantId = this.resolveRestaurantId(restaurantId);
     const trimmed = String(idOrName || '').trim();
@@ -130,9 +224,7 @@ export class VoiceOrderingService {
       };
     };
     if (!trimmed) return null;
-    if (!resolvedRestaurantId) {
-      return fallbackItem();
-    }
+    if (!resolvedRestaurantId) return null;
 
     try {
       const db = DatabaseService.getInstance().getDatabase();
@@ -141,12 +233,24 @@ export class VoiceOrderingService {
         SELECT mi.*, mc.name as category
         FROM menu_items mi
         LEFT JOIN menu_categories mc ON mc.id = mi.category_id
-        WHERE mi.restaurant_id = ? AND mi.is_available = TRUE AND (mi.id = ? OR LOWER(mi.name) LIKE ?)
+        WHERE mi.restaurant_id = ?
+          AND (
+            mi.id = ?
+            OR LOWER(mi.name) LIKE ?
+            OR LOWER(COALESCE(mi.description, '')) LIKE ?
+            OR LOWER(COALESCE(mc.name, '') || ' ' || mi.name) LIKE ?
+          )
         LIMIT 1
         `,
-        [resolvedRestaurantId, trimmed, `%${trimmed.toLowerCase()}%`]
+        [
+          resolvedRestaurantId,
+          trimmed,
+          `%${trimmed.toLowerCase()}%`,
+          `%${trimmed.toLowerCase()}%`,
+          `%${trimmed.toLowerCase()}%`
+        ]
       );
-      if (!row) return fallbackItem();
+      if (!row) return null;
 
       return {
         id: row.id,
@@ -357,7 +461,11 @@ export class VoiceOrderingService {
 
     const db = DatabaseService.getInstance().getDatabase();
     const orderId = uuidv4();
-    const restaurantId = process.env.VAPI_RESTAURANT_ID || 'sasheys-kitchen-union';
+    const restaurantId = this.resolveRestaurantId(input?.restaurantId);
+    if (!restaurantId) {
+      logger.error('createOrder missing restaurantId', { callId: input?.callId });
+      return { success: false, errors: ['Missing restaurantId'] };
+    }
     const lastInitial =
       input.customer?.lastInitial ||
       String(input.customer?.name || '')
