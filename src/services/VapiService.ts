@@ -223,12 +223,19 @@ export class VapiService {
           result = await VoiceOrderingService.getInstance().getStoreStatus(restaurantId);
           break;
         case 'searchMenu': {
+          // Log raw parameters to diagnose what Vapi is actually sending
+          logger.info('[vapi] searchMenu raw_params', { requestId, callId, parameters: JSON.stringify(parameters) });
+
           const q =
             parameters?.q ??
             parameters?.query ??
             parameters?.text ??
             parameters?.name ??
             parameters?.itemName ??
+            parameters?.search ??
+            parameters?.searchQuery ??
+            parameters?.item ??
+            parameters?.menuItem ??
             '';
           const query = String(q || '').trim();
           logger.info('[vapi] searchMenu', { requestId, callId, restaurantId, restaurantIdSource, query });
