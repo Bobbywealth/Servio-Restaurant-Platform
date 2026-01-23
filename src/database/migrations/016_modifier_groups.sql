@@ -9,7 +9,7 @@
 
 CREATE TABLE IF NOT EXISTS modifier_groups (
   id TEXT PRIMARY KEY,
-  restaurant_id TEXT NOT NULL REFERENCES restaurants(id),
+  restaurant_id TEXT REFERENCES restaurants(id),
   name TEXT NOT NULL,
   description TEXT,
   selection_type TEXT NOT NULL DEFAULT 'single',
@@ -23,26 +23,92 @@ CREATE TABLE IF NOT EXISTS modifier_groups (
   deleted_at TIMESTAMP
 );
 
--- Safety for partially-created tables
-ALTER TABLE modifier_groups ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
-ALTER TABLE modifier_groups ADD COLUMN IF NOT EXISTS restaurant_id TEXT;
-ALTER TABLE modifier_groups ADD COLUMN IF NOT EXISTS display_order INTEGER NOT NULL DEFAULT 0;
-ALTER TABLE modifier_groups ADD COLUMN IF NOT EXISTS selection_type TEXT NOT NULL DEFAULT 'single';
-ALTER TABLE modifier_groups ADD COLUMN IF NOT EXISTS min_selections INTEGER NOT NULL DEFAULT 0;
-ALTER TABLE modifier_groups ADD COLUMN IF NOT EXISTS max_selections INTEGER;
-ALTER TABLE modifier_groups ADD COLUMN IF NOT EXISTS is_required BOOLEAN NOT NULL DEFAULT FALSE;
-ALTER TABLE modifier_groups ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;
+-- Safety for partially-created tables: ensure all columns exist
+DO $$
+BEGIN
+  -- Add restaurant_id if missing
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'modifier_groups' AND column_name = 'restaurant_id'
+  ) THEN
+    ALTER TABLE modifier_groups ADD COLUMN restaurant_id TEXT REFERENCES restaurants(id);
+  END IF;
+  
+  -- Add other columns if missing
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'modifier_groups' AND column_name = 'deleted_at'
+  ) THEN
+    ALTER TABLE modifier_groups ADD COLUMN deleted_at TIMESTAMP;
+  END IF;
+  
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'modifier_groups' AND column_name = 'display_order'
+  ) THEN
+    ALTER TABLE modifier_groups ADD COLUMN display_order INTEGER NOT NULL DEFAULT 0;
+  END IF;
+  
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'modifier_groups' AND column_name = 'selection_type'
+  ) THEN
+    ALTER TABLE modifier_groups ADD COLUMN selection_type TEXT NOT NULL DEFAULT 'single';
+  END IF;
+  
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'modifier_groups' AND column_name = 'min_selections'
+  ) THEN
+    ALTER TABLE modifier_groups ADD COLUMN min_selections INTEGER NOT NULL DEFAULT 0;
+  END IF;
+  
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'modifier_groups' AND column_name = 'max_selections'
+  ) THEN
+    ALTER TABLE modifier_groups ADD COLUMN max_selections INTEGER;
+  END IF;
+  
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'modifier_groups' AND column_name = 'is_required'
+  ) THEN
+    ALTER TABLE modifier_groups ADD COLUMN is_required BOOLEAN NOT NULL DEFAULT FALSE;
+  END IF;
+  
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'modifier_groups' AND column_name = 'is_active'
+  ) THEN
+    ALTER TABLE modifier_groups ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT TRUE;
+  END IF;
+  
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'modifier_groups' AND column_name = 'description'
+  ) THEN
+    ALTER TABLE modifier_groups ADD COLUMN description TEXT;
+  END IF;
+END $$;
 
 -- Backfill restaurant_id for legacy modifier_groups using menu_item_modifiers + menu_items
-UPDATE modifier_groups mg
-SET restaurant_id = mi.restaurant_id
-FROM menu_item_modifiers mim
-JOIN menu_items mi ON mi.id = mim.menu_item_id
-WHERE mim.modifier_group_id = mg.id
-  AND mg.restaurant_id IS NULL;
-
--- Deduplicate existing modifier_groups before enforcing unique index
--- NOTE: executed after options table/columns are normalized below
+-- Only run if both tables and columns exist
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'menu_item_modifiers')
+     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'menu_item_modifiers' AND column_name = 'modifier_group_id')
+     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'menu_items' AND column_name = 'restaurant_id')
+     AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'modifier_groups' AND column_name = 'restaurant_id')
+  THEN
+    UPDATE modifier_groups mg
+    SET restaurant_id = mi.restaurant_id
+    FROM menu_item_modifiers mim
+    JOIN menu_items mi ON mi.id = mim.menu_item_id
+    WHERE mim.modifier_group_id = mg.id
+      AND mg.restaurant_id IS NULL;
+  END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS idx_modifier_groups_restaurant
   ON modifier_groups(restaurant_id);
@@ -51,8 +117,8 @@ CREATE INDEX IF NOT EXISTS idx_modifier_groups_restaurant
 -- For now, options belong to a single group.
 CREATE TABLE IF NOT EXISTS modifier_options (
   id TEXT PRIMARY KEY,
-  restaurant_id TEXT NOT NULL REFERENCES restaurants(id),
-  group_id TEXT NOT NULL REFERENCES modifier_groups(id),
+  restaurant_id TEXT REFERENCES restaurants(id),
+  group_id TEXT REFERENCES modifier_groups(id),
   name TEXT NOT NULL,
   price_delta DOUBLE PRECISION NOT NULL DEFAULT 0,
   is_active BOOLEAN NOT NULL DEFAULT TRUE,
@@ -62,47 +128,149 @@ CREATE TABLE IF NOT EXISTS modifier_options (
   deleted_at TIMESTAMP
 );
 
--- Safety for partially-created tables
-ALTER TABLE modifier_options ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
-ALTER TABLE modifier_options ADD COLUMN IF NOT EXISTS display_order INTEGER NOT NULL DEFAULT 0;
-ALTER TABLE modifier_options ADD COLUMN IF NOT EXISTS price_delta DOUBLE PRECISION NOT NULL DEFAULT 0;
-ALTER TABLE modifier_options ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;
--- Backward compatibility: old schema used modifier_group_id
-ALTER TABLE modifier_options RENAME COLUMN modifier_group_id TO group_id;
-ALTER TABLE modifier_options ADD COLUMN IF NOT EXISTS group_id TEXT;
+-- Safety for partially-created modifier_options table
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'modifier_options' AND column_name = 'deleted_at'
+  ) THEN
+    ALTER TABLE modifier_options ADD COLUMN deleted_at TIMESTAMP;
+  END IF;
+  
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'modifier_options' AND column_name = 'display_order'
+  ) THEN
+    ALTER TABLE modifier_options ADD COLUMN display_order INTEGER NOT NULL DEFAULT 0;
+  END IF;
+  
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'modifier_options' AND column_name = 'price_delta'
+  ) THEN
+    ALTER TABLE modifier_options ADD COLUMN price_delta DOUBLE PRECISION NOT NULL DEFAULT 0;
+  END IF;
+  
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'modifier_options' AND column_name = 'is_active'
+  ) THEN
+    ALTER TABLE modifier_options ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT TRUE;
+  END IF;
+  
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'modifier_options' AND column_name = 'restaurant_id'
+  ) THEN
+    ALTER TABLE modifier_options ADD COLUMN restaurant_id TEXT REFERENCES restaurants(id);
+  END IF;
+  
+  -- Handle column rename: modifier_group_id -> group_id
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'modifier_options' AND column_name = 'modifier_group_id'
+  ) AND NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'modifier_options' AND column_name = 'group_id'
+  ) THEN
+    ALTER TABLE modifier_options RENAME COLUMN modifier_group_id TO group_id;
+  ELSIF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'modifier_options' AND column_name = 'group_id'
+  ) THEN
+    ALTER TABLE modifier_options ADD COLUMN group_id TEXT REFERENCES modifier_groups(id);
+  END IF;
+END $$;
 
--- Backward compatibility: old join table used menu_item_modifiers with modifier_group_id
-ALTER TABLE menu_item_modifiers RENAME COLUMN modifier_group_id TO group_id;
-ALTER TABLE menu_item_modifiers ADD COLUMN IF NOT EXISTS group_id TEXT;
+-- Handle menu_item_modifiers column rename: modifier_group_id -> group_id
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'menu_item_modifiers') THEN
+    IF EXISTS (
+      SELECT 1 FROM information_schema.columns 
+      WHERE table_name = 'menu_item_modifiers' AND column_name = 'modifier_group_id'
+    ) AND NOT EXISTS (
+      SELECT 1 FROM information_schema.columns 
+      WHERE table_name = 'menu_item_modifiers' AND column_name = 'group_id'
+    ) THEN
+      ALTER TABLE menu_item_modifiers RENAME COLUMN modifier_group_id TO group_id;
+    ELSIF NOT EXISTS (
+      SELECT 1 FROM information_schema.columns 
+      WHERE table_name = 'menu_item_modifiers' AND column_name = 'group_id'
+    ) THEN
+      ALTER TABLE menu_item_modifiers ADD COLUMN group_id TEXT;
+    END IF;
+  END IF;
+END $$;
 
--- Now that group_id exists, safely dedupe groups and dependent options
-WITH dupes AS (
-  SELECT id,
-         ROW_NUMBER() OVER (PARTITION BY restaurant_id, name ORDER BY created_at DESC, id DESC) AS rn
-  FROM modifier_groups
-  WHERE deleted_at IS NULL
-)
-DELETE FROM modifier_options
-WHERE group_id IN (SELECT id FROM dupes WHERE rn > 1);
+-- Safely dedupe groups and dependent options (only if restaurant_id exists)
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'modifier_groups' AND column_name = 'restaurant_id'
+  ) AND EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'modifier_options' AND column_name = 'group_id'
+  ) THEN
+    -- Delete duplicate modifier_options
+    DELETE FROM modifier_options
+    WHERE group_id IN (
+      SELECT id FROM (
+        SELECT id,
+               ROW_NUMBER() OVER (PARTITION BY restaurant_id, name ORDER BY created_at DESC, id DESC) AS rn
+        FROM modifier_groups
+        WHERE deleted_at IS NULL
+      ) dupes WHERE rn > 1
+    );
+  END IF;
+END $$;
 
-WITH dupes AS (
-  SELECT id,
-         ROW_NUMBER() OVER (PARTITION BY restaurant_id, name ORDER BY created_at DESC, id DESC) AS rn
-  FROM modifier_groups
-  WHERE deleted_at IS NULL
-)
-DELETE FROM menu_item_modifiers
-WHERE group_id IN (SELECT id FROM dupes WHERE rn > 1);
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'modifier_groups' AND column_name = 'restaurant_id'
+  ) AND EXISTS (
+    SELECT 1 FROM information_schema.tables WHERE table_name = 'menu_item_modifiers'
+  ) AND EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'menu_item_modifiers' AND column_name = 'group_id'
+  ) THEN
+    -- Delete duplicate menu_item_modifiers
+    DELETE FROM menu_item_modifiers
+    WHERE group_id IN (
+      SELECT id FROM (
+        SELECT id,
+               ROW_NUMBER() OVER (PARTITION BY restaurant_id, name ORDER BY created_at DESC, id DESC) AS rn
+        FROM modifier_groups
+        WHERE deleted_at IS NULL
+      ) dupes WHERE rn > 1
+    );
+  END IF;
+END $$;
 
-WITH dupes AS (
-  SELECT id,
-         ROW_NUMBER() OVER (PARTITION BY restaurant_id, name ORDER BY created_at DESC, id DESC) AS rn
-  FROM modifier_groups
-  WHERE deleted_at IS NULL
-)
-DELETE FROM modifier_groups
-WHERE id IN (SELECT id FROM dupes WHERE rn > 1);
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'modifier_groups' AND column_name = 'restaurant_id'
+  ) THEN
+    -- Delete duplicate modifier_groups
+    DELETE FROM modifier_groups
+    WHERE id IN (
+      SELECT id FROM (
+        SELECT id,
+               ROW_NUMBER() OVER (PARTITION BY restaurant_id, name ORDER BY created_at DESC, id DESC) AS rn
+        FROM modifier_groups
+        WHERE deleted_at IS NULL
+      ) dupes WHERE rn > 1
+    );
+  END IF;
+END $$;
 
+-- Create indexes (these are safe with IF NOT EXISTS)
 CREATE UNIQUE INDEX IF NOT EXISTS idx_modifier_groups_restaurant_name_unique
   ON modifier_groups(restaurant_id, name)
   WHERE deleted_at IS NULL;
@@ -131,12 +299,44 @@ CREATE TABLE IF NOT EXISTS item_modifier_groups (
   deleted_at TIMESTAMP
 );
 
--- Safety for partially-created tables
-ALTER TABLE item_modifier_groups ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
-ALTER TABLE item_modifier_groups ADD COLUMN IF NOT EXISTS display_order INTEGER NOT NULL DEFAULT 0;
-ALTER TABLE item_modifier_groups ADD COLUMN IF NOT EXISTS override_min INTEGER;
-ALTER TABLE item_modifier_groups ADD COLUMN IF NOT EXISTS override_max INTEGER;
-ALTER TABLE item_modifier_groups ADD COLUMN IF NOT EXISTS override_required BOOLEAN;
+-- Safety for partially-created item_modifier_groups table
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'item_modifier_groups' AND column_name = 'deleted_at'
+  ) THEN
+    ALTER TABLE item_modifier_groups ADD COLUMN deleted_at TIMESTAMP;
+  END IF;
+  
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'item_modifier_groups' AND column_name = 'display_order'
+  ) THEN
+    ALTER TABLE item_modifier_groups ADD COLUMN display_order INTEGER NOT NULL DEFAULT 0;
+  END IF;
+  
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'item_modifier_groups' AND column_name = 'override_min'
+  ) THEN
+    ALTER TABLE item_modifier_groups ADD COLUMN override_min INTEGER;
+  END IF;
+  
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'item_modifier_groups' AND column_name = 'override_max'
+  ) THEN
+    ALTER TABLE item_modifier_groups ADD COLUMN override_max INTEGER;
+  END IF;
+  
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'item_modifier_groups' AND column_name = 'override_required'
+  ) THEN
+    ALTER TABLE item_modifier_groups ADD COLUMN override_required BOOLEAN;
+  END IF;
+END $$;
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_item_modifier_groups_unique
   ON item_modifier_groups(item_id, group_id)
