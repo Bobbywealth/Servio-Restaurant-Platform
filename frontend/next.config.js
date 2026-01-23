@@ -31,6 +31,29 @@ const nextConfig = {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || process.env.BACKEND_URL || 'http://localhost:3002',
   },
 
+  async headers() {
+    return [
+      {
+        source: '/sw.js',
+        headers: [
+          { key: 'Cache-Control', value: 'no-cache, no-store, must-revalidate' }
+        ],
+      },
+      {
+        source: '/manifest.json',
+        headers: [
+          { key: 'Cache-Control', value: 'no-cache, no-store, must-revalidate' }
+        ],
+      },
+      {
+        source: '/manifest-tablet.webmanifest',
+        headers: [
+          { key: 'Cache-Control', value: 'no-cache, no-store, must-revalidate' }
+        ],
+      }
+    ]
+  },
+
   // EXPERIMENTAL FEATURES
   // Keep this minimal in dev to avoid Fast Refresh full reload loops.
   experimental: {

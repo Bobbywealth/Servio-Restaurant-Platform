@@ -42,6 +42,54 @@ export default function App({ Component, pageProps }: AppProps) {
     }
   }, [])
 
+  useEffect(() => {
+    if (process.env.NODE_ENV !== 'production') return
+    if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return
+
+    let refreshing = false
+    const handleControllerChange = () => {
+      if (refreshing) return
+      refreshing = true
+      window.location.reload()
+    }
+
+    const registerServiceWorker = () => {
+      navigator.serviceWorker
+        .register('/sw.js')
+        .then((registration) => {
+          registration.update()
+
+          if (registration.waiting) {
+            registration.waiting.postMessage({ type: 'SKIP_WAITING' })
+          }
+
+          registration.addEventListener('updatefound', () => {
+            const newWorker = registration.installing
+            if (!newWorker) return
+            newWorker.addEventListener('statechange', () => {
+              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                newWorker.postMessage({ type: 'SKIP_WAITING' })
+              }
+            })
+          })
+        })
+        .catch(() => {
+          // Ignore registration failures to avoid breaking the app
+        })
+    }
+
+    navigator.serviceWorker.addEventListener('controllerchange', handleControllerChange)
+    if (document.readyState === 'complete') {
+      registerServiceWorker()
+    } else {
+      window.addEventListener('load', registerServiceWorker, { once: true })
+    }
+
+    return () => {
+      navigator.serviceWorker.removeEventListener('controllerchange', handleControllerChange)
+    }
+  }, [])
+
   return (
     <>
       <Head>

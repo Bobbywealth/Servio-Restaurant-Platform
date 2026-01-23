@@ -1,24 +1,19 @@
 // LIGHTNING FAST CACHING VERSION
-const CACHE_NAME = 'servio-v2.0.0-turbo'
-const STATIC_CACHE_NAME = 'servio-static-v2.0.0'
-const DYNAMIC_CACHE_NAME = 'servio-dynamic-v2.0.0'
-const API_CACHE_NAME = 'servio-api-v2.0.0'
-const IMAGE_CACHE_NAME = 'servio-images-v2.0.0'
+const CACHE_NAME = 'servio-v2.0.1-turbo'
+const STATIC_CACHE_NAME = 'servio-static-v2.0.1'
+const DYNAMIC_CACHE_NAME = 'servio-dynamic-v2.0.1'
+const API_CACHE_NAME = 'servio-api-v2.0.1'
+const IMAGE_CACHE_NAME = 'servio-images-v2.0.1'
 
-// AGGRESSIVE PRE-CACHING
+// SAFE PRE-CACHING (assets + offline only; avoid HTML route caching)
 const STATIC_CACHE_URLS = [
-  '/',
-  '/login',
-  '/dashboard/',
-  '/dashboard/assistant/',
-  '/dashboard/orders/',
-  '/dashboard/timeclock/',
-  '/offline/',
+  '/offline',
   '/manifest.json',
-  // Pre-cache critical assets
-  '/_next/static/css/',
-  '/_next/static/chunks/',
-  '/_next/static/media/'
+  '/manifest-tablet.webmanifest',
+  '/icons/servio-icon-192.svg',
+  '/icons/servio-icon-512.svg',
+  '/icons/servio-icon-maskable.svg',
+  '/images/servio_logo_transparent_tight.png'
 ]
 
 // CACHE STRATEGIES
@@ -145,55 +140,15 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(handleGenericRequest(request))
 })
 
-// API REQUEST HANDLER - STALE WHILE REVALIDATE WITH SMART CACHING
+// API REQUEST HANDLER - NETWORK ONLY (avoid stale auth/data issues)
 async function handleAPIRequest(request) {
-  const url = new URL(request.url)
-  const hasAuth =
-    request.headers.get('Authorization') ||
-    request.headers.get('authorization') ||
-    request.credentials === 'include'
-
-  if (hasAuth) {
-    // Do NOT cache authenticated API responses
-    try {
-      return await fetch(request)
-    } catch (error) {
-      return new Response(
-        JSON.stringify({
-          error: 'Offline',
-          message: 'Network unavailable - please try again',
-          cached: false
-        }),
-        {
-          status: 503,
-          headers: { 'Content-Type': 'application/json' }
-        }
-      )
-    }
-  }
-
   try {
-    // For unauthenticated APIs, always try network first
-    const response = await fetch(request)
-
-    // Cache successful GET responses
-    if (request.method === 'GET' && isCacheableResponse(response)) {
-      const cache = await caches.open(API_CACHE_NAME)
-      cache.put(request, response.clone())
-    }
-
-    return response
+    return await fetch(request)
   } catch (error) {
-    // Offline fallback for GET requests
-    if (request.method === 'GET') {
-      const cached = await caches.match(request)
-      if (cached) return cached
-    }
-
     return new Response(
       JSON.stringify({
         error: 'Offline',
-        message: 'Network unavailable - some features may be limited',
+        message: 'Network unavailable - please try again',
         cached: false
       }),
       {
@@ -252,24 +207,13 @@ async function handleImageRequest(request) {
   }
 }
 
-// NAVIGATION HANDLER - NETWORK FIRST WITH SMART CACHING
+// NAVIGATION HANDLER - NETWORK ONLY WITH OFFLINE FALLBACK
 async function handleNavigation(request) {
   try {
     const response = await fetch(request)
-
-    if (isCacheableResponse(response)) {
-      // Cache successful navigations
-      const cache = await caches.open(DYNAMIC_CACHE_NAME)
-      cache.put(request, response.clone())
-    }
-
     return response
   } catch (error) {
-    // Try cache first, then offline page
-    const cached = await caches.match(request)
-    if (cached) return cached
-
-    const offlinePage = await caches.match('/offline/')
+    const offlinePage = await caches.match('/offline')
     return offlinePage || new Response(
       '<!DOCTYPE html><html><head><title>Offline</title></head><body><h1>You are offline</h1><p>Please check your connection and try again.</p></body></html>',
       { headers: { 'Content-Type': 'text/html' } }
@@ -328,6 +272,8 @@ function isImageRequest(url) {
 function isCacheableResponse(response) {
   if (!response) return false
   if (response.status === 206) return false
+  const contentType = response.headers.get('content-type') || ''
+  if (contentType.includes('text/html')) return false
   return response.ok
 }
 
