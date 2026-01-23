@@ -43,6 +43,17 @@ api.interceptors.request.use((config) => {
   return config
 })
 
+// Determine the correct login page based on current URL
+function getLoginUrl(): string {
+  if (typeof window === 'undefined') return '/login'
+  const path = window.location.pathname
+  if (path.startsWith('/tablet')) {
+    const next = encodeURIComponent(path)
+    return `/tablet/login?next=${next}`
+  }
+  return '/login'
+}
+
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
@@ -61,7 +72,7 @@ api.interceptors.response.use(
         localStorage.removeItem('servio_access_token')
         localStorage.removeItem('servio_refresh_token')
         localStorage.removeItem('servio_user')
-        window.location.href = '/login'
+        window.location.href = getLoginUrl()
         return Promise.reject(error)
       }
 
@@ -96,7 +107,7 @@ api.interceptors.response.use(
       if (process.env.NODE_ENV !== 'production') {
         console.info('[api] refresh failed, redirecting to login', message)
       }
-      window.location.href = '/login'
+      window.location.href = getLoginUrl()
     }
 
     return Promise.reject(error)
