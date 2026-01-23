@@ -118,6 +118,11 @@ const MenuManagement: React.FC = () => {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [showPreview, setShowPreview] = useState(false);
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  const [editorTab, setEditorTab] = useState<'basics' | 'availability' | 'modifiers' | 'preview'>('basics');
+  const [basicsDirty, setBasicsDirty] = useState(false);
+  const [pendingSelection, setPendingSelection] = useState<{ type: 'category' | 'item'; id: string } | null>(null);
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
   const [editingCategory, setEditingCategory] = useState<MenuCategory | null>(null);
   const [categoryInheritedGroups, setCategoryInheritedGroups] = useState<ChoiceGroupType[]>([]);
@@ -130,6 +135,7 @@ const MenuManagement: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [isSavingModifier, setIsSavingModifier] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [useAiImport, setUseAiImport] = useState(true);
   const [isGeneratingNewDescription, setIsGeneratingNewDescription] = useState(false);
   const [isGeneratingEditDescription, setIsGeneratingEditDescription] = useState(false);
   const [newItemImages, setNewItemImages] = useState<File[]>([]);
@@ -298,9 +304,147 @@ const MenuManagement: React.FC = () => {
     }
   }, [user?.id]);
 
+  const activeCategoryId = selectedCategory !== 'all' ? selectedCategory : categories[0]?.id || null;
+  const activeCategory = activeCategoryId ? categories.find((c) => c.id === activeCategoryId) : null;
+
+  const cancelBasicsChanges = useCallback(() => {
+    if (!editingItem) return;
+    setEditItem({
+      id: editingItem.id,
+      name: editingItem.name,
+      description: editingItem.description || '',
+      price: String(editingItem.price),
+      categoryId: editingItem.category_id,
+      preparationTime: editingItem.preparation_time ? String(editingItem.preparation_time) : '',
+      isAvailable: editingItem.is_available
+    });
+    setEditItemImages([]);
+    setEditItemExistingImages(editingItem.images || []);
+    const groups = Array.isArray((editingItem as any).modifierGroups) ? (editingItem as any).modifierGroups : [];
+    const attached = groups
+      .filter((g: any) => (g.assignmentLevel || g.assignment_level) !== 'category')
+      .map((g: any, idx: number) => ({
+        groupId: g.id,
+        name: g.name,
+        overrideMin: g.overrides?.overrideMin ?? null,
+        overrideMax: g.overrides?.overrideMax ?? null,
+        overrideRequired: g.overrides?.overrideRequired ?? null,
+        displayOrder: g.overrides?.displayOrder ?? g.displayOrder ?? idx
+      }));
+    setEditItemAttachedGroups(attached);
+    setEditItemExistingAttachedGroups(attached);
+    setEditItemInheritedGroups(
+      groups
+        .filter((g: any) => (g.assignmentLevel || g.assignment_level) === 'category')
+        .map((g: any) => toChoiceGroup(g))
+    );
+    setBasicsDirty(false);
+  }, [editingItem]);
+
+  const proceedPendingSelection = useCallback(async () => {
+    if (!pendingSelection) return;
+    const pending = pendingSelection;
+    setPendingSelection(null);
+    setShowDiscardConfirm(false);
+    cancelBasicsChanges();
+
+    if (pending.type === 'category') {
+      setSelectedCategory(pending.id);
+      const nextCat = categories.find((c) => c.id === pending.id);
+      const first = nextCat?.items?.[0];
+      if (first) {
+        await openEditItemModal(first);
+      } else {
+        setSelectedItemId(null);
+        setEditingItem(null);
+      }
+      return;
+    }
+
+    const cat = categories.find((c) => c.items.some((i) => i.id === pending.id));
+    const item = cat?.items.find((i) => i.id === pending.id);
+    if (item) {
+      await openEditItemModal(item);
+    }
+  }, [pendingSelection, cancelBasicsChanges, categories]);
+
+  const requestSelectCategory = useCallback(
+    async (categoryId: string) => {
+      if (basicsDirty) {
+        setPendingSelection({ type: 'category', id: categoryId });
+        setShowDiscardConfirm(true);
+        return;
+      }
+      setSelectedCategory(categoryId);
+      const cat = categories.find((c) => c.id === categoryId);
+      const first = cat?.items?.[0];
+      if (first) {
+        await openEditItemModal(first);
+      } else {
+        setSelectedItemId(null);
+        setEditingItem(null);
+      }
+    },
+    [basicsDirty, categories]
+  );
+
+  const requestSelectItem = useCallback(
+    async (item: MenuItem) => {
+      if (basicsDirty) {
+        setPendingSelection({ type: 'item', id: item.id });
+        setShowDiscardConfirm(true);
+        return;
+      }
+      await openEditItemModal(item);
+    },
+    [basicsDirty]
+  );
+
+  const modifierSummaryForItem = (item: MenuItem) => {
+    const groups = Array.isArray((item as any).modifierGroups) ? (item as any).modifierGroups : [];
+    const required = groups.filter((g: any) => Boolean(g.isRequired ?? g.is_required)).length;
+    return `${groups.length} group${groups.length === 1 ? '' : 's'}${required > 0 ? `, ${required} required` : ''}`;
+  };
+
+  const formatMoney = (v: number) => {
+    const n = Number.isFinite(v) ? v : 0;
+    try {
+      return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(n);
+    } catch {
+      return `$${n.toFixed(2)}`;
+    }
+  };
+
   useEffect(() => {
     loadMenuData();
   }, [loadMenuData]);
+
+  // Selection behavior: keep editor selection valid and auto-select first item when category changes.
+  useEffect(() => {
+    if (loading) return;
+    if (basicsDirty) return;
+    if (!activeCategoryId) {
+      setSelectedItemId(null);
+      setEditingItem(null);
+      return;
+    }
+    const cat = categories.find((c) => c.id === activeCategoryId);
+    const items = cat?.items || [];
+    if (!items.length) {
+      setSelectedItemId(null);
+      setEditingItem(null);
+      return;
+    }
+    const stillExists = selectedItemId ? items.find((i) => i.id === selectedItemId) : null;
+    if (stillExists) {
+      // Keep current selection in sync with refreshed object
+      setEditingItem(stillExists);
+      return;
+    }
+    // Auto-select first item in category
+    void openEditItemModal(items[0]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeCategoryId, categories, loading, basicsDirty, selectedItemId]);
 
   const loadModifierGroups = useCallback(async () => {
     try {
@@ -392,6 +536,7 @@ const MenuManagement: React.FC = () => {
 
   // DnD sensors (must be defined at top-level for hooks)
   const categoryGroupSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+  const itemTableSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   // Load restaurant slug for public ordering link
   useEffect(() => {
@@ -638,7 +783,10 @@ const MenuManagement: React.FC = () => {
     try {
       const formData = new FormData();
       formData.append('file', file);
-      const resp = await api.post('/api/menu/import', formData, {
+      const ext = (file?.name || '').toLowerCase();
+      const isPdfOrDocx = ext.endsWith('.pdf') || ext.endsWith('.docx');
+      const url = isPdfOrDocx && useAiImport ? '/api/menu/import?useAi=1' : '/api/menu/import';
+      const resp = await api.post(url, formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       const data = resp.data?.data;
@@ -868,7 +1016,9 @@ const MenuManagement: React.FC = () => {
       setEditItemSizes([]);
       // keep previously set inherited groups from item payload
     }
-    setShowEditItemModal(true);
+    setSelectedItemId(item.id);
+    setEditorTab('basics');
+    setBasicsDirty(false);
   };
 
   const reloadEditItemSizes = async (itemId: string) => {
@@ -918,12 +1068,26 @@ const MenuManagement: React.FC = () => {
       });
       await syncItemModifierGroups(editItem.id, editItemAttachedGroups, editItemExistingAttachedGroups);
       toast.success('Menu item updated');
-      setShowEditItemModal(false);
-      setEditingItem(null);
-      setEditItemImages([]);
-      setEditItemExistingImages([]);
-      setEditItemAttachedGroups([]);
-      setEditItemExistingAttachedGroups([]);
+      setBasicsDirty(false);
+      // Optimistically update local state so the editor stays consistent immediately.
+      setCategories((prev) =>
+        prev.map((cat) => ({
+          ...cat,
+          items: (cat.items || []).map((it) =>
+            it.id === editItem.id
+              ? {
+                  ...it,
+                  name: editItem.name,
+                  description: editItem.description,
+                  price: Number(editItem.price || 0),
+                  category_id: editItem.categoryId,
+                  preparation_time: editItem.preparationTime ? Number(editItem.preparationTime) : undefined,
+                  is_available: Boolean(editItem.isAvailable)
+                }
+              : it
+          )
+        }))
+      );
       await loadMenuData();
     } catch (error) {
       console.error('Failed to update menu item:', error);
@@ -934,12 +1098,26 @@ const MenuManagement: React.FC = () => {
   };
 
   const handleToggleAvailability = async (item: MenuItem) => {
+    const nextAvailable = !item.is_available;
+    // Optimistic update (no full refresh unless failure)
+    setCategories((prev) =>
+      prev.map((cat) => ({
+        ...cat,
+        items: (cat.items || []).map((it) => (it.id === item.id ? { ...it, is_available: nextAvailable } : it))
+      }))
+    );
     try {
       const endpoint = item.is_available ? '/api/menu/items/set-unavailable' : '/api/menu/items/set-available';
       await api.post(endpoint, { itemId: item.id });
-      toast.success(item.is_available ? 'Item marked as unavailable' : 'Item marked as available');
-      await loadMenuData();
+      toast.success(nextAvailable ? 'Item marked as available' : 'Item marked as unavailable');
     } catch (error) {
+      // Revert
+      setCategories((prev) =>
+        prev.map((cat) => ({
+          ...cat,
+          items: (cat.items || []).map((it) => (it.id === item.id ? { ...it, is_available: item.is_available } : it))
+        }))
+      );
       console.error('Failed to toggle availability:', error);
       toast.error('Failed to update item availability');
     }
@@ -1025,7 +1203,7 @@ const MenuManagement: React.FC = () => {
                     : 'bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200'
                 }`}>
                   <Upload className="w-4 h-4" />
-                  {isImporting ? 'Importing…' : 'Import Menu'}
+                      {isImporting ? 'Importing…' : 'Import Menu'}
                   <input
                     type="file"
                     accept=".csv,.xls,.xlsx,.pdf,.docx"
@@ -1040,6 +1218,16 @@ const MenuManagement: React.FC = () => {
                     }}
                   />
                 </label>
+
+                    <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 dark:text-gray-200">
+                      <input
+                        type="checkbox"
+                        checked={useAiImport}
+                        onChange={(e) => setUseAiImport(e.target.checked)}
+                        disabled={isImporting}
+                      />
+                      AI organizer (PDF/DOCX)
+                    </label>
                 
                 <button
                   onClick={() => openAddItemModal()}
@@ -1132,7 +1320,7 @@ const MenuManagement: React.FC = () => {
               <p className="text-gray-500 mt-2">Loading menu...</p>
             </div>
           ) : (
-            <div className="flex flex-col md:flex-row gap-6">
+            <div className="flex flex-col lg:flex-row gap-6">
               <CategorySidebar
                 categories={categories.map((c) => ({
                   id: c.id,
@@ -1143,246 +1331,410 @@ const MenuManagement: React.FC = () => {
                   is_hidden: Boolean((c as any).is_hidden),
                   item_count: c.item_count
                 }))}
-                selectedCategoryId={selectedCategory !== 'all' ? selectedCategory : categories[0]?.id || null}
-                onSelectCategory={(id) => setSelectedCategory(id)}
+                selectedCategoryId={activeCategoryId}
+                onSelectCategory={(id) => {
+                  requestSelectCategory(id);
+                }}
                 onAddCategory={() => setShowAddCategoryModal(true)}
                 onToggleHidden={handleToggleCategoryHidden}
                 onReorderCategories={handleReorderCategories}
               />
 
-              <div className="flex-1 space-y-6">
-                {/* Category-level configuration */}
-                {(() => {
-                  const activeCategoryId = selectedCategory !== 'all' ? selectedCategory : categories[0]?.id;
-                  const active = activeCategoryId ? categories.find((c) => c.id === activeCategoryId) : null;
-                  if (!active) return null;
-                  return (
-                    <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-5">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="min-w-0">
-                          <h2 className="text-xl font-black text-gray-900 dark:text-white truncate">{active.name}</h2>
-                          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 whitespace-pre-wrap">
-                            {active.description || 'No category description yet.'}
-                          </p>
-                        </div>
-                        <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 dark:text-gray-300">
-                          <input
-                            type="checkbox"
-                            checked={!Boolean((active as any).is_hidden)}
-                            onChange={(e) => handleToggleCategoryHidden(active.id, !e.target.checked)}
-                          />
-                          Visible on menu
-                        </label>
-                      </div>
-
-                      <div className="mt-4">
-                        <div className="text-sm font-bold text-gray-900 dark:text-white">Category-level choice groups</div>
-                        <div className="text-xs text-gray-500 dark:text-gray-400">
-                          Applied to all items in this category. Item-level groups can be added in the item editor.
-                        </div>
-
-                        <div className="mt-3 flex flex-wrap items-center gap-2">
-                          <select
-                            className="px-3 py-2 border border-gray-200 rounded-lg text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                            defaultValue=""
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              if (!val || !activeCategoryId) return;
-                              const next = Array.from(new Set([...categoryModifierGroupIds, val]));
-                              handleSetCategoryModifierGroups(activeCategoryId, next);
-                              e.currentTarget.value = '';
-                            }}
-                          >
-                            <option value="">Add group…</option>
-                            {modifierGroups
-                              .filter((g) => !categoryModifierGroupIds.includes(g.id))
-                              .map((g) => (
-                                <option key={g.id} value={g.id}>
-                                  {g.name}
-                                </option>
-                              ))}
-                          </select>
-
-                          {isLoadingCategoryGroups ? (
-                            <div className="text-sm text-gray-500">Loading…</div>
-                          ) : categoryInheritedGroups.length === 0 ? (
-                            <div className="text-sm text-gray-500">No category-level choice groups assigned.</div>
-                          ) : (
-                            <DndContext
-                              sensors={categoryGroupSensors}
-                              onDragEnd={(event) => {
-                                if (!activeCategoryId) return;
-                                const { active, over } = event;
-                                if (!over) return;
-                                const activeId = String(active.id);
-                                const overId = String(over.id);
-                                if (activeId === overId) return;
-                                const oldIndex = categoryModifierGroupIds.indexOf(activeId);
-                                const newIndex = categoryModifierGroupIds.indexOf(overId);
-                                if (oldIndex === -1 || newIndex === -1) return;
-                                const next = arrayMove(categoryModifierGroupIds, oldIndex, newIndex);
-                                handleSetCategoryModifierGroups(activeCategoryId, next);
-                              }}
-                            >
-                              <SortableContext items={categoryModifierGroupIds} strategy={verticalListSortingStrategy}>
-                                <div className="flex flex-wrap gap-2">
-                                  {categoryModifierGroupIds.map((id) => {
-                                    const g = categoryInheritedGroups.find((x) => x.id === id);
-                                    if (!g) return null;
-                                    return (
-                                      <SortableCategoryGroupChip
-                                        key={g.id}
-                                        id={g.id}
-                                        label={g.name}
-                                        onRemove={() => {
-                                          if (!activeCategoryId) return;
-                                          const next = categoryModifierGroupIds.filter((x) => x !== g.id);
-                                          handleSetCategoryModifierGroups(activeCategoryId, next);
-                                        }}
-                                      />
-                                    );
-                                  })}
-                                </div>
-                              </SortableContext>
-                            </DndContext>
-                          )}
-                        </div>
-                      </div>
+              {/* Middle pane: Items */}
+              <div className="flex-1 min-w-0 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+                <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-sm font-bold text-gray-900 dark:text-white truncate">
+                      {activeCategory ? activeCategory.name : 'Items'}
                     </div>
-                  );
-                })()}
-
-                {/* Global modifiers management (unchanged) */}
-                <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-5">
-                  <div className="flex items-center justify-between mb-4">
-                    <div>
-                      <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Add-ons & Modifiers</h2>
-                      <p className="text-sm text-gray-500 dark:text-gray-400">Create modifier groups and options, then assign them to menu items.</p>
+                    <div className="text-xs text-gray-500 dark:text-gray-400">
+                      {activeCategory ? `${activeCategory.items?.length || 0} items` : 'Select a category to view items.'}
                     </div>
-                    <button
-                      onClick={() => setShowAddModifierGroupModal(true)}
-                      className="flex items-center gap-2 px-3 py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition-colors"
-                    >
-                      <Plus className="w-4 h-4" />
-                      New Group
-                    </button>
                   </div>
-                  {modifierGroups.length === 0 ? (
-                    <div className="text-sm text-gray-500 dark:text-gray-400">No modifier groups yet.</div>
-                  ) : (
-                    <div className="space-y-3">
-                      {modifierGroups.map((group) => {
-                        const options = modifierOptions[group.id] || [];
-                        const isExpanded = expandedModifierGroups.has(group.id);
-                        const draft = newModifierOptionDrafts[group.id] || { name: '', description: '', priceModifier: '' };
-                        return (
-                          <div key={group.id} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-                            <button
-                              className="w-full flex items-center justify-between text-left"
-                              onClick={() => toggleModifierGroupExpanded(group.id)}
-                              type="button"
-                            >
-                              <div>
-                                <div className="font-semibold text-gray-900 dark:text-white">{group.name}</div>
-                                <div className="text-xs text-gray-500 dark:text-gray-400">
-                                  {group.selectionType} • {group.minSelections}-{group.maxSelections ?? '∞'} selections
-                                  {group.isRequired ? ' • Required' : ''} • {options.length} options
-                                </div>
-                              </div>
-                              <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
-                            </button>
-                            {isExpanded && (
-                              <div className="mt-3 space-y-3">
-                                {options.length > 0 ? (
-                                  <div className="space-y-2">
-                                    {options.map((opt) => (
-                                      <div key={opt.id} className="flex items-center justify-between text-sm text-gray-700 dark:text-gray-300">
-                                        <div>
-                                          <span className="font-medium">{opt.name}</span>
-                                          {opt.description ? <span className="text-xs text-gray-500 ml-2">{opt.description}</span> : null}
-                                        </div>
-                                        <span className="text-xs text-gray-500">+{Number((opt as any).priceDelta ?? 0).toFixed(2)}</span>
-                                      </div>
-                                    ))}
-                                  </div>
-                                ) : (
-                                  <div className="text-xs text-gray-500 dark:text-gray-400">No options yet.</div>
-                                )}
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                                  <input
-                                    type="text"
-                                    value={draft.name}
-                                    onChange={(e) =>
-                                      setNewModifierOptionDrafts((prev) => ({
-                                        ...prev,
-                                        [group.id]: { ...draft, name: e.target.value }
-                                      }))
-                                    }
-                                    placeholder="Option name"
-                                    className="px-3 py-2 border border-gray-200 rounded-lg text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                                  />
-                                  <input
-                                    type="text"
-                                    value={draft.description}
-                                    onChange={(e) =>
-                                      setNewModifierOptionDrafts((prev) => ({
-                                        ...prev,
-                                        [group.id]: { ...draft, description: e.target.value }
-                                      }))
-                                    }
-                                    placeholder="Description (optional)"
-                                    className="px-3 py-2 border border-gray-200 rounded-lg text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                                  />
-                                  <div className="flex gap-2">
-                                    <input
-                                      type="number"
-                                      step="0.01"
-                                      value={draft.priceModifier}
-                                      onChange={(e) =>
-                                        setNewModifierOptionDrafts((prev) => ({
-                                          ...prev,
-                                          [group.id]: { ...draft, priceModifier: e.target.value }
-                                        }))
-                                      }
-                                      placeholder="Price +"
-                                      className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                                    />
-                                    <button
-                                      onClick={() => handleAddModifierOption(group.id)}
-                                      className="px-3 py-2 bg-slate-900 text-white rounded-lg text-sm hover:bg-slate-800"
-                                      disabled={isSavingModifier}
-                                    >
-                                      Add
-                                    </button>
-                                  </div>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-2 rounded-lg bg-red-600 hover:bg-red-700 text-white px-3 py-2 text-sm font-bold disabled:opacity-50"
+                    disabled={!activeCategoryId}
+                    onClick={() => openAddItemModal(activeCategoryId || undefined)}
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add Item
+                  </button>
                 </div>
 
-                {filteredCategories.map((category) => (
-                  <CategorySection
-                    key={category.id}
-                    category={category}
-                    isExpanded={true}
-                    onToggle={() => {}}
-                    searchTerm={searchTerm}
-                    onAddItem={openAddItemModal}
-                    onEditItem={openEditItemModal}
-                    onToggleAvailability={handleToggleAvailability}
-                    onReorderItems={handleReorderItems}
-                  />
-                ))}
+                {!activeCategory ? (
+                  <div className="p-8 text-center text-gray-500 dark:text-gray-400">
+                    No category selected.
+                  </div>
+                ) : (
+                  (() => {
+                    const items =
+                      (activeCategory.items || []).filter((item) => {
+                        if (!searchTerm.trim()) return true;
+                        const q = searchTerm.toLowerCase();
+                        return (
+                          item.name.toLowerCase().includes(q) ||
+                          (item.description || '').toLowerCase().includes(q)
+                        );
+                      }) || [];
+                    if (items.length === 0) {
+                      return (
+                        <div className="p-8 text-center">
+                          <div className="text-gray-600 dark:text-gray-300 font-semibold">This category has no items.</div>
+                          <button
+                            type="button"
+                            className="mt-2 text-sm font-bold text-red-600 hover:text-red-700"
+                            onClick={() => openAddItemModal(activeCategory.id)}
+                          >
+                            Add your first item
+                          </button>
+                        </div>
+                      );
+                    }
+                    return (
+                      <div className="overflow-auto">
+                        <table className="w-full text-sm">
+                          <thead className="sticky top-0 bg-gray-50 dark:bg-gray-900/40">
+                            <tr className="text-left text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                              <th className="px-4 py-3">Item</th>
+                              <th className="px-4 py-3">Price</th>
+                              <th className="px-4 py-3">Availability</th>
+                              <th className="px-4 py-3">Modifiers</th>
+                              <th className="px-4 py-3 text-right">Actions</th>
+                            </tr>
+                          </thead>
+                          <DndContext
+                            sensors={itemTableSensors}
+                            onDragEnd={(event) => {
+                              if (searchTerm.trim()) return; // avoid surprising reorder while filtered
+                              const { active, over } = event;
+                              if (!over) return;
+                              const activeId = String(active.id);
+                              const overId = String(over.id);
+                              if (activeId === overId) return;
+                              const ordered = items.slice().sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+                              const ids = ordered.map((i) => i.id);
+                              const oldIndex = ids.indexOf(activeId);
+                              const newIndex = ids.indexOf(overId);
+                              if (oldIndex === -1 || newIndex === -1) return;
+                              const next = arrayMove(ids, oldIndex, newIndex);
+                              handleReorderItems(activeCategory.id, next);
+                            }}
+                          >
+                            <SortableContext
+                              items={items.slice().sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)).map((i) => i.id)}
+                              strategy={verticalListSortingStrategy}
+                            >
+                              <tbody>
+                                {items
+                                  .slice()
+                                  .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+                                  .map((item) => (
+                                    <SortableItemTableRow
+                                      key={item.id}
+                                      item={item}
+                                      selected={selectedItemId === item.id}
+                                      disableDrag={Boolean(searchTerm.trim())}
+                                      onSelect={() => requestSelectItem(item)}
+                                      onToggleAvailability={() => handleToggleAvailability(item)}
+                                      modifierSummary={modifierSummaryForItem(item)}
+                                      formatMoney={formatMoney}
+                                    />
+                                  ))}
+                              </tbody>
+                            </SortableContext>
+                          </DndContext>
+                        </table>
+                        {searchTerm.trim() ? (
+                          <div className="px-4 py-2 text-xs text-gray-500 dark:text-gray-400">
+                            Reordering is disabled while searching.
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })()
+                )}
+              </div>
 
-                {filteredCategories.length === 0 && (
-                  <div className="text-center py-12">
-                    <p className="text-gray-500 text-lg">No items found</p>
-                    <p className="text-gray-400 text-sm mt-1">Try adjusting your search or filters</p>
+              {/* Right pane: Item editor */}
+              <div className="w-full lg:w-[420px] shrink-0 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+                {!editingItem || !selectedItemId ? (
+                  <div className="p-6">
+                    <div className="text-lg font-black text-gray-900 dark:text-white">Item Editor</div>
+                    <div className="mt-2 text-sm text-gray-500 dark:text-gray-400">Select an item to edit.</div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col h-full">
+                    <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="text-lg font-black text-gray-900 dark:text-white truncate">{editingItem.name}</div>
+                          <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                            {activeCategory?.name ? `Category: ${activeCategory.name}` : ''}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          className="shrink-0 inline-flex items-center gap-2 rounded-lg bg-slate-900 text-white hover:bg-slate-800 px-3 py-2 text-sm font-bold"
+                          onClick={() => setShowAddModifierGroupModal(true)}
+                        >
+                          <Plus className="h-4 w-4" />
+                          New Group
+                        </button>
+                      </div>
+
+                      <div className="mt-3 flex items-center gap-2">
+                        {(['basics', 'availability', 'modifiers', 'preview'] as const).map((tab) => (
+                          <button
+                            key={tab}
+                            type="button"
+                            className={clsx(
+                              'rounded-lg px-3 py-2 text-sm font-black',
+                              editorTab === tab
+                                ? 'bg-red-600 text-white'
+                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600'
+                            )}
+                            onClick={() => setEditorTab(tab)}
+                          >
+                            {tab === 'basics'
+                              ? 'Basics'
+                              : tab === 'availability'
+                                ? 'Availability'
+                                : tab === 'modifiers'
+                                  ? 'Modifiers'
+                                  : 'Preview'}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="p-4 overflow-auto">
+                      {editorTab === 'basics' ? (
+                        <div className="space-y-4">
+                          <div>
+                            <label className="block text-sm font-bold text-gray-700 dark:text-gray-300">Name</label>
+                            <input
+                              type="text"
+                              value={editItem.name}
+                              onChange={(e) => {
+                                setBasicsDirty(true);
+                                setEditItem((prev) => ({ ...prev, name: e.target.value }));
+                              }}
+                              className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                            />
+                          </div>
+
+                          <div>
+                            <div className="flex items-center justify-between">
+                              <label className="block text-sm font-bold text-gray-700 dark:text-gray-300">Description</label>
+                              <button
+                                type="button"
+                                onClick={handleGenerateEditDescription}
+                                disabled={isGeneratingEditDescription}
+                                className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 hover:text-red-700 disabled:text-gray-400"
+                              >
+                                <Sparkles className="w-3 h-3" />
+                                {isGeneratingEditDescription ? 'Generating...' : 'Generate'}
+                              </button>
+                            </div>
+                            <textarea
+                              value={editItem.description}
+                              onChange={(e) => {
+                                setBasicsDirty(true);
+                                setEditItem((prev) => ({ ...prev, description: e.target.value }));
+                              }}
+                              className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                              rows={3}
+                            />
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-sm font-bold text-gray-700 dark:text-gray-300">Price</label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={editItem.price}
+                                onChange={(e) => {
+                                  setBasicsDirty(true);
+                                  setEditItem((prev) => ({ ...prev, price: e.target.value }));
+                                }}
+                                className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-bold text-gray-700 dark:text-gray-300">Prep time (mins)</label>
+                              <input
+                                type="number"
+                                value={editItem.preparationTime}
+                                onChange={(e) => {
+                                  setBasicsDirty(true);
+                                  setEditItem((prev) => ({ ...prev, preparationTime: e.target.value }));
+                                }}
+                                className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                              />
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-bold text-gray-700 dark:text-gray-300">Category</label>
+                            <select
+                              value={editItem.categoryId}
+                              onChange={(e) => {
+                                setBasicsDirty(true);
+                                setEditItem((prev) => ({ ...prev, categoryId: e.target.value }));
+                              }}
+                              className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                            >
+                              <option value="">Select category</option>
+                              {categories.map((category) => (
+                                <option key={category.id} value={category.id}>
+                                  {category.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <ItemSizeEditor
+                            sizes={editItemSizes}
+                            onCreate={async (input) => {
+                              await api.post(`/api/menu/items/${encodeURIComponent(editItem.id)}/sizes`, {
+                                sizeName: input.sizeName,
+                                price: input.price,
+                                isPreselected: input.isPreselected,
+                                displayOrder: input.displayOrder
+                              });
+                              await reloadEditItemSizes(editItem.id);
+                            }}
+                            onUpdate={async (sizeId, patch) => {
+                              await api.put(`/api/menu/items/${encodeURIComponent(editItem.id)}/sizes/${encodeURIComponent(sizeId)}`, patch);
+                              await reloadEditItemSizes(editItem.id);
+                            }}
+                            onDelete={async (sizeId) => {
+                              await api.delete(`/api/menu/items/${encodeURIComponent(editItem.id)}/sizes/${encodeURIComponent(sizeId)}`);
+                              await reloadEditItemSizes(editItem.id);
+                            }}
+                          />
+
+                          <div>
+                            <label className="block text-sm font-bold text-gray-700 dark:text-gray-300">Images</label>
+                            <div className="mt-1 flex flex-col gap-2">
+                              <label className="inline-flex items-center gap-2 px-3 py-2 border border-dashed border-gray-300 rounded-lg text-sm text-gray-600 hover:text-gray-900 hover:border-gray-400 cursor-pointer dark:border-gray-600 dark:text-gray-300 dark:hover:text-white">
+                                <Upload className="w-4 h-4" />
+                                Add images (up to 5)
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  multiple
+                                  className="hidden"
+                                  onChange={(e) => {
+                                    const files = Array.from(e.target.files || []);
+                                    const validFiles = filterImageFiles(files).slice(0, 5);
+                                    setBasicsDirty(true);
+                                    setEditItemImages(validFiles);
+                                  }}
+                                />
+                              </label>
+                              <div className="text-xs text-gray-500 dark:text-gray-400">
+                                {editItemExistingImages.length} existing, {editItemImages.length} new
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-end gap-3 pt-2">
+                            <button
+                              type="button"
+                              className="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700 disabled:opacity-50"
+                              disabled={!basicsDirty || isSaving}
+                              onClick={() => cancelBasicsChanges()}
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="button"
+                              className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold disabled:opacity-50"
+                              disabled={isSaving || !basicsDirty}
+                              onClick={handleUpdateItem}
+                            >
+                              {isSaving ? 'Saving...' : 'Save'}
+                            </button>
+                          </div>
+                        </div>
+                      ) : editorTab === 'availability' ? (
+                        <div className="space-y-4">
+                          <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <div className="font-bold text-gray-900 dark:text-white">Availability</div>
+                                <div className="text-xs text-gray-500 dark:text-gray-400">Quick toggle for daily ops.</div>
+                              </div>
+                              <button
+                                type="button"
+                                className={clsx(
+                                  'inline-flex items-center gap-2 rounded-lg px-3 py-2 font-bold',
+                                  editingItem.is_available
+                                    ? 'bg-teal-100 text-teal-700 hover:bg-teal-200'
+                                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200'
+                                )}
+                                onClick={() => handleToggleAvailability(editingItem)}
+                              >
+                                {editingItem.is_available ? 'Available' : '86'}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ) : editorTab === 'modifiers' ? (
+                        <div className="space-y-4">
+                          <ChoiceGroupAssignment
+                            availableGroups={modifierGroups.map((g: any) => toChoiceGroup(g))}
+                            inheritedGroups={editItemInheritedGroups}
+                            attachedGroups={editItemAttachedGroups}
+                            onAddAttachedGroup={(groupId) => {
+                              setEditItemAttachedGroups((prev) => {
+                                if (prev.some((p) => p.groupId === groupId)) return prev;
+                                const found = modifierGroups.find((g) => g.id === groupId);
+                                return [
+                                  ...prev,
+                                  {
+                                    groupId,
+                                    name: found?.name,
+                                    displayOrder: prev.length
+                                  }
+                                ];
+                              });
+                            }}
+                            onRemoveAttachedGroup={(groupId) => setEditItemAttachedGroups((prev) => prev.filter((p) => p.groupId !== groupId))}
+                            onUpdateAttachedGroup={(groupId, patch) =>
+                              setEditItemAttachedGroups((prev) => prev.map((p) => (p.groupId === groupId ? { ...p, ...patch } : p)))
+                            }
+                          />
+
+                          <div className="flex justify-end gap-3">
+                            <button
+                              type="button"
+                              className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold disabled:opacity-50"
+                              disabled={isSaving}
+                              onClick={async () => {
+                                try {
+                                  setIsSaving(true);
+                                  await syncItemModifierGroups(editItem.id, editItemAttachedGroups, editItemExistingAttachedGroups);
+                                  await loadMenuData();
+                                  toast.success('Modifiers updated');
+                                } catch (e) {
+                                  toast.error('Failed to update modifiers');
+                                } finally {
+                                  setIsSaving(false);
+                                }
+                              }}
+                            >
+                              {isSaving ? 'Saving...' : 'Save modifiers'}
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <ItemPreviewPanel item={editingItem} sizes={editItemSizes} />
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
@@ -1390,6 +1742,48 @@ const MenuManagement: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Unsaved changes guard */}
+      <AnimatePresence>
+        {showDiscardConfirm && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50"
+            onClick={() => setShowDiscardConfirm(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.98, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.98, opacity: 0 }}
+              className="bg-white dark:bg-gray-800 rounded-xl max-w-md w-full p-5 border border-gray-200 dark:border-gray-700"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="text-lg font-black text-gray-900 dark:text-white">Discard changes?</div>
+              <div className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                You have unsaved edits. If you continue, your changes will be lost.
+              </div>
+              <div className="mt-4 flex justify-end gap-3">
+                <button
+                  type="button"
+                  className="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
+                  onClick={() => setShowDiscardConfirm(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold"
+                  onClick={() => proceedPendingSelection()}
+                >
+                  Discard
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Menu Preview Modal */}
       <AnimatePresence>
@@ -2073,6 +2467,349 @@ const MenuManagement: React.FC = () => {
         )}
       </AnimatePresence>
     </DashboardLayout>
+  );
+};
+
+const SortableItemTableRow: React.FC<{
+  item: MenuItem;
+  selected: boolean;
+  disableDrag: boolean;
+  onSelect: () => void;
+  onToggleAvailability: () => void;
+  modifierSummary: string;
+  formatMoney: (v: number) => string;
+}> = ({ item, selected, disableDrag, onSelect, onToggleAvailability, modifierSummary, formatMoney }) => {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition
+  };
+
+  const thumb = Array.isArray(item.images) ? item.images[0] : undefined;
+  const price = Number(item.fromPrice ?? item.price ?? 0);
+
+  return (
+    <tr
+      ref={setNodeRef}
+      style={style}
+      className={clsx(
+        'border-t border-gray-100 dark:border-gray-700 cursor-pointer',
+        selected ? 'bg-red-50/60 dark:bg-red-900/10' : 'hover:bg-gray-50 dark:hover:bg-gray-700/40',
+        isDragging && 'opacity-70'
+      )}
+      onClick={onSelect}
+    >
+      <td className="px-4 py-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <button
+            type="button"
+            className={clsx(
+              'shrink-0 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200',
+              disableDrag && 'opacity-40 cursor-not-allowed'
+            )}
+            onClick={(e) => e.stopPropagation()}
+            disabled={disableDrag}
+            {...(!disableDrag ? attributes : {})}
+            {...(!disableDrag ? listeners : {})}
+            aria-label="Drag to reorder"
+            title={disableDrag ? 'Reorder disabled while searching' : 'Drag to reorder'}
+          >
+            <GripVertical className="h-5 w-5" />
+          </button>
+
+          <div className="h-10 w-10 rounded-lg bg-gray-100 dark:bg-gray-700 overflow-hidden shrink-0">
+            {thumb ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={resolveMediaUrl(thumb)} alt="" className="h-full w-full object-cover" />
+            ) : null}
+          </div>
+
+          <div className="min-w-0">
+            <div className="font-semibold text-gray-900 dark:text-white truncate">{item.name}</div>
+            {item.description ? (
+              <div className="text-xs text-gray-500 dark:text-gray-400 truncate">{item.description}</div>
+            ) : null}
+          </div>
+        </div>
+      </td>
+
+      <td className="px-4 py-3 font-semibold text-gray-900 dark:text-white">
+        {Array.isArray(item.sizes) && item.sizes.length > 0 ? `From ${formatMoney(price)}` : formatMoney(price)}
+      </td>
+
+      <td className="px-4 py-3">
+        <button
+          type="button"
+          className={clsx(
+            'inline-flex items-center gap-2 rounded-lg px-3 py-1.5 font-bold',
+            item.is_available
+              ? 'bg-teal-100 text-teal-700 hover:bg-teal-200'
+              : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200'
+          )}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleAvailability();
+          }}
+        >
+          {item.is_available ? 'Available' : '86'}
+        </button>
+      </td>
+
+      <td className="px-4 py-3 text-gray-700 dark:text-gray-200">{modifierSummary}</td>
+
+      <td className="px-4 py-3 text-right">
+        <div className="inline-flex items-center gap-2">
+          <button
+            type="button"
+            className="inline-flex items-center gap-2 rounded-lg bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 px-3 py-1.5 font-bold text-gray-800 dark:text-gray-100"
+            onClick={(e) => {
+              e.stopPropagation();
+              onSelect();
+            }}
+          >
+            <Edit3 className="h-4 w-4" />
+            Edit
+          </button>
+          <button
+            type="button"
+            className="inline-flex items-center justify-center rounded-lg bg-gray-100 px-3 py-1.5 font-bold text-gray-400 dark:bg-gray-700"
+            disabled
+            title="Duplicate (coming soon)"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Copy className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            className="inline-flex items-center justify-center rounded-lg bg-gray-100 px-3 py-1.5 font-bold text-gray-400 dark:bg-gray-700"
+            disabled
+            title="Delete (coming soon)"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
+        </div>
+      </td>
+    </tr>
+  );
+};
+
+const ItemPreviewPanel: React.FC<{ item: MenuItem; sizes: ItemSize[] }> = ({ item, sizes }) => {
+  const formatMoney = (v: number) => {
+    const n = Number.isFinite(v) ? v : 0;
+    try {
+      return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(n);
+    } catch {
+      return `$${n.toFixed(2)}`;
+    }
+  };
+
+  const groups = Array.isArray((item as any).modifierGroups) ? (item as any).modifierGroups : [];
+  const sizeList = Array.isArray(sizes) ? sizes : [];
+  const defaultSizeId =
+    sizeList.find((s) => s.isPreselected)?.id || sizeList[0]?.id || null;
+  const [selectedSizeId, setSelectedSizeId] = useState<string | null>(defaultSizeId);
+  const [singleSelections, setSingleSelections] = useState<Record<string, string | null>>({});
+  const [multiSelections, setMultiSelections] = useState<Record<string, Record<string, boolean>>>({});
+  const [qtySelections, setQtySelections] = useState<Record<string, Record<string, number>>>({});
+
+  useEffect(() => {
+    setSelectedSizeId(defaultSizeId);
+    setSingleSelections({});
+    setMultiSelections({});
+    setQtySelections({});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [item.id]);
+
+  const basePrice = (() => {
+    if (selectedSizeId) {
+      const s = sizeList.find((x) => x.id === selectedSizeId);
+      if (s) return Number(s.price || 0);
+    }
+    return Number(item.fromPrice ?? item.price ?? 0);
+  })();
+
+  const modifiersTotal = groups.reduce((sum: number, g: any) => {
+    const groupId = String(g.id);
+    const selectionType = (g.selectionType || g.selection_type || 'single') as string;
+    const options = Array.isArray(g.options) ? g.options : [];
+    if (selectionType === 'single') {
+      const selected = singleSelections[groupId];
+      const opt = options.find((o: any) => String(o.id) === String(selected));
+      return sum + Number(opt?.priceDelta ?? opt?.price_delta ?? 0);
+    }
+    if (selectionType === 'quantity') {
+      const qtyMap = qtySelections[groupId] || {};
+      return (
+        sum +
+        options.reduce((s2: number, o: any) => {
+          const qty = Number(qtyMap[String(o.id)] || 0);
+          const delta = Number(o.priceDelta ?? o.price_delta ?? 0);
+          return s2 + qty * delta;
+        }, 0)
+      );
+    }
+    // multiple
+    const map = multiSelections[groupId] || {};
+    return (
+      sum +
+      options.reduce((s2: number, o: any) => {
+        if (!map[String(o.id)]) return s2;
+        return s2 + Number(o.priceDelta ?? o.price_delta ?? 0);
+      }, 0)
+    );
+  }, 0);
+
+  const total = basePrice + modifiersTotal;
+
+  const thumb = Array.isArray(item.images) ? item.images[0] : undefined;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-start gap-3">
+        <div className="h-14 w-14 rounded-xl bg-gray-100 dark:bg-gray-700 overflow-hidden shrink-0">
+          {thumb ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={resolveMediaUrl(thumb)} alt="" className="h-full w-full object-cover" />
+          ) : null}
+        </div>
+        <div className="min-w-0">
+          <div className="text-lg font-black text-gray-900 dark:text-white truncate">{item.name}</div>
+          <div className="text-sm text-gray-600 dark:text-gray-300 whitespace-pre-wrap">{item.description || ''}</div>
+          <div className="mt-2 text-sm font-bold text-gray-900 dark:text-white">
+            {sizeList.length > 0 ? `From ${formatMoney(Math.min(...sizeList.map((s) => s.price)))}` : formatMoney(Number(item.price || 0))}
+            <span className="ml-2 text-xs font-semibold text-gray-500 dark:text-gray-400">(Preview total: {formatMoney(total)})</span>
+          </div>
+        </div>
+      </div>
+
+      {sizeList.length > 0 ? (
+        <div className="rounded-xl border border-gray-200 dark:border-gray-700 p-3">
+          <div className="text-xs font-black uppercase tracking-wide text-gray-500 dark:text-gray-400">Sizes</div>
+          <div className="mt-2 space-y-2">
+            {sizeList
+              .slice()
+              .sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0))
+              .map((s) => (
+                <label key={s.id} className="flex items-center justify-between gap-3 text-sm font-semibold text-gray-800 dark:text-gray-200">
+                  <span className="inline-flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="preview-size"
+                      checked={selectedSizeId === s.id}
+                      onChange={() => setSelectedSizeId(s.id)}
+                    />
+                    {s.sizeName}
+                  </span>
+                  <span>{formatMoney(Number(s.price || 0))}</span>
+                </label>
+              ))}
+          </div>
+        </div>
+      ) : null}
+
+      {groups.length === 0 ? (
+        <div className="text-sm text-gray-500 dark:text-gray-400">No modifier groups for this item.</div>
+      ) : (
+        <div className="space-y-3">
+          {groups.map((g: any) => {
+            const groupId = String(g.id);
+            const name = String(g.name || '');
+            const selectionType = (g.selectionType || g.selection_type || 'single') as 'single' | 'multiple' | 'quantity';
+            const minSelections = Number(g.minSelections ?? g.min_selections ?? 0);
+            const maxSelections = g.maxSelections ?? g.max_selections ?? null;
+            const isRequired = Boolean(g.isRequired ?? g.is_required);
+            const options = Array.isArray(g.options) ? g.options : [];
+
+            return (
+              <div key={groupId} className="rounded-xl border border-gray-200 dark:border-gray-700 p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="font-black text-gray-900 dark:text-white truncate">{name}</div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400">
+                      {isRequired ? 'Required' : 'Optional'} · {selectionType}
+                      {maxSelections !== null ? ` · min ${minSelections} / max ${maxSelections}` : minSelections ? ` · min ${minSelections}` : ''}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-2 space-y-2">
+                  {options.map((o: any) => {
+                    const optId = String(o.id);
+                    const optName = String(o.name || '');
+                    const delta = Number(o.priceDelta ?? o.price_delta ?? 0);
+
+                    if (selectionType === 'single') {
+                      const selected = singleSelections[groupId] || null;
+                      return (
+                        <label key={optId} className="flex items-center justify-between gap-3 text-sm font-semibold text-gray-800 dark:text-gray-200">
+                          <span className="inline-flex items-center gap-2">
+                            <input
+                              type="radio"
+                              name={`preview-${groupId}`}
+                              checked={selected === optId}
+                              onChange={() => setSingleSelections((prev) => ({ ...prev, [groupId]: optId }))}
+                            />
+                            {optName}
+                          </span>
+                          <span className="text-xs text-gray-500 dark:text-gray-400">{delta ? `+${formatMoney(delta)}` : ''}</span>
+                        </label>
+                      );
+                    }
+
+                    if (selectionType === 'quantity') {
+                      const qty = Number((qtySelections[groupId] || {})[optId] || 0);
+                      return (
+                        <div key={optId} className="flex items-center justify-between gap-3 text-sm font-semibold text-gray-800 dark:text-gray-200">
+                          <div className="min-w-0">
+                            <div className="truncate">{optName}</div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400">{delta ? `+${formatMoney(delta)} each` : ''}</div>
+                          </div>
+                          <input
+                            type="number"
+                            min={0}
+                            value={qty}
+                            onChange={(e) => {
+                              const next = Math.max(0, Number(e.target.value) || 0);
+                              setQtySelections((prev) => ({
+                                ...prev,
+                                [groupId]: { ...(prev[groupId] || {}), [optId]: next }
+                              }));
+                            }}
+                            className="w-20 rounded-lg border border-gray-200 px-2 py-1 text-sm font-bold dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                          />
+                        </div>
+                      );
+                    }
+
+                    // multiple
+                    const checked = Boolean((multiSelections[groupId] || {})[optId]);
+                    return (
+                      <label key={optId} className="flex items-center justify-between gap-3 text-sm font-semibold text-gray-800 dark:text-gray-200">
+                        <span className="inline-flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(e) =>
+                              setMultiSelections((prev) => ({
+                                ...prev,
+                                [groupId]: { ...(prev[groupId] || {}), [optId]: e.target.checked }
+                              }))
+                            }
+                          />
+                          {optName}
+                        </span>
+                        <span className="text-xs text-gray-500 dark:text-gray-400">{delta ? `+${formatMoney(delta)}` : ''}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 };
 

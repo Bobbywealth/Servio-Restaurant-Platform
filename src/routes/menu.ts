@@ -66,6 +66,79 @@ function parsePrice(value: string): number | null {
   return Number.isFinite(price) ? price : null;
 }
 
+async function extractMenuRowsWithAI(text: string): Promise<ParsedMenuRow[]> {
+  if (!openai) {
+    throw new Error('AI service is not configured (missing OPENAI_API_KEY)');
+  }
+
+  const clipped = String(text || '').slice(0, 20000);
+  if (!clipped.trim()) return [];
+
+  const prompt = [
+    'Parse this restaurant menu text into structured JSON.',
+    '',
+    'Return ONLY valid JSON (no markdown).',
+    'Schema:',
+    '{ "items": [ { "category": string|null, "name": string, "description": string|null, "price": number } ] }',
+    '',
+    'Rules:',
+    '- category should be the nearest preceding section header (e.g. "Appetizers"). Use null if unknown.',
+    '- name is required.',
+    '- description is optional.',
+    '- price must be a number in dollars (e.g. 12.5). If no clear price, omit the item.',
+    '- Do not hallucinate items not present in the text.',
+    '',
+    'Menu text:',
+    clipped
+  ].join('\n');
+
+  const completion = await openai.chat.completions.create({
+    model: 'gpt-4',
+    messages: [
+      { role: 'system', content: 'You extract structured menu data from messy OCR text.' },
+      { role: 'user', content: prompt }
+    ],
+    temperature: 0,
+    max_tokens: 2000
+  });
+
+  const raw = completion.choices[0]?.message?.content?.trim() || '';
+  const jsonText = raw.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```$/i, '').trim();
+
+  let parsed: any;
+  try {
+    parsed = JSON.parse(jsonText);
+  } catch {
+    // If the model returned extra text, try extracting the first JSON object.
+    const firstBrace = jsonText.indexOf('{');
+    const lastBrace = jsonText.lastIndexOf('}');
+    if (firstBrace >= 0 && lastBrace > firstBrace) {
+      parsed = JSON.parse(jsonText.slice(firstBrace, lastBrace + 1));
+    } else {
+      throw new Error('AI import returned invalid JSON');
+    }
+  }
+
+  const items = Array.isArray(parsed?.items) ? parsed.items : Array.isArray(parsed) ? parsed : [];
+  const normalized: ParsedMenuRow[] = [];
+  for (const it of items) {
+    const name = typeof it?.name === 'string' ? it.name.trim() : '';
+    const category = typeof it?.category === 'string' ? it.category.trim() : null;
+    const description = typeof it?.description === 'string' ? it.description.trim() : null;
+    const priceNum = typeof it?.price === 'number' ? it.price : parsePrice(String(it?.price ?? ''));
+    if (!name) continue;
+    if (priceNum === null || !Number.isFinite(priceNum) || priceNum <= 0) continue;
+    normalized.push({
+      name,
+      category: category || null,
+      description: description || null,
+      price: Number(priceNum)
+    });
+    if (normalized.length >= 500) break;
+  }
+  return normalized;
+}
+
 function extractMenuRowsFromText(text: string): ParsedMenuRow[] {
   const rows: ParsedMenuRow[] = [];
   const lines = text
@@ -1711,6 +1784,9 @@ router.post('/import', importUpload.single('file'), asyncHandler(async (req: Req
   const importId = uuidv4();
   const ext = path.extname(req.file.originalname).toLowerCase();
   const mime = req.file.mimetype;
+  const useAi =
+    String((req.query as any)?.useAi || (req.body as any)?.useAi || '').toLowerCase() === 'true' ||
+    String((req.query as any)?.useAi || (req.body as any)?.useAi || '') === '1';
   const fileType = (() => {
     if (mime.includes('excel') || ext === '.xlsx' || ext === '.xls') return 'excel';
     if (mime.includes('csv') || ext === '.csv') return 'csv';
@@ -1754,10 +1830,18 @@ router.post('/import', importUpload.single('file'), asyncHandler(async (req: Req
       });
     } else if (fileType === 'pdf') {
       const parsed = await pdfParse(req.file.buffer);
-      data = extractMenuRowsFromText(parsed.text);
+      if (useAi) {
+        data = await extractMenuRowsWithAI(parsed.text);
+      } else {
+        data = extractMenuRowsFromText(parsed.text);
+      }
     } else if (fileType === 'docx') {
       const parsed = await mammoth.extractRawText({ buffer: req.file.buffer });
-      data = extractMenuRowsFromText(parsed.value || '');
+      if (useAi) {
+        data = await extractMenuRowsWithAI(parsed.value || '');
+      } else {
+        data = extractMenuRowsFromText(parsed.value || '');
+      }
     }
 
     // Process the data
