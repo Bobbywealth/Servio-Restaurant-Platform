@@ -41,6 +41,7 @@ export default function NotificationCenter({ className = '' }: NotificationCente
   const [isOpen, setIsOpen] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
   const socket = useSocket()
+  const [alertAudio, setAlertAudio] = useState<HTMLAudioElement | null>(null)
 
   const markAsRead = useCallback((id: string) => {
     setNotifications(prev => {
@@ -91,15 +92,39 @@ export default function NotificationCenter({ className = '' }: NotificationCente
       }
     }
 
+    // Prefetch alert sound
+    const audio = new Audio('/sounds/order-alert.mp3')
+    audio.preload = 'auto'
+    setAlertAudio(audio)
+
     // Listen for socket events
     const handleOrderEvent = (data: any) => {
       addNotification({
         type: 'order',
         priority: 'medium',
         title: 'New Order',
-        message: `Order #${data.id || 'Unknown'} received`,
+        message: `Order #${data.id || data.orderId || 'Unknown'} received`,
         data
       })
+      if (audio) {
+        audio.currentTime = 0
+        audio.play().catch(() => {})
+      }
+    }
+
+    const handleNotificationEvent = (payload: any) => {
+      const notif = payload?.notification || payload
+      addNotification({
+        type: 'system',
+        priority: notif?.severity === 'high' ? 'high' : 'medium',
+        title: notif?.title || 'Notification',
+        message: notif?.message || 'New activity',
+        data: notif
+      })
+      if (audio) {
+        audio.currentTime = 0
+        audio.play().catch(() => {})
+      }
     }
 
     const handleInventoryLowStock = (data: any) => {
@@ -168,6 +193,8 @@ export default function NotificationCenter({ className = '' }: NotificationCente
 
     // Register event listeners
     socket.on('order:new', handleOrderEvent)
+    socket.on('new-order', handleOrderEvent)
+    socket.on('notifications.new', handleNotificationEvent)
     socket.on('inventory:low_stock', handleInventoryLowStock)
     socket.on('staff:clock_in', handleStaffClockIn)
     socket.on('task:assigned', handleTaskAssigned)
@@ -177,6 +204,8 @@ export default function NotificationCenter({ className = '' }: NotificationCente
     return () => {
       // Cleanup event listeners
       socket.off('order:new', handleOrderEvent)
+      socket.off('new-order', handleOrderEvent)
+      socket.off('notifications.new', handleNotificationEvent)
       socket.off('inventory:low_stock', handleInventoryLowStock)
       socket.off('staff:clock_in', handleStaffClockIn)
       socket.off('task:assigned', handleTaskAssigned)
