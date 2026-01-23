@@ -69,8 +69,16 @@ router.post('/tool/:toolName', requireVapiWebhookAuth, async (req: Request, res:
   console.log(`[VAPI_DEBUG] query=${queryStr}`);
   console.log(`[VAPI_DEBUG] url=${req.originalUrl}`);
 
+  const headerRestaurantId =
+    (req.headers['x-vapi-restaurant-id'] as string) ||
+    (req.headers['x-restaurant-id'] as string);
+
   // Merge query params into body for tools that send via URL
-  const mergedParams = { ...req.query, ...body };
+  const mergedParams = {
+    ...req.query,
+    ...body,
+    ...(headerRestaurantId ? { restaurantId: headerRestaurantId } : {})
+  };
 
   const parameters =
     (mergedParams as any)?.parameters ??
@@ -126,6 +134,9 @@ router.get('/tool/:toolName', requireVapiWebhookAuth, async (req: Request, res: 
   const toolName = Array.isArray(toolNameParam) ? toolNameParam[0] : toolNameParam;
 
   const headerCallId = req.headers['x-vapi-call-id'];
+  const headerRestaurantId =
+    (req.headers['x-vapi-restaurant-id'] as string) ||
+    (req.headers['x-restaurant-id'] as string);
   const headerCallIdValue = Array.isArray(headerCallId) ? headerCallId[0] : headerCallId;
   const callIdRaw = (req.query as any)?.callId || headerCallIdValue;
   const callId =
@@ -144,7 +155,8 @@ router.get('/tool/:toolName', requireVapiWebhookAuth, async (req: Request, res: 
         : undefined;
 
   try {
-    const exec = await vapiService.executeToolRequest(toolName, req.query, {
+    const parameters = headerRestaurantId ? { ...req.query, restaurantId: headerRestaurantId } : req.query;
+    const exec = await vapiService.executeToolRequest(toolName, parameters, {
       callId,
       customerNumber
     });
