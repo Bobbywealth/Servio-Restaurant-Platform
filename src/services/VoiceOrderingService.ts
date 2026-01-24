@@ -38,15 +38,6 @@ export class VoiceOrderingService {
     }
   }
 
-  private normalizeRestaurantId(input?: string | null) {
-    const trimmed = String(input || '').trim();
-    if (!trimmed) return null;
-    if (trimmed.toLowerCase() === 'unions') {
-      return 'sasheys-kitchen-union';
-    }
-    return trimmed;
-  }
-
   private resolveRestaurantId(input?: string | null) {
     // Try: input → env var. Avoid hardcoded fallbacks to prevent wrong-restaurant lookups.
     const resolved = input || process.env.VAPI_RESTAURANT_ID || null;
