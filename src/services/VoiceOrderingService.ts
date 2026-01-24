@@ -392,12 +392,12 @@ export class VoiceOrderingService {
     let items: any[] = [];
     if (this.isGeneralMenuQuery(query)) {
       const popular = this.getPopularMenuItems();
-      const items = popular.length > 0 ? popular : this.getMenuItemsFromData();
+      items = popular.length > 0 ? popular : this.getMenuItemsFromData();
       console.log('🔍 [searchMenu] Returning items:', JSON.stringify(items, null, 2));
       return items;
     }
     const q = query.toLowerCase();
-    const items = this.getMenuItemsFromData((item) => item.name.toLowerCase().includes(q));
+    items = this.getMenuItemsFromData((item) => item.name.toLowerCase().includes(q));
     console.log('🔍 [searchMenu] Returning items:', JSON.stringify(items, null, 2));
     return items;
   }
