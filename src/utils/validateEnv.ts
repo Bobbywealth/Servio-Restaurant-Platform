@@ -5,7 +5,7 @@ export interface EnvStatus {
   errors: string[];
   warnings: string[];
   services: {
-    database: 'configured' | 'sqlite-fallback' | 'missing';
+    database: 'configured' | 'missing';
     assistant: 'available' | 'unavailable';
     auth: 'secure' | 'insecure';
     uploads: 'configured' | 'default';
@@ -24,11 +24,9 @@ export function validateEnvironment(): EnvStatus {
   // === DATABASE ===
   const hasDbUrl = !!process.env.DATABASE_URL;
   const dbSsl = process.env.DATABASE_SSL;
-  
-  if (!hasDbUrl && isProd) {
-    errors.push('DATABASE_URL is required in production (no SQLite fallback available)');
-  } else if (!hasDbUrl) {
-    warnings.push('DATABASE_URL not set - using SQLite (OK for development)');
+
+  if (!hasDbUrl) {
+    errors.push('DATABASE_URL is required - PostgreSQL is the only supported database');
   }
 
   // DATABASE_SSL parsing
@@ -50,8 +48,14 @@ export function validateEnvironment(): EnvStatus {
   const frontendUrl = process.env.FRONTEND_URL;
   if (isProd && (!frontendUrl || frontendUrl.includes('localhost'))) {
     errors.push('FRONTEND_URL is required in production and must not be localhost');
+    errors.push('Set FRONTEND_URL to your frontend URL (e.g., https://servio-app.onrender.com)');
   } else if (!frontendUrl) {
     warnings.push('FRONTEND_URL not set - using localhost default');
+  }
+
+  // Warn about CORS configuration in production
+  if (isProd && frontendUrl && !frontendUrl.startsWith('https://')) {
+    warnings.push('FRONTEND_URL should use https:// in production for security');
   }
 
   // === OPENAI_API_KEY (optional but affects features) ===
@@ -71,7 +75,7 @@ export function validateEnvironment(): EnvStatus {
   logger.info('       ENVIRONMENT VALIDATION');
   logger.info('========================================');
   logger.info(`NODE_ENV:        ${process.env.NODE_ENV || 'development'}`);
-  logger.info(`DATABASE_URL:    ${hasDbUrl ? '[CONFIGURED]' : '[NOT SET - SQLite fallback]'}`);
+  logger.info(`DATABASE_URL:    ${hasDbUrl ? '[CONFIGURED]' : '[NOT SET - REQUIRED]'}`);
   logger.info(`DATABASE_SSL:    ${dbSsl || 'false'}`);
   logger.info(`JWT_SECRET:      ${isInsecureJwt ? '[INSECURE DEFAULT]' : '[CONFIGURED]'}`);
   logger.info(`FRONTEND_URL:    ${frontendUrl || '[NOT SET - localhost]'}`);
@@ -91,6 +95,15 @@ export function validateEnvironment(): EnvStatus {
 
   if (errors.length === 0) {
     logger.info('✓ Environment validation passed');
+  } else {
+    logger.info('');
+    logger.info('💡 Quick Fix Guide:');
+    logger.info('   - Set FRONTEND_URL to your frontend URL (e.g., https://servio-app.onrender.com)');
+    logger.info('   - Set DATABASE_URL to your PostgreSQL connection string');
+    logger.info('   - Set JWT_SECRET to a secure random value');
+    logger.info('   - Set OPENAI_API_KEY for Assistant features');
+    logger.info('');
+    logger.info('📖 Full deployment guide: See RENDER_DEPLOYMENT.md');
   }
 
   logger.info('========================================');
@@ -100,7 +113,7 @@ export function validateEnvironment(): EnvStatus {
     errors,
     warnings,
     services: {
-      database: hasDbUrl ? 'configured' : (isProd ? 'missing' : 'sqlite-fallback'),
+      database: hasDbUrl ? 'configured' : 'missing',
       assistant: hasOpenAI ? 'available' : 'unavailable',
       auth: isInsecureJwt ? 'insecure' : 'secure',
       uploads: uploadsDir ? 'configured' : 'default',
@@ -129,38 +142,59 @@ export function failFastIfInvalid(): void {
 /**
  * Get parsed CORS origins from environment.
  * Uses FRONTEND_URL as primary, ALLOWED_ORIGINS for additional domains.
+ * Automatically includes both HTTP and HTTPS versions for production URLs.
  */
 export function getCorsOrigins(defaultOrigin?: string): string[] {
   const origins = new Set<string>();
   const normalizeOrigin = (origin: string) => origin.trim().replace(/\/+$/, '');
-  
+
+  const addOriginWithVariants = (origin: string) => {
+    const normalized = normalizeOrigin(origin);
+    if (!normalized) return;
+
+    origins.add(normalized);
+
+    // For production URLs (not localhost), add both HTTP and HTTPS variants
+    if (!normalized.includes('localhost')) {
+      if (normalized.startsWith('http://')) {
+        origins.add(normalized.replace('http://', 'https://'));
+      } else if (normalized.startsWith('https://')) {
+        origins.add(normalized.replace('https://', 'http://'));
+      } else {
+        // No protocol specified - add both
+        origins.add(`http://${normalized}`);
+        origins.add(`https://${normalized}`);
+      }
+    }
+  };
+
   // Primary: FRONTEND_URL
   const frontendUrl = process.env.FRONTEND_URL;
   if (frontendUrl) {
-    const normalized = normalizeOrigin(frontendUrl);
-    if (normalized) {
-      origins.add(normalized);
-    }
+    addOriginWithVariants(frontendUrl);
   }
-  
+
   // Additional: ALLOWED_ORIGINS (comma-separated)
   const allowedOrigins = process.env.ALLOWED_ORIGINS;
   if (allowedOrigins) {
     const additional = allowedOrigins
       .split(',')
-      .map(origin => normalizeOrigin(origin))
+      .map(origin => origin.trim())
       .filter(Boolean);
-    additional.forEach(origin => origins.add(origin));
+    additional.forEach(origin => addOriginWithVariants(origin));
   }
-  
+
   // Fallback for development
   if (origins.size === 0) {
     if (defaultOrigin) {
-      origins.add(normalizeOrigin(defaultOrigin));
+      addOriginWithVariants(defaultOrigin);
     } else {
+      // Development defaults
       origins.add('http://localhost:3000');
+      origins.add('http://localhost:3001');
+      origins.add('http://localhost:3003');
     }
   }
-  
+
   return Array.from(origins);
 }

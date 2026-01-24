@@ -306,7 +306,7 @@ export default function StaffPage() {
           </div>
 
           {/* Staff Cards Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             {(isLoading ? [] : filteredStaff).map((member, index) => {
               const status = getStatus(member.id)
               const activeShift = currentByUserId.get(member.id)
@@ -335,11 +335,11 @@ export default function StaffPage() {
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center space-x-2">
+                  <div className="flex items-center gap-2">
                     <span className={`status-badge ${getStatusColor(status)}`}>
                       {getStatusText(status)}
                     </span>
-                    <button className="btn-icon">
+                    <button className="btn-icon min-w-[44px] min-h-[44px]" aria-label="More options">
                       <MoreVertical className="w-4 h-4" />
                     </button>
                   </div>
@@ -368,9 +368,9 @@ export default function StaffPage() {
                   </div>
                 </div>
 
-                <div className="mt-4 flex space-x-2">
-                  <button className="btn-secondary flex-1 text-sm" disabled title="Coming soon">
-                    <Edit3 className="w-4 h-4 mr-1" />
+                <div className="mt-4 flex gap-2">
+                  <button className="btn-secondary flex-1 text-sm min-h-[44px] inline-flex items-center justify-center" disabled title="Coming soon">
+                    <Edit3 className="w-4 h-4 mr-1.5" />
                     Edit
                   </button>
                 </div>

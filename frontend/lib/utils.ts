@@ -177,6 +177,34 @@ export const storage = {
   }
 }
 
+export const safeLocalStorage = {
+  getItem: (key: string): string | null => {
+    if (typeof window === 'undefined') return null
+    try {
+      return window.localStorage.getItem(key)
+    } catch (error) {
+      console.error(`Error reading localStorage key "${key}":`, error)
+      return null
+    }
+  },
+  setItem: (key: string, value: string): void => {
+    if (typeof window === 'undefined') return
+    try {
+      window.localStorage.setItem(key, value)
+    } catch (error) {
+      console.error(`Error setting localStorage key "${key}":`, error)
+    }
+  },
+  removeItem: (key: string): void => {
+    if (typeof window === 'undefined') return
+    try {
+      window.localStorage.removeItem(key)
+    } catch (error) {
+      console.error(`Error removing localStorage key "${key}":`, error)
+    }
+  }
+}
+
 // Normalize API errors to a readable string
 export function getErrorMessage(error: any, fallback: string = 'An unexpected error occurred'): string {
   const message =
