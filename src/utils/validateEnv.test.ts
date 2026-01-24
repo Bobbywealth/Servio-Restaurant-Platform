@@ -17,6 +17,10 @@ describe('getCorsOrigins', () => {
     expect(getCorsOrigins()).toEqual(['http://localhost:3000']);
   });
 
+  it('uses provided default origin when unset', () => {
+    expect(getCorsOrigins('https://servio-app.onrender.com')).toEqual(['https://servio-app.onrender.com']);
+  });
+
   it('uses FRONTEND_URL when set', () => {
     process.env.FRONTEND_URL = 'https://example.com';
     expect(getCorsOrigins()).toEqual(['https://example.com']);
@@ -28,4 +32,3 @@ describe('getCorsOrigins', () => {
     expect(getCorsOrigins()).toEqual(['https://example.com', 'https://a.com', 'https://b.com']);
   });
 });
-
