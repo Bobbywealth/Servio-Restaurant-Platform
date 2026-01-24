@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react'
 import { api } from '../lib/api'
+import { safeLocalStorage } from '../lib/utils'
 
 export interface User {
   id: string
@@ -46,9 +47,9 @@ export function UserProvider({ children }: UserProviderProps) {
   
   const clearAuthStorage = () => {
     if (typeof window === 'undefined') return
-    localStorage.removeItem('servio_user')
-    localStorage.removeItem('servio_access_token')
-    localStorage.removeItem('servio_refresh_token')
+    safeLocalStorage.removeItem('servio_user')
+    safeLocalStorage.removeItem('servio_access_token')
+    safeLocalStorage.removeItem('servio_refresh_token')
   }
 
   useEffect(() => {
@@ -60,9 +61,9 @@ export function UserProvider({ children }: UserProviderProps) {
           return
         }
         
-        const savedUser = localStorage.getItem('servio_user')
-        const accessToken = localStorage.getItem('servio_access_token')
-        const refreshToken = localStorage.getItem('servio_refresh_token')
+        const savedUser = safeLocalStorage.getItem('servio_user')
+        const accessToken = safeLocalStorage.getItem('servio_access_token')
+        const refreshToken = safeLocalStorage.getItem('servio_refresh_token')
 
         if (savedUser && accessToken) {
           setUser(JSON.parse(savedUser))
@@ -77,7 +78,7 @@ export function UserProvider({ children }: UserProviderProps) {
             const meUser = meResp.data?.data?.user as User | undefined
             if (meUser) {
               setUser(meUser)
-              localStorage.setItem('servio_user', JSON.stringify(meUser))
+              safeLocalStorage.setItem('servio_user', JSON.stringify(meUser))
               // Load available accounts for switching
               loadAvailableAccounts().catch(console.error)
               return
@@ -92,10 +93,10 @@ export function UserProvider({ children }: UserProviderProps) {
             const refreshResp = await api.post('/api/auth/refresh', { refreshToken })
             const newAccessToken = refreshResp.data?.data?.accessToken as string | undefined
             const refreshedUser = refreshResp.data?.data?.user as User | undefined
-            if (newAccessToken) localStorage.setItem('servio_access_token', newAccessToken)
+            if (newAccessToken) safeLocalStorage.setItem('servio_access_token', newAccessToken)
             if (refreshedUser) {
               setUser(refreshedUser)
-              localStorage.setItem('servio_user', JSON.stringify(refreshedUser))
+              safeLocalStorage.setItem('servio_user', JSON.stringify(refreshedUser))
               // Load available accounts for switching
               loadAvailableAccounts().catch(console.error)
               return
@@ -136,9 +137,9 @@ export function UserProvider({ children }: UserProviderProps) {
       const refreshToken = resp.data?.data?.refreshToken as string
 
       if (typeof window !== 'undefined') {
-        if (accessToken) localStorage.setItem('servio_access_token', accessToken)
-        if (refreshToken) localStorage.setItem('servio_refresh_token', refreshToken)
-        localStorage.setItem('servio_user', JSON.stringify(userData))
+        if (accessToken) safeLocalStorage.setItem('servio_access_token', accessToken)
+        if (refreshToken) safeLocalStorage.setItem('servio_refresh_token', refreshToken)
+        safeLocalStorage.setItem('servio_user', JSON.stringify(userData))
       }
       setUser(userData)
       
@@ -152,10 +153,10 @@ export function UserProvider({ children }: UserProviderProps) {
   const logout = () => {
     setUser(null)
     if (typeof window !== 'undefined') {
-      localStorage.removeItem('servio_user')
-      const refreshToken = localStorage.getItem('servio_refresh_token')
-      localStorage.removeItem('servio_access_token')
-      localStorage.removeItem('servio_refresh_token')
+      safeLocalStorage.removeItem('servio_user')
+      const refreshToken = safeLocalStorage.getItem('servio_refresh_token')
+      safeLocalStorage.removeItem('servio_access_token')
+      safeLocalStorage.removeItem('servio_refresh_token')
       if (refreshToken) {
         api.post('/api/auth/logout', { refreshToken }).catch(() => {})
       }
@@ -191,7 +192,7 @@ export function UserProvider({ children }: UserProviderProps) {
       const updatedUser = { ...user, ...updates }
       setUser(updatedUser)
       if (typeof window !== 'undefined') {
-        localStorage.setItem('servio_user', JSON.stringify(updatedUser))
+        safeLocalStorage.setItem('servio_user', JSON.stringify(updatedUser))
       }
     }
   }
@@ -216,9 +217,9 @@ export function UserProvider({ children }: UserProviderProps) {
       const refreshToken = response.data?.data?.refreshToken as string
 
       if (typeof window !== 'undefined') {
-        if (accessToken) localStorage.setItem('servio_access_token', accessToken)
-        if (refreshToken) localStorage.setItem('servio_refresh_token', refreshToken)
-        localStorage.setItem('servio_user', JSON.stringify(userData))
+        if (accessToken) safeLocalStorage.setItem('servio_access_token', accessToken)
+        if (refreshToken) safeLocalStorage.setItem('servio_refresh_token', refreshToken)
+        safeLocalStorage.setItem('servio_user', JSON.stringify(userData))
       }
       setUser(userData)
 

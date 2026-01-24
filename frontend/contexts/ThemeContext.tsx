@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react'
+import { safeLocalStorage } from '../lib/utils'
 
 type Theme = 'light' | 'dark' | 'system'
 
@@ -52,9 +53,9 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
     // Only save to localStorage if user explicitly changes theme
     // Default is always light, so we don't save 'light' to localStorage
     if (theme !== 'light') {
-      localStorage.setItem('servio_theme', theme)
+      safeLocalStorage.setItem('servio_theme', theme)
     } else {
-      localStorage.removeItem('servio_theme')
+      safeLocalStorage.removeItem('servio_theme')
     }
   }, [theme, mounted])
 
@@ -73,8 +74,13 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
       root.classList.add(systemTheme)
     }
 
-    mediaQuery.addEventListener('change', handleChange)
-    return () => mediaQuery.removeEventListener('change', handleChange)
+    if (typeof mediaQuery.addEventListener === 'function') {
+      mediaQuery.addEventListener('change', handleChange)
+      return () => mediaQuery.removeEventListener('change', handleChange)
+    }
+
+    mediaQuery.addListener?.(handleChange)
+    return () => mediaQuery.removeListener?.(handleChange)
   }, [theme, mounted])
 
   const setTheme = (newTheme: Theme) => {
