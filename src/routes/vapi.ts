@@ -282,7 +282,8 @@ router.get('/assistant-config', async (req: Request, res: Response) => {
               q: { type: 'string', description: 'Search query' },
               restaurantId: { type: 'string', description: 'Restaurant ID (optional if provided via metadata)' },
               restaurantSlug: { type: 'string', description: 'Restaurant slug (optional fallback)' }
-            }
+            },
+            required: ['q']
           }
         },
         {

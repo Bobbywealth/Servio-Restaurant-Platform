@@ -440,6 +440,22 @@ export class VapiService {
             query
           });
 
+          if (!query) {
+            logger.warn('[vapi] searchMenu empty_query', {
+              requestId,
+              callId,
+              restaurantId,
+              restaurantIdSource: resolvedRestaurantIdSource
+            });
+            result = {
+              ok: false,
+              reason: 'empty_query',
+              message: 'Please provide a menu item or category to search.',
+              query
+            };
+            break;
+          }
+
           // Requirement: restaurantId must be present.
           if (!restaurantId) {
             result = {
