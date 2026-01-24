@@ -543,6 +543,17 @@ export class VapiService {
           normalizedParameters.callId = normalizedParameters.callId || message.call?.id;
           normalizedParameters.source = normalizedParameters.source || 'vapi';
           if (!normalizedParameters.customer) normalizedParameters.customer = {};
+
+          // Handle top-level customerName and phoneNumber fields (for backward compatibility with VAPI AI)
+          if (normalizedParameters.customerName && !normalizedParameters.customer.name) {
+            normalizedParameters.customer.name = normalizedParameters.customerName;
+            delete normalizedParameters.customerName;
+          }
+          if (normalizedParameters.phoneNumber && !normalizedParameters.customer.phone) {
+            normalizedParameters.customer.phone = normalizedParameters.phoneNumber;
+            delete normalizedParameters.phoneNumber;
+          }
+
           normalizedParameters.customer.phone =
             normalizedParameters.customer.phone || message.call?.customer?.number;
           if (!normalizedParameters.customer.lastInitial && normalizedParameters.customer.name) {
