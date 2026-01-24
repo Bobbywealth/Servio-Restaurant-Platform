@@ -540,16 +540,35 @@ export class VoiceOrderingService {
       // Note: VAPI AI collects modifiers verbally but may not pass them in structured format
       // We'll allow orders to proceed with base prices and log missing modifiers for manual review
 
-      // Dinner defaults
-      if (isDinner) {
-        if (!inputItem.modifiers?.rice_choice) {
-          console.log(`⚠️ [validateQuote] ${menuItem.name} missing rice_choice modifier (non-blocking)`);
+      const category = String(menuItem.category || '').toLowerCase();
+      const isEntree = isDinner || category.includes('entree');
+      const isRastaPastaJerk = itemName.includes('rasta pasta') && itemName.includes('jerk chicken');
+      const isSalmon = itemName.includes('salmon');
+
+      // Entree defaults
+      if (isEntree) {
+        const modifierGroupIds = (menuItem.modifierGroups || []).map((group: any) => group.id);
+        const hasSize = modifierGroupIds.includes('size');
+        const hasSideChoice = modifierGroupIds.includes('side_choice');
+        const hasGravyAmount = modifierGroupIds.includes('gravy_amount');
+        const hasGravyType = modifierGroupIds.includes('gravy_type');
+
+        if (!isRastaPastaJerk) {
+          if (hasSize && !inputItem.modifiers?.size) {
+            console.log(`⚠️ [validateQuote] ${menuItem.name} missing size modifier (non-blocking)`);
+          }
+          const sideChoice = inputItem.modifiers?.side_choice;
+          if (hasSideChoice && !sideChoice) {
+            console.log(`⚠️ [validateQuote] ${menuItem.name} missing side_choice modifier (non-blocking)`);
+          } else if (Array.isArray(sideChoice) && sideChoice.length > 2) {
+            console.log(`⚠️ [validateQuote] ${menuItem.name} has ${sideChoice.length} side_choice selections; extras are out of plate`);
+          }
         }
-        if (!inputItem.modifiers?.cabbage) {
-          console.log(`⚠️ [validateQuote] ${menuItem.name} missing cabbage modifier (non-blocking)`);
+        if (hasGravyAmount && !inputItem.modifiers?.gravy_amount) {
+          console.log(`⚠️ [validateQuote] ${menuItem.name} missing gravy_amount modifier (non-blocking)`);
         }
-        if (!inputItem.modifiers?.spice_level) {
-          console.log(`⚠️ [validateQuote] ${menuItem.name} missing spice_level modifier (non-blocking)`);
+        if (hasGravyType && !inputItem.modifiers?.gravy_type) {
+          console.log(`⚠️ [validateQuote] ${menuItem.name} missing gravy_type modifier (non-blocking)`);
         }
       }
 
@@ -558,6 +577,11 @@ export class VoiceOrderingService {
         if (!inputItem.modifiers?.fish_style) {
           console.log(`⚠️ [validateQuote] ${menuItem.name} missing fish_style modifier (non-blocking)`);
         }
+      }
+
+      // Salmon preparation
+      if (isSalmon && !inputItem.modifiers?.salmon_preparation) {
+        console.log(`⚠️ [validateQuote] ${menuItem.name} missing salmon_preparation modifier (non-blocking)`);
       }
 
       // Wings
@@ -581,6 +605,15 @@ export class VoiceOrderingService {
       if (menuItem.modifierGroups) {
         menuItem.modifierGroups.forEach((group: any) => {
           const selectedOptionId = inputItem.modifiers?.[group.id];
+          if (Array.isArray(selectedOptionId)) {
+            selectedOptionId.forEach((optionId: string) => {
+              const option = group.options.find((o: any) => o.id === optionId);
+              if (option) {
+                itemPrice += (option.priceDelta || 0);
+              }
+            });
+            return;
+          }
           const option = group.options.find((o: any) => o.id === selectedOptionId);
           if (option) {
             itemPrice += (option.priceDelta || 0);
@@ -713,12 +746,12 @@ export class VoiceOrderingService {
 
     await db.run(`
       INSERT INTO orders (
-        id, restaurant_id, status, customer_name, customer_phone, last_initial,
+        id, restaurant_id, channel, status, customer_name, customer_phone, last_initial,
         order_type, pickup_time, items, subtotal, tax, fees, total, total_amount,
         source, call_id, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     `, [
-      orderId, restaurantId, 'received', input.customer?.name, input.customer?.phone, lastInitial,
+      orderId, restaurantId, input.source || 'vapi', 'received', input.customer?.name, input.customer?.phone, lastInitial,
       input.orderType, input.pickupTime, JSON.stringify(orderItems), quote.subtotal, quote.tax, quote.fees, quote.total, quote.total,
       input.source || 'vapi', input.callId
     ]);
@@ -727,10 +760,21 @@ export class VoiceOrderingService {
       const menuItem = this.getMenuItem(item.itemId);
       await db.run(`
         INSERT INTO order_items (
-          id, order_id, item_id, item_name_snapshot, qty, unit_price_snapshot, modifiers_json, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+          id, order_id, menu_item_id, item_id, name, item_name_snapshot,
+          quantity, qty, unit_price, unit_price_snapshot, modifiers_json, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
       `, [
-        uuidv4(), orderId, item.itemId, menuItem?.name, item.qty, item.price, JSON.stringify(item.modifiers || {})
+        uuidv4(),
+        orderId,
+        item.itemId,
+        item.itemId,
+        menuItem?.name || item.itemId,
+        menuItem?.name,
+        item.qty,
+        item.qty,
+        item.price,
+        item.price,
+        JSON.stringify(item.modifiers || {})
       ]);
     }
 
