@@ -89,10 +89,12 @@ export class VapiService {
   async handleWebhook(payload: VapiWebhookPayload): Promise<VapiResponse> {
     const { message } = payload;
     
-    logger.info('Vapi webhook received:', { 
-      type: message.type, 
+    logger.info('Vapi webhook received:', {
+      type: message.type,
       callId: message.call?.id
     });
+    logger.info('[vapi] webhook_type', { type: message.type });
+    logger.info('[vapi] webhook_payload', { payload: this.safeStringify(payload) });
 
     try {
       switch (message.type) {
@@ -100,9 +102,11 @@ export class VapiService {
           return await this.handleAssistantRequest(message);
         
         case 'function-call':
+          logger.info('[vapi] webhook_route', { type: message.type, route: 'function-call' });
           return await this.handleFunctionCall(message);
 
         case 'tool-calls':
+          logger.info('[vapi] webhook_route', { type: message.type, route: 'tool-calls' });
           return await this.handleToolCalls(message);
         
         case 'end-of-call-report':
@@ -125,6 +129,18 @@ export class VapiService {
     } catch (error) {
       logger.error('Vapi webhook error:', error);
       return { error: 'Internal server error' };
+    }
+  }
+
+  private safeStringify(value: any, maxLength = 8000): string {
+    try {
+      const json = JSON.stringify(value, null, 2);
+      if (json.length <= maxLength) {
+        return json;
+      }
+      return `${json.slice(0, maxLength)}...`;
+    } catch (error) {
+      return `[unserializable payload: ${error instanceof Error ? error.message : String(error)}]`;
     }
   }
 
