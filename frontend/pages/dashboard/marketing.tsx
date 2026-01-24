@@ -454,26 +454,95 @@ const QuickSendForm = ({ onClose, customers, staff }: {
 }) => {
   const [formData, setFormData] = useState({
     type: 'sms' as 'sms' | 'email',
-    recipientType: 'customer' as 'customer' | 'staff',
+    recipientType: 'customer' as 'customer' | 'staff' | 'custom',
     recipient: '',
+    customPhone: '',
+    customEmail: '',
     subject: '',
     message: ''
   });
   const [sending, setSending] = useState(false);
+  const [phoneValidation, setPhoneValidation] = useState<{ isValid: boolean; formatted: string; error?: string } | null>(null);
+
+  // Validate phone number as user types
+  const validatePhone = async (phone: string) => {
+    if (!phone || phone.length < 10) {
+      setPhoneValidation(null);
+      return;
+    }
+    try {
+      const response = await api.get(`/api/marketing/validate-phone?phone=${encodeURIComponent(phone)}`);
+      setPhoneValidation(response.data.data);
+    } catch (error) {
+      setPhoneValidation({ isValid: false, formatted: phone, error: 'Could not validate phone number' });
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.recipient || !formData.message) {
-      toast.error('Please fill in all required fields');
+
+    // Validate based on recipient type
+    if (formData.recipientType === 'custom') {
+      if (formData.type === 'sms' && !formData.customPhone) {
+        toast.error('Please enter a phone number');
+        return;
+      }
+      if (formData.type === 'email' && !formData.customEmail) {
+        toast.error('Please enter an email address');
+        return;
+      }
+    } else if (!formData.recipient) {
+      toast.error('Please select a recipient');
+      return;
+    }
+
+    if (!formData.message) {
+      toast.error('Please enter a message');
       return;
     }
 
     setSending(true);
     try {
-      if (formData.recipientType === 'customer') {
+      if (formData.recipientType === 'custom') {
+        // Send to custom phone number or email
+        if (formData.type === 'sms') {
+          const response = await api.post('/api/marketing/send-test-sms', {
+            phone: formData.customPhone,
+            message: formData.message
+          });
+          if (response.data.success) {
+            toast.success(response.data.message || `SMS sent to ${response.data.data.to}!`);
+            onClose();
+          } else {
+            const error = response.data.error;
+            toast.error(
+              <div>
+                <strong>{error?.message || 'Failed to send SMS'}</strong>
+                {error?.details && <p className="text-sm mt-1">{error.details}</p>}
+                {error?.tip && <p className="text-sm mt-1 text-gray-500">{error.tip}</p>}
+              </div>,
+              { duration: 6000 }
+            );
+          }
+        } else {
+          // Email to custom address
+          const response = await api.post('/api/marketing/send-email', {
+            email: formData.customEmail,
+            subject: formData.subject,
+            message: formData.message
+          });
+          if (response.data.success) {
+            toast.success(`Email sent to ${formData.customEmail}!`);
+            onClose();
+          } else {
+            toast.error(response.data.error?.message || 'Failed to send email');
+          }
+        }
+      } else if (formData.recipientType === 'customer') {
         const customer = customers.find(c => c.id === formData.recipient);
         if (!customer) {
           toast.error('Customer not found');
+          setSending(false);
           return;
         }
 
@@ -484,10 +553,18 @@ const QuickSendForm = ({ onClose, customers, staff }: {
 
         const response = await api.post(endpoint, payload);
         if (response.data.success) {
-          toast.success(`${formData.type.toUpperCase()} sent successfully!`);
+          const msg = response.data.message || `${formData.type.toUpperCase()} sent successfully!`;
+          toast.success(msg);
           onClose();
         } else {
-          toast.error(response.data.error?.message || 'Failed to send message');
+          const error = response.data.error;
+          toast.error(
+            <div>
+              <strong>{error?.message || 'Failed to send message'}</strong>
+              {error?.details && <p className="text-sm mt-1">{error.details}</p>}
+            </div>,
+            { duration: 5000 }
+          );
         }
       } else {
         // Staff messaging
@@ -503,9 +580,17 @@ const QuickSendForm = ({ onClose, customers, staff }: {
           toast.error(response.data.error?.message || 'Failed to send message');
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error sending message:', error);
-      toast.error('Failed to send message');
+      const errorMessage = error.response?.data?.error?.message || 'Failed to send message';
+      const errorDetails = error.response?.data?.error?.details;
+      toast.error(
+        <div>
+          <strong>{errorMessage}</strong>
+          {errorDetails && <p className="text-sm mt-1">{errorDetails}</p>}
+        </div>,
+        { duration: 5000 }
+      );
     } finally {
       setSending(false);
     }
@@ -534,11 +619,15 @@ const QuickSendForm = ({ onClose, customers, staff }: {
                 </label>
                 <select
                   value={formData.recipientType}
-                  onChange={(e) => setFormData({ ...formData, recipientType: e.target.value as 'customer' | 'staff', recipient: '' })}
+                  onChange={(e) => {
+                    setFormData({ ...formData, recipientType: e.target.value as 'customer' | 'staff' | 'custom', recipient: '' });
+                    setPhoneValidation(null);
+                  }}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                 >
                   <option value="customer">Customer</option>
                   <option value="staff">Staff</option>
+                  <option value="custom">Custom Number/Email</option>
                 </select>
               </div>
 
@@ -557,24 +646,75 @@ const QuickSendForm = ({ onClose, customers, staff }: {
               </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Select Recipient *
-              </label>
-              <select
-                value={formData.recipient}
-                onChange={(e) => setFormData({ ...formData, recipient: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                required
-              >
-                <option value="">Select a {formData.recipientType}...</option>
-                {recipients.map((r: any) => (
-                  <option key={r.id} value={r.id}>
-                    {r.name} - {formData.type === 'sms' ? r.phone : r.email}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {formData.recipientType === 'custom' ? (
+              <div>
+                {formData.type === 'sms' ? (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Phone Number *
+                    </label>
+                    <input
+                      type="tel"
+                      value={formData.customPhone}
+                      onChange={(e) => {
+                        setFormData({ ...formData, customPhone: e.target.value });
+                        validatePhone(e.target.value);
+                      }}
+                      className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 ${
+                        phoneValidation
+                          ? phoneValidation.isValid
+                            ? 'border-green-500 dark:border-green-400'
+                            : 'border-red-500 dark:border-red-400'
+                          : 'border-gray-300 dark:border-gray-600'
+                      }`}
+                      placeholder="Enter phone number (e.g., 5551234567 or +15551234567)"
+                    />
+                    {phoneValidation && (
+                      <p className={`text-sm mt-1 ${phoneValidation.isValid ? 'text-green-600' : 'text-red-600'}`}>
+                        {phoneValidation.isValid
+                          ? `Will send to: ${phoneValidation.formatted}`
+                          : phoneValidation.error || 'Invalid phone number'}
+                      </p>
+                    )}
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      Enter 10 digits for US numbers (country code +1 will be added automatically)
+                    </p>
+                  </div>
+                ) : (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Email Address *
+                    </label>
+                    <input
+                      type="email"
+                      value={formData.customEmail}
+                      onChange={(e) => setFormData({ ...formData, customEmail: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                      placeholder="Enter email address"
+                    />
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Select Recipient *
+                </label>
+                <select
+                  value={formData.recipient}
+                  onChange={(e) => setFormData({ ...formData, recipient: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                  required={formData.recipientType !== 'custom'}
+                >
+                  <option value="">Select a {formData.recipientType}...</option>
+                  {recipients.map((r: any) => (
+                    <option key={r.id} value={r.id}>
+                      {r.name} - {formData.type === 'sms' ? r.phone : r.email}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             {formData.type === 'email' && (
               <div>
@@ -727,8 +867,11 @@ const CustomerForm = ({ customer, onSave, onCancel }: {
                 value={formData.phone}
                 onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
-                placeholder="+1 (555) 123-4567"
+                placeholder="5551234567 or +15551234567"
               />
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                Enter 10 digits for US numbers. Country code (+1) will be added automatically for SMS.
+              </p>
             </div>
 
             <div>
