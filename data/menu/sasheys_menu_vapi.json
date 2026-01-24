@@ -8833,6 +8833,35 @@
                   "priceDelta": 24.0
                 }
               ]
+            },
+            {
+              "id": "breakfast_side",
+              "name": "What would you like with your breakfast?",
+              "required": true,
+              "minSelect": 1,
+              "maxSelect": 1,
+              "options": [
+                {
+                  "id": "boiled_food",
+                  "name": "Boiled Food",
+                  "priceDelta": 0
+                },
+                {
+                  "id": "fried_dumplings",
+                  "name": "Fried Dumplings",
+                  "priceDelta": 0
+                },
+                {
+                  "id": "white_rice",
+                  "name": "White Rice",
+                  "priceDelta": 0
+                },
+                {
+                  "id": "rice_peas",
+                  "name": "Rice & Peas",
+                  "priceDelta": 0
+                }
+              ]
             }
           ]
         },
@@ -8859,6 +8888,35 @@
                   "id": "large",
                   "name": "Large",
                   "priceDelta": 11.0
+                }
+              ]
+            },
+            {
+              "id": "breakfast_side",
+              "name": "What would you like with your breakfast?",
+              "required": true,
+              "minSelect": 1,
+              "maxSelect": 1,
+              "options": [
+                {
+                  "id": "boiled_food",
+                  "name": "Boiled Food",
+                  "priceDelta": 0
+                },
+                {
+                  "id": "fried_dumplings",
+                  "name": "Fried Dumplings",
+                  "priceDelta": 0
+                },
+                {
+                  "id": "white_rice",
+                  "name": "White Rice",
+                  "priceDelta": 0
+                },
+                {
+                  "id": "rice_peas",
+                  "name": "Rice & Peas",
+                  "priceDelta": 0
                 }
               ]
             }
@@ -8894,6 +8952,35 @@
                   "priceDelta": 16.0
                 }
               ]
+            },
+            {
+              "id": "breakfast_side",
+              "name": "What would you like with your breakfast?",
+              "required": true,
+              "minSelect": 1,
+              "maxSelect": 1,
+              "options": [
+                {
+                  "id": "boiled_food",
+                  "name": "Boiled Food",
+                  "priceDelta": 0
+                },
+                {
+                  "id": "fried_dumplings",
+                  "name": "Fried Dumplings",
+                  "priceDelta": 0
+                },
+                {
+                  "id": "white_rice",
+                  "name": "White Rice",
+                  "priceDelta": 0
+                },
+                {
+                  "id": "rice_peas",
+                  "name": "Rice & Peas",
+                  "priceDelta": 0
+                }
+              ]
             }
           ]
         },
@@ -8925,6 +9012,35 @@
                   "id": "large",
                   "name": "Large",
                   "priceDelta": 16.0
+                }
+              ]
+            },
+            {
+              "id": "breakfast_side",
+              "name": "What would you like with your breakfast?",
+              "required": true,
+              "minSelect": 1,
+              "maxSelect": 1,
+              "options": [
+                {
+                  "id": "boiled_food",
+                  "name": "Boiled Food",
+                  "priceDelta": 0
+                },
+                {
+                  "id": "fried_dumplings",
+                  "name": "Fried Dumplings",
+                  "priceDelta": 0
+                },
+                {
+                  "id": "white_rice",
+                  "name": "White Rice",
+                  "priceDelta": 0
+                },
+                {
+                  "id": "rice_peas",
+                  "name": "Rice & Peas",
+                  "priceDelta": 0
                 }
               ]
             }
@@ -8960,6 +9076,35 @@
                   "priceDelta": 15.0
                 }
               ]
+            },
+            {
+              "id": "breakfast_side",
+              "name": "What would you like with your breakfast?",
+              "required": true,
+              "minSelect": 1,
+              "maxSelect": 1,
+              "options": [
+                {
+                  "id": "boiled_food",
+                  "name": "Boiled Food",
+                  "priceDelta": 0
+                },
+                {
+                  "id": "fried_dumplings",
+                  "name": "Fried Dumplings",
+                  "priceDelta": 0
+                },
+                {
+                  "id": "white_rice",
+                  "name": "White Rice",
+                  "priceDelta": 0
+                },
+                {
+                  "id": "rice_peas",
+                  "name": "Rice & Peas",
+                  "priceDelta": 0
+                }
+              ]
             }
           ]
         },
@@ -8991,6 +9136,35 @@
                   "id": "large",
                   "name": "Large",
                   "priceDelta": 16.5
+                }
+              ]
+            },
+            {
+              "id": "breakfast_side",
+              "name": "What would you like with your breakfast?",
+              "required": true,
+              "minSelect": 1,
+              "maxSelect": 1,
+              "options": [
+                {
+                  "id": "boiled_food",
+                  "name": "Boiled Food",
+                  "priceDelta": 0
+                },
+                {
+                  "id": "fried_dumplings",
+                  "name": "Fried Dumplings",
+                  "priceDelta": 0
+                },
+                {
+                  "id": "white_rice",
+                  "name": "White Rice",
+                  "priceDelta": 0
+                },
+                {
+                  "id": "rice_peas",
+                  "name": "Rice & Peas",
+                  "priceDelta": 0
                 }
               ]
             }
@@ -9026,6 +9200,35 @@
                   "priceDelta": 16.0
                 }
               ]
+            },
+            {
+              "id": "breakfast_side",
+              "name": "What would you like with your breakfast?",
+              "required": true,
+              "minSelect": 1,
+              "maxSelect": 1,
+              "options": [
+                {
+                  "id": "boiled_food",
+                  "name": "Boiled Food",
+                  "priceDelta": 0
+                },
+                {
+                  "id": "fried_dumplings",
+                  "name": "Fried Dumplings",
+                  "priceDelta": 0
+                },
+                {
+                  "id": "white_rice",
+                  "name": "White Rice",
+                  "priceDelta": 0
+                },
+                {
+                  "id": "rice_peas",
+                  "name": "Rice & Peas",
+                  "priceDelta": 0
+                }
+              ]
             }
           ]
         },
@@ -9059,6 +9262,35 @@
                   "priceDelta": 16.0
                 }
               ]
+            },
+            {
+              "id": "breakfast_side",
+              "name": "What would you like with your breakfast?",
+              "required": true,
+              "minSelect": 1,
+              "maxSelect": 1,
+              "options": [
+                {
+                  "id": "boiled_food",
+                  "name": "Boiled Food",
+                  "priceDelta": 0
+                },
+                {
+                  "id": "fried_dumplings",
+                  "name": "Fried Dumplings",
+                  "priceDelta": 0
+                },
+                {
+                  "id": "white_rice",
+                  "name": "White Rice",
+                  "priceDelta": 0
+                },
+                {
+                  "id": "rice_peas",
+                  "name": "Rice & Peas",
+                  "priceDelta": 0
+                }
+              ]
             }
           ]
         },
@@ -9085,6 +9317,35 @@
                   "id": "large",
                   "name": "Large",
                   "priceDelta": 11.0
+                }
+              ]
+            },
+            {
+              "id": "breakfast_side",
+              "name": "What would you like with your breakfast?",
+              "required": true,
+              "minSelect": 1,
+              "maxSelect": 1,
+              "options": [
+                {
+                  "id": "boiled_food",
+                  "name": "Boiled Food",
+                  "priceDelta": 0
+                },
+                {
+                  "id": "fried_dumplings",
+                  "name": "Fried Dumplings",
+                  "priceDelta": 0
+                },
+                {
+                  "id": "white_rice",
+                  "name": "White Rice",
+                  "priceDelta": 0
+                },
+                {
+                  "id": "rice_peas",
+                  "name": "Rice & Peas",
+                  "priceDelta": 0
                 }
               ]
             }
