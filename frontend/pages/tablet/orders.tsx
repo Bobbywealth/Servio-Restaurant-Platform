@@ -2,7 +2,7 @@ import Head from 'next/head';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/router';
 import clsx from 'clsx';
-import { CheckCircle2, RefreshCcw, ChevronDown, Printer } from 'lucide-react';
+import { CheckCircle2, RefreshCcw, ChevronDown, Printer, Clock } from 'lucide-react';
 import { useSocket } from '../../lib/socket';
 import { PrintReceipt } from '../../components/PrintReceipt';
 import { TabletSidebar } from '../../components/tablet/TabletSidebar';
