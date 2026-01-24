@@ -18,6 +18,8 @@ export default function TabletPrintPage() {
   const [printMode, setPrintMode] = useState<PrintMode>('system');
   const [loading, setLoading] = useState(true);
   const [printStatus, setPrintStatus] = useState<string | null>(null);
+  const [headerText, setHeaderText] = useState<string>('');
+  const [footerText, setFooterText] = useState<string>('');
 
   useEffect(() => {
     const storedPaper = window.localStorage.getItem('servio_thermal_paper_width');
@@ -58,6 +60,11 @@ export default function TabletPrintPage() {
 
         setOrder(orderRes.data?.data || null);
         setRestaurant(restaurantRes.data?.data || null);
+
+        // Load printer settings for header/footer text
+        const settings = restaurantRes.data?.data?.settings || {};
+        setHeaderText(settings.printer_receipt_header_text || '');
+        setFooterText(settings.printer_receipt_footer_text || '');
       } finally {
         setLoading(false);
       }
@@ -67,8 +74,8 @@ export default function TabletPrintPage() {
 
   const receiptHtml = useMemo(() => {
     if (!order) return '';
-    return generateReceiptHtml({ restaurant, order, paperWidth });
-  }, [order, restaurant, paperWidth]);
+    return generateReceiptHtml({ restaurant, order, paperWidth, headerText, footerText });
+  }, [order, restaurant, paperWidth, headerText, footerText]);
 
   const handlePrint = () => {
     if (!order) return;
@@ -98,7 +105,9 @@ export default function TabletPrintPage() {
         total: order.total_amount || 0,
         pickupTime: orderAny.pickup_time || undefined,
         createdAt: order.created_at || undefined,
-        specialInstructions: orderAny.special_instructions || undefined
+        specialInstructions: orderAny.special_instructions || undefined,
+        headerText: headerText || undefined,
+        footerText: footerText || undefined
       };
 
       const escPosData = generateEscPosReceipt(receiptData, paperWidth);

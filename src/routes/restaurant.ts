@@ -337,7 +337,10 @@ router.put('/settings', asyncHandler(async (req: Request, res: Response) => {
     online_payments_enabled,
     printer_auto_print_enabled,
     printer_paper_width,
-    printer_mode
+    printer_mode,
+    printer_number_of_copies,
+    printer_receipt_header_text,
+    printer_receipt_footer_text
   } = req.body;
 
   if (!restaurantId) {
@@ -377,6 +380,16 @@ router.put('/settings', asyncHandler(async (req: Request, res: Response) => {
   if (printer_mode !== undefined) {
     (settings as any).printer_mode = String(printer_mode);
   }
+  if (printer_number_of_copies !== undefined) {
+    const copies = parseInt(String(printer_number_of_copies), 10);
+    (settings as any).printer_number_of_copies = Math.max(1, Math.min(5, copies || 1));
+  }
+  if (printer_receipt_header_text !== undefined) {
+    (settings as any).printer_receipt_header_text = String(printer_receipt_header_text).slice(0, 50);
+  }
+  if (printer_receipt_footer_text !== undefined) {
+    (settings as any).printer_receipt_footer_text = String(printer_receipt_footer_text).slice(0, 50);
+  }
 
   // Save updated settings
   await db.run(
@@ -390,7 +403,15 @@ router.put('/settings', asyncHandler(async (req: Request, res: Response) => {
     'update_restaurant_settings',
     'restaurant',
     restaurantId,
-    { online_payments_enabled, printer_auto_print_enabled, printer_paper_width, printer_mode }
+    {
+      online_payments_enabled,
+      printer_auto_print_enabled,
+      printer_paper_width,
+      printer_mode,
+      printer_number_of_copies,
+      printer_receipt_header_text,
+      printer_receipt_footer_text
+    }
   );
 
   logger.info(`Restaurant settings updated for ${restaurantId}`);

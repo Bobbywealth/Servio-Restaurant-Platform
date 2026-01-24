@@ -26,6 +26,8 @@ export interface ReceiptData {
   pickupTime?: string;
   createdAt?: string;
   specialInstructions?: string;
+  headerText?: string;
+  footerText?: string;
 }
 
 function centerText(text: string, width: number): string {
@@ -60,10 +62,16 @@ export function generatePlainTextReceipt(data: ReceiptData, paperWidth: '80mm' |
   const doubleDivider = line('=', charWidth);
   
   let receipt = '';
-  
+
+  // Custom header text if provided
+  if (data.headerText) {
+    receipt += centerText(data.headerText.toUpperCase(), charWidth) + '\n';
+    receipt += divider + '\n';
+  }
+
   // Header - Restaurant name (centered)
   receipt += centerText(data.restaurantName?.toUpperCase() || 'SERVIO RESTAURANT', charWidth) + '\n';
-  
+
   // Restaurant info (centered)
   if (data.restaurantPhone) {
     receipt += centerText(data.restaurantPhone, charWidth) + '\n';
@@ -71,7 +79,7 @@ export function generatePlainTextReceipt(data: ReceiptData, paperWidth: '80mm' |
   if (data.restaurantAddress) {
     receipt += centerText(data.restaurantAddress, charWidth) + '\n';
   }
-  
+
   receipt += '\n';
   receipt += doubleDivider + '\n';
   
@@ -150,15 +158,15 @@ export function generatePlainTextReceipt(data: ReceiptData, paperWidth: '80mm' |
   
   // Footer (centered)
   receipt += '\n';
-  
+
   // Timestamp
   const now = data.createdAt ? new Date(data.createdAt) : new Date();
   receipt += centerText(now.toLocaleString(), charWidth) + '\n';
-  
+
   receipt += '\n';
-  receipt += centerText('Thank you for your order!', charWidth) + '\n';
+  receipt += centerText(data.footerText || 'Thank you for your order!', charWidth) + '\n';
   receipt += '\n\n\n';  // Extra lines before cut
-  
+
   return receipt;
 }
 
