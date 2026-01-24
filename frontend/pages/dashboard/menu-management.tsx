@@ -1528,25 +1528,15 @@ const MenuManagement: React.FC = () => {
                             {activeCategory?.name ? `Category: ${activeCategory.name}` : ''}
                           </div>
                         </div>
-                        <div className="flex shrink-0 items-center gap-2">
-                          <button
-                            type="button"
-                            className="inline-flex items-center gap-2 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 px-3 py-2 text-sm font-bold disabled:opacity-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-900/20"
-                            onClick={() => handleDeleteItem(editingItem)}
-                            disabled={deletingItemId === editingItem.id}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                            {deletingItemId === editingItem.id ? 'Deleting…' : 'Delete item'}
-                          </button>
-                          <button
-                            type="button"
-                            className="inline-flex items-center gap-2 rounded-lg bg-slate-900 text-white hover:bg-slate-800 px-3 py-2 text-sm font-bold"
-                            onClick={() => setShowAddModifierGroupModal(true)}
-                          >
-                            <Plus className="h-4 w-4" />
-                            New Group
-                          </button>
-                        </div>
+                        <button
+                          type="button"
+                          className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 px-3 py-2 text-sm font-bold disabled:opacity-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-900/20"
+                          onClick={() => handleDeleteItem(editingItem)}
+                          disabled={deletingItemId === editingItem.id}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          {deletingItemId === editingItem.id ? 'Deleting…' : 'Delete item'}
+                        </button>
                       </div>
 
                       <div className="mt-3 flex items-center gap-2">
