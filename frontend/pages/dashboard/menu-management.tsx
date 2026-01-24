@@ -603,6 +603,7 @@ const MenuManagement: React.FC = () => {
   };
 
   const handleReorderCategories = async (nextOrderedIds: string[]) => {
+    const previousCategories = categories;
     // Optimistic reorder in UI
     setCategories((prev) => {
       const byId = new Map(prev.map((c) => [c.id, c] as const));
@@ -617,8 +618,10 @@ const MenuManagement: React.FC = () => {
 
     try {
       await api.put('/api/menu/categories/reorder', { categoryIds: nextOrderedIds });
+      toast.success('Category order saved');
     } catch (error) {
       console.error('Failed to persist category order', error);
+      setCategories(previousCategories);
       toast.error('Failed to save category order');
     }
   };
