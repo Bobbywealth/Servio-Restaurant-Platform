@@ -66,6 +66,32 @@ const normalizeVapiSettings = (settings: any): Required<Pick<VapiSettings, 'enab
   };
 };
 
+const normalizeProvidedSecret = (value?: string | null) => {
+  if (!value) return '';
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  return trimmed.replace(/^Bearer\s+/i, '');
+};
+
+const getProvidedVapiSecret = (req: Request) => {
+  const headerSecret =
+    (req.headers['x-vapi-secret'] as string | undefined) ||
+    (req.headers['x-vapi-webhook-secret'] as string | undefined) ||
+    (req.headers['x-vapi-signature'] as string | undefined);
+  const authHeader = req.headers.authorization;
+
+  return normalizeProvidedSecret(headerSecret || authHeader || '');
+};
+
+const hasValidVapiSecret = (req: Request, settings: any) => {
+  const provided = getProvidedVapiSecret(req);
+  if (!provided) return false;
+  const vapi = settings?.vapi ?? {};
+  const apiKey = normalizeProvidedSecret(vapi.apiKey);
+  const webhookSecret = normalizeProvidedSecret(vapi.webhookSecret);
+  return provided === apiKey || provided === webhookSecret;
+};
+
 /**
  * GET /api/restaurants/:id/vapi
  * Get per-restaurant Vapi settings
@@ -200,12 +226,6 @@ router.post('/:id/vapi/test', asyncHandler(async (req: Request, res: Response) =
       error: { message: 'Restaurant id is required.' }
     });
   }
-  if (!canAccessRestaurant(req, restaurantId)) {
-    return res.status(403).json({
-      success: false,
-      error: { message: 'Not authorized to access this restaurant' }
-    });
-  }
 
   const db = DatabaseService.getInstance().getDatabase();
   const restaurant = await db.get('SELECT settings FROM restaurants WHERE id = ?', [restaurantId]);
@@ -217,6 +237,12 @@ router.post('/:id/vapi/test', asyncHandler(async (req: Request, res: Response) =
   }
 
   const settings = parseSettings(restaurant.settings);
+  if (!canAccessRestaurant(req, restaurantId) && !hasValidVapiSecret(req, settings)) {
+    return res.status(403).json({
+      success: false,
+      error: { message: 'Not authorized to access this restaurant' }
+    });
+  }
   const vapiSettings = normalizeVapiSettings(settings);
 
   if (!vapiSettings.hasApiKey) {
