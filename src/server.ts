@@ -142,7 +142,24 @@ async function initializeServer() {
     app.use('/api/timeclock', requireAuth, timeclockRoutes);
     app.use('/api/marketing', requireAuth, marketingRoutes);
     app.use('/api/restaurant', requireAuth, restaurantRoutes);
-    app.use('/api/restaurants', requireAuth, restaurantsRoutes);
+    app.use('/api/restaurants', (req, res, next) => {
+      if (req.path.endsWith('/vapi/test')) {
+        const vapiApiKey = process.env.VAPI_API_KEY?.trim();
+        const vapiWebhookSecret = process.env.VAPI_WEBHOOK_SECRET?.trim();
+        const headerSecret =
+          typeof req.headers['x-vapi-secret'] === 'string' ||
+          typeof req.headers['x-vapi-webhook-secret'] === 'string' ||
+          typeof req.headers['x-vapi-signature'] === 'string';
+        if (headerSecret) return next();
+        if (typeof req.headers.authorization === 'string' && req.headers.authorization.startsWith('Bearer ')) {
+          const token = req.headers.authorization.replace(/^Bearer\s+/i, '').trim();
+          if ((vapiApiKey && token === vapiApiKey) || (vapiWebhookSecret && token === vapiWebhookSecret)) {
+            return next();
+          }
+        }
+      }
+      return requireAuth(req, res, next);
+    }, restaurantsRoutes);
     app.use('/api/integrations', requireAuth, integrationsRoutes);
     app.use('/api/notifications', requireAuth, notificationsRoutes);
 
