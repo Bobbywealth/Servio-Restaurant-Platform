@@ -94,15 +94,15 @@ function normalizeStatus(s: string | null | undefined) {
 function statusBadgeClassesForStatus(status: string) {
   switch (status) {
     case 'received':
-      return 'bg-[#c4a661] text-[#1a1a1a]';
+      return 'bg-[var(--tablet-accent)] text-[var(--tablet-accent-contrast)]';
     case 'preparing':
-      return 'bg-[#3a3a3a] text-white ring-1 ring-[#4a5f8c]';
+      return 'bg-[var(--tablet-border-strong)] text-[var(--tablet-text)] ring-1 ring-[var(--tablet-info)]';
     case 'ready':
-      return 'bg-[#4a7c59] text-white';
+      return 'bg-[var(--tablet-success)] text-white';
     case 'scheduled':
-      return 'bg-[#2a2a2a] text-[#8a8a8a]';
+      return 'bg-[var(--tablet-border)] text-[var(--tablet-muted-strong)]';
     default:
-      return 'bg-[#3a3a3a] text-white';
+      return 'bg-[var(--tablet-border-strong)] text-[var(--tablet-text)]';
   }
 }
 
@@ -993,7 +993,7 @@ export default function TabletOrdersPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#1a1a1a] text-white font-sans">
+    <div className="tablet-theme min-h-screen bg-[var(--tablet-bg)] text-[var(--tablet-text)] font-sans">
       <Head>
         <title>Orders • Servio</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0" />
@@ -1005,22 +1005,22 @@ export default function TabletOrdersPage() {
         {receiptHtml ? <PrintReceipt receiptHtml={receiptHtml} copies={2} paperWidth={paperWidth} /> : null}
       </div>
 
-      <div className="no-print flex min-h-screen">
+      <div className="no-print flex min-h-screen flex-col lg:flex-row">
         <TabletSidebar statusDotClassName={isOnline && socketConnected ? 'bg-emerald-400' : 'bg-amber-400'} />
 
-        <main className="flex-1 bg-[#1a1a1a] text-white px-6 py-6">
+        <main className="flex-1 bg-[var(--tablet-bg)] text-[var(--tablet-text)] px-4 py-4 sm:px-6 sm:py-6">
           <div className="flex flex-col gap-6">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div>
-                <div className="text-xs uppercase tracking-[0.2em] text-[#6a6a6a]">Order Management</div>
+                <div className="text-xs uppercase tracking-[0.2em] text-[var(--tablet-muted)]">Order Management</div>
                 <div className="text-3xl font-semibold">All Orders</div>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3 md:justify-end">
                 <div className={`px-3 py-1 text-xs font-semibold uppercase border rounded-full ${connectionClasses}`}>
                   {connectionLabel}
                 </div>
                 {cachedAt && (
-                  <div className="text-xs text-white/60 font-medium">
+                  <div className="text-xs text-[var(--tablet-muted)] font-medium">
                     Cached: {new Date(cachedAt).toLocaleTimeString()}
                   </div>
                 )}
@@ -1031,7 +1031,7 @@ export default function TabletOrdersPage() {
                 </div>
                 <button
                   onClick={refresh}
-                  className="bg-[#242424] hover:brightness-110 p-3 rounded-full transition shadow-[0_2px_8px_rgba(0,0,0,0.3)]"
+                  className="bg-[var(--tablet-surface-alt)] hover:brightness-110 p-3 rounded-full transition shadow-[0_2px_8px_rgba(0,0,0,0.3)]"
                   aria-label="Refresh"
                 >
                   <RefreshCcw className={clsx('h-5 w-5', loading && 'animate-spin')} />
@@ -1040,11 +1040,11 @@ export default function TabletOrdersPage() {
             </div>
 
             {showUpdateBanner && (
-              <div className="bg-[#242424] text-white px-4 py-3 flex items-center justify-between rounded-xl border border-[#3a3a3a] shadow-[0_2px_8px_rgba(0,0,0,0.3)]">
+              <div className="bg-[var(--tablet-surface-alt)] text-[var(--tablet-text)] px-4 py-3 flex items-center justify-between rounded-xl border border-[var(--tablet-border-strong)] shadow-[0_2px_8px_rgba(0,0,0,0.3)]">
                 <div className="font-semibold">Update available — refresh to get the latest tablet improvements.</div>
                 <button
                   type="button"
-                  className="bg-[#c4a661] text-[#1a1a1a] px-3 py-1 rounded-lg font-semibold"
+                  className="bg-[var(--tablet-accent)] text-[var(--tablet-accent-contrast)] px-3 py-1 rounded-lg font-semibold"
                   onClick={() => window.location.reload()}
                 >
                   Refresh
@@ -1053,21 +1053,21 @@ export default function TabletOrdersPage() {
             )}
 
             {filtered.length === 0 && !loading ? (
-              <div className="flex flex-col items-center justify-center py-32 text-[#6a6a6a]">
+              <div className="flex flex-col items-center justify-center py-20 sm:py-32 text-[var(--tablet-muted)]">
                 <CheckCircle2 className="h-24 w-24 mb-6 opacity-20" />
                 <h2 className="text-3xl font-semibold">All Clear</h2>
                 <p className="text-base mt-3 font-medium uppercase tracking-widest">No active orders</p>
               </div>
             ) : (
-              <div className="flex flex-col gap-6 lg:flex-row">
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(280px,1fr)_minmax(360px,1.6fr)]">
                 {/* Left Panel: Order Queue */}
-                <section className="lg:w-[38%] w-full bg-[#1c1c1c] rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.3)] border border-[#2a2a2a] flex flex-col min-h-[70vh]">
-                  <div className="px-4 py-4 border-b border-[#2a2a2a] flex items-center justify-between">
-                    <button className="flex items-center gap-2 text-sm font-semibold uppercase text-[#d4b896]">
+                <section className="bg-[var(--tablet-surface)] rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.3)] border border-[var(--tablet-border)] flex flex-col min-h-[50vh] lg:min-h-[70vh]">
+                  <div className="px-4 py-4 border-b border-[var(--tablet-border)] flex items-center justify-between">
+                    <button className="flex items-center gap-2 text-sm font-semibold uppercase text-[var(--tablet-accent)]">
                       All Orders
                       <ChevronDown className="h-4 w-4" />
                     </button>
-                    <div className="text-xs font-semibold text-[#6a6a6a]">{filtered.length} Active</div>
+                    <div className="text-xs font-semibold text-[var(--tablet-muted)]">{filtered.length} Active</div>
                   </div>
                   <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
                     {filtered.map((o, index) => {
@@ -1084,12 +1084,12 @@ export default function TabletOrdersPage() {
 
                       const statusLabel = isNew ? 'NEW' : isPreparing ? 'IN PROGRESS' : isReady ? 'READY' : 'SCHEDULED';
                       const statusBadgeClasses = isNew
-                        ? 'bg-[#c4a661] text-[#1a1a1a]'
+                        ? 'bg-[var(--tablet-accent)] text-[var(--tablet-accent-contrast)]'
                         : isPreparing
-                          ? 'bg-[#3a3a3a] text-white ring-1 ring-[#4a5f8c]'
+                          ? 'bg-[var(--tablet-border-strong)] text-[var(--tablet-text)] ring-1 ring-[var(--tablet-info)]'
                           : isReady
-                            ? 'bg-[#4a7c59] text-white'
-                            : 'bg-[#2a2a2a] text-[#8a8a8a]';
+                            ? 'bg-[var(--tablet-success)] text-white'
+                            : 'bg-[var(--tablet-border)] text-[var(--tablet-muted-strong)]';
 
                       return (
                         <button
@@ -1097,9 +1097,9 @@ export default function TabletOrdersPage() {
                           type="button"
                           onClick={() => setSelectedOrder(o)}
                           className={clsx(
-                            'w-full text-left rounded-lg border border-[#2a2a2a] p-4 shadow-[0_2px_8px_rgba(0,0,0,0.3)] transition transform hover:brightness-110 hover:scale-[1.01]',
-                            isSelected && 'bg-[#4a5f8c] border-[#5d7099] shadow-[0_4px_12px_rgba(93,112,153,0.45)]',
-                            !isSelected && 'bg-[#202020]'
+                            'w-full text-left rounded-lg border border-[var(--tablet-border)] p-4 shadow-[0_2px_8px_rgba(0,0,0,0.3)] transition transform hover:brightness-110 hover:scale-[1.01]',
+                            isSelected && 'bg-[var(--tablet-info)] border-[var(--tablet-info)] shadow-[0_4px_12px_rgba(93,112,153,0.45)]',
+                            !isSelected && 'bg-[var(--tablet-card)]'
                           )}
                         >
                           <div className="flex items-center justify-between">
@@ -1107,24 +1107,24 @@ export default function TabletOrdersPage() {
                               {statusLabel}
                             </span>
                             {isLatest && (
-                              <span className="text-[11px] font-semibold uppercase text-[#d4b896]">Newest</span>
+                              <span className="text-[11px] font-semibold uppercase text-[var(--tablet-accent)]">Newest</span>
                             )}
                           </div>
                           <div className="mt-2 flex items-center justify-between">
-                            <div className={clsx('text-lg font-semibold truncate', isSelected ? 'text-white' : 'text-white')}>
+                            <div className={clsx('text-lg font-semibold truncate', 'text-[var(--tablet-text)]')}>
                               {o.customer_name || 'Guest'}
                             </div>
-                            <div className="flex items-center gap-2 text-sm text-[#6a6a6a]">
+                            <div className="flex items-center gap-2 text-sm text-[var(--tablet-muted)]">
                               <Clock className="h-4 w-4" />
                               <span className="tabular-nums">{timeStr}</span>
                             </div>
                           </div>
-                          <div className="mt-2 flex items-center justify-between text-sm text-[#6a6a6a]">
+                          <div className="mt-2 flex items-center justify-between text-sm text-[var(--tablet-muted)]">
                             <span>{itemCount} item{itemCount !== 1 ? 's' : ''}</span>
-                            <span className="text-white font-semibold">{formatMoney(o.total_amount)}</span>
+                            <span className="text-[var(--tablet-text)] font-semibold">{formatMoney(o.total_amount)}</span>
                           </div>
                           {hasPendingAction && (
-                            <div className="mt-2 text-[11px] font-semibold uppercase text-[#d4b896]">
+                            <div className="mt-2 text-[11px] font-semibold uppercase text-[var(--tablet-accent)]">
                               Pending Sync
                             </div>
                           )}
@@ -1134,10 +1134,10 @@ export default function TabletOrdersPage() {
                   </div>
                 </section>
 
-                {/* Right Panel: Order Details */}
-                <section className="lg:w-[62%] w-full flex flex-col gap-6">
-                  <div className="bg-[#1c1c1c] rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.3)] border border-[#2a2a2a]">
-                    <div className="px-6 py-5 border-b border-[#2a2a2a]">
+                <section className="flex flex-col gap-6">
+                  {/* Order Details */}
+                  <div className="bg-[var(--tablet-surface)] rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.3)] border border-[var(--tablet-border)]">
+                    <div className="px-6 py-5 border-b border-[var(--tablet-border)]">
                       <div className="text-2xl font-semibold">
                         {selectedOrder ? (
                           <>ORDER #{selectedOrder.external_id ? selectedOrder.external_id.slice(-4).toUpperCase() : selectedOrder.id.slice(-4).toUpperCase()} - {(selectedOrder.customer_name || 'Guest').toUpperCase()}</>
@@ -1148,57 +1148,22 @@ export default function TabletOrdersPage() {
                     </div>
                     {selectedOrder ? (
                       <div className="px-6 py-5 space-y-6">
-                        <div className="bg-[#242424] rounded-lg p-5 flex flex-col gap-4">
-                          <div className="flex items-center gap-4">
-                            <div className="h-14 w-14 rounded-full bg-[#3a3a3a] flex items-center justify-center text-xl font-semibold">
-                              {(selectedOrder.customer_name || 'G')[0]}
-                            </div>
-                            <div className="flex-1">
-                              <div className="text-lg font-semibold">{selectedOrder.customer_name || 'Guest'}</div>
-                              <div className="text-sm text-[#6a6a6a]">{selectedOrder.customer_phone || 'No contact provided'}</div>
-                              <div className="mt-3 flex flex-wrap gap-3 text-sm">
-                                <span className="text-[11px] uppercase tracking-widest text-[#6a6a6a]">
-                                  {selectedOrder.order_type || 'Pickup'}
-                                </span>
-                                <span className="text-white">
-                                  {selectedOrder.pickup_time
-                                    ? new Date(selectedOrder.pickup_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                                    : 'Ready ASAP'}
-                                </span>
-                                <span className="text-[#6a6a6a]">
-                                  {selectedOrder.pickup_time
-                                    ? new Date(selectedOrder.pickup_time).toLocaleDateString()
-                                    : new Date().toLocaleDateString()}
-                                </span>
-                              </div>
-                            </div>
-                            <div className="flex flex-col gap-2">
-                              <span className={clsx('px-3 py-1 rounded-full text-[11px] font-semibold uppercase text-center', statusBadgeClassesForStatus(normalizeStatus(selectedOrder.status)))}>
-                                {normalizeStatus(selectedOrder.status)}
-                              </span>
-                              <span className="px-3 py-1 rounded-full text-[11px] font-semibold uppercase text-center bg-[#2a2a2a] text-[#8a8a8a]">
-                                {selectedOrder.channel || 'POS'}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center justify-between border-b border-[#2a2a2a] pb-4">
-                          <span className="text-sm text-[#6a6a6a] uppercase">Total Cost</span>
+                        <div className="flex items-center justify-between border-b border-[var(--tablet-border)] pb-4">
+                          <span className="text-sm text-[var(--tablet-muted)] uppercase">Total Cost</span>
                           <span className="text-3xl font-semibold">{formatMoney(selectedOrder.total_amount)}</span>
                         </div>
 
                         <div>
                           <div className="text-lg font-semibold mb-3">Items ({selectedOrder.items?.length || 0})</div>
-                          <div className="space-y-3 max-h-[320px] overflow-y-auto pr-2">
+                          <div className="space-y-3 max-h-[260px] sm:max-h-[320px] overflow-y-auto pr-2">
                             {(selectedOrder.items || []).map((it, idx) => (
-                              <div key={idx} className="flex items-center gap-4 pb-3 border-b border-[#2a2a2a] last:border-0">
-                                <div className="h-14 w-14 rounded-md bg-[#2f2f2f] flex items-center justify-center text-sm text-[#6a6a6a]">
+                              <div key={idx} className="flex items-center gap-4 pb-3 border-b border-[var(--tablet-border)] last:border-0">
+                                <div className="h-14 w-14 rounded-md bg-[var(--tablet-border-strong)] flex items-center justify-center text-sm text-[var(--tablet-muted)]">
                                   {it.quantity || 1}
                                 </div>
                                 <div className="flex-1">
                                   <div className="text-base font-semibold">{it.name}</div>
-                                  <div className="text-sm text-[#6a6a6a]">Prepared fresh</div>
+                                  <div className="text-sm text-[var(--tablet-muted)]">Prepared fresh</div>
                                 </div>
                                 <div className="text-base font-semibold">
                                   {formatMoney((it.unit_price || it.price || 0) * (it.quantity || 1))}
@@ -1206,21 +1171,69 @@ export default function TabletOrdersPage() {
                               </div>
                             ))}
                           </div>
-                          <div className="text-sm text-white/90">{selectedOrder.special_instructions}</div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="px-6 py-16 text-center text-[var(--tablet-muted)]">
+                        Waiting for orders...
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Customer + Actions */}
+                  <div className="bg-[var(--tablet-surface)] rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.3)] border border-[var(--tablet-border)]">
+                    <div className="px-6 py-5 border-b border-[var(--tablet-border)]">
+                      <div className="text-xl font-semibold">Customer</div>
+                    </div>
+                    {selectedOrder ? (
+                      <div className="px-6 py-5 space-y-5">
+                        <div className="flex items-center gap-4">
+                          <div className="h-14 w-14 rounded-full bg-[var(--tablet-border-strong)] flex items-center justify-center text-xl font-semibold">
+                            {(selectedOrder.customer_name || 'G')[0]}
+                          </div>
+                          <div className="flex-1">
+                            <div className="text-lg font-semibold">{selectedOrder.customer_name || 'Guest'}</div>
+                            <div className="text-sm text-[var(--tablet-muted)]">{selectedOrder.customer_phone || 'No contact provided'}</div>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap gap-3 text-sm">
+                          <span className="text-[11px] uppercase tracking-widest text-[var(--tablet-muted)]">
+                            {selectedOrder.order_type || 'Pickup'}
+                          </span>
+                          <span className="text-[var(--tablet-text)]">
+                            {selectedOrder.pickup_time
+                              ? new Date(selectedOrder.pickup_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                              : 'Ready ASAP'}
+                          </span>
+                          <span className="text-[var(--tablet-muted)]">
+                            {selectedOrder.pickup_time
+                              ? new Date(selectedOrder.pickup_time).toLocaleDateString()
+                              : new Date().toLocaleDateString()}
+                          </span>
+                        </div>
+
+                        <div className="flex flex-wrap gap-2">
+                          <span className={clsx('px-3 py-1 rounded-full text-[11px] font-semibold uppercase text-center', statusBadgeClassesForStatus(normalizeStatus(selectedOrder.status)))}>
+                            {normalizeStatus(selectedOrder.status)}
+                          </span>
+                          <span className="px-3 py-1 rounded-full text-[11px] font-semibold uppercase text-center bg-[var(--tablet-border)] text-[var(--tablet-muted-strong)]">
+                            {selectedOrder.channel || 'POS'}
+                          </span>
                         </div>
 
                         {selectedOrder.special_instructions && (
-                          <div className="bg-[#2a2a2a] rounded-lg p-4">
-                            <div className="text-[11px] uppercase tracking-widest text-[#d4b896] mb-2">
+                          <div className="bg-[var(--tablet-border)] rounded-lg p-4">
+                            <div className="text-[11px] uppercase tracking-widest text-[var(--tablet-accent)] mb-2">
                               Special Instructions
                             </div>
-                            <div className="text-sm text-white/90">{selectedOrder.special_instructions}</div>
+                            <div className="text-sm text-[var(--tablet-text)] opacity-90">{selectedOrder.special_instructions}</div>
                           </div>
                         )}
                       </div>
                     ) : (
-                      <div className="px-6 py-16 text-center text-[#6a6a6a]">
-                        Waiting for orders...
+                      <div className="px-6 py-12 text-center text-[var(--tablet-muted)]">
+                        Select an order to view customer details.
                       </div>
                     )}
                   </div>
@@ -1232,14 +1245,14 @@ export default function TabletOrdersPage() {
                           <button
                             disabled={busyId === selectedOrder.id}
                             onClick={() => acceptOrder(selectedOrder)}
-                            className="h-14 rounded-full bg-[#c4a661] text-[#1a1a1a] font-semibold uppercase shadow-[0_2px_8px_rgba(0,0,0,0.3)] transition hover:brightness-110 active:scale-95 disabled:opacity-50"
+                            className="h-14 rounded-full bg-[var(--tablet-accent)] text-[var(--tablet-accent-contrast)] font-semibold uppercase shadow-[0_2px_8px_rgba(0,0,0,0.3)] transition hover:brightness-110 active:scale-95 disabled:opacity-50"
                           >
                             Confirm Order
                           </button>
                           <button
                             disabled={busyId === selectedOrder.id}
                             onClick={() => declineOrder(selectedOrder)}
-                            className="h-14 rounded-full border-2 border-[#4a4a4a] text-white font-semibold uppercase transition hover:brightness-110 active:scale-95 disabled:opacity-50"
+                            className="h-14 rounded-full border-2 border-[var(--tablet-border-strong)] text-[var(--tablet-text)] font-semibold uppercase transition hover:brightness-110 active:scale-95 disabled:opacity-50"
                           >
                             Decline
                           </button>
@@ -1250,14 +1263,14 @@ export default function TabletOrdersPage() {
                           <button
                             disabled={busyId === selectedOrder.id}
                             onClick={() => setStatus(selectedOrder.id, 'ready')}
-                            className="h-14 rounded-full bg-[#4a7c59] text-white font-semibold uppercase shadow-[0_2px_8px_rgba(0,0,0,0.3)] transition hover:brightness-110 active:scale-95 disabled:opacity-50"
+                            className="h-14 rounded-full bg-[var(--tablet-success)] text-white font-semibold uppercase shadow-[0_2px_8px_rgba(0,0,0,0.3)] transition hover:brightness-110 active:scale-95 disabled:opacity-50"
                           >
                             Ready for Pickup
                           </button>
                           <button
                             onClick={() => printOrder(selectedOrder.id)}
                             disabled={printingOrderId === selectedOrder.id}
-                            className="h-14 rounded-full border-2 border-[#4a4a4a] text-white font-semibold uppercase transition hover:brightness-110 active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
+                            className="h-14 rounded-full border-2 border-[var(--tablet-border-strong)] text-[var(--tablet-text)] font-semibold uppercase transition hover:brightness-110 active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
                           >
                             <Printer className="h-5 w-5" />
                             Print
@@ -1274,12 +1287,12 @@ export default function TabletOrdersPage() {
                                 setSelectedOrder(null);
                               }
                             }}
-                            className="h-14 rounded-full bg-[#4a7c59] text-white font-semibold uppercase shadow-[0_2px_8px_rgba(0,0,0,0.3)] transition hover:brightness-110 active:scale-95 disabled:opacity-50"
+                            className="h-14 rounded-full bg-[var(--tablet-success)] text-white font-semibold uppercase shadow-[0_2px_8px_rgba(0,0,0,0.3)] transition hover:brightness-110 active:scale-95 disabled:opacity-50"
                           >
                             Complete Order
                           </button>
                           <button
-                            className="h-14 rounded-full border-2 border-[#4a4a4a] text-white font-semibold uppercase transition hover:brightness-110 active:scale-95"
+                            className="h-14 rounded-full border-2 border-[var(--tablet-border-strong)] text-[var(--tablet-text)] font-semibold uppercase transition hover:brightness-110 active:scale-95"
                             type="button"
                           >
                             Assign Driver
@@ -1298,21 +1311,21 @@ export default function TabletOrdersPage() {
       {/* Print Prompt Modal (when auto-print is OFF) */}
       {showPrintPrompt && (
         <div className="no-print fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="bg-[#1c1c1c] rounded-3xl shadow-[0_12px_30px_rgba(0,0,0,0.5)] p-8 w-full max-w-md border border-[#2a2a2a]">
+          <div className="bg-[var(--tablet-surface)] rounded-3xl shadow-[0_12px_30px_rgba(0,0,0,0.5)] p-6 sm:p-8 w-full max-w-md border border-[var(--tablet-border)]">
             <div className="text-center mb-6">
-              <Printer className="h-14 w-14 mx-auto text-[#6a6a6a] mb-4" />
+              <Printer className="h-14 w-14 mx-auto text-[var(--tablet-muted)] mb-4" />
               <h3 className="text-2xl font-semibold mb-2">Print Receipt?</h3>
-              <p className="text-sm text-[#6a6a6a]">Order has been accepted. Would you like to print it?</p>
+              <p className="text-sm text-[var(--tablet-muted)]">Order has been accepted. Would you like to print it?</p>
             </div>
             <div className="flex gap-4">
               <button
-                className="flex-1 px-6 py-4 rounded-2xl border-2 border-[#4a4a4a] text-sm font-semibold uppercase transition hover:brightness-110"
+                className="flex-1 px-6 py-4 rounded-2xl border-2 border-[var(--tablet-border-strong)] text-sm font-semibold uppercase transition hover:brightness-110"
                 onClick={() => setShowPrintPrompt(null)}
               >
                 No
               </button>
               <button
-                className="flex-1 px-6 py-4 rounded-2xl bg-[#c4a661] text-[#1a1a1a] text-sm font-semibold uppercase transition hover:brightness-110"
+                className="flex-1 px-6 py-4 rounded-2xl bg-[var(--tablet-accent)] text-[var(--tablet-accent-contrast)] text-sm font-semibold uppercase transition hover:brightness-110"
                 onClick={() => {
                   const orderId = showPrintPrompt;
                   setShowPrintPrompt(null);
