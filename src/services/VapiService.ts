@@ -132,12 +132,36 @@ export class VapiService {
    * where toolCallId is the id from the incoming tool call.
    */
   private async handleToolCalls(message: any): Promise<any> {
+    const normalizeToolCall = (raw: any) => {
+      if (!raw || typeof raw !== 'object') return null;
+      const toolCall = raw.toolCall || raw;
+      const toolFunction = toolCall?.function || raw?.function || raw?.toolCall?.function;
+      const name =
+        raw?.name ||
+        toolCall?.name ||
+        toolFunction?.name ||
+        toolCall?.toolName ||
+        raw?.toolName;
+      const parameters =
+        toolCall?.parameters ??
+        toolCall?.arguments ??
+        toolFunction?.arguments ??
+        raw?.parameters ??
+        raw?.arguments;
+      const id = toolCall?.id || raw?.id;
+      return { id, name, parameters };
+    };
+
     const toolCallList: Array<{ id?: string; name?: string; parameters?: any }> =
-      (Array.isArray(message.toolCallList) ? message.toolCallList : null) ||
-      (Array.isArray(message.toolCalls) ? message.toolCalls : null) ||
+      (Array.isArray(message.toolCallList)
+        ? message.toolCallList.map(normalizeToolCall).filter(Boolean)
+        : null) ||
+      (Array.isArray(message.toolCalls)
+        ? message.toolCalls.map(normalizeToolCall).filter(Boolean)
+        : null) ||
       (Array.isArray(message.toolWithToolCallList)
         ? message.toolWithToolCallList
-            .map((t: any) => ({ id: t?.toolCall?.id, name: t?.name, parameters: t?.toolCall?.parameters }))
+            .map((t: any) => normalizeToolCall({ toolCall: t?.toolCall, name: t?.name }))
             .filter(Boolean)
         : []);
 
@@ -153,15 +177,17 @@ export class VapiService {
     const results: Array<{ name: string; toolCallId?: string; result: string; error?: string }> = [];
 
     for (const tc of toolCallList) {
-      const name = String(tc?.name || '');
+      const name = String(tc?.name || '').trim();
       const toolCallId = typeof tc?.id === 'string' ? tc.id : undefined;
       const params = tc?.parameters || {};
-      const exec = await this.executeToolCall(name, params, message);
+      const exec = name
+        ? await this.executeToolCall(name, params, message)
+        : { error: 'Missing tool name' };
 
       // Vapi expects `result` to be a string (often JSON-stringified).
       const payload = exec.error ? { ok: false, error: exec.error } : exec.result ?? { ok: true };
       results.push({
-        name,
+        name: name || 'unknown',
         toolCallId,
         result: JSON.stringify(payload),
         ...(exec.error ? { error: exec.error } : {})
@@ -171,6 +197,11 @@ export class VapiService {
     return { results };
   }
 
+  private getRestaurantIdFromParams(parameters: any, message?: any): {
+    restaurantId: string | null;
+    restaurantSlug: string | null;
+    source: string;
+  } {
   private async getRestaurantIdFromParams(
     parameters: any,
     message?: any
@@ -301,9 +332,18 @@ export class VapiService {
   }
 
   private async executeToolCall(name: string, parameters: any, message: any): Promise<{ result?: any; error?: string }> {
+    if (!name || !name.trim()) {
+      return { error: 'Missing tool name' };
+    }
     const callId = message.call?.id;
     const requestId = callId || `vapi_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const normalizedParameters = this.normalizeToolParameters(parameters);
+    const { restaurantId: rawRestaurantId, restaurantSlug, source: restaurantIdSource } =
+      this.getRestaurantIdFromParams(normalizedParameters, message);
+    const resolvedFromSlug = !rawRestaurantId && restaurantSlug
+      ? await VoiceOrderingService.getInstance().resolveRestaurantIdFromSlug(restaurantSlug)
+      : null;
+    const restaurantId = rawRestaurantId || resolvedFromSlug;
     const { restaurantId, restaurantSlug, source: restaurantIdSource } = await this.getRestaurantIdFromParams(
       normalizedParameters,
       message
