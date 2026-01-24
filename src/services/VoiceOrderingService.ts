@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { SmsService } from './SmsService';
+import { SocketService } from './SocketService';
 
 import { eventBus } from '../events/bus';
 import { logger } from '../utils/logger';
@@ -754,6 +755,14 @@ export class VoiceOrderingService {
     });
 
     try {
+      const io = SocketService.getIO();
+      if (io) {
+        io.to(`restaurant-${restaurantId}`).emit('new-order', {
+          orderId,
+          totalAmount: quote.total
+        });
+      }
+
       await eventBus.emit('order.created_vapi', {
         restaurantId,
         type: 'order.created_vapi',
