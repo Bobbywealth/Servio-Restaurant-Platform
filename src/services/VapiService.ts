@@ -197,19 +197,13 @@ export class VapiService {
     return { results };
   }
 
-  private getRestaurantIdFromParams(parameters: any, message?: any): {
-    restaurantId: string | null;
-    restaurantSlug: string | null;
-    source: string;
-  } {
-    const safeGet = (root: any, path: string[]): any => {
-      return path.reduce((acc, key) => (acc && typeof acc === 'object' ? acc[key] : undefined), root);
-    };
-
   private async getRestaurantIdFromParams(
     parameters: any,
     message?: any
   ): Promise<{ restaurantId: string | null; restaurantSlug: string | null; source: string }> {
+    const safeGet = (root: any, path: string[]): any => {
+      return path.reduce((acc, key) => (acc && typeof acc === 'object' ? acc[key] : undefined), root);
+    };
     // 1) explicit tool parameters (preferred)
     const fromParams =
       (parameters && (parameters as any).restaurantId) ||
