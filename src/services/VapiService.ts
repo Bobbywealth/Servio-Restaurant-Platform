@@ -341,15 +341,11 @@ export class VapiService {
     const requestId = callId || `vapi_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const normalizedParameters = this.normalizeToolParameters(parameters);
     const { restaurantId: rawRestaurantId, restaurantSlug, source: restaurantIdSource } =
-      this.getRestaurantIdFromParams(normalizedParameters, message);
+      await this.getRestaurantIdFromParams(normalizedParameters, message);
     const resolvedFromSlug = !rawRestaurantId && restaurantSlug
       ? await VoiceOrderingService.getInstance().resolveRestaurantIdFromSlug(restaurantSlug)
       : null;
     const restaurantId = rawRestaurantId || resolvedFromSlug;
-    const { restaurantId, restaurantSlug, source: restaurantIdSource } = await this.getRestaurantIdFromParams(
-      normalizedParameters,
-      message
-    );
     const startedAt = Date.now();
 
     logger.info('[vapi] tool_call_start', { requestId, callId, toolName: name });
