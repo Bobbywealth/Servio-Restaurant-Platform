@@ -44,6 +44,10 @@ type OrdersResponse = {
   error?: { message?: string };
 };
 
+type PendingAction =
+  | { id: string; orderId: string; type: 'status'; payload: { status: string }; queuedAt: number }
+  | { id: string; orderId: string; type: 'prep-time'; payload: { prepMinutes: number }; queuedAt: number };
+
 async function apiGet<T>(path: string): Promise<T> {
   const res = await api.get(path);
   return res.data as T;
@@ -172,6 +176,33 @@ function beepSequence() {
   window.setTimeout(() => beep(), 600);
 }
 
+const ACTION_QUEUE_KEY = 'servio_tablet_action_queue';
+const ORDER_CACHE_KEY = 'servio_cached_orders';
+
+function loadActionQueue(): PendingAction[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = window.localStorage.getItem(ACTION_QUEUE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed as PendingAction[];
+  } catch {
+    return [];
+  }
+}
+
+function saveActionQueue(next: PendingAction[]) {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(ACTION_QUEUE_KEY, JSON.stringify(next));
+}
+
+function removeAuthTokens() {
+  if (typeof window === 'undefined') return;
+  window.localStorage.removeItem('servio_access_token');
+  window.localStorage.removeItem('servio_refresh_token');
+  window.localStorage.removeItem('servio_user');
+}
 
 export default function TabletOrdersPage() {
   const router = useRouter();
@@ -199,6 +230,11 @@ export default function TabletOrdersPage() {
   const lastRefreshAt = useRef<number>(0);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [showPrintPrompt, setShowPrintPrompt] = useState<string | null>(null);
+  const [pendingActions, setPendingActions] = useState<Set<string>>(() => new Set());
+  const [cachedAt, setCachedAt] = useState<string | null>(null);
+  const [isOnline, setIsOnline] = useState<boolean>(true);
+  const [socketConnected, setSocketConnected] = useState<boolean>(false);
+  const [showUpdateBanner, setShowUpdateBanner] = useState(false);
 
   useEffect(() => {
     if (authLoading) return;
@@ -215,6 +251,70 @@ export default function TabletOrdersPage() {
       </div>
     );
   }
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    setIsOnline(navigator.onLine);
+    const handleOnline = () => {
+      setIsOnline(true);
+    };
+    const handleOffline = () => {
+      setIsOnline(false);
+    };
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!socket) return;
+    const cleanup = socket.onConnectionChange((status) => {
+      setSocketConnected(status);
+    });
+    return () => cleanup();
+  }, [socket]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!('serviceWorker' in navigator)) return;
+    const handleMessage = (event: MessageEvent) => {
+      const data = event.data;
+      if (data?.type === 'SW_ACTIVATED') {
+        setShowUpdateBanner(true);
+      }
+    };
+    navigator.serviceWorker.addEventListener('message', handleMessage);
+    return () => {
+      navigator.serviceWorker.removeEventListener('message', handleMessage);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const cachedQueue = loadActionQueue();
+    if (cachedQueue.length > 0) {
+      setPendingActions(new Set(cachedQueue.map((item) => item.orderId)));
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const raw = window.localStorage.getItem(ORDER_CACHE_KEY);
+    if (!raw) return;
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed?.orders)) {
+        setOrders(parsed.orders);
+        setCachedAt(parsed.cachedAt || null);
+        setLoading(false);
+      }
+    } catch {
+      // ignore cache parse issues
+    }
+  }, []);
 
   // Initialize audio on mount
   useEffect(() => {
@@ -236,6 +336,28 @@ export default function TabletOrdersPage() {
       document.removeEventListener('touchstart', handleInteraction);
     };
   }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const idleMs = 15 * 60 * 1000;
+    let idleTimer: number | null = null;
+    const handleIdleLogout = () => {
+      removeAuthTokens();
+      const next = router.asPath || '/tablet/orders';
+      router.replace(`/tablet/login?next=${encodeURIComponent(next)}`);
+    };
+    const resetIdleTimer = () => {
+      if (idleTimer) window.clearTimeout(idleTimer);
+      idleTimer = window.setTimeout(handleIdleLogout, idleMs);
+    };
+    resetIdleTimer();
+    const events = ['mousemove', 'mousedown', 'touchstart', 'keydown'];
+    events.forEach((eventName) => window.addEventListener(eventName, resetIdleTimer));
+    return () => {
+      if (idleTimer) window.clearTimeout(idleTimer);
+      events.forEach((eventName) => window.removeEventListener(eventName, resetIdleTimer));
+    };
+  }, [router]);
 
   useEffect(() => {
     const storedAuto = typeof window !== 'undefined' ? window.localStorage.getItem('servio_auto_print_enabled') : null;
@@ -289,6 +411,46 @@ export default function TabletOrdersPage() {
     loadPrinterSettings();
   }, []);
 
+  const enqueueAction = (action: PendingAction) => {
+    const current = loadActionQueue();
+    const next = [...current, action];
+    saveActionQueue(next);
+    setPendingActions((prev) => {
+      const updated = new Set(prev);
+      updated.add(action.orderId);
+      return updated;
+    });
+  };
+
+  const clearPendingForOrder = (orderId: string) => {
+    setPendingActions((prev) => {
+      const next = new Set(prev);
+      next.delete(orderId);
+      return next;
+    });
+  };
+
+  const processActionQueue = async () => {
+    if (typeof window === 'undefined') return;
+    if (!navigator.onLine) return;
+    const queue = loadActionQueue();
+    if (queue.length === 0) return;
+    const remaining: PendingAction[] = [];
+    for (const action of queue) {
+      try {
+        if (action.type === 'status') {
+          await apiPost(`/api/orders/${encodeURIComponent(action.orderId)}/status`, action.payload);
+        } else if (action.type === 'prep-time') {
+          await apiPost(`/api/orders/${encodeURIComponent(action.orderId)}/prep-time`, action.payload);
+        }
+        clearPendingForOrder(action.orderId);
+      } catch {
+        remaining.push(action);
+      }
+    }
+    saveActionQueue(remaining);
+  };
+
   async function refresh() {
     try {
       if (typeof window !== 'undefined' && !window.localStorage.getItem('servio_access_token')) {
@@ -298,6 +460,11 @@ export default function TabletOrdersPage() {
       const json = await apiGet<OrdersResponse>('/api/orders?limit=50&offset=0');
       const list = Array.isArray(json?.data?.orders) ? json.data!.orders! : [];
       setOrders(list);
+      if (typeof window !== 'undefined') {
+        const payload = JSON.stringify({ orders: list, cachedAt: new Date().toISOString() });
+        window.localStorage.setItem(ORDER_CACHE_KEY, payload);
+        setCachedAt(new Date().toISOString());
+      }
       lastRefreshAt.current = Date.now();
     } catch (e: unknown) {
       console.error(e);
@@ -543,12 +710,28 @@ export default function TabletOrdersPage() {
     setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, status: nextStatus } : o)));
     setSelectedOrder((prev) => (prev?.id === orderId ? { ...prev, status: nextStatus } : prev));
     try {
-      await apiPost(`/api/orders/${encodeURIComponent(orderId)}/status`, { status: nextStatus });
-      if (socket) {
-        socket.emit('order:status_changed', { orderId, status: nextStatus, timestamp: new Date() });
+      if (!navigator.onLine) {
+        enqueueAction({
+          id: `${orderId}-${Date.now()}`,
+          orderId,
+          type: 'status',
+          payload: { status: nextStatus },
+          queuedAt: Date.now()
+        });
+      } else {
+        await apiPost(`/api/orders/${encodeURIComponent(orderId)}/status`, { status: nextStatus });
+        if (socket) {
+          socket.emit('order:status_changed', { orderId, status: nextStatus, timestamp: new Date() });
+        }
       }
     } catch (e) {
-      await refresh();
+      enqueueAction({
+        id: `${orderId}-${Date.now()}`,
+        orderId,
+        type: 'status',
+        payload: { status: nextStatus },
+        queuedAt: Date.now()
+      });
     } finally {
       setBusyId(null);
     }
@@ -558,7 +741,17 @@ export default function TabletOrdersPage() {
     setBusyId(order.id);
     try {
       // Set status to preparing
-      await apiPost(`/api/orders/${encodeURIComponent(order.id)}/status`, { status: 'preparing' });
+      if (!navigator.onLine) {
+        enqueueAction({
+          id: `${order.id}-${Date.now()}`,
+          orderId: order.id,
+          type: 'status',
+          payload: { status: 'preparing' },
+          queuedAt: Date.now()
+        });
+      } else {
+        await apiPost(`/api/orders/${encodeURIComponent(order.id)}/status`, { status: 'preparing' });
+      }
       setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, status: 'preparing' } : o)));
       setSelectedOrder((prev) => (prev?.id === order.id ? { ...prev, status: 'preparing' } : prev));
       if (socket) {
@@ -574,7 +767,13 @@ export default function TabletOrdersPage() {
         setShowPrintPrompt(order.id);
       }
     } catch (e) {
-      await refresh();
+      enqueueAction({
+        id: `${order.id}-${Date.now()}`,
+        orderId: order.id,
+        type: 'status',
+        payload: { status: 'preparing' },
+        queuedAt: Date.now()
+      });
     } finally {
       setBusyId(null);
     }
@@ -584,13 +783,29 @@ export default function TabletOrdersPage() {
     setBusyId(order.id);
     setSelectedOrder(null);
     try {
-      await apiPost(`/api/orders/${encodeURIComponent(order.id)}/status`, { status: 'cancelled' });
+      if (!navigator.onLine) {
+        enqueueAction({
+          id: `${order.id}-${Date.now()}`,
+          orderId: order.id,
+          type: 'status',
+          payload: { status: 'cancelled' },
+          queuedAt: Date.now()
+        });
+      } else {
+        await apiPost(`/api/orders/${encodeURIComponent(order.id)}/status`, { status: 'cancelled' });
+      }
       setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, status: 'cancelled' } : o)));
       if (socket) {
         socket.emit('order:status_changed', { orderId: order.id, status: 'cancelled', timestamp: new Date() });
       }
     } catch (e) {
-      await refresh();
+      enqueueAction({
+        id: `${order.id}-${Date.now()}`,
+        orderId: order.id,
+        type: 'status',
+        payload: { status: 'cancelled' },
+        queuedAt: Date.now()
+      });
     } finally {
       setBusyId(null);
     }
@@ -599,11 +814,22 @@ export default function TabletOrdersPage() {
   async function setPrepTime(orderId: string, minutes: number) {
     setBusyId(orderId);
     try {
-      const resp = await apiPost<{ success: boolean; data?: { pickupTime?: string } }>(
-        `/api/orders/${encodeURIComponent(orderId)}/prep-time`,
-        { prepMinutes: minutes }
-      );
-      const pickupTime = resp?.data?.pickupTime;
+      let pickupTime: string | undefined;
+      if (!navigator.onLine) {
+        enqueueAction({
+          id: `${orderId}-${Date.now()}`,
+          orderId,
+          type: 'prep-time',
+          payload: { prepMinutes: minutes },
+          queuedAt: Date.now()
+        });
+      } else {
+        const resp = await apiPost<{ success: boolean; data?: { pickupTime?: string } }>(
+          `/api/orders/${encodeURIComponent(orderId)}/prep-time`,
+          { prepMinutes: minutes }
+        );
+        pickupTime = resp?.data?.pickupTime;
+      }
       setOrders((prev) =>
         prev.map((o) => (o.id === orderId ? { ...o, status: 'preparing', pickup_time: pickupTime } : o))
       );
@@ -611,7 +837,13 @@ export default function TabletOrdersPage() {
         socket.emit('order:status_changed', { orderId, status: 'preparing', timestamp: new Date() });
       }
     } catch (e) {
-      await refresh();
+      enqueueAction({
+        id: `${orderId}-${Date.now()}`,
+        orderId,
+        type: 'prep-time',
+        payload: { prepMinutes: minutes },
+        queuedAt: Date.now()
+      });
     } finally {
       setBusyId(null);
     }
@@ -624,6 +856,14 @@ export default function TabletOrdersPage() {
       if (Date.now() - lastRefreshAt.current < 5000) return;
       refresh();
     }, 10000);
+    return () => window.clearInterval(t);
+  }, []);
+
+  useEffect(() => {
+    processActionQueue();
+    const t = window.setInterval(() => {
+      processActionQueue();
+    }, 15000);
     return () => window.clearInterval(t);
   }, []);
 
@@ -709,6 +949,13 @@ export default function TabletOrdersPage() {
     setAutoPrintPendingId(newest.id);
   }, [autoPrintEnabled, filtered, loading, autoPrintPendingId]);
 
+  const connectionLabel = isOnline ? (socketConnected ? 'Online' : 'Reconnecting') : 'Offline';
+  const connectionClasses = isOnline
+    ? socketConnected
+      ? 'bg-emerald-500/20 text-emerald-700 border-emerald-500/30'
+      : 'bg-amber-500/20 text-amber-700 border-amber-500/30'
+    : 'bg-red-500/20 text-red-700 border-red-500/30';
+
   return (
     <div className="min-h-screen bg-white text-black font-sans">
       <Head>
@@ -733,6 +980,12 @@ export default function TabletOrdersPage() {
             />
           </div>
           <div className="bg-white text-black font-black px-2 py-0.5 rounded text-lg italic">SERVIO</div>
+          <div className={`ml-2 px-2 py-1 text-xs font-black uppercase border rounded-full ${connectionClasses}`}>
+            {connectionLabel}
+          </div>
+          {cachedAt && (
+            <div className="text-xs text-white/70 font-semibold">Cached: {new Date(cachedAt).toLocaleTimeString()}</div>
+          )}
         </div>
         <div className="flex items-center gap-4">
           <div className="text-right">
@@ -757,6 +1010,19 @@ export default function TabletOrdersPage() {
         </div>
       </div>
 
+      {showUpdateBanner && (
+        <div className="no-print bg-blue-600 text-white px-4 py-3 flex items-center justify-between">
+          <div className="font-semibold">Update available — refresh to get the latest tablet improvements.</div>
+          <button
+            type="button"
+            className="bg-white text-blue-700 px-3 py-1 rounded-lg font-black"
+            onClick={() => window.location.reload()}
+          >
+            Refresh
+          </button>
+        </div>
+      )}
+
       <div className="no-print p-4">
         {filtered.length === 0 && !loading ? (
           <div className="flex flex-col items-center justify-center py-32 text-slate-400">
@@ -773,6 +1039,7 @@ export default function TabletOrdersPage() {
               const isReady = status === 'ready';
               const timeStr = formatTimeAgo(o.created_at, now);
               const itemCount = (o.items || []).reduce((sum, it) => sum + (it.quantity || 1), 0);
+              const hasPendingAction = pendingActions.has(o.id);
 
               return (
                 <div 
@@ -796,6 +1063,11 @@ export default function TabletOrdersPage() {
                       <span className="text-5xl font-black font-mono leading-none tracking-tighter">
                         #{o.external_id ? o.external_id.slice(-4).toUpperCase() : o.id.slice(-4).toUpperCase()}
                       </span>
+                      {hasPendingAction && (
+                        <span className="mt-1 text-xs font-black uppercase tracking-wider text-white/80">
+                          Pending Sync
+                        </span>
+                      )}
                     </div>
                     <div className="text-right">
                       <span className="text-base font-black uppercase tracking-wider opacity-80">
