@@ -29,6 +29,7 @@
     "axios": "^1.6.2",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.0.0",
+    "critters": "^0.0.20",
     "eslint": "^8",
     "eslint-config-next": "14.0.4",
     "framer-motion": "^12.23.26",
