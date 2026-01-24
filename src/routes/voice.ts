@@ -33,7 +33,7 @@ router.get('/menu/items/:id', requireVapiAuth, asyncHandler(async (req: Request,
 
 // 3) Quote
 router.post('/order/quote', requireVapiAuth, asyncHandler(async (req: Request, res: Response) => {
-  res.json(service.validateQuote(req.body));
+  res.json(await service.validateQuote(req.body));
 }));
 
 // 4) Create Order (Received status)

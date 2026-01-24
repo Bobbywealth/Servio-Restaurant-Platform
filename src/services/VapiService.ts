@@ -537,7 +537,7 @@ export class VapiService {
         }
         case 'quoteOrder':
           normalizedParameters.restaurantId = restaurantId;
-          result = VoiceOrderingService.getInstance().validateQuote(normalizedParameters);
+          result = await VoiceOrderingService.getInstance().validateQuote(normalizedParameters);
           break;
         case 'createOrder': {
           normalizedParameters.callId = normalizedParameters.callId || message.call?.id;
