@@ -483,8 +483,7 @@ img, video {
     /* Disable iOS bounce on fixed elements */
     .fixed,
     .sticky {
-      -webkit-transform: translateZ(0);
-      transform: translateZ(0);
+      will-change: transform;
     }
   }
 
