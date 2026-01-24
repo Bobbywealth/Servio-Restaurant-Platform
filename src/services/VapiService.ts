@@ -346,6 +346,11 @@ export class VapiService {
       ? await VoiceOrderingService.getInstance().resolveRestaurantIdFromSlug(restaurantSlug)
       : null;
     const restaurantId = rawRestaurantId || resolvedFromSlug;
+    const resolvedRestaurantIdSource = rawRestaurantId
+      ? restaurantIdSource
+      : resolvedFromSlug
+        ? 'db.slug_lookup'
+        : restaurantIdSource;
     const startedAt = Date.now();
 
     logger.info('[vapi] tool_call_start', { requestId, callId, toolName: name });
@@ -386,7 +391,7 @@ export class VapiService {
             requestId,
             callId,
             restaurantId,
-            restaurantIdSource,
+            restaurantIdSource: resolvedRestaurantIdSource,
             restaurantSlug,
             query
           });
@@ -513,12 +518,23 @@ export class VapiService {
   public async executeToolRequest(
     toolName: string,
     parameters: any,
-    context?: { callId?: string | null; customerNumber?: string | null }
+    context?: {
+      callId?: string | null;
+      customerNumber?: string | null;
+      phoneNumberId?: string | null;
+    }
   ): Promise<{ result?: any; error?: string }> {
     const callId = context?.callId || undefined;
     const customerNumber = context?.customerNumber || undefined;
+    const phoneNumberId = context?.phoneNumberId || undefined;
     const message = {
-      call: callId || customerNumber ? { id: callId, customer: customerNumber ? { number: customerNumber } : undefined } : undefined
+      call: callId || customerNumber || phoneNumberId
+        ? {
+            id: callId,
+            phoneNumberId,
+            customer: customerNumber ? { number: customerNumber } : undefined
+          }
+        : undefined
     };
 
     return this.executeToolCall(toolName, parameters, message);
