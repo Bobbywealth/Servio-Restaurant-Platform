@@ -75,6 +75,9 @@ router.post('/tool/:toolName', requireVapiWebhookAuth, async (req: Request, res:
   const headerRestaurantSlug =
     (req.headers['x-vapi-restaurant-slug'] as string) ||
     (req.headers['x-restaurant-slug'] as string);
+  const headerPhoneNumberId =
+    (req.headers['x-vapi-phone-number-id'] as string) ||
+    (req.headers['x-phone-number-id'] as string);
 
   // Merge query params into body for tools that send via URL
   const mergedParams = {
@@ -107,11 +110,23 @@ router.post('/tool/:toolName', requireVapiWebhookAuth, async (req: Request, res:
       : Array.isArray(customerNumberRaw)
         ? customerNumberRaw[0]
         : undefined;
+  const phoneNumberIdRaw =
+    (body as any)?.phoneNumberId ||
+    (body as any)?.call?.phoneNumberId ||
+    (body as any)?.call?.phone?.numberId ||
+    headerPhoneNumberId;
+  const phoneNumberId =
+    typeof phoneNumberIdRaw === 'string'
+      ? phoneNumberIdRaw
+      : Array.isArray(phoneNumberIdRaw)
+        ? phoneNumberIdRaw[0]
+        : undefined;
 
   try {
     const exec = await vapiService.executeToolRequest(toolName, parameters, {
       callId,
-      customerNumber
+      customerNumber,
+      phoneNumberId
     });
 
     const resultPayload = exec.error ? { ok: false, error: exec.error } : exec.result ?? { ok: true };
@@ -145,6 +160,9 @@ router.get('/tool/:toolName', requireVapiWebhookAuth, async (req: Request, res: 
   const headerRestaurantSlug =
     (req.headers['x-vapi-restaurant-slug'] as string) ||
     (req.headers['x-restaurant-slug'] as string);
+  const headerPhoneNumberId =
+    (req.headers['x-vapi-phone-number-id'] as string) ||
+    (req.headers['x-phone-number-id'] as string);
   const headerCallIdValue = Array.isArray(headerCallId) ? headerCallId[0] : headerCallId;
   const callIdRaw = (req.query as any)?.callId || headerCallIdValue;
   const callId =
@@ -161,6 +179,13 @@ router.get('/tool/:toolName', requireVapiWebhookAuth, async (req: Request, res: 
       : Array.isArray(customerNumberRaw)
         ? customerNumberRaw[0]
         : undefined;
+  const phoneNumberIdRaw = (req.query as any)?.phoneNumberId || headerPhoneNumberId;
+  const phoneNumberId =
+    typeof phoneNumberIdRaw === 'string'
+      ? phoneNumberIdRaw
+      : Array.isArray(phoneNumberIdRaw)
+        ? phoneNumberIdRaw[0]
+        : undefined;
 
   try {
     const parameters = {
@@ -170,7 +195,8 @@ router.get('/tool/:toolName', requireVapiWebhookAuth, async (req: Request, res: 
     };
     const exec = await vapiService.executeToolRequest(toolName, parameters, {
       callId,
-      customerNumber
+      customerNumber,
+      phoneNumberId
     });
 
     const resultPayload = exec.error ? { ok: false, error: exec.error } : exec.result ?? { ok: true };
