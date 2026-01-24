@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { DatabaseService } from '../services/DatabaseService';
 import { asyncHandler } from '../middleware/errorHandler';
+import { logger } from '../utils/logger';
 
 const router = Router();
 
@@ -101,31 +102,60 @@ router.post('/manual', asyncHandler(async (req: Request, res: Response) => {
   const db = DatabaseService.getInstance().getDatabase();
   const jobs = [];
 
+  logger.info(`Manual sync triggered for channels: ${targetChannels.join(', ')}`, {
+    channels: targetChannels,
+    syncType: type,
+    restaurantId: req.user?.restaurantId,
+    triggeredBy: userId || 'manual'
+  });
+
   for (const channel of targetChannels) {
     const jobId = `sync_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-    await db.run(`
-      INSERT INTO sync_jobs (id, restaurant_id, job_type, status, payload, metadata)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `, [
-      jobId,
-      req.user?.restaurantId || null,
-      type,
-      'pending',
-      JSON.stringify({ channels: [channel] }),
-      JSON.stringify({ triggeredBy: userId || 'manual', triggerTime: new Date().toISOString() })
-    ]);
+    try {
+      logger.info(`Creating manual sync job: ${jobId}`, {
+        jobId,
+        restaurantId: req.user?.restaurantId,
+        jobType: type,
+        channel
+      });
 
-    // Simulate immediate completion for demo
-    setTimeout(async () => {
       await db.run(`
-        UPDATE sync_jobs
-        SET status = 'completed', completed_at = CURRENT_TIMESTAMP
-        WHERE id = ?
-      `, [jobId]);
-    }, Math.random() * 2000 + 1000); // Complete after 1-3 seconds
+        INSERT INTO sync_jobs (id, restaurant_id, job_type, status, payload, metadata)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `, [
+        jobId,
+        req.user?.restaurantId || null,
+        type,
+        'pending',
+        JSON.stringify({ channels: [channel] }),
+        JSON.stringify({ triggeredBy: userId || 'manual', triggerTime: new Date().toISOString() })
+      ]);
 
-    jobs.push({ jobId, channel, status: 'pending' });
+      logger.info(`Successfully created manual sync job: ${jobId}`);
+
+      // Simulate immediate completion for demo
+      setTimeout(async () => {
+        await db.run(`
+          UPDATE sync_jobs
+          SET status = 'completed', completed_at = CURRENT_TIMESTAMP
+          WHERE id = ?
+        `, [jobId]);
+      }, Math.random() * 2000 + 1000); // Complete after 1-3 seconds
+
+      jobs.push({ jobId, channel, status: 'pending' });
+    } catch (error) {
+      logger.error(`Failed to create manual sync job for channel ${channel}:`, {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        jobId,
+        restaurantId: req.user?.restaurantId,
+        channel,
+        syncType: type
+      });
+      // Continue with other channels even if one fails
+      jobs.push({ jobId, channel, status: 'failed', error: error instanceof Error ? error.message : String(error) });
+    }
   }
 
   await DatabaseService.getInstance().logAudit(

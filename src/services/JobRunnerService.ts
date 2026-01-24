@@ -223,31 +223,52 @@ export class JobRunnerService {
   }): Promise<string> {
     const db = DatabaseService.getInstance().getDatabase();
     const jobId = `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    
-    const scheduledAt = params.scheduled_at || new Date();
-    
-    await db.run(
-      `INSERT INTO sync_jobs (
-        id, restaurant_id, integration_id, job_type, entity_type, entity_id, 
-        status, payload, retry_count, max_retries, scheduled_at, next_run_at, priority
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        jobId,
-        params.restaurant_id,
-        params.integration_id || null,
-        params.job_type,
-        params.entity_type || null,
-        params.entity_id || null,
-        JobStatus.PENDING,
-        JSON.stringify(params.payload),
-        0,
-        params.max_retries || 3,
-        scheduledAt.toISOString(),
-        scheduledAt.toISOString(),
-        params.priority || 10
-      ]
-    );
 
-    return jobId;
+    const scheduledAt = params.scheduled_at || new Date();
+
+    try {
+      logger.info(`Adding sync job to queue: ${jobId}`, {
+        jobId,
+        restaurantId: params.restaurant_id,
+        jobType: params.job_type,
+        entityType: params.entity_type,
+        entityId: params.entity_id,
+        priority: params.priority || 10
+      });
+
+      await db.run(
+        `INSERT INTO sync_jobs (
+          id, restaurant_id, integration_id, job_type, entity_type, entity_id,
+          status, payload, retry_count, max_retries, scheduled_at, next_run_at, priority
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          jobId,
+          params.restaurant_id,
+          params.integration_id || null,
+          params.job_type,
+          params.entity_type || null,
+          params.entity_id || null,
+          JobStatus.PENDING,
+          JSON.stringify(params.payload),
+          0,
+          params.max_retries || 3,
+          scheduledAt.toISOString(),
+          scheduledAt.toISOString(),
+          params.priority || 10
+        ]
+      );
+
+      logger.info(`Successfully added sync job to queue: ${jobId}`);
+      return jobId;
+    } catch (error) {
+      logger.error(`Failed to add sync job to queue:`, {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        jobId,
+        restaurantId: params.restaurant_id,
+        jobType: params.job_type
+      });
+      throw error;
+    }
   }
 }
