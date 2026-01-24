@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import Head from 'next/head';
 import { motion, AnimatePresence } from 'framer-motion';
 import clsx from 'clsx';
@@ -400,20 +400,21 @@ const MenuManagement: React.FC = () => {
     [basicsDirty]
   );
 
-  const modifierSummaryForItem = (item: MenuItem) => {
+  // Memoized helper functions to prevent re-renders in child components
+  const modifierSummaryForItem = useCallback((item: MenuItem) => {
     const groups = Array.isArray((item as any).modifierGroups) ? (item as any).modifierGroups : [];
     const required = groups.filter((g: any) => Boolean(g.isRequired ?? g.is_required)).length;
     return `${groups.length} group${groups.length === 1 ? '' : 's'}${required > 0 ? `, ${required} required` : ''}`;
-  };
+  }, []);
 
-  const formatMoney = (v: number) => {
+  const formatMoney = useCallback((v: number) => {
     const n = Number.isFinite(v) ? v : 0;
     try {
       return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(n);
     } catch {
       return `$${n.toFixed(2)}`;
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadMenuData();
@@ -1183,21 +1184,32 @@ const MenuManagement: React.FC = () => {
     });
   };
 
-  const filteredCategories = categories.filter(category => {
-    if (selectedCategory !== 'all' && category.id !== selectedCategory) return false;
-    
-    const matchesSearch = category.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         category.items?.some(item => 
-                           item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           item.description.toLowerCase().includes(searchTerm.toLowerCase())
-                         );
-    
-    return matchesSearch;
-  });
+  // Memoize expensive computations to prevent recalculation on every render
+  const filteredCategories = useMemo(() => {
+    return categories.filter(category => {
+      if (selectedCategory !== 'all' && category.id !== selectedCategory) return false;
 
-  const totalItems = categories.reduce((sum, cat) => sum + (cat.item_count || 0), 0);
-  const availableItems = categories.reduce((sum, cat) => 
-    sum + (cat.items?.filter(item => item.is_available).length || 0), 0
+      const searchLower = searchTerm.toLowerCase();
+      const matchesSearch = category.name.toLowerCase().includes(searchLower) ||
+                           category.items?.some(item =>
+                             item.name.toLowerCase().includes(searchLower) ||
+                             item.description.toLowerCase().includes(searchLower)
+                           );
+
+      return matchesSearch;
+    });
+  }, [categories, selectedCategory, searchTerm]);
+
+  const totalItems = useMemo(() =>
+    categories.reduce((sum, cat) => sum + (cat.item_count || 0), 0),
+    [categories]
+  );
+
+  const availableItems = useMemo(() =>
+    categories.reduce((sum, cat) =>
+      sum + (cat.items?.filter(item => item.is_available).length || 0), 0
+    ),
+    [categories]
   );
 
   return (
@@ -1207,52 +1219,70 @@ const MenuManagement: React.FC = () => {
       </Head>
 
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-        {/* Header */}
+        {/* Header - Mobile Optimized */}
         <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-          <div className="px-6 py-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+          <div className="px-4 sm:px-6 py-4">
+            {/* Title and Primary Action Row */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div className="min-w-0">
+                <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">
                   Menu Manager
                 </h1>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mt-1">
                   {user?.name}&apos;s Restaurant • {totalItems} items • {availableItems} available
                 </p>
               </div>
-              
-              <div className="flex items-center gap-3">
+
+              {/* Primary action - always visible */}
+              <button
+                onClick={() => openAddItemModal()}
+                className="flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white rounded-lg transition-colors min-h-[44px] touch-manipulation font-medium sm:shrink-0"
+              >
+                <Plus className="w-4 h-4" />
+                Add Item
+              </button>
+            </div>
+
+            {/* Secondary Actions - Scrollable on Mobile */}
+            <div className="mt-3 -mx-4 sm:mx-0 px-4 sm:px-0 overflow-x-auto scrollbar-hide">
+              <div className="flex items-center gap-2 sm:gap-3 min-w-max sm:min-w-0 sm:flex-wrap">
                 <button
                   onClick={handlePreviewMenu}
-                  className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 rounded-lg transition-colors"
+                  className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-gray-100 hover:bg-gray-200 active:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 rounded-lg transition-colors min-h-[40px] touch-manipulation text-sm whitespace-nowrap"
                 >
-                  <Eye className="w-4 h-4" />
-                  Preview Menu
+                  <Eye className="w-4 h-4 shrink-0" />
+                  <span className="hidden xs:inline">Preview</span>
+                  <span className="xs:hidden">Preview</span>
                 </button>
-                
+
                 <button
                   onClick={openAddCategoryModal}
-                  className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-colors"
+                  className="flex items-center gap-2 px-3 sm:px-4 py-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 active:bg-gray-200 dark:text-gray-400 dark:hover:text-white dark:hover:bg-gray-700 rounded-lg transition-colors min-h-[40px] touch-manipulation text-sm whitespace-nowrap"
                 >
-                  <Settings className="w-4 h-4" />
-                  Add Category
+                  <Settings className="w-4 h-4 shrink-0" />
+                  <span className="hidden sm:inline">Add Category</span>
+                  <span className="sm:hidden">Category</span>
                 </button>
 
                 <button
                   onClick={() => setShowAddModifierGroupModal(true)}
-                  className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-colors"
+                  className="flex items-center gap-2 px-3 sm:px-4 py-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 active:bg-gray-200 dark:text-gray-400 dark:hover:text-white dark:hover:bg-gray-700 rounded-lg transition-colors min-h-[40px] touch-manipulation text-sm whitespace-nowrap"
                 >
-                  <Tag className="w-4 h-4" />
-                  Add Modifier Group
+                  <Tag className="w-4 h-4 shrink-0" />
+                  <span className="hidden sm:inline">Add Modifier Group</span>
+                  <span className="sm:hidden">Modifiers</span>
                 </button>
 
-                <div className="flex flex-col items-start gap-1">
-                  <label className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors cursor-pointer ${
+                {/* Import button with dropdown indicator */}
+                <div className="flex items-center gap-1">
+                  <label className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg transition-colors cursor-pointer min-h-[40px] touch-manipulation text-sm whitespace-nowrap ${
                     isImporting
                       ? 'bg-gray-200 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
-                      : 'bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200'
+                      : 'bg-gray-100 hover:bg-gray-200 active:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200'
                   }`}>
-                    <Upload className="w-4 h-4" />
-                        {isImporting ? 'Importing…' : 'Import CSV/XLSX/PDF/DOCX'}
+                    <Upload className="w-4 h-4 shrink-0" />
+                    <span className="hidden sm:inline">{isImporting ? 'Importing…' : 'Import'}</span>
+                    <span className="sm:hidden">{isImporting ? '...' : 'Import'}</span>
                     <input
                       type="file"
                       accept=".csv,.xls,.xlsx,.pdf,.docx"
@@ -1267,28 +1297,19 @@ const MenuManagement: React.FC = () => {
                       }}
                     />
                   </label>
-                  <span className="text-xs text-gray-500 dark:text-gray-400">
-                    Excel files supported (.xls, .xlsx)
-                  </span>
                 </div>
 
-                    <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 dark:text-gray-200">
-                      <input
-                        type="checkbox"
-                        checked={useAiImport}
-                        onChange={(e) => setUseAiImport(e.target.checked)}
-                        disabled={isImporting}
-                      />
-                      AI organizer (PDF/DOCX)
-                    </label>
-                
-                <button
-                  onClick={() => openAddItemModal()}
-                  className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
-                >
-                  <Plus className="w-4 h-4" />
-                  Add Item
-                </button>
+                {/* AI checkbox - hidden on smallest screens */}
+                <label className="hidden sm:flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200 whitespace-nowrap min-h-[40px]">
+                  <input
+                    type="checkbox"
+                    checked={useAiImport}
+                    onChange={(e) => setUseAiImport(e.target.checked)}
+                    disabled={isImporting}
+                    className="w-4 h-4"
+                  />
+                  AI Import
+                </label>
               </div>
             </div>
 
@@ -1365,15 +1386,16 @@ const MenuManagement: React.FC = () => {
           </div>
         </div>
 
-        {/* Main Content */}
-        <div className="p-6">
+        {/* Main Content - Mobile Optimized */}
+        <div className="p-3 sm:p-6">
           {loading ? (
             <div className="text-center py-12">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600 mx-auto"></div>
               <p className="text-gray-500 mt-2">Loading menu...</p>
             </div>
           ) : (
-            <div className="flex flex-col lg:flex-row gap-6">
+            <div className="flex flex-col lg:flex-row gap-4 sm:gap-6">
+              {/* Category Sidebar - Collapsible on mobile */}
               <CategorySidebar
                 categories={categories.map((c) => ({
                   id: c.id,
@@ -1395,8 +1417,8 @@ const MenuManagement: React.FC = () => {
 
               {/* Middle pane: Items */}
               <div className="flex-1 min-w-0 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-                <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between gap-3">
-                  <div className="min-w-0">
+                <div className="p-3 sm:p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between gap-2 sm:gap-3">
+                  <div className="min-w-0 flex-1">
                     <div className="text-sm font-bold text-gray-900 dark:text-white truncate">
                       {activeCategory ? activeCategory.name : 'Items'}
                     </div>
@@ -1406,12 +1428,13 @@ const MenuManagement: React.FC = () => {
                   </div>
                   <button
                     type="button"
-                    className="inline-flex items-center gap-2 rounded-lg bg-red-600 hover:bg-red-700 text-white px-3 py-2 text-sm font-bold disabled:opacity-50"
+                    className="inline-flex items-center justify-center gap-1 sm:gap-2 rounded-lg bg-red-600 hover:bg-red-700 active:bg-red-800 text-white px-2.5 sm:px-3 py-2 text-xs sm:text-sm font-bold disabled:opacity-50 min-h-[40px] touch-manipulation"
                     disabled={!activeCategoryId}
                     onClick={() => openAddItemModal(activeCategoryId || undefined)}
                   >
                     <Plus className="w-4 h-4" />
-                    Add Item
+                    <span className="hidden xs:inline">Add Item</span>
+                    <span className="xs:hidden">Add</span>
                   </button>
                 </div>
 
@@ -1445,15 +1468,15 @@ const MenuManagement: React.FC = () => {
                       );
                     }
                     return (
-                      <div className="overflow-auto">
-                        <table className="w-full text-sm">
-                          <thead className="sticky top-0 bg-gray-50 dark:bg-gray-900/40">
+                      <div className="overflow-auto -mx-3 sm:mx-0">
+                        <table className="w-full text-sm min-w-[400px] sm:min-w-0">
+                          <thead className="sticky top-0 bg-gray-50 dark:bg-gray-900/40 z-10">
                             <tr className="text-left text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                              <th className="px-4 py-3">Item</th>
-                              <th className="px-4 py-3">Price</th>
-                              <th className="px-4 py-3">Availability</th>
-                              <th className="px-4 py-3">Modifiers</th>
-                              <th className="px-4 py-3 text-right">Actions</th>
+                              <th className="px-2 sm:px-4 py-2 sm:py-3">Item</th>
+                              <th className="hidden sm:table-cell px-4 py-3">Price</th>
+                              <th className="px-2 sm:px-4 py-2 sm:py-3">Status</th>
+                              <th className="hidden md:table-cell px-4 py-3">Modifiers</th>
+                              <th className="px-2 sm:px-4 py-2 sm:py-3 text-right">Actions</th>
                             </tr>
                           </thead>
                           <DndContext
@@ -1511,60 +1534,65 @@ const MenuManagement: React.FC = () => {
                 )}
               </div>
 
-              {/* Right pane: Item editor */}
-              <div className="w-full lg:w-[420px] shrink-0 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+              {/* Right pane: Item editor - Responsive with better mobile support */}
+              <div className="w-full lg:w-[420px] shrink-0 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 lg:max-h-[calc(100vh-200px)] lg:sticky lg:top-4">
                 {!editingItem || !selectedItemId ? (
-                  <div className="p-6">
-                    <div className="text-lg font-black text-gray-900 dark:text-white">Item Editor</div>
+                  <div className="p-4 sm:p-6">
+                    <div className="text-base sm:text-lg font-black text-gray-900 dark:text-white">Item Editor</div>
                     <div className="mt-2 text-sm text-gray-500 dark:text-gray-400">Select an item to edit.</div>
                   </div>
                 ) : (
-                  <div className="flex flex-col h-full">
-                    <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="text-lg font-black text-gray-900 dark:text-white truncate">{editingItem.name}</div>
+                  <div className="flex flex-col h-full max-h-[70vh] lg:max-h-none">
+                    {/* Editor Header */}
+                    <div className="p-3 sm:p-4 border-b border-gray-200 dark:border-gray-700 sticky top-0 bg-white dark:bg-gray-800 z-10">
+                      <div className="flex items-start justify-between gap-2 sm:gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="text-base sm:text-lg font-black text-gray-900 dark:text-white truncate">{editingItem.name}</div>
                           <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
                             {activeCategory?.name ? `Category: ${activeCategory.name}` : ''}
                           </div>
                         </div>
                         <button
                           type="button"
-                          className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 px-3 py-2 text-sm font-bold disabled:opacity-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-900/20"
+                          className="inline-flex shrink-0 items-center justify-center gap-1 sm:gap-2 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 active:bg-red-100 px-2 sm:px-3 py-2 text-xs sm:text-sm font-bold disabled:opacity-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-900/20 min-h-[40px] touch-manipulation"
                           onClick={() => handleDeleteItem(editingItem)}
                           disabled={deletingItemId === editingItem.id}
                         >
                           <Trash2 className="h-4 w-4" />
-                          {deletingItemId === editingItem.id ? 'Deleting…' : 'Delete item'}
+                          <span className="hidden sm:inline">{deletingItemId === editingItem.id ? 'Deleting…' : 'Delete'}</span>
                         </button>
                       </div>
 
-                      <div className="mt-3 flex items-center gap-2">
-                        {(['basics', 'availability', 'modifiers', 'preview'] as const).map((tab) => (
-                          <button
-                            key={tab}
-                            type="button"
-                            className={clsx(
-                              'rounded-lg px-3 py-2 text-sm font-black',
-                              editorTab === tab
-                                ? 'bg-red-600 text-white'
-                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600'
-                            )}
-                            onClick={() => setEditorTab(tab)}
-                          >
-                            {tab === 'basics'
-                              ? 'Basics'
-                              : tab === 'availability'
-                                ? 'Availability'
-                                : tab === 'modifiers'
-                                  ? 'Modifiers'
-                                  : 'Preview'}
-                          </button>
-                        ))}
+                      {/* Editor Tabs - Scrollable on mobile */}
+                      <div className="mt-3 -mx-3 sm:mx-0 px-3 sm:px-0 overflow-x-auto scrollbar-hide">
+                        <div className="flex items-center gap-1.5 sm:gap-2 min-w-max sm:min-w-0">
+                          {(['basics', 'availability', 'modifiers', 'preview'] as const).map((tab) => (
+                            <button
+                              key={tab}
+                              type="button"
+                              className={clsx(
+                                'rounded-lg px-2.5 sm:px-3 py-2 text-xs sm:text-sm font-bold whitespace-nowrap min-h-[36px] sm:min-h-[40px] touch-manipulation',
+                                editorTab === tab
+                                  ? 'bg-red-600 text-white'
+                                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200 active:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600'
+                              )}
+                              onClick={() => setEditorTab(tab)}
+                            >
+                              {tab === 'basics'
+                                ? 'Basics'
+                                : tab === 'availability'
+                                  ? 'Avail.'
+                                  : tab === 'modifiers'
+                                    ? 'Mods'
+                                    : 'Preview'}
+                            </button>
+                          ))}
+                        </div>
                       </div>
                     </div>
 
-                    <div className="p-4 overflow-auto">
+                    {/* Editor Content - Scrollable */}
+                    <div className="p-3 sm:p-4 overflow-auto flex-1">
                       {editorTab === 'basics' ? (
                         <div className="space-y-4">
                           <div>
@@ -2516,7 +2544,18 @@ const MenuManagement: React.FC = () => {
   );
 };
 
-const SortableItemTableRow: React.FC<{
+// Memoized table row component to prevent unnecessary re-renders
+const SortableItemTableRow = memo(function SortableItemTableRow({
+  item,
+  selected,
+  disableDrag,
+  onSelect,
+  onToggleAvailability,
+  onDelete,
+  isDeleting,
+  modifierSummary,
+  formatMoney
+}: {
   item: MenuItem;
   selected: boolean;
   disableDrag: boolean;
@@ -2526,7 +2565,7 @@ const SortableItemTableRow: React.FC<{
   isDeleting: boolean;
   modifierSummary: string;
   formatMoney: (v: number) => string;
-}> = ({ item, selected, disableDrag, onSelect, onToggleAvailability, onDelete, isDeleting, modifierSummary, formatMoney }) => {
+}) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
@@ -2547,12 +2586,13 @@ const SortableItemTableRow: React.FC<{
       )}
       onClick={onSelect}
     >
-      <td className="px-4 py-3">
-        <div className="flex items-center gap-3 min-w-0">
+      {/* Item info cell - mobile optimized with touch-friendly drag handle */}
+      <td className="px-2 sm:px-4 py-2 sm:py-3">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           <button
             type="button"
             className={clsx(
-              'shrink-0 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200',
+              'shrink-0 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 p-1 min-h-[44px] min-w-[44px] flex items-center justify-center touch-manipulation',
               disableDrag && 'opacity-40 cursor-not-allowed'
             )}
             onClick={(e) => e.stopPropagation()}
@@ -2565,34 +2605,40 @@ const SortableItemTableRow: React.FC<{
             <GripVertical className="h-5 w-5" />
           </button>
 
-          <div className="h-10 w-10 rounded-lg bg-gray-100 dark:bg-gray-700 overflow-hidden shrink-0">
+          <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-lg bg-gray-100 dark:bg-gray-700 overflow-hidden shrink-0">
             {thumb ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={resolveMediaUrl(thumb)} alt="" className="h-full w-full object-cover" />
+              <img src={resolveMediaUrl(thumb)} alt="" className="h-full w-full object-cover" loading="lazy" />
             ) : null}
           </div>
 
-          <div className="min-w-0">
-            <div className="font-semibold text-gray-900 dark:text-white truncate">{item.name}</div>
+          <div className="min-w-0 flex-1">
+            <div className="font-semibold text-gray-900 dark:text-white truncate text-sm sm:text-base">{item.name}</div>
             {item.description ? (
-              <div className="text-xs text-gray-500 dark:text-gray-400 truncate">{item.description}</div>
+              <div className="text-xs text-gray-500 dark:text-gray-400 truncate max-w-[150px] sm:max-w-none">{item.description}</div>
             ) : null}
+            {/* Mobile price display */}
+            <div className="sm:hidden text-xs font-semibold text-gray-700 dark:text-gray-300 mt-0.5">
+              {Array.isArray(item.sizes) && item.sizes.length > 0 ? `From ${formatMoney(price)}` : formatMoney(price)}
+            </div>
           </div>
         </div>
       </td>
 
-      <td className="px-4 py-3 font-semibold text-gray-900 dark:text-white">
+      {/* Price cell - hidden on mobile (shown inline above) */}
+      <td className="hidden sm:table-cell px-4 py-3 font-semibold text-gray-900 dark:text-white whitespace-nowrap">
         {Array.isArray(item.sizes) && item.sizes.length > 0 ? `From ${formatMoney(price)}` : formatMoney(price)}
       </td>
 
-      <td className="px-4 py-3">
+      {/* Availability toggle - touch-friendly */}
+      <td className="px-2 sm:px-4 py-2 sm:py-3">
         <button
           type="button"
           className={clsx(
-            'inline-flex items-center gap-2 rounded-lg px-3 py-1.5 font-bold',
+            'inline-flex items-center justify-center gap-1 sm:gap-2 rounded-lg px-2 sm:px-3 py-1.5 sm:py-2 font-bold text-xs sm:text-sm min-h-[36px] sm:min-h-[40px] touch-manipulation',
             item.is_available
-              ? 'bg-teal-100 text-teal-700 hover:bg-teal-200'
-              : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200'
+              ? 'bg-teal-100 text-teal-700 hover:bg-teal-200 active:bg-teal-300'
+              : 'bg-gray-200 text-gray-700 hover:bg-gray-300 active:bg-gray-400 dark:bg-gray-700 dark:text-gray-200'
           )}
           onClick={(e) => {
             e.stopPropagation();
@@ -2603,24 +2649,26 @@ const SortableItemTableRow: React.FC<{
         </button>
       </td>
 
-      <td className="px-4 py-3 text-gray-700 dark:text-gray-200">{modifierSummary}</td>
+      {/* Modifiers - hidden on small mobile */}
+      <td className="hidden md:table-cell px-4 py-3 text-gray-700 dark:text-gray-200 text-sm">{modifierSummary}</td>
 
-      <td className="px-4 py-3 text-right">
-        <div className="inline-flex items-center gap-2">
+      {/* Actions - touch-friendly buttons */}
+      <td className="px-2 sm:px-4 py-2 sm:py-3 text-right">
+        <div className="inline-flex items-center gap-1 sm:gap-2">
           <button
             type="button"
-            className="inline-flex items-center gap-2 rounded-lg bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 px-3 py-1.5 font-bold text-gray-800 dark:text-gray-100"
+            className="inline-flex items-center justify-center gap-1 sm:gap-2 rounded-lg bg-gray-100 hover:bg-gray-200 active:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 px-2 sm:px-3 py-1.5 sm:py-2 font-bold text-gray-800 dark:text-gray-100 min-h-[36px] sm:min-h-[40px] touch-manipulation"
             onClick={(e) => {
               e.stopPropagation();
               onSelect();
             }}
           >
             <Edit3 className="h-4 w-4" />
-            Edit
+            <span className="hidden sm:inline">Edit</span>
           </button>
           <button
             type="button"
-            className="inline-flex items-center justify-center rounded-lg bg-gray-100 px-3 py-1.5 font-bold text-gray-400 dark:bg-gray-700"
+            className="hidden sm:inline-flex items-center justify-center rounded-lg bg-gray-100 px-3 py-2 font-bold text-gray-400 dark:bg-gray-700 min-h-[40px]"
             disabled
             title="Duplicate (coming soon)"
             onClick={(e) => e.stopPropagation()}
@@ -2629,7 +2677,7 @@ const SortableItemTableRow: React.FC<{
           </button>
           <button
             type="button"
-            className="inline-flex items-center justify-center rounded-lg bg-gray-100 px-3 py-1.5 font-bold text-red-500 hover:text-red-600 dark:bg-gray-700 dark:text-red-400 dark:hover:text-red-300 disabled:opacity-50"
+            className="inline-flex items-center justify-center rounded-lg bg-gray-100 px-2 sm:px-3 py-1.5 sm:py-2 font-bold text-red-500 hover:text-red-600 active:bg-red-100 dark:bg-gray-700 dark:text-red-400 dark:hover:text-red-300 disabled:opacity-50 min-h-[36px] sm:min-h-[40px] touch-manipulation"
             disabled={isDeleting}
             title="Delete item"
             onClick={(e) => {
@@ -2643,17 +2691,18 @@ const SortableItemTableRow: React.FC<{
       </td>
     </tr>
   );
-};
+});
 
-const ItemPreviewPanel: React.FC<{ item: MenuItem; sizes: ItemSize[] }> = ({ item, sizes }) => {
-  const formatMoney = (v: number) => {
+// Memoized preview panel to prevent unnecessary re-renders
+const ItemPreviewPanel = memo(function ItemPreviewPanel({ item, sizes }: { item: MenuItem; sizes: ItemSize[] }) {
+  const formatMoney = useCallback((v: number) => {
     const n = Number.isFinite(v) ? v : 0;
     try {
       return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(n);
     } catch {
       return `$${n.toFixed(2)}`;
     }
-  };
+  }, []);
 
   const groups = Array.isArray((item as any).modifierGroups) ? (item as any).modifierGroups : [];
   const sizeList = Array.isArray(sizes) ? sizes : [];
@@ -2862,7 +2911,7 @@ const ItemPreviewPanel: React.FC<{ item: MenuItem; sizes: ItemSize[] }> = ({ ite
       )}
     </div>
   );
-};
+});
 
 // Category Section Component
 interface CategorySectionProps {
