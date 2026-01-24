@@ -536,27 +536,45 @@ export class VoiceOrderingService {
       const isAckee = itemId.includes('ackee') || itemName.includes('ackee');
       const isOxtail = itemId.includes('oxtail') || itemName.includes('oxtail');
 
-      // Requirement: Dinner defaults
+      // MODIFIER VALIDATION - Log warnings but don't block order creation
+      // Note: VAPI AI collects modifiers verbally but may not pass them in structured format
+      // We'll allow orders to proceed with base prices and log missing modifiers for manual review
+
+      // Dinner defaults
       if (isDinner) {
-        if (!inputItem.modifiers?.rice_choice) errors.push(`${menuItem.name} requires rice_choice`);
-        if (!inputItem.modifiers?.cabbage) errors.push(`${menuItem.name} requires cabbage`);
-        if (!inputItem.modifiers?.spice_level) errors.push(`${menuItem.name} requires spice_level`);
+        if (!inputItem.modifiers?.rice_choice) {
+          console.log(`⚠️ [validateQuote] ${menuItem.name} missing rice_choice modifier (non-blocking)`);
+        }
+        if (!inputItem.modifiers?.cabbage) {
+          console.log(`⚠️ [validateQuote] ${menuItem.name} missing cabbage modifier (non-blocking)`);
+        }
+        if (!inputItem.modifiers?.spice_level) {
+          console.log(`⚠️ [validateQuote] ${menuItem.name} missing spice_level modifier (non-blocking)`);
+        }
       }
 
-      // Requirement: Fish dinners
+      // Fish dinners
       if (isFish && isDinner) {
-        if (!inputItem.modifiers?.fish_style) errors.push(`${menuItem.name} requires fish_style (Escovitch/Brown Stewed)`);
+        if (!inputItem.modifiers?.fish_style) {
+          console.log(`⚠️ [validateQuote] ${menuItem.name} missing fish_style modifier (non-blocking)`);
+        }
       }
 
-      // Requirement: Wings
+      // Wings
       if (isWings) {
-        if (!inputItem.modifiers?.wings_size) errors.push(`${menuItem.name} requires wings_size`);
-        if (!inputItem.modifiers?.wings_sauce) errors.push(`${menuItem.name} requires wings_sauce`);
+        if (!inputItem.modifiers?.wings_size) {
+          console.log(`⚠️ [validateQuote] ${menuItem.name} missing wings_size modifier (non-blocking)`);
+        }
+        if (!inputItem.modifiers?.wings_sauce) {
+          console.log(`⚠️ [validateQuote] ${menuItem.name} missing wings_sauce modifier (non-blocking)`);
+        }
       }
 
-      // Requirement: Ackee
+      // Ackee
       if (isAckee) {
-        if (!inputItem.modifiers?.callaloo_add) errors.push(`${menuItem.name} requires callaloo add decision`);
+        if (!inputItem.modifiers?.callaloo_add) {
+          console.log(`⚠️ [validateQuote] ${menuItem.name} missing callaloo_add modifier (non-blocking)`);
+        }
       }
 
       // Calculate price from modifiers
@@ -641,10 +659,6 @@ export class VoiceOrderingService {
       });
       return { success: false, errors: ['Missing customer name or phone'] };
     }
-    if (!input?.totals) {
-      logger.warn('createOrder missing totals payload', { callId: input?.callId });
-      return { success: false, errors: ['Missing totals'] };
-    }
 
     const quote = await this.validateQuote(input);
     if (!quote.valid) return { success: false, errors: quote.errors };
@@ -665,14 +679,23 @@ export class VoiceOrderingService {
         ?.charAt(0)
         ?.toUpperCase();
 
+    // Optional totals validation - if provided, compare to calculated quote
     const providedTotals = input?.totals;
-    const totalDelta = Math.abs(Number(providedTotals.total) - Number(quote.total));
-    if (totalDelta > 0.05) {
-      logger.warn('createOrder totals mismatch', {
+    if (providedTotals) {
+      const totalDelta = Math.abs(Number(providedTotals.total) - Number(quote.total));
+      if (totalDelta > 0.05) {
+        logger.warn('createOrder totals mismatch', {
+          callId: input?.callId,
+          orderId,
+          provided: providedTotals,
+          computed: { subtotal: quote.subtotal, tax: quote.tax, fees: quote.fees, total: quote.total }
+        });
+      }
+    } else {
+      logger.info('createOrder using calculated totals', {
         callId: input?.callId,
         orderId,
-        provided: providedTotals,
-        computed: { subtotal: quote.subtotal, tax: quote.tax, fees: quote.fees, total: quote.total }
+        totals: { subtotal: quote.subtotal, tax: quote.tax, fees: quote.fees, total: quote.total }
       });
     }
 
