@@ -130,7 +130,7 @@ export function failFastIfInvalid(): void {
  * Get parsed CORS origins from environment.
  * Uses FRONTEND_URL as primary, ALLOWED_ORIGINS for additional domains.
  */
-export function getCorsOrigins(): string[] {
+export function getCorsOrigins(defaultOrigin?: string): string[] {
   const origins = new Set<string>();
   const normalizeOrigin = (origin: string) => origin.trim().replace(/\/+$/, '');
   
@@ -155,7 +155,11 @@ export function getCorsOrigins(): string[] {
   
   // Fallback for development
   if (origins.size === 0) {
-    origins.add('http://localhost:3000');
+    if (defaultOrigin) {
+      origins.add(normalizeOrigin(defaultOrigin));
+    } else {
+      origins.add('http://localhost:3000');
+    }
   }
   
   return Array.from(origins);

@@ -40,7 +40,7 @@ app.get('/health', (_req, res) => {
 });
 
 // Get CORS origins from environment (FRONTEND_URL + ALLOWED_ORIGINS)
-const corsOrigins = getCorsOrigins();
+const corsOrigins = getCorsOrigins(FRONTEND_ORIGIN);
 logger.info(`CORS origins: ${corsOrigins.join(', ')}`);
 if (process.env.FRONTEND_URL && process.env.FRONTEND_URL !== FRONTEND_ORIGIN) {
   logger.warn(`FRONTEND_URL env does not match expected origin: ${process.env.FRONTEND_URL} (expected ${FRONTEND_ORIGIN})`);
