@@ -983,14 +983,15 @@ export class VapiService {
        - Full name
        - Phone number (confirm if caller ID is available)
        - Email address (optional)
-    12. Place the order using createOrder with items, modifiers, customer details, and totals.
+    12. Place the order using createOrder with items, modifiers, customer details, and totals if available.
     13. Upsell a drink or side.
     14. Close the call.
 
     IMPORTANT PHONE CALL GUIDELINES:
     - Keep responses concise and conversational.
     - Confirm phone numbers and names clearly.
-    - For dinners, always get the defaults (Rice, Cabbage, Spice).
+    - For dinners, always get the defaults (Rice, Cabbage, Spice), but do not block the order if a modifier is missing.
+    - Missing modifiers should be logged and confirmed verbally when possible, but the order can proceed.
     - If the store is closed, do not take orders.
     `;
   }

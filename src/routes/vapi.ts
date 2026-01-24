@@ -359,8 +359,7 @@ router.get('/assistant-config', async (req: Request, res: Response) => {
                   tax: { type: 'number' },
                   fees: { type: 'number' },
                   total: { type: 'number' }
-                },
-                required: ['subtotal', 'tax', 'fees', 'total']
+                }
               },
               orderType: { type: 'string', enum: ['pickup', 'delivery', 'dine-in'] },
               pickupTime: { type: 'string' },
@@ -368,7 +367,7 @@ router.get('/assistant-config', async (req: Request, res: Response) => {
               restaurantId: { type: 'string', description: 'Restaurant ID (optional if provided via metadata)' },
               restaurantSlug: { type: 'string', description: 'Restaurant slug (optional fallback)' }
             },
-            required: ['items', 'customer', 'orderType', 'totals']
+            required: ['items', 'customer', 'orderType']
           }
         }
       ]
