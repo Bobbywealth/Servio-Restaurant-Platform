@@ -425,6 +425,7 @@ export class VoiceOrderingService {
   }
 
   public validateQuote(input: any) {
+    console.log('🛒 [validateQuote] Received input:', JSON.stringify(input, null, 2));
     const orderType = String(input?.orderType || 'pickup').toLowerCase();
     if (!VoiceOrderingService.ALLOWED_ORDER_TYPES.has(orderType)) {
       return {
@@ -439,11 +440,28 @@ export class VoiceOrderingService {
     }
 
     const { items } = input;
+    if (!Array.isArray(items) || items.length === 0) {
+      return {
+        valid: false,
+        subtotal: 0,
+        tax: 0,
+        fees: 0,
+        total: 0,
+        errors: ['Missing items'],
+        items: []
+      };
+    }
     const errors: string[] = [];
     let subtotal = 0;
 
     const validatedItems = items.map((inputItem: any) => {
+      console.log('🛒 [validateQuote] Processing item:', {
+        itemId: inputItem?.itemId,
+        qty: inputItem?.qty,
+        hasItemId: Boolean(inputItem?.itemId)
+      });
       const menuItem = this.getMenuItem(inputItem.itemId);
+      console.log('🛒 [validateQuote] Menu item found:', menuItem);
       if (!menuItem) {
         errors.push(`Item not found: ${inputItem.itemId}`);
         return null;
