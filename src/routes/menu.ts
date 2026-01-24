@@ -1702,19 +1702,42 @@ router.post('/items/set-unavailable', asyncHandler(async (req: Request, res: Res
   for (const channel of syncResults) {
     const jobId = `sync_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-    await db.run(`
-      INSERT INTO sync_jobs (id, restaurant_id, job_type, status, payload, metadata)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `, [
-      jobId,
-      req.user?.restaurantId || null,
-      'set_unavailable',
-      'completed', // In real app, this would be 'pending' initially
-      JSON.stringify({ channels: [channel], itemId, itemName: item.name, action: 'set_unavailable' }),
-      JSON.stringify({ source: 'menu_toggle' })
-    ]);
+    try {
+      logger.info(`Creating sync job for set-unavailable: ${jobId}`, {
+        jobId,
+        restaurantId: req.user?.restaurantId,
+        jobType: 'set_unavailable',
+        channel,
+        itemId,
+        itemName: item.name
+      });
 
-    syncJobs.push({ channel, jobId, status: 'completed' });
+      await db.run(`
+        INSERT INTO sync_jobs (id, restaurant_id, job_type, status, payload, metadata)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `, [
+        jobId,
+        req.user?.restaurantId || null,
+        'set_unavailable',
+        'completed', // In real app, this would be 'pending' initially
+        JSON.stringify({ channels: [channel], itemId, itemName: item.name, action: 'set_unavailable' }),
+        JSON.stringify({ source: 'menu_toggle' })
+      ]);
+
+      logger.info(`Successfully created sync job: ${jobId}`);
+      syncJobs.push({ channel, jobId, status: 'completed' });
+    } catch (error) {
+      logger.error(`Failed to create sync job for channel ${channel}:`, {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        jobId,
+        restaurantId: req.user?.restaurantId,
+        itemId,
+        channel
+      });
+      // Continue with other channels even if one fails
+      syncJobs.push({ channel, jobId, status: 'failed', error: error instanceof Error ? error.message : String(error) });
+    }
   }
 
   await DatabaseService.getInstance().logAudit(
@@ -1779,19 +1802,42 @@ router.post('/items/set-available', asyncHandler(async (req: Request, res: Respo
   for (const channel of syncResults) {
     const jobId = `sync_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-    await db.run(`
-      INSERT INTO sync_jobs (id, restaurant_id, job_type, status, payload, metadata)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `, [
-      jobId,
-      req.user?.restaurantId || null,
-      'set_available',
-      'completed',
-      JSON.stringify({ channels: [channel], itemId, itemName: item.name, action: 'set_available' }),
-      JSON.stringify({ source: 'menu_toggle' })
-    ]);
+    try {
+      logger.info(`Creating sync job for set-available: ${jobId}`, {
+        jobId,
+        restaurantId: req.user?.restaurantId,
+        jobType: 'set_available',
+        channel,
+        itemId,
+        itemName: item.name
+      });
 
-    syncJobs.push({ channel, jobId, status: 'completed' });
+      await db.run(`
+        INSERT INTO sync_jobs (id, restaurant_id, job_type, status, payload, metadata)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `, [
+        jobId,
+        req.user?.restaurantId || null,
+        'set_available',
+        'completed',
+        JSON.stringify({ channels: [channel], itemId, itemName: item.name, action: 'set_available' }),
+        JSON.stringify({ source: 'menu_toggle' })
+      ]);
+
+      logger.info(`Successfully created sync job: ${jobId}`);
+      syncJobs.push({ channel, jobId, status: 'completed' });
+    } catch (error) {
+      logger.error(`Failed to create sync job for channel ${channel}:`, {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        jobId,
+        restaurantId: req.user?.restaurantId,
+        itemId,
+        channel
+      });
+      // Continue with other channels even if one fails
+      syncJobs.push({ channel, jobId, status: 'failed', error: error instanceof Error ? error.message : String(error) });
+    }
   }
 
   await DatabaseService.getInstance().logAudit(
