@@ -251,6 +251,7 @@ export default function TabletOrdersPage() {
   const [isOnline, setIsOnline] = useState<boolean>(true);
   const [socketConnected, setSocketConnected] = useState<boolean>(false);
   const [showUpdateBanner, setShowUpdateBanner] = useState(false);
+  const [showOrderDetailsModal, setShowOrderDetailsModal] = useState(false);
 
   useEffect(() => {
     if (authLoading) return;
@@ -1138,8 +1139,13 @@ export default function TabletOrdersPage() {
                 {/* Middle Panel: Order Details */}
                 <section className="flex flex-col gap-6">
                   {/* Order Details */}
-                  <div className="bg-[var(--tablet-surface)] rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.3)] border border-[var(--tablet-border)]">
-                    <div className="px-6 py-5 border-b border-[var(--tablet-border)]">
+                  <button
+                    type="button"
+                    onClick={() => selectedOrder && setShowOrderDetailsModal(true)}
+                    disabled={!selectedOrder}
+                    className="bg-[var(--tablet-surface)] rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.3)] border border-[var(--tablet-border)] text-left transition hover:brightness-110 active:scale-[0.99] disabled:hover:brightness-100 disabled:active:scale-100"
+                  >
+                    <div className="px-6 py-5 border-b border-[var(--tablet-border)] flex items-center justify-between">
                       <div className="text-2xl font-semibold">
                         {selectedOrder ? (
                           <>ORDER #{selectedOrder.external_id ? selectedOrder.external_id.slice(-4).toUpperCase() : selectedOrder.id.slice(-4).toUpperCase()} - {(selectedOrder.customer_name || 'Guest').toUpperCase()}</>
@@ -1147,6 +1153,11 @@ export default function TabletOrdersPage() {
                           'ORDER DETAILS'
                         )}
                       </div>
+                      {selectedOrder && (
+                        <div className="text-xs text-[var(--tablet-accent)] uppercase font-semibold ml-2">
+                          Tap for details
+                        </div>
+                      )}
                     </div>
                     {selectedOrder ? (
                       <div className="px-6 py-5 space-y-6">
@@ -1180,7 +1191,7 @@ export default function TabletOrdersPage() {
                         Waiting for orders...
                       </div>
                     )}
-                  </div>
+                  </button>
 
                 </section>
 
@@ -1344,6 +1355,130 @@ export default function TabletOrdersPage() {
         </div>
       )}
 
+      {/* Order Details Modal */}
+      {showOrderDetailsModal && selectedOrder && (
+        <div className="no-print fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
+          <div className="bg-[var(--tablet-surface)] rounded-3xl shadow-[0_12px_30px_rgba(0,0,0,0.5)] w-full max-w-2xl max-h-[90vh] overflow-hidden border border-[var(--tablet-border)] flex flex-col">
+            {/* Modal Header */}
+            <div className="px-6 py-5 border-b border-[var(--tablet-border)] flex items-center justify-between">
+              <div className="text-2xl font-semibold">
+                ORDER #{selectedOrder.external_id ? selectedOrder.external_id.slice(-4).toUpperCase() : selectedOrder.id.slice(-4).toUpperCase()}
+              </div>
+              <button
+                onClick={() => setShowOrderDetailsModal(false)}
+                className="h-10 w-10 rounded-full bg-[var(--tablet-border-strong)] hover:brightness-110 flex items-center justify-center transition"
+                aria-label="Close"
+              >
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Modal Body - Scrollable */}
+            <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
+              {/* Customer Info */}
+              <div className="bg-[var(--tablet-card)] rounded-xl p-5 border border-[var(--tablet-border)]">
+                <div className="text-sm uppercase tracking-widest text-[var(--tablet-muted)] mb-3">Customer</div>
+                <div className="flex items-center gap-4 mb-4">
+                  <div className="h-16 w-16 rounded-full bg-[var(--tablet-border-strong)] flex items-center justify-center text-2xl font-semibold">
+                    {(selectedOrder.customer_name || 'G')[0]}
+                  </div>
+                  <div className="flex-1">
+                    <div className="text-xl font-semibold">{selectedOrder.customer_name || 'Guest'}</div>
+                    <div className="text-sm text-[var(--tablet-muted)]">{selectedOrder.customer_phone || 'No contact provided'}</div>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-3 text-sm">
+                  <span className="text-[11px] uppercase tracking-widest text-[var(--tablet-muted)]">
+                    {selectedOrder.order_type || 'Pickup'}
+                  </span>
+                  <span className="text-[var(--tablet-text)]">
+                    {selectedOrder.pickup_time
+                      ? new Date(selectedOrder.pickup_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                      : 'Ready ASAP'}
+                  </span>
+                  <span className="text-[var(--tablet-muted)]">
+                    {selectedOrder.pickup_time
+                      ? new Date(selectedOrder.pickup_time).toLocaleDateString()
+                      : new Date().toLocaleDateString()}
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-2 mt-4">
+                  <span className={clsx('px-3 py-1 rounded-full text-[11px] font-semibold uppercase text-center', statusBadgeClassesForStatus(normalizeStatus(selectedOrder.status)))}>
+                    {normalizeStatus(selectedOrder.status)}
+                  </span>
+                  <span className="px-3 py-1 rounded-full text-[11px] font-semibold uppercase text-center bg-[var(--tablet-border)] text-[var(--tablet-muted-strong)]">
+                    {selectedOrder.channel || 'POS'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Total Cost */}
+              <div className="bg-[var(--tablet-card)] rounded-xl p-5 border border-[var(--tablet-border)]">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-[var(--tablet-muted)] uppercase tracking-widest">Total Cost</span>
+                  <span className="text-4xl font-bold">{formatMoney(selectedOrder.total_amount)}</span>
+                </div>
+              </div>
+
+              {/* Items */}
+              <div className="bg-[var(--tablet-card)] rounded-xl p-5 border border-[var(--tablet-border)]">
+                <div className="text-lg font-semibold mb-4">Items ({selectedOrder.items?.length || 0})</div>
+                <div className="space-y-4">
+                  {(selectedOrder.items || []).map((it, idx) => (
+                    <div key={idx} className="flex items-center gap-4 pb-4 border-b border-[var(--tablet-border)] last:border-0">
+                      <div className="h-16 w-16 rounded-lg bg-[var(--tablet-border-strong)] flex items-center justify-center text-lg font-semibold text-[var(--tablet-muted)]">
+                        {it.quantity || 1}
+                      </div>
+                      <div className="flex-1">
+                        <div className="text-lg font-semibold">{it.name}</div>
+                        <div className="text-sm text-[var(--tablet-muted)]">Prepared fresh</div>
+                      </div>
+                      <div className="text-lg font-semibold">
+                        {formatMoney((it.unit_price || it.price || 0) * (it.quantity || 1))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Special Instructions */}
+              {selectedOrder.special_instructions && (
+                <div className="bg-[var(--tablet-card)] rounded-xl p-5 border border-[var(--tablet-border)]">
+                  <div className="text-xs uppercase tracking-widest text-[var(--tablet-accent)] mb-3">
+                    Special Instructions
+                  </div>
+                  <div className="text-base text-[var(--tablet-text)] leading-relaxed">{selectedOrder.special_instructions}</div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer - Action Buttons */}
+            <div className="px-6 py-5 border-t border-[var(--tablet-border)] flex gap-3">
+              <button
+                onClick={() => setShowOrderDetailsModal(false)}
+                className="flex-1 px-6 py-4 rounded-2xl border-2 border-[var(--tablet-border-strong)] text-sm font-semibold uppercase transition hover:brightness-110"
+              >
+                Close
+              </button>
+              {normalizeStatus(selectedOrder.status) === 'preparing' && (
+                <button
+                  onClick={() => {
+                    setShowOrderDetailsModal(false);
+                    printOrder(selectedOrder.id);
+                  }}
+                  disabled={printingOrderId === selectedOrder.id}
+                  className="flex-1 px-6 py-4 rounded-2xl bg-[var(--tablet-accent)] text-[var(--tablet-accent-contrast)] text-sm font-semibold uppercase transition hover:brightness-110 disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  <Printer className="h-5 w-5" />
+                  Print
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       <style jsx global>{`
         body {
