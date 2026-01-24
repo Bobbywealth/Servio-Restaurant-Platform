@@ -36,7 +36,14 @@ export const requireVapiAuth = (req: Request, res: Response, next: NextFunction)
  * This middleware intentionally does NOT use JWT.
  */
 export const requireVapiWebhookAuth = (req: Request, _res: Response, next: NextFunction) => {
-  const secret = process.env.VAPI_WEBHOOK_SECRET;
+  const secret = process.env.VAPI_WEBHOOK_SECRET?.trim();
+
+  const normalizeSecret = (value?: string | null) => {
+    if (!value) return undefined;
+    const trimmed = value.trim();
+    if (!trimmed) return undefined;
+    return trimmed.replace(/^Bearer\s+/i, '');
+  };
 
   // In dev, allow webhooks even without a configured secret (but warn).
   if (!secret) {
@@ -47,17 +54,21 @@ export const requireVapiWebhookAuth = (req: Request, _res: Response, next: NextF
     return next();
   }
 
-  const headerSecret = req.headers['x-vapi-secret'];
-  const provided =
+  const headerSecret =
+    req.headers['x-vapi-secret'] ??
+    req.headers['x-vapi-webhook-secret'] ??
+    req.headers['x-vapi-signature'];
+  const providedRaw =
     typeof headerSecret === 'string'
       ? headerSecret
       : Array.isArray(headerSecret)
         ? headerSecret[0]
         : undefined;
+  const provided = normalizeSecret(providedRaw);
 
   // Also allow standard Bearer token if you choose to configure it that way in Vapi.
   const authHeader = req.headers.authorization;
-  const bearer = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice('Bearer '.length).trim() : null;
+  const bearer = normalizeSecret(authHeader);
 
   if (provided === secret || bearer === secret) return next();
   return next(new UnauthorizedError('Invalid Vapi webhook secret'));
