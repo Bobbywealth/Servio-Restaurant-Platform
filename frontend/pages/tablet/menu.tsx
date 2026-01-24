@@ -232,7 +232,7 @@ export default function TabletMenuPage() {
                         )}
                       </div>
                     </div>
-                  ))
+                  ))}
                 </div>
               )}
             </div>
