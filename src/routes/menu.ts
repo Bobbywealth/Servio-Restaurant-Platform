@@ -60,10 +60,99 @@ type ParsedMenuRow = {
   preparation_time?: number | null;
 };
 
+const normalizeKey = (value: string): string =>
+  String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+
 function parsePrice(value: string): number | null {
   const cleaned = value.replace(/[^0-9.]/g, '');
   const price = Number.parseFloat(cleaned);
   return Number.isFinite(price) ? price : null;
+}
+
+function getValueByKeys(row: Record<string, any>, candidates: string[]): any {
+  const normalizedCandidates = new Set(candidates.map((key) => normalizeKey(key)));
+  for (const key of Object.keys(row)) {
+    if (normalizedCandidates.has(normalizeKey(key))) {
+      return row[key];
+    }
+  }
+  return undefined;
+}
+
+function normalizeImportedRow(row: Record<string, any>): ParsedMenuRow | null {
+  const nameValue = getValueByKeys(row, [
+    'name',
+    'item name',
+    'item',
+    'menu item',
+    'dish',
+    'title'
+  ]);
+  const priceValue = getValueByKeys(row, [
+    'price',
+    'item price',
+    'menu price',
+    'price ($)',
+    'amount',
+    'unit price'
+  ]);
+  const descriptionValue = getValueByKeys(row, [
+    'description',
+    'details',
+    'desc',
+    'item description'
+  ]);
+  const categoryValue = getValueByKeys(row, [
+    'category',
+    'section',
+    'group',
+    'menu section',
+    'type'
+  ]);
+  const costValue = getValueByKeys(row, [
+    'cost',
+    'item cost',
+    'food cost'
+  ]);
+  const prepValue = getValueByKeys(row, [
+    'prep time',
+    'preparation time',
+    'cook time',
+    'prep_time'
+  ]);
+
+  const name = typeof nameValue === 'string' ? nameValue.trim() : String(nameValue || '').trim();
+  const price =
+    typeof priceValue === 'number'
+      ? priceValue
+      : parsePrice(String(priceValue ?? '').trim());
+
+  if (!name || price === null || !Number.isFinite(price)) {
+    return null;
+  }
+
+  return {
+    name,
+    description:
+      descriptionValue === undefined || descriptionValue === null
+        ? null
+        : String(descriptionValue).trim() || null,
+    price: Number(price),
+    category:
+      categoryValue === undefined || categoryValue === null
+        ? null
+        : String(categoryValue).trim() || null,
+    cost:
+      costValue === undefined || costValue === null
+        ? null
+        : parseFloat(String(costValue)),
+    preparation_time:
+      prepValue === undefined || prepValue === null
+        ? null
+        : parseInt(String(prepValue), 10)
+  };
 }
 
 async function extractMenuRowsWithAI(text: string): Promise<ParsedMenuRow[]> {
@@ -1887,15 +1976,28 @@ router.post('/import', importUpload.single('file'), asyncHandler(async (req: Req
     for (let i = 0; i < data.length; i++) {
       const row = data[i];
       try {
+        const normalizedRow =
+          row && typeof row === 'object' && !Array.isArray(row)
+            ? normalizeImportedRow(row as Record<string, any>)
+            : null;
+        const resolvedRow = normalizedRow || {
+          name: row?.name,
+          price: row?.price,
+          description: row?.description,
+          category: row?.category,
+          cost: row?.cost,
+          preparation_time: row?.preparation_time
+        };
+
         // Validate required fields
-        if (!row.name || row.price === undefined || row.price === null) {
+        if (!resolvedRow.name || resolvedRow.price === undefined || resolvedRow.price === null) {
           throw new Error('Missing required fields: name, price');
         }
 
-        const categoryName = row.category || 'Uncategorized';
-        const priceValue = typeof row.price === 'number'
-          ? row.price
-          : parsePrice(String(row.price));
+        const categoryName = String(resolvedRow.category || 'Imported Items').trim() || 'Imported Items';
+        const priceValue = typeof resolvedRow.price === 'number'
+          ? resolvedRow.price
+          : parsePrice(String(resolvedRow.price));
         if (!Number.isFinite(priceValue)) {
           throw new Error('Invalid price value');
         }
@@ -1915,22 +2017,30 @@ router.post('/import', importUpload.single('file'), asyncHandler(async (req: Req
           category = { id: categoryId };
         }
 
-        // Create menu item
+        // Create or update menu item
         const itemId = uuidv4();
         await db.run(`
           INSERT INTO menu_items (
             id, restaurant_id, category_id, name, description, price, cost,
             preparation_time, is_available, sort_order
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+          ON CONFLICT(restaurant_id, name) DO UPDATE SET
+            category_id = excluded.category_id,
+            description = excluded.description,
+            price = excluded.price,
+            cost = excluded.cost,
+            preparation_time = excluded.preparation_time,
+            sort_order = excluded.sort_order,
+            updated_at = CURRENT_TIMESTAMP
         `, [
           itemId,
           restaurantId,
           category.id,
-          String(row.name).trim(),
-          row.description ? String(row.description).trim() : null,
+          String(resolvedRow.name).trim(),
+          resolvedRow.description ? String(resolvedRow.description).trim() : null,
           priceValue,
-          row.cost ? parseFloat(String(row.cost)) : null,
-          row.preparation_time ? parseInt(String(row.preparation_time)) : 0,
+          resolvedRow.cost ? parseFloat(String(resolvedRow.cost)) : null,
+          resolvedRow.preparation_time ? parseInt(String(resolvedRow.preparation_time)) : 0,
           i
         ]);
 
