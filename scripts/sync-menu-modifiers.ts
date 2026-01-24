@@ -59,10 +59,15 @@ function inferSelectionType(group: ModifierGroup): 'single' | 'multiple' {
 }
 
 async function upsertModifierGroup(db: any, restaurantId: string, group: ModifierGroup, displayOrder: number) {
-  const existing = await db.get(
-    `SELECT id FROM modifier_groups WHERE id = ? AND restaurant_id = ? AND deleted_at IS NULL`,
-    [group.id, restaurantId]
-  );
+  const existing =
+    await db.get(
+      `SELECT id FROM modifier_groups WHERE id = ? AND restaurant_id = ? AND deleted_at IS NULL`,
+      [group.id, restaurantId]
+    ) ||
+    await db.get(
+      `SELECT id FROM modifier_groups WHERE restaurant_id = ? AND LOWER(name) = LOWER(?) AND deleted_at IS NULL`,
+      [restaurantId, group.name]
+    );
   const selectionType = inferSelectionType(group);
   const minSelections = group.minSelect ?? 0;
   const maxSelections = group.maxSelect ?? null;
@@ -81,18 +86,21 @@ async function upsertModifierGroup(db: any, restaurantId: string, group: Modifie
         maxSelections,
         isRequired,
         displayOrder,
-        group.id,
+        existing.id,
         restaurantId
       ]
     );
-  } else {
+  }
+
+  const resolvedId = existing?.id ?? group.id;
+  if (!existing) {
     await db.run(
       `INSERT INTO modifier_groups (
         id, restaurant_id, name, selection_type, min_selections, max_selections, is_required,
         display_order, is_active, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
       [
-        group.id,
+        resolvedId,
         restaurantId,
         group.name,
         selectionType,
@@ -103,6 +111,8 @@ async function upsertModifierGroup(db: any, restaurantId: string, group: Modifie
       ]
     );
   }
+
+  return resolvedId;
 }
 
 async function upsertModifierOption(
@@ -112,10 +122,15 @@ async function upsertModifierOption(
   option: ModifierOption,
   displayOrder: number
 ) {
-  const existing = await db.get(
-    `SELECT id FROM modifier_options WHERE id = ? AND group_id = ? AND deleted_at IS NULL`,
-    [option.id, groupId]
-  );
+  const existing =
+    await db.get(
+      `SELECT id FROM modifier_options WHERE id = ? AND group_id = ? AND deleted_at IS NULL`,
+      [option.id, groupId]
+    ) ||
+    await db.get(
+      `SELECT id FROM modifier_options WHERE group_id = ? AND LOWER(name) = LOWER(?) AND deleted_at IS NULL`,
+      [groupId, option.name]
+    );
 
   const priceDelta = option.priceDelta ?? 0;
   const isSoldOut = option.isSoldOut ? 1 : 0;
@@ -133,11 +148,13 @@ async function upsertModifierOption(
         isSoldOut,
         isPreselected,
         displayOrder,
-        option.id,
+        existing.id,
         groupId
       ]
     );
-  } else {
+  }
+
+  if (!existing) {
     await db.run(
       `INSERT INTO modifier_options (
         id, group_id, restaurant_id, name, price_delta, is_sold_out, is_preselected,
@@ -230,16 +247,16 @@ async function syncModifiers() {
       }
 
       for (const [groupIndex, group] of item.modifierGroups.entries()) {
-        await upsertModifierGroup(db, restaurantId, group, groupIndex);
+        const groupId = await upsertModifierGroup(db, restaurantId, group, groupIndex);
         groupCount += 1;
 
         const options = group.options || [];
         for (const [optionIndex, option] of options.entries()) {
-          await upsertModifierOption(db, restaurantId, group.id, option, optionIndex);
+          await upsertModifierOption(db, restaurantId, groupId, option, optionIndex);
           optionCount += 1;
         }
 
-        await attachGroupToItem(db, itemRow.id, group.id, groupIndex);
+        await attachGroupToItem(db, itemRow.id, groupId, groupIndex);
         attachmentCount += 1;
       }
     }
