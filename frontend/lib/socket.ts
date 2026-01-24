@@ -63,12 +63,33 @@ class SocketManager {
     this.connect()
   }
 
+  private resolveBackendUrl(): string {
+    const rawBackendUrl =
+      process.env.NEXT_PUBLIC_API_URL ||
+      process.env.NEXT_PUBLIC_BACKEND_URL ||
+      'http://localhost:3002'
+
+    if (rawBackendUrl.startsWith('http')) {
+      return rawBackendUrl
+    }
+
+    if (typeof window !== 'undefined') {
+      return `${window.location.protocol}//${rawBackendUrl}`
+    }
+
+    return `http://${rawBackendUrl}`
+  }
+
   connect(): void {
+    if (typeof window === 'undefined') {
+      return
+    }
+
     if (this.socket?.connected) {
       return
     }
 
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3002'
+    const backendUrl = this.resolveBackendUrl()
 
     const socketOptions = {
       transports: ['websocket', 'polling'],
