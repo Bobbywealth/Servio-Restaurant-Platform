@@ -134,6 +134,7 @@ const MenuManagement: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [isSavingModifier, setIsSavingModifier] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
   const [useAiImport, setUseAiImport] = useState(true);
   const [isGeneratingNewDescription, setIsGeneratingNewDescription] = useState(false);
   const [isGeneratingEditDescription, setIsGeneratingEditDescription] = useState(false);
@@ -1130,6 +1131,43 @@ const MenuManagement: React.FC = () => {
     }
   };
 
+  const handleDeleteItem = async (item: MenuItem) => {
+    const confirmed = window.confirm(`Delete "${item.name}"? This cannot be undone.`);
+    if (!confirmed) return;
+
+    setDeletingItemId(item.id);
+    const previousCategories = categories;
+
+    setCategories((prev) =>
+      prev.map((cat) => ({
+        ...cat,
+        item_count: cat.id === item.category_id ? Math.max(0, (cat.item_count || 0) - 1) : cat.item_count,
+        items: (cat.items || []).filter((it) => it.id !== item.id)
+      }))
+    );
+
+    if (editingItem?.id === item.id) {
+      setShowEditItemModal(false);
+      setEditingItem(null);
+      setEditItemAttachedGroups([]);
+      setEditItemExistingAttachedGroups([]);
+      setEditItemSizes([]);
+      setEditItemInheritedGroups([]);
+    }
+
+    try {
+      await api.delete(`/api/menu/items/${encodeURIComponent(item.id)}`);
+      toast.success('Menu item deleted');
+      setSelectedItemId((prev) => (prev === item.id ? null : prev));
+    } catch (error) {
+      console.error('Failed to delete menu item:', error);
+      toast.error('Failed to delete menu item');
+      setCategories(previousCategories);
+    } finally {
+      setDeletingItemId(null);
+    }
+  };
+
   const toggleCategory = (categoryId: string) => {
     setExpandedCategories(prev => {
       const newSet = new Set(prev);
@@ -1204,27 +1242,32 @@ const MenuManagement: React.FC = () => {
                   Add Modifier Group
                 </button>
 
-                <label className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors cursor-pointer ${
-                  isImporting
-                    ? 'bg-gray-200 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
-                    : 'bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200'
-                }`}>
-                  <Upload className="w-4 h-4" />
-                      {isImporting ? 'Importing…' : 'Import Menu'}
-                  <input
-                    type="file"
-                    accept=".csv,.xls,.xlsx,.pdf,.docx"
-                    className="hidden"
-                    disabled={isImporting}
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) {
-                        handleImportFile(file);
-                      }
-                      e.currentTarget.value = '';
-                    }}
-                  />
-                </label>
+                <div className="flex flex-col items-start gap-1">
+                  <label className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors cursor-pointer ${
+                    isImporting
+                      ? 'bg-gray-200 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+                      : 'bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200'
+                  }`}>
+                    <Upload className="w-4 h-4" />
+                        {isImporting ? 'Importing…' : 'Import CSV/XLSX/PDF/DOCX'}
+                    <input
+                      type="file"
+                      accept=".csv,.xls,.xlsx,.pdf,.docx"
+                      className="hidden"
+                      disabled={isImporting}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          handleImportFile(file);
+                        }
+                        e.currentTarget.value = '';
+                      }}
+                    />
+                  </label>
+                  <span className="text-xs text-gray-500 dark:text-gray-400">
+                    Excel files supported (.xls, .xlsx)
+                  </span>
+                </div>
 
                     <label className="flex items-center gap-2 text-sm font-semibold text-gray-700 dark:text-gray-200">
                       <input
@@ -1444,6 +1487,8 @@ const MenuManagement: React.FC = () => {
                                       disableDrag={Boolean(searchTerm.trim())}
                                       onSelect={() => requestSelectItem(item)}
                                       onToggleAvailability={() => handleToggleAvailability(item)}
+                                      onDelete={() => handleDeleteItem(item)}
+                                      isDeleting={deletingItemId === item.id}
                                       modifierSummary={modifierSummaryForItem(item)}
                                       formatMoney={formatMoney}
                                     />
@@ -1480,14 +1525,25 @@ const MenuManagement: React.FC = () => {
                             {activeCategory?.name ? `Category: ${activeCategory.name}` : ''}
                           </div>
                         </div>
-                        <button
-                          type="button"
-                          className="shrink-0 inline-flex items-center gap-2 rounded-lg bg-slate-900 text-white hover:bg-slate-800 px-3 py-2 text-sm font-bold"
-                          onClick={() => setShowAddModifierGroupModal(true)}
-                        >
-                          <Plus className="h-4 w-4" />
-                          New Group
-                        </button>
+                        <div className="flex shrink-0 items-center gap-2">
+                          <button
+                            type="button"
+                            className="inline-flex items-center gap-2 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 px-3 py-2 text-sm font-bold disabled:opacity-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-900/20"
+                            onClick={() => handleDeleteItem(editingItem)}
+                            disabled={deletingItemId === editingItem.id}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            {deletingItemId === editingItem.id ? 'Deleting…' : 'Delete item'}
+                          </button>
+                          <button
+                            type="button"
+                            className="inline-flex items-center gap-2 rounded-lg bg-slate-900 text-white hover:bg-slate-800 px-3 py-2 text-sm font-bold"
+                            onClick={() => setShowAddModifierGroupModal(true)}
+                          >
+                            <Plus className="h-4 w-4" />
+                            New Group
+                          </button>
+                        </div>
                       </div>
 
                       <div className="mt-3 flex items-center gap-2">
@@ -2473,9 +2529,11 @@ const SortableItemTableRow: React.FC<{
   disableDrag: boolean;
   onSelect: () => void;
   onToggleAvailability: () => void;
+  onDelete: () => void;
+  isDeleting: boolean;
   modifierSummary: string;
   formatMoney: (v: number) => string;
-}> = ({ item, selected, disableDrag, onSelect, onToggleAvailability, modifierSummary, formatMoney }) => {
+}> = ({ item, selected, disableDrag, onSelect, onToggleAvailability, onDelete, isDeleting, modifierSummary, formatMoney }) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
@@ -2578,10 +2636,13 @@ const SortableItemTableRow: React.FC<{
           </button>
           <button
             type="button"
-            className="inline-flex items-center justify-center rounded-lg bg-gray-100 px-3 py-1.5 font-bold text-gray-400 dark:bg-gray-700"
-            disabled
-            title="Delete (coming soon)"
-            onClick={(e) => e.stopPropagation()}
+            className="inline-flex items-center justify-center rounded-lg bg-gray-100 px-3 py-1.5 font-bold text-red-500 hover:text-red-600 dark:bg-gray-700 dark:text-red-400 dark:hover:text-red-300 disabled:opacity-50"
+            disabled={isDeleting}
+            title="Delete item"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
           >
             <Trash2 className="h-4 w-4" />
           </button>
@@ -2819,6 +2880,8 @@ interface CategorySectionProps {
   onAddItem: (categoryId: string) => void;
   onEditItem: (item: MenuItem) => void;
   onToggleAvailability: (item: MenuItem) => void;
+  onDeleteItem: (item: MenuItem) => void;
+  deletingItemId: string | null;
   onReorderItems: (categoryId: string, orderedItemIds: string[]) => void;
 }
 
@@ -2830,6 +2893,8 @@ const CategorySection: React.FC<CategorySectionProps> = ({
   onAddItem,
   onEditItem,
   onToggleAvailability,
+  onDeleteItem,
+  deletingItemId,
   onReorderItems
 }) => {
   const filteredItems = category.items?.filter(item =>
@@ -2922,6 +2987,8 @@ const CategorySection: React.FC<CategorySectionProps> = ({
                           item={item}
                           onEdit={onEditItem}
                           onToggleAvailability={onToggleAvailability}
+                          onDelete={onDeleteItem}
+                          isDeleting={deletingItemId === item.id}
                         />
                       ))}
                     </div>
@@ -2950,7 +3017,9 @@ const SortableMenuItemRow: React.FC<{
   item: MenuItem;
   onEdit: (item: MenuItem) => void;
   onToggleAvailability: (item: MenuItem) => void;
-}> = ({ item, onEdit, onToggleAvailability }) => {
+  onDelete: (item: MenuItem) => void;
+  isDeleting: boolean;
+}> = ({ item, onEdit, onToggleAvailability, onDelete, isDeleting }) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
@@ -2975,7 +3044,13 @@ const SortableMenuItemRow: React.FC<{
           <GripVertical className="w-5 h-5" />
         </button>
         <div className="flex-1">
-          <MenuItemCard item={item} onEdit={onEdit} onToggleAvailability={onToggleAvailability} />
+          <MenuItemCard
+            item={item}
+            onEdit={onEdit}
+            onToggleAvailability={onToggleAvailability}
+            onDelete={onDelete}
+            isDeleting={isDeleting}
+          />
         </div>
       </div>
     </div>
@@ -3028,9 +3103,11 @@ interface MenuItemCardProps {
   item: MenuItem;
   onEdit: (item: MenuItem) => void;
   onToggleAvailability: (item: MenuItem) => void;
+  onDelete: (item: MenuItem) => void;
+  isDeleting: boolean;
 }
 
-const MenuItemCard: React.FC<MenuItemCardProps> = ({ item, onEdit, onToggleAvailability }) => {
+const MenuItemCard: React.FC<MenuItemCardProps> = ({ item, onEdit, onToggleAvailability, onDelete, isDeleting }) => {
   return (
     <div className="flex items-center gap-4 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors">
       {/* Item Image */}
@@ -3096,6 +3173,15 @@ const MenuItemCard: React.FC<MenuItemCardProps> = ({ item, onEdit, onToggleAvail
           title="Edit item"
         >
           <Edit3 className="w-4 h-4" />
+        </button>
+
+        <button
+          onClick={() => onDelete(item)}
+          disabled={isDeleting}
+          className="p-2 text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300 rounded-lg hover:bg-white dark:hover:bg-gray-800 transition-colors disabled:opacity-50"
+          title="Delete item"
+        >
+          <Trash2 className="w-4 h-4" />
         </button>
         
         <button className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-white dark:hover:bg-gray-800 transition-colors">

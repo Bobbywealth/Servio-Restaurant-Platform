@@ -33,10 +33,16 @@ const canAccessRestaurant = (req: Request, restaurantId: string) => {
 
 const parseSettings = (raw: any) => {
   if (!raw) return {};
-  if (typeof raw === 'object') return raw;
+  if (typeof raw === 'object') {
+    return Array.isArray(raw) ? {} : raw;
+  }
   if (typeof raw !== 'string') return {};
   try {
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed;
+    }
+    return {};
   } catch {
     return {};
   }
