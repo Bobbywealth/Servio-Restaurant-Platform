@@ -4,10 +4,10 @@ import { motion, AnimatePresence } from 'framer-motion'
 import dynamic from 'next/dynamic'
 import { api } from '../../lib/api'
 import toast from 'react-hot-toast'
-import { 
-  Package, 
-  AlertTriangle, 
-  TrendingDown, 
+import {
+  Package,
+  AlertTriangle,
+  TrendingDown,
   Plus,
   Search,
   Filter,
@@ -18,6 +18,9 @@ import {
   RefreshCw,
   X
 } from 'lucide-react'
+import { InventoryCardSkeleton, StatCardSkeleton } from '../../components/ui/Skeleton'
+import { PullToRefresh } from '../../components/ui/PullToRefresh'
+import { useHaptic } from '../../lib/haptics'
 
 const DashboardLayout = dynamic(() => import('../../components/Layout/DashboardLayout'), {
   ssr: true,

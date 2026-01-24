@@ -5,6 +5,9 @@ import { useUser } from '../../contexts/UserContext'
 import { api } from '../../lib/api'
 import { useSocket } from '../../lib/socket'
 import { RefreshCw, Filter, ClipboardList } from 'lucide-react'
+import { OrderCardSkeleton, StatCardSkeleton, TableRowSkeleton } from '../../components/ui/Skeleton'
+import { PullToRefresh } from '../../components/ui/PullToRefresh'
+import { useHaptic } from '../../lib/haptics'
 
 type OrderStatus = 'received' | 'preparing' | 'ready' | 'completed' | 'cancelled'
 
@@ -53,11 +56,12 @@ function statusBadgeClass(status: OrderStatus) {
 export default function OrdersPage() {
   const { user, hasPermission } = useUser()
   const socket = useSocket()
+  const { haptic, hapticWithVisual } = useHaptic()
   const [orders, setOrders] = useState<Order[]>([])
   const [summary, setSummary] = useState<OrdersSummary | null>(null)
   const [statusFilter, setStatusFilter] = useState<OrderStatus | 'all'>('all')
   const [channelFilter, setChannelFilter] = useState<string>('all')
-  const [isLoading, setIsLoading] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null)
 
@@ -145,6 +149,7 @@ export default function OrdersPage() {
 
   const updateOrderStatus = async (orderId: string, status: OrderStatus) => {
     if (!canUpdateOrders) return
+    haptic('medium')  // Haptic feedback on status update
     setUpdatingOrderId(orderId)
     setError(null)
     try {
@@ -152,14 +157,16 @@ export default function OrdersPage() {
         status,
         userId: user?.id || 'system'
       })
-      
+
       // Notify other clients via socket
       if (socket) {
         socket.emit('order:status_changed', { orderId, status, timestamp: new Date() })
       }
-      
+
+      haptic('success')  // Success haptic feedback
       await fetchData()
     } catch (e: any) {
+      haptic('error')  // Error haptic feedback
       setError(e?.response?.data?.error?.message || e?.message || 'Failed to update order')
     } finally {
       setUpdatingOrderId(null)
@@ -174,6 +181,7 @@ export default function OrdersPage() {
       </Head>
 
       <DashboardLayout>
+        <PullToRefresh onRefresh={fetchData} disabled={!hasPermission('orders', 'read')}>
         <div className="space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
@@ -218,7 +226,15 @@ export default function OrdersPage() {
             </div>
           )}
 
-          {summary && (
+          {/* Summary Stats */}
+          {isLoading && !summary ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <StatCardSkeleton />
+              <StatCardSkeleton />
+              <StatCardSkeleton />
+              <StatCardSkeleton />
+            </div>
+          ) : summary && (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="card">
                 <p className="text-sm text-surface-600 dark:text-surface-400">Active Orders</p>
@@ -301,10 +317,18 @@ export default function OrdersPage() {
                 </tr>
               </thead>
               <tbody>
-                {orders.length === 0 ? (
+                {isLoading && orders.length === 0 ? (
+                  <>
+                    <TableRowSkeleton columns={canUpdateOrders ? 7 : 6} />
+                    <TableRowSkeleton columns={canUpdateOrders ? 7 : 6} />
+                    <TableRowSkeleton columns={canUpdateOrders ? 7 : 6} />
+                    <TableRowSkeleton columns={canUpdateOrders ? 7 : 6} />
+                    <TableRowSkeleton columns={canUpdateOrders ? 7 : 6} />
+                  </>
+                ) : orders.length === 0 ? (
                   <tr>
                     <td className="py-6 px-2 text-surface-500 dark:text-surface-400" colSpan={canUpdateOrders ? 7 : 6}>
-                      {isLoading ? 'Loading orders…' : 'No orders found.'}
+                      No orders found.
                     </td>
                   </tr>
                 ) : (
@@ -360,11 +384,18 @@ export default function OrdersPage() {
 
           {/* Mobile Card View */}
           <div className="md:hidden space-y-4">
-            {orders.length === 0 ? (
+            {isLoading && orders.length === 0 ? (
+              <>
+                <OrderCardSkeleton />
+                <OrderCardSkeleton />
+                <OrderCardSkeleton />
+                <OrderCardSkeleton />
+              </>
+            ) : orders.length === 0 ? (
               <div className="card text-center py-12">
                 <ClipboardList className="w-12 h-12 mx-auto mb-3 text-surface-300 dark:text-surface-600" />
                 <p className="text-surface-500 dark:text-surface-400">
-                  {isLoading ? 'Loading orders…' : 'No orders found.'}
+                  No orders found.
                 </p>
               </div>
             ) : (
@@ -441,6 +472,7 @@ export default function OrdersPage() {
             )}
           </div>
         </div>
+        </PullToRefresh>
       </DashboardLayout>
     </>
   )
