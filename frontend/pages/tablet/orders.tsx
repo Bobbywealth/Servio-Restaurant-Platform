@@ -893,11 +893,31 @@ export default function TabletOrdersPage() {
     return orders.filter((o) => activeStatuses.has(normalizeStatus(o.status)));
   }, [orders]);
 
+  const sortedOrders = useMemo(() => {
+    const withTimestamp = (order: Order) => {
+      if (!order.created_at) return 0;
+      const ts = new Date(order.created_at).getTime();
+      return Number.isNaN(ts) ? 0 : ts;
+    };
+    return [...activeOrders].sort((a, b) => withTimestamp(b) - withTimestamp(a));
+  }, [activeOrders]);
+
+  useEffect(() => {
+    if (sortedOrders.length === 0) {
+      if (selectedOrder) setSelectedOrder(null);
+      return;
+    }
+    const latest = sortedOrders[0];
+    if (!selectedOrder || selectedOrder.id !== latest.id) {
+      setSelectedOrder(latest);
+    }
+  }, [sortedOrders, selectedOrder?.id]);
+
   const receivedOrders = useMemo(() => {
     return activeOrders.filter((o) => normalizeStatus(o.status) === 'received');
   }, [activeOrders]);
 
-  const filtered = activeOrders;
+  const filtered = sortedOrders;
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -1031,243 +1051,228 @@ export default function TabletOrdersPage() {
             <p className="text-2xl mt-3 font-bold uppercase tracking-widest">No active orders</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {filtered.map((o) => {
-              const status = normalizeStatus(o.status);
-              const isNew = status === 'received';
-              const isPreparing = status === 'preparing';
-              const isReady = status === 'ready';
-              const timeStr = formatTimeAgo(o.created_at, now);
-              const itemCount = (o.items || []).reduce((sum, it) => sum + (it.quantity || 1), 0);
-              const hasPendingAction = pendingActions.has(o.id);
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[320px_1fr_320px]">
+            {/* Left Panel: Order List */}
+            <div className="rounded-3xl border-4 border-black bg-white shadow-2xl flex flex-col min-h-[70vh]">
+              <div className="px-4 py-3 border-b-2 border-slate-200 flex items-center justify-between">
+                <div className="text-2xl font-black uppercase">Orders</div>
+                <div className="text-lg font-bold text-slate-500">{filtered.length} Active</div>
+              </div>
+              <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
+                {filtered.map((o, index) => {
+                  const status = normalizeStatus(o.status);
+                  const isNew = status === 'received';
+                  const isPreparing = status === 'preparing';
+                  const isReady = status === 'ready';
+                  const timeStr = formatTimeAgo(o.created_at, now);
+                  const itemCount = (o.items || []).reduce((sum, it) => sum + (it.quantity || 1), 0);
+                  const hasPendingAction = pendingActions.has(o.id);
+                  const isLatest = index === 0;
 
-              return (
-                <div 
-                  key={o.id} 
-                  onClick={() => setSelectedOrder(o)}
-                  className={clsx(
-                    "flex flex-col rounded-3xl border-[5px] bg-white overflow-hidden shadow-2xl transition-all cursor-pointer active:scale-[0.98]",
-                    isNew ? "border-blue-600 ring-8 ring-blue-100 animate-pulse" : "border-black",
-                    isReady && "opacity-60 grayscale"
-                  )}
-                >
-                  {/* Card Header */}
-                  <div 
-                    className={clsx(
-                      "px-5 py-4 flex items-center justify-between",
-                      isNew ? "bg-blue-600 text-white" : isPreparing ? "bg-amber-500 text-white" : "bg-black text-white"
-                    )}
-                  >
-                    <div className="flex flex-col">
-                      <span className="text-base font-black uppercase tracking-wider opacity-80">Order</span>
-                      <span className="text-5xl font-black font-mono leading-none tracking-tighter">
-                        #{o.external_id ? o.external_id.slice(-4).toUpperCase() : o.id.slice(-4).toUpperCase()}
-                      </span>
+                  return (
+                    <div
+                      key={o.id}
+                      className={clsx(
+                        "rounded-2xl border-2 p-3 shadow-lg",
+                        isLatest ? "border-blue-600 ring-4 ring-blue-100" : "border-slate-200",
+                        isReady && "opacity-60 grayscale"
+                      )}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="text-lg font-black uppercase text-slate-500">Order</div>
+                        {isLatest && (
+                          <div className="text-xs font-black uppercase bg-blue-600 text-white px-2 py-1 rounded-full">
+                            Latest
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center justify-between mt-1">
+                        <div className="text-3xl font-black font-mono">
+                          #{o.external_id ? o.external_id.slice(-4).toUpperCase() : o.id.slice(-4).toUpperCase()}
+                        </div>
+                        <div className="text-right">
+                          <div className="text-xs font-black uppercase text-slate-500">
+                            {isNew ? 'NEW' : isPreparing ? 'PREP' : 'READY'}
+                          </div>
+                          <div className={clsx(
+                            "text-xl font-black tabular-nums",
+                            timeStr.includes('m') && parseInt(timeStr) > 15 ? "text-red-600" : "text-black"
+                          )}>
+                            {timeStr}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="mt-2 flex items-center justify-between">
+                        <div className="text-lg font-black uppercase truncate">{o.customer_name || 'Guest'}</div>
+                        <div className="text-sm font-black uppercase bg-slate-200 text-black px-2 py-1 rounded">
+                          {o.channel || 'POS'}
+                        </div>
+                      </div>
+                      <div className="mt-2 flex items-center justify-between">
+                        <div className="text-base font-bold text-slate-600">
+                          {itemCount} item{itemCount !== 1 ? 's' : ''}
+                        </div>
+                        <div className="text-lg font-black">{formatMoney(o.total_amount)}</div>
+                      </div>
                       {hasPendingAction && (
-                        <span className="mt-1 text-xs font-black uppercase tracking-wider text-white/80">
+                        <div className="mt-2 text-xs font-black uppercase text-amber-700">
                           Pending Sync
-                        </span>
+                        </div>
                       )}
                     </div>
-                    <div className="text-right">
-                      <span className="text-base font-black uppercase tracking-wider opacity-80">
-                        {isNew ? 'NEW' : isPreparing ? 'PREP' : 'READY'}
-                      </span>
-                      <div className={clsx(
-                        "text-4xl font-black tabular-nums leading-none",
-                        timeStr.includes('m') && parseInt(timeStr) > 15 ? "text-red-300" : ""
-                      )}>
-                        {timeStr}
-                      </div>
-                    </div>
-                  </div>
+                  );
+                })}
+              </div>
+            </div>
 
-                  {/* Customer & Summary */}
-                  <div className="px-5 py-4 flex-grow">
-                    <div className="flex items-center justify-between mb-3">
-                      <span className="text-3xl font-black text-black truncate uppercase">
-                        {o.customer_name || 'GUEST'}
-                      </span>
-                      <div className="flex-shrink-0 bg-slate-200 text-black px-3 py-1 rounded-lg text-lg font-black uppercase">
-                        {o.channel || 'POS'}
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-2xl font-bold text-slate-600">
-                        {itemCount} item{itemCount !== 1 ? 's' : ''}
-                      </span>
-                      <span className="text-3xl font-black text-black">
-                        {formatMoney(o.total_amount)}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Quick Action Footer */}
-                  <div className={clsx(
-                    "px-5 py-4 text-center font-black text-2xl uppercase tracking-wide",
-                    isNew ? "bg-blue-100 text-blue-700" : isPreparing ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-600"
-                  )}>
-                    {isNew ? 'TAP TO VIEW & ACCEPT' : isPreparing ? 'TAP FOR DETAILS' : 'TAP TO COMPLETE'}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* Order Detail Modal - Fullscreen for tablet clarity */}
-      {selectedOrder && (
-        <div className="no-print fixed inset-0 z-50 flex items-stretch bg-black/70">
-          {/* Fullscreen order details */}
-          <div className="flex-1 w-full h-full overflow-hidden">
-            <div className="bg-white w-full h-full overflow-hidden flex flex-col">
-              {/* Modal Header - compact */}
-              <div className={clsx(
-                "px-4 py-3 flex items-center justify-between flex-shrink-0",
-                normalizeStatus(selectedOrder.status) === 'received' ? "bg-blue-600 text-white" : 
-                normalizeStatus(selectedOrder.status) === 'preparing' ? "bg-amber-500 text-white" : "bg-black text-white"
-              )}>
-                <div className="flex items-center gap-4">
-                  <div className="text-4xl font-black font-mono leading-none tracking-tighter">
+            {/* Center Panel: Order Items */}
+            <div className="rounded-3xl border-4 border-black bg-white shadow-2xl flex flex-col min-h-[70vh]">
+              <div className="px-4 py-3 border-b-2 border-slate-200 flex items-center justify-between">
+                <div className="text-2xl font-black uppercase">Latest Order</div>
+                {selectedOrder ? (
+                  <div className="text-lg font-black font-mono">
                     #{selectedOrder.external_id ? selectedOrder.external_id.slice(-4).toUpperCase() : selectedOrder.id.slice(-4).toUpperCase()}
                   </div>
-                  <div className="text-lg font-bold opacity-80 uppercase">
+                ) : null}
+              </div>
+              {selectedOrder ? (
+                <div className="flex-1 overflow-y-auto px-4 py-3 min-h-0">
+                  <div className="text-base font-black text-slate-500 uppercase mb-2">Items</div>
+                  <div className="space-y-3">
+                    {(selectedOrder.items || []).map((it, idx) => (
+                      <div key={idx} className="flex items-center gap-3 py-2 border-b border-slate-200 last:border-0">
+                        <div className="flex-shrink-0 bg-black text-white w-10 h-10 rounded-lg flex items-center justify-center text-xl font-black">
+                          {it.quantity || 1}
+                        </div>
+                        <div className="flex-grow min-w-0">
+                          <div className="text-xl font-black leading-tight text-black break-words uppercase truncate">
+                            {it.name}
+                          </div>
+                        </div>
+                        <div className="text-xl font-black text-black flex-shrink-0">
+                          {formatMoney((it.unit_price || it.price || 0) * (it.quantity || 1))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {selectedOrder.special_instructions && (
+                    <div className="mt-3 p-3 bg-yellow-50 border-2 border-yellow-200 rounded-xl">
+                      <div className="text-base font-black text-yellow-700 uppercase mb-1">Special Instructions</div>
+                      <div className="text-lg font-bold text-yellow-900">{selectedOrder.special_instructions}</div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="flex-1 flex items-center justify-center text-2xl font-bold text-slate-400">
+                  Waiting for orders...
+                </div>
+              )}
+            </div>
+
+            {/* Right Panel: Customer & Actions */}
+            <div className="rounded-3xl border-4 border-black bg-white shadow-2xl flex flex-col min-h-[70vh]">
+              <div className="px-4 py-3 border-b-2 border-slate-200 flex items-center justify-between">
+                <div className="text-2xl font-black uppercase">Details</div>
+                {selectedOrder ? (
+                  <div className="text-sm font-black uppercase text-slate-500">
                     {normalizeStatus(selectedOrder.status)}
                   </div>
-                </div>
-                <button
-                  onClick={() => setSelectedOrder(null)}
-                  className="bg-white/20 hover:bg-white/30 p-2 rounded-xl transition-colors"
-                >
-                  <span className="text-2xl font-black">✕</span>
-                </button>
+                ) : null}
               </div>
-
-              {/* Customer Info - compact */}
-              <div className="px-4 py-3 bg-slate-100 border-b-2 border-slate-200 flex-shrink-0">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-2xl font-black text-black uppercase">{selectedOrder.customer_name || 'GUEST'}</div>
+              {selectedOrder ? (
+                <>
+                  <div className="px-4 py-3 border-b-2 border-slate-200">
+                    <div className="text-2xl font-black uppercase text-black">{selectedOrder.customer_name || 'Guest'}</div>
                     {selectedOrder.customer_phone && (
                       <div className="text-lg font-bold text-slate-600">{selectedOrder.customer_phone}</div>
                     )}
-                  </div>
-                  <div className="text-right">
-                    <div className="bg-black text-white px-3 py-1 rounded-lg text-lg font-black uppercase">
-                      {selectedOrder.channel || 'POS'}
+                    <div className="mt-2 flex items-center gap-2">
+                      <div className="bg-black text-white px-3 py-1 rounded-lg text-base font-black uppercase">
+                        {selectedOrder.channel || 'POS'}
+                      </div>
+                      {selectedOrder.order_type && (
+                        <div className="text-base font-bold text-slate-600">{selectedOrder.order_type}</div>
+                      )}
                     </div>
-                    {selectedOrder.order_type && (
-                      <div className="text-base font-bold text-slate-600 mt-1">{selectedOrder.order_type}</div>
+                  </div>
+                  <div className="px-4 py-3 border-b-2 border-slate-200">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xl font-black text-black uppercase">Total</span>
+                      <span className="text-3xl font-black text-black">{formatMoney(selectedOrder.total_amount)}</span>
+                    </div>
+                    {selectedOrder.pickup_time && (
+                      <div className="text-lg font-bold text-slate-600 mt-1">
+                        Pickup: {new Date(selectedOrder.pickup_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </div>
                     )}
                   </div>
-                </div>
-              </div>
-
-              {/* Items List - SCROLLABLE */}
-              <div className="flex-1 overflow-y-auto px-4 py-3 min-h-0">
-                <div className="text-base font-black text-slate-500 uppercase mb-2">Items</div>
-                <div className="space-y-3">
-                  {(selectedOrder.items || []).map((it, idx) => (
-                    <div key={idx} className="flex items-center gap-3 py-2 border-b border-slate-200 last:border-0">
-                      <div className="flex-shrink-0 bg-black text-white w-10 h-10 rounded-lg flex items-center justify-center text-xl font-black">
-                        {it.quantity || 1}
+                  <div className="px-4 py-4 flex-1 flex flex-col justify-end">
+                    {normalizeStatus(selectedOrder.status) === 'received' && (
+                      <div className="flex gap-3">
+                        <button
+                          disabled={busyId === selectedOrder.id}
+                          onClick={() => declineOrder(selectedOrder)}
+                          className="flex-1 bg-red-600 hover:bg-red-700 active:scale-95 text-white py-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-xl disabled:opacity-50"
+                        >
+                          <span className="text-2xl font-black uppercase">Decline</span>
+                        </button>
+                        <button
+                          disabled={busyId === selectedOrder.id}
+                          onClick={() => acceptOrder(selectedOrder)}
+                          className="flex-[2] bg-green-600 hover:bg-green-700 active:scale-95 text-white py-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-xl disabled:opacity-50"
+                        >
+                          <span className="text-2xl font-black uppercase">Accept</span>
+                          <CheckCircle2 className="h-7 w-7 stroke-[3px]" />
+                        </button>
                       </div>
-                      <div className="flex-grow min-w-0">
-                        <div className="text-xl font-black leading-tight text-black break-words uppercase truncate">
-                          {it.name}
-                        </div>
+                    )}
+                    {normalizeStatus(selectedOrder.status) === 'preparing' && (
+                      <div className="flex gap-3">
+                        <button
+                          onClick={() => printOrder(selectedOrder.id)}
+                          disabled={printingOrderId === selectedOrder.id}
+                          className="flex-1 bg-slate-200 hover:bg-slate-300 active:scale-95 text-black py-4 rounded-xl flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+                        >
+                          <Printer className="h-6 w-6" />
+                          <span className="text-xl font-black uppercase">Print</span>
+                        </button>
+                        <button
+                          disabled={busyId === selectedOrder.id}
+                          onClick={() => {
+                            setStatus(selectedOrder.id, 'ready');
+                          }}
+                          className="flex-[2] bg-black hover:bg-slate-800 active:scale-95 text-white py-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-xl disabled:opacity-50"
+                        >
+                          <span className="text-2xl font-black uppercase">Ready</span>
+                          <CheckCircle2 className="h-7 w-7 stroke-[3px]" />
+                        </button>
                       </div>
-                      <div className="text-xl font-black text-black flex-shrink-0">
-                        {formatMoney((it.unit_price || it.price || 0) * (it.quantity || 1))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                
-                {selectedOrder.special_instructions && (
-                  <div className="mt-3 p-3 bg-yellow-50 border-2 border-yellow-200 rounded-xl">
-                    <div className="text-base font-black text-yellow-700 uppercase mb-1">Special Instructions</div>
-                    <div className="text-lg font-bold text-yellow-900">{selectedOrder.special_instructions}</div>
+                    )}
+                    {normalizeStatus(selectedOrder.status) === 'ready' && (
+                      <button
+                        disabled={busyId === selectedOrder.id}
+                        onClick={() => {
+                          if (window.confirm('Mark this order as completed?')) {
+                            setStatus(selectedOrder.id, 'completed');
+                            setSelectedOrder(null);
+                          }
+                        }}
+                        className="w-full bg-slate-500 hover:bg-slate-600 active:scale-95 text-white py-4 rounded-xl flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+                      >
+                        <span className="text-2xl font-black uppercase">Complete</span>
+                      </button>
+                    )}
                   </div>
-                )}
-              </div>
-
-              {/* Total - compact */}
-              <div className="px-4 py-3 bg-slate-100 border-t-2 border-slate-200 flex-shrink-0">
-                <div className="flex items-center justify-between">
-                  <span className="text-xl font-black text-black uppercase">Total</span>
-                  <span className="text-3xl font-black text-black">{formatMoney(selectedOrder.total_amount)}</span>
-                </div>
-                {selectedOrder.pickup_time && (
-                  <div className="text-lg font-bold text-slate-600 mt-1">
-                    Pickup: {new Date(selectedOrder.pickup_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </div>
-                )}
-              </div>
-
-            {/* Action Buttons - compact */}
-            <div className="px-4 py-3 bg-white border-t-2 border-slate-200 flex-shrink-0">
-              {normalizeStatus(selectedOrder.status) === 'received' && (
-                <div className="flex gap-3">
-                  <button
-                    disabled={busyId === selectedOrder.id}
-                    onClick={() => declineOrder(selectedOrder)}
-                    className="flex-1 bg-red-600 hover:bg-red-700 active:scale-95 text-white py-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-xl disabled:opacity-50"
-                  >
-                    <span className="text-2xl font-black uppercase">DECLINE</span>
-                  </button>
-                  <button
-                    disabled={busyId === selectedOrder.id}
-                    onClick={() => acceptOrder(selectedOrder)}
-                    className="flex-[2] bg-green-600 hover:bg-green-700 active:scale-95 text-white py-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-xl disabled:opacity-50"
-                  >
-                    <span className="text-2xl font-black uppercase">ACCEPT</span>
-                    <CheckCircle2 className="h-7 w-7 stroke-[3px]" />
-                  </button>
+                </>
+              ) : (
+                <div className="flex-1 flex items-center justify-center text-2xl font-bold text-slate-400">
+                  Waiting for orders...
                 </div>
               )}
-              {normalizeStatus(selectedOrder.status) === 'preparing' && (
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => printOrder(selectedOrder.id)}
-                    disabled={printingOrderId === selectedOrder.id}
-                    className="flex-1 bg-slate-200 hover:bg-slate-300 active:scale-95 text-black py-4 rounded-xl flex items-center justify-center gap-2 transition-all disabled:opacity-50"
-                  >
-                    <Printer className="h-6 w-6" />
-                    <span className="text-xl font-black uppercase">PRINT</span>
-                  </button>
-                  <button
-                    disabled={busyId === selectedOrder.id}
-                    onClick={() => {
-                      setStatus(selectedOrder.id, 'ready');
-                    }}
-                    className="flex-[2] bg-black hover:bg-slate-800 active:scale-95 text-white py-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-xl disabled:opacity-50"
-                  >
-                    <span className="text-2xl font-black uppercase">READY</span>
-                    <CheckCircle2 className="h-7 w-7 stroke-[3px]" />
-                  </button>
-                </div>
-              )}
-              {normalizeStatus(selectedOrder.status) === 'ready' && (
-                <button
-                  disabled={busyId === selectedOrder.id}
-                  onClick={() => {
-                    if (window.confirm('Mark this order as completed?')) {
-                      setStatus(selectedOrder.id, 'completed');
-                      setSelectedOrder(null);
-                    }
-                  }}
-                  className="w-full bg-slate-500 hover:bg-slate-600 active:scale-95 text-white py-4 rounded-xl flex items-center justify-center gap-2 transition-all disabled:opacity-50"
-                >
-                  <span className="text-2xl font-black uppercase">COMPLETE</span>
-                </button>
-              )}
-            </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Print Prompt Modal (when auto-print is OFF) */}
       {showPrintPrompt && (
