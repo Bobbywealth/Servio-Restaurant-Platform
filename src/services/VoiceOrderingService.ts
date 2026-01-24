@@ -389,6 +389,7 @@ export class VoiceOrderingService {
 
   public searchMenu(query: string) {
     if (!this.menuData) return [];
+    let items: any[] = [];
     if (this.isGeneralMenuQuery(query)) {
       const popular = this.getPopularMenuItems();
       const items = popular.length > 0 ? popular : this.getMenuItemsFromData();
