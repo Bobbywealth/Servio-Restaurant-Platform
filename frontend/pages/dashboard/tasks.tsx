@@ -29,9 +29,9 @@ export default function TasksPage() {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [editingTask, setEditingTask] = useState<Task | null>(null)
 
-  const canCreateTasks = isManagerOrOwner() || hasPermission('tasks', 'create')
-  const canUpdateTasks = isManagerOrOwner() || hasPermission('tasks', 'update')
-  const canDeleteTasks = isManagerOrOwner() || hasPermission('tasks', 'delete')
+  const canCreateTasks = isManagerOrOwner || hasPermission('tasks', 'create')
+  const canUpdateTasks = isManagerOrOwner || hasPermission('tasks', 'update')
+  const canDeleteTasks = isManagerOrOwner || hasPermission('tasks', 'delete')
 
   const fetchTasks = async () => {
     setIsLoading(true)
