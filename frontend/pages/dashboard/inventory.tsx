@@ -326,9 +326,9 @@ export default function InventoryPage() {
             </div>
           </div>
 
-          {/* Inventory Table */}
+          {/* Desktop Inventory Table */}
           <motion.div
-            className="card overflow-hidden"
+            className="hidden md:block card overflow-hidden"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.4 }}
@@ -430,6 +430,95 @@ export default function InventoryPage() {
               </table>
             </div>
           </motion.div>
+
+          {/* Mobile Inventory Cards */}
+          <div className="md:hidden space-y-4">
+            {items.length === 0 ? (
+              <div className="card text-center py-12">
+                <Package className="w-12 h-12 mx-auto mb-3 text-surface-300 dark:text-surface-600" />
+                <p className="text-surface-500 dark:text-surface-400">
+                  {isLoading ? 'Loading inventory...' : 'No items found'}
+                </p>
+              </div>
+            ) : (
+              items.map((item, index) => (
+                <motion.div
+                  key={item.id}
+                  className="card hover:shadow-lg transition-shadow"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.05 * index }}
+                >
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-semibold text-base text-surface-900 dark:text-surface-100 truncate">
+                        {item.name}
+                      </h3>
+                      {item.sku && (
+                        <p className="text-xs text-surface-500 dark:text-surface-400 mt-0.5">
+                          SKU: {item.sku}
+                        </p>
+                      )}
+                    </div>
+                    <span className={`status-badge ml-2 ${
+                      item.on_hand_qty <= item.low_stock_threshold ? 'status-warning' : 'status-success'
+                    }`}>
+                      {item.on_hand_qty <= item.low_stock_threshold ? 'Low' : 'Good'}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 mb-3">
+                    <div>
+                      <div className="text-xs text-surface-500 dark:text-surface-400 mb-1">Category</div>
+                      <div className="text-sm font-medium text-surface-900 dark:text-surface-100">
+                        {item.category || 'Uncategorized'}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-surface-500 dark:text-surface-400 mb-1">Stock Level</div>
+                      <div className="text-sm font-medium text-surface-900 dark:text-surface-100">
+                        {item.on_hand_qty} {item.unit}
+                      </div>
+                    </div>
+                    <div className="col-span-2">
+                      <div className="text-xs text-surface-500 dark:text-surface-400 mb-1">Low Stock Threshold</div>
+                      <div className="text-sm font-medium text-surface-900 dark:text-surface-100">
+                        {item.low_stock_threshold} {item.unit}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="pt-3 border-t border-surface-200 dark:border-surface-700">
+                    <div className="flex items-center justify-between gap-2">
+                      <button
+                        onClick={() => openEditModal(item)}
+                        className="btn-secondary flex-1 min-h-[44px] inline-flex items-center justify-center gap-2"
+                      >
+                        <Edit3 className="w-4 h-4" />
+                        <span>Edit</span>
+                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleAdjustQuantity(item.id, -1)}
+                          className="btn-icon bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 min-w-[44px] min-h-[44px]"
+                          aria-label="Remove 1"
+                        >
+                          <TrendingDown className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleAdjustQuantity(item.id, 1)}
+                          className="btn-icon bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/30 min-w-[44px] min-h-[44px]"
+                          aria-label="Add 1"
+                        >
+                          <Plus className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              ))
+            )}
+          </div>
 
           {/* Add Item Modal */}
           <AnimatePresence>
