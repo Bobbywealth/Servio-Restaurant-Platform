@@ -424,7 +424,10 @@ export class VoiceOrderingService {
     return null;
   }
 
-  public validateQuote(input: any) {
+  public async validateQuote(input: any) {
+    // ADD COMPREHENSIVE LOGGING FIRST
+    console.log('🛒 [validateQuote] RAW input received:', JSON.stringify(input, null, 2));
+
     const orderType = String(input?.orderType || 'pickup').toLowerCase();
     if (!VoiceOrderingService.ALLOWED_ORDER_TYPES.has(orderType)) {
       return {
@@ -439,13 +442,85 @@ export class VoiceOrderingService {
     }
 
     const { items } = input;
+
+    // Log each item being processed
+    if (items) {
+      items.forEach((item: any, index: number) => {
+        console.log(`🛒 [validateQuote] Item ${index}:`, {
+          hasItemId: !!item.itemId,
+          hasName: !!(item.name || item.itemName),
+          itemId: item.itemId,
+          name: item.name || item.itemName,
+          qty: item.qty || item.quantity
+        });
+      });
+    }
+
+    const restaurantId = this.resolveRestaurantId(
+      input.restaurantId || input.restaurantSlug || process.env.VAPI_RESTAURANT_ID
+    );
+
+    if (!restaurantId) {
+      console.error('❌ [validateQuote] Restaurant ID is required');
+      return {
+        valid: false,
+        subtotal: 0,
+        tax: 0,
+        fees: 0,
+        total: 0,
+        errors: ['Restaurant ID is required'],
+        items: []
+      };
+    }
+
     const errors: string[] = [];
     let subtotal = 0;
 
-    const validatedItems = items.map((inputItem: any) => {
-      const menuItem = this.getMenuItem(inputItem.itemId);
+    const validatedItems = await Promise.all(items.map(async (inputItem: any) => {
+      let menuItem = null;
+
+      // Try to get by itemId first
+      if (inputItem.itemId) {
+        menuItem = this.getMenuItem(inputItem.itemId);
+        if (!menuItem) {
+          console.log(`⚠️ [validateQuote] Failed to get item by ID ${inputItem.itemId}, trying database...`);
+          // Try database lookup as fallback
+          menuItem = await this.getMenuItemLive(inputItem.itemId, restaurantId);
+        }
+      }
+
+      // Fallback: search by name if no ID or ID lookup failed
+      if (!menuItem && (inputItem.name || inputItem.itemName)) {
+        const searchName = inputItem.name || inputItem.itemName;
+        console.log(`🔍 [validateQuote] Falling back to name search for: "${searchName}"`);
+
+        try {
+          const searchResults = await this.searchMenuLive(searchName, restaurantId);
+
+          if (searchResults && searchResults.length > 0) {
+            // Take first exact or closest match
+            const firstResult = searchResults[0];
+            console.log(`✅ [validateQuote] Found item by name: "${firstResult.name}" (ID: ${firstResult.id})`);
+
+            // Convert search result to menu item format
+            menuItem = {
+              id: firstResult.id,
+              name: firstResult.name,
+              basePrice: Number(firstResult.price || 0),
+              modifierGroups: [],
+              tags: [],
+              category: firstResult.category || 'Menu'
+            };
+          }
+        } catch (err) {
+          console.log(`⚠️ [validateQuote] Failed to search by name "${searchName}":`, err instanceof Error ? err.message : String(err));
+        }
+      }
+
       if (!menuItem) {
-        errors.push(`Item not found: ${inputItem.itemId}`);
+        const itemDesc = inputItem.itemId || inputItem.name || inputItem.itemName || 'unknown';
+        errors.push(`Item not found: ${itemDesc}`);
+        console.error('❌ [validateQuote] Could not resolve item:', inputItem);
         return null;
       }
 
@@ -505,12 +580,31 @@ export class VoiceOrderingService {
         itemPrice += 3.00;
       }
 
-      subtotal += itemPrice * (inputItem.qty || 1);
-      return { ...inputItem, price: itemPrice };
-    });
+      // Get quantity from either qty or quantity field
+      const quantity = inputItem.qty || inputItem.quantity || 1;
+
+      subtotal += itemPrice * quantity;
+
+      // Return with the correct itemId (important for createOrder)
+      return {
+        ...inputItem,
+        itemId: menuItem.id,  // Ensure itemId is set correctly
+        price: itemPrice,
+        qty: quantity
+      };
+    }));
 
     const tax = subtotal * 0.06625; // Using tax rate from JSON
     const total = subtotal + tax;
+
+    console.log('🛒 [validateQuote] Result:', {
+      valid: errors.length === 0,
+      subtotal: parseFloat(subtotal.toFixed(2)),
+      tax: parseFloat(tax.toFixed(2)),
+      total: parseFloat(total.toFixed(2)),
+      errorCount: errors.length,
+      errors
+    });
 
     return {
       valid: errors.length === 0,
@@ -552,7 +646,7 @@ export class VoiceOrderingService {
       return { success: false, errors: ['Missing totals'] };
     }
 
-    const quote = this.validateQuote(input);
+    const quote = await this.validateQuote(input);
     if (!quote.valid) return { success: false, errors: quote.errors };
 
     const db = DatabaseService.getInstance().getDatabase();
