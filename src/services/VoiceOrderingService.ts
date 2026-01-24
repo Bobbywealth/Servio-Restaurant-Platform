@@ -39,10 +39,27 @@ export class VoiceOrderingService {
   }
 
   private resolveRestaurantId(input?: string | null) {
-    // TEMP FIX for testing: fallback to Sashey's Kitchen if restaurantId missing
-    // Try: input → env var → ID from menu JSON → slug from dashboard
-    // TODO: Remove this fallback once multi-restaurant metadata is configured
-    return input || process.env.VAPI_RESTAURANT_ID || 'sasheys-kitchen-union';
+    // Try: input → env var. Avoid hardcoded fallbacks to prevent wrong-restaurant lookups.
+    return input || process.env.VAPI_RESTAURANT_ID || null;
+  }
+
+  public async resolveRestaurantIdFromSlug(slug?: string | null) {
+    const trimmed = String(slug || '').trim();
+    if (!trimmed) return null;
+    try {
+      const db = DatabaseService.getInstance().getDatabase();
+      const row = await db.get(
+        'SELECT id FROM restaurants WHERE slug = ? AND is_active = TRUE',
+        [trimmed]
+      );
+      return row?.id || null;
+    } catch (err) {
+      logger.error('[vapi] resolveRestaurantIdFromSlug failed', {
+        slug: trimmed,
+        error: err instanceof Error ? err.message : String(err)
+      });
+      return null;
+    }
   }
 
   // Live DB: get open/closed info; for now always "open" if DB reachable
