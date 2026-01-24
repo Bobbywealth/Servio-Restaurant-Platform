@@ -456,3 +456,173 @@ img, video {
     -webkit-overflow-scrolling: touch;
   }
 }
+
+/* NATIVE APP FEEL - MOBILE OPTIMIZATIONS */
+@layer utilities {
+  /* Smooth scroll behavior for iOS */
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Prevent pull-to-refresh on desktop */
+  @media (hover: hover) and (pointer: fine) {
+    body {
+      overscroll-behavior-y: contain;
+    }
+  }
+
+  /* Enable smooth scrolling on mobile */
+  @media (hover: none) and (pointer: coarse) {
+    * {
+      -webkit-overflow-scrolling: touch;
+      scroll-behavior: smooth;
+    }
+
+    /* Disable iOS bounce on fixed elements */
+    .fixed,
+    .sticky {
+      -webkit-transform: translateZ(0);
+      transform: translateZ(0);
+    }
+  }
+
+  /* Performance: GPU acceleration for transitions */
+  .will-change-transform {
+    will-change: transform;
+  }
+
+  .will-change-opacity {
+    will-change: opacity;
+  }
+
+  /* Native app transitions */
+  .transition-native {
+    transition-timing-function: cubic-bezier(0.61, 1, 0.88, 1);
+  }
+
+  /* iOS-style momentum scrolling */
+  .momentum-scroll {
+    overflow-y: scroll;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+  }
+
+  /* Prevent text selection on interactive elements */
+  .no-select {
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+
+  /* Active state for touch */
+  .active-state:active {
+    transform: scale(0.97);
+    opacity: 0.9;
+  }
+
+  /* Backdrop blur for modals */
+  .backdrop-blur-native {
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+  }
+}
+
+/* LOADING STATE OPTIMIZATIONS */
+@layer components {
+  /* Skeleton pulse animation */
+  @keyframes skeleton-pulse {
+    0%, 100% {
+      opacity: 0.5;
+    }
+    50% {
+      opacity: 0.8;
+    }
+  }
+
+  .skeleton-animate {
+    animation: skeleton-pulse 1.5s ease-in-out infinite;
+  }
+
+  /* Shimmer effect for loading */
+  @keyframes shimmer {
+    0% {
+      background-position: -1000px 0;
+    }
+    100% {
+      background-position: 1000px 0;
+    }
+  }
+
+  .shimmer {
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.1) 50%,
+      transparent 100%
+    );
+    background-size: 1000px 100%;
+    animation: shimmer 2s infinite;
+  }
+}
+
+/* PERFORMANCE: Reduce repaints */
+@layer base {
+  /* Contain layout for better performance */
+  .card,
+  .card-hover {
+    contain: layout style paint;
+  }
+
+  /* Optimize font rendering */
+  body {
+    font-feature-settings: "kern" 1;
+    font-kerning: normal;
+    text-size-adjust: 100%;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  /* Optimize images */
+  img {
+    content-visibility: auto;
+  }
+}
+
+/* MOBILE: Improve tap targets */
+@media (max-width: 768px) {
+  /* Ensure minimum tap target size */
+  button,
+  a,
+  input[type="button"],
+  input[type="submit"],
+  select {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Larger text inputs on mobile */
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="tel"],
+  input[type="number"],
+  textarea {
+    font-size: 16px; /* Prevents zoom on iOS */
+  }
+}
+
+/* DARK MODE: Prevent flash */
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+  }
+}
+
+/* PERFORMANCE: Content visibility */
+.content-auto {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 500px;
+}
