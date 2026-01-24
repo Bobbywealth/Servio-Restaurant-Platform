@@ -44,6 +44,29 @@ export class VapiService {
     this.assistantService = new AssistantService();
   }
 
+  private normalizeToolName(name: string): string {
+    const trimmed = name.trim();
+    if (!trimmed) return '';
+
+    const stripped = trimmed.replace(/[^a-zA-Z0-9]/g, '');
+    const lower = stripped.toLowerCase();
+    const aliases: Record<string, string> = {
+      getstorestatus: 'getStoreStatus',
+      searchmenu: 'searchMenu',
+      getmenuitem: 'getMenuItem',
+      getmenuitembyname: 'getMenuItemByName',
+      quoteorder: 'quoteOrder',
+      createorder: 'createOrder',
+      checkorderstatus: 'checkOrderStatus'
+    };
+
+    if (aliases[lower]) {
+      return aliases[lower];
+    }
+
+    return trimmed.charAt(0).toLowerCase() + trimmed.slice(1);
+  }
+
   async handleWebhook(payload: VapiWebhookPayload): Promise<VapiResponse> {
     const { message } = payload;
     
@@ -355,8 +378,10 @@ export class VapiService {
 
     logger.info('[vapi] tool_call_start', { requestId, callId, toolName: name });
 
-    // Normalize tool name to handle different casing from Vapi (PascalCase vs camelCase)
-    const normalizedName = name.charAt(0).toLowerCase() + name.slice(1);
+    const normalizedName = this.normalizeToolName(name);
+    if (!normalizedName) {
+      return { error: 'Missing tool name' };
+    }
 
     try {
       let result;
