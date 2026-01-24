@@ -49,7 +49,25 @@ export class VoiceOrderingService {
 
   private resolveRestaurantId(input?: string | null) {
     // Try: input → env var. Avoid hardcoded fallbacks to prevent wrong-restaurant lookups.
-    return this.normalizeRestaurantId(input) || this.normalizeRestaurantId(process.env.VAPI_RESTAURANT_ID) || null;
+    const resolved = input || process.env.VAPI_RESTAURANT_ID || null;
+    return this.normalizeRestaurantId(resolved);
+  }
+
+  private normalizeRestaurantId(input?: string | null): string | null {
+    if (!input) {
+      return null;
+    }
+
+    const mapping: Record<string, string> = {
+      unions: 'sasheys-kitchen-union',
+      union: 'sasheys-kitchen-union',
+      sasheys: 'sasheys-kitchen-union',
+      sashey: 'sasheys-kitchen-union'
+    };
+
+    const trimmed = input.trim();
+    const normalized = trimmed.toLowerCase();
+    return mapping[normalized] || trimmed;
   }
 
   public async resolveRestaurantIdFromSlug(slug?: string | null) {
