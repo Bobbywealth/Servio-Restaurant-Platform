@@ -55,40 +55,45 @@ router.get('/today', asyncHandler(async (req: Request, res: Response) => {
  * Get all tasks with filtering
  */
 router.get('/', asyncHandler(async (req: Request, res: Response) => {
-  const { status, type, assignedTo } = req.query;
+  const { status, type, assignedTo, priority } = req.query;
   const db = DatabaseService.getInstance().getDatabase();
   const restaurantId = req.user?.restaurantId;
 
-  let query = 'SELECT * FROM tasks';
+  let query = 'SELECT t.*, u.name as assigned_to_name FROM tasks t LEFT JOIN users u ON t.assigned_to = u.id';
   const params: any[] = [restaurantId];
-  const conditions: string[] = ['restaurant_id = ?'];
+  const conditions: string[] = ['t.restaurant_id = ?'];
 
   if (status) {
-    conditions.push('status = ?');
+    conditions.push('t.status = ?');
     params.push(status);
   }
 
   if (type) {
-    conditions.push('type = ?');
+    conditions.push('t.type = ?');
     params.push(type);
   }
 
   if (assignedTo) {
-    conditions.push('assigned_to = ?');
+    conditions.push('t.assigned_to = ?');
     params.push(assignedTo);
+  }
+
+  if (priority) {
+    conditions.push('t.priority = ?');
+    params.push(priority);
   }
 
   if (conditions.length > 0) {
     query += ' WHERE ' + conditions.join(' AND ');
   }
 
-  query += ' ORDER BY created_at DESC';
+  query += ' ORDER BY t.created_at DESC';
 
   const tasks = await db.all(query, params);
 
   res.json({
     success: true,
-    data: tasks
+    data: { tasks }
   });
 }));
 
@@ -257,7 +262,7 @@ router.get('/stats', asyncHandler(async (req: Request, res: Response) => {
  * Create a new task
  */
 router.post('/', asyncHandler(async (req: Request, res: Response) => {
-  const { title, description, type = 'one_time', assignedTo, dueDate } = req.body;
+  const { title, description, type = 'one_time', assignedTo, dueDate, priority = 'medium', status = 'pending' } = req.body;
 
   if (!title) {
     return res.status(400).json({
@@ -274,13 +279,21 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
     });
   }
 
+  const validPriorities = ['low', 'medium', 'high'];
+  if (!validPriorities.includes(priority)) {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'Invalid priority. Must be one of: ' + validPriorities.join(', ') }
+    });
+  }
+
   const db = DatabaseService.getInstance().getDatabase();
   const taskId = `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
   await db.run(`
     INSERT INTO tasks (
-      id, restaurant_id, title, description, type, assigned_to, due_date, status
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      id, restaurant_id, title, description, type, assigned_to, due_date, status, priority
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `, [
     taskId,
     req.user?.restaurantId,
@@ -289,7 +302,8 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
     type,
     assignedTo || null,
     dueDate || null,
-    'pending'
+    status,
+    priority
   ]);
 
   await DatabaseService.getInstance().logAudit(
@@ -298,14 +312,14 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
     'create_task',
     'task',
     taskId,
-    { title, type, assignedTo }
+    { title, type, assignedTo, priority }
   );
 
   await eventBus.emit('task.created', {
     restaurantId: req.user?.restaurantId!,
     type: 'task.created',
     actor: { actorType: 'user', actorId: req.user?.id },
-    payload: { taskId, title, assignedTo },
+    payload: { taskId, title, assignedTo, priority },
     occurredAt: new Date().toISOString()
   });
 
@@ -317,8 +331,161 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
       taskId,
       title,
       type,
-      status: 'pending',
+      status,
+      priority,
       createdAt: new Date().toISOString()
+    }
+  });
+}));
+
+/**
+ * PUT /api/tasks/:id
+ * Update a task
+ */
+router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const { title, description, status, priority, assignedTo, dueDate } = req.body;
+
+  const db = DatabaseService.getInstance().getDatabase();
+
+  const task = await db.get('SELECT * FROM tasks WHERE id = ? AND restaurant_id = ?', [id, req.user?.restaurantId]);
+  if (!task) {
+    return res.status(404).json({
+      success: false,
+      error: { message: 'Task not found' }
+    });
+  }
+
+  const updates: string[] = [];
+  const params: any[] = [];
+
+  if (title !== undefined) {
+    updates.push('title = ?');
+    params.push(title);
+  }
+
+  if (description !== undefined) {
+    updates.push('description = ?');
+    params.push(description);
+  }
+
+  if (status !== undefined) {
+    const validStatuses = ['pending', 'in_progress', 'completed'];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'Invalid status. Must be one of: ' + validStatuses.join(', ') }
+      });
+    }
+    updates.push('status = ?');
+    params.push(status);
+
+    if (status === 'completed') {
+      updates.push('completed_at = ?');
+      params.push(new Date().toISOString());
+    }
+  }
+
+  if (priority !== undefined) {
+    const validPriorities = ['low', 'medium', 'high'];
+    if (!validPriorities.includes(priority)) {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'Invalid priority. Must be one of: ' + validPriorities.join(', ') }
+      });
+    }
+    updates.push('priority = ?');
+    params.push(priority);
+  }
+
+  if (assignedTo !== undefined) {
+    updates.push('assigned_to = ?');
+    params.push(assignedTo);
+  }
+
+  if (dueDate !== undefined) {
+    updates.push('due_date = ?');
+    params.push(dueDate);
+  }
+
+  if (updates.length === 0) {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'No fields to update' }
+    });
+  }
+
+  updates.push('updated_at = CURRENT_TIMESTAMP');
+  params.push(id);
+
+  await db.run(
+    `UPDATE tasks SET ${updates.join(', ')} WHERE id = ?`,
+    params
+  );
+
+  await DatabaseService.getInstance().logAudit(
+    req.user?.restaurantId!,
+    req.user?.id || 'system',
+    'update_task',
+    'task',
+    id,
+    { taskTitle: task.title, updates: req.body }
+  );
+
+  logger.info(`Task updated: ${task.title}`);
+
+  res.json({
+    success: true,
+    data: {
+      taskId: id,
+      message: 'Task updated successfully'
+    }
+  });
+}));
+
+/**
+ * DELETE /api/tasks/:id
+ * Delete a task
+ */
+router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+
+  const db = DatabaseService.getInstance().getDatabase();
+
+  const task = await db.get('SELECT * FROM tasks WHERE id = ? AND restaurant_id = ?', [id, req.user?.restaurantId]);
+  if (!task) {
+    return res.status(404).json({
+      success: false,
+      error: { message: 'Task not found' }
+    });
+  }
+
+  await db.run('DELETE FROM tasks WHERE id = ?', [id]);
+
+  await DatabaseService.getInstance().logAudit(
+    req.user?.restaurantId!,
+    req.user?.id || 'system',
+    'delete_task',
+    'task',
+    id,
+    { taskTitle: task.title }
+  );
+
+  await eventBus.emit('task.deleted', {
+    restaurantId: req.user?.restaurantId!,
+    type: 'task.deleted',
+    actor: { actorType: 'user', actorId: req.user?.id },
+    payload: { taskId: id, title: task.title },
+    occurredAt: new Date().toISOString()
+  });
+
+  logger.info(`Task deleted: ${task.title}`);
+
+  res.json({
+    success: true,
+    data: {
+      taskId: id,
+      message: 'Task deleted successfully'
     }
   });
 }));
