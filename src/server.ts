@@ -18,6 +18,7 @@ import { requireAuth } from './middleware/auth';
 import { initializeNotifications } from './notifications/initNotifications';
 import { validateEnvironment, failFastIfInvalid, getCorsOrigins } from './utils/validateEnv';
 import { UPLOADS_DIR, checkUploadsHealth } from './utils/uploads';
+import { SocketService } from './services/SocketService';
 
 const FRONTEND_ORIGIN = 'https://servio-app.onrender.com';
 
@@ -379,6 +380,8 @@ io.on('connection', (socket) => {
     logger.info(`Client disconnected: ${socket.id}`);
   });
 });
+
+SocketService.setIO(io);
 
 // Make io available to routes
 app.set('socketio', io);
