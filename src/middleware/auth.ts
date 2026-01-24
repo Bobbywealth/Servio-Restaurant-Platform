@@ -1,5 +1,5 @@
 import type { Request, Response, NextFunction } from 'express';
-import jwt from 'jsonwebtoken';
+import jwt, { JsonWebTokenError, TokenExpiredError } from 'jsonwebtoken';
 import { DatabaseService } from '../services/DatabaseService';
 import { UnauthorizedError, ForbiddenError } from './errorHandler';
 import type { AccessTokenPayload, AuthUser } from '../types/auth';
@@ -39,7 +39,18 @@ export async function requireAuth(req: Request, _res: Response, next: NextFuncti
     }
 
     const token = header.slice('Bearer '.length).trim();
-    const decoded = jwt.verify(token, getJwtSecret()) as AccessTokenPayload;
+    let decoded: AccessTokenPayload;
+    try {
+      decoded = jwt.verify(token, getJwtSecret()) as AccessTokenPayload;
+    } catch (err) {
+      if (err instanceof TokenExpiredError) {
+        throw new UnauthorizedError('Token expired');
+      }
+      if (err instanceof JsonWebTokenError) {
+        throw new UnauthorizedError('Invalid token');
+      }
+      throw err;
+    }
     const userId = decoded?.sub;
     if (!userId) throw new UnauthorizedError('Invalid token payload');
 
@@ -71,4 +82,3 @@ export function requirePermission(permission: string) {
     return next(new ForbiddenError(`Missing permission: ${permission}`));
   };
 }
-

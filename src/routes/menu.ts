@@ -1838,7 +1838,7 @@ router.post('/import', importUpload.single('file'), asyncHandler(async (req: Req
   await db.run(`
     INSERT INTO menu_imports (id, restaurant_id, filename, file_type, status, uploaded_by)
     VALUES (?, ?, ?, ?, 'processing', ?)
-  `, [importId, restaurantId, req.file.originalname, fileType, 'system']);
+  `, [importId, restaurantId, req.file.originalname, fileType, req.user?.id ?? null]);
 
   try {
     let data: any[] = [];
