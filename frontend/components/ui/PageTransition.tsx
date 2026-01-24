@@ -1,11 +1,13 @@
 import React from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence, cubicBezier } from 'framer-motion'
 import { useRouter } from 'next/router'
 
 interface PageTransitionProps {
   children: React.ReactNode
   className?: string
 }
+
+const smoothEase = cubicBezier(0.61, 1, 0.88, 1)
 
 const pageVariants = {
   initial: {
@@ -17,7 +19,7 @@ const pageVariants = {
     y: 0,
     transition: {
       duration: 0.3,
-      ease: [0.61, 1, 0.88, 1] // Custom easing for smooth feel
+      ease: smoothEase // Custom easing for smooth feel
     }
   },
   exit: {
@@ -25,7 +27,7 @@ const pageVariants = {
     y: -8,
     transition: {
       duration: 0.2,
-      ease: [0.61, 1, 0.88, 1]
+      ease: smoothEase
     }
   }
 }
@@ -109,7 +111,7 @@ export const slideUpVariants = {
     opacity: 0,
     transition: {
       duration: 0.3,
-      ease: [0.61, 1, 0.88, 1]
+      ease: smoothEase
     }
   }
 }
