@@ -1206,6 +1206,7 @@ export default function TabletOrdersPage() {
                               </div>
                             ))}
                           </div>
+                          <div className="text-sm text-white/90">{selectedOrder.special_instructions}</div>
                         </div>
 
                         {selectedOrder.special_instructions && (
