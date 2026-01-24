@@ -136,6 +136,68 @@ img, video {
   }
 }
 
+/* RESPONSIVE TABLET ORDERS GRID - ALL DEVICE SUPPORT */
+
+/* Mobile phones (< 640px) - Single column, stacked layout */
+.tablet-orders-responsive {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+/* Small tablets and large phones (640px - 819px) - 2 column layout */
+@media (min-width: 640px) and (max-width: 819px) {
+  .tablet-orders-responsive {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+  }
+  .tablet-orders-responsive > section:nth-child(3) {
+    grid-column: 1 / -1;
+  }
+}
+
+/* iPad/Tablets in portrait (820px - 1023px) - 2 column with sidebar */
+@media (min-width: 820px) and (max-width: 1023px) {
+  .tablet-orders-responsive {
+    display: grid;
+    grid-template-columns: minmax(280px, 1fr) minmax(320px, 1.2fr);
+    gap: 1.25rem;
+  }
+  .tablet-orders-responsive > section:nth-child(3) {
+    grid-column: 1 / -1;
+  }
+}
+
+/* iPad/Tablets landscape & Desktop (1024px+) - Full 3 column */
+@media (min-width: 1024px) {
+  .tablet-orders-responsive {
+    display: grid;
+    grid-template-columns: minmax(280px, 1fr) minmax(340px, 1.2fr) minmax(300px, 1.1fr);
+    gap: 1.5rem;
+  }
+  .tablet-orders-responsive > section:nth-child(3) {
+    grid-column: auto;
+  }
+}
+
+/* Large screens (1280px+) - Optimized proportions */
+@media (min-width: 1280px) {
+  .tablet-orders-responsive {
+    grid-template-columns: minmax(320px, 1fr) minmax(400px, 1.3fr) minmax(340px, 1.1fr);
+  }
+}
+
+/* Extra large screens (1536px+) */
+@media (min-width: 1536px) {
+  .tablet-orders-responsive {
+    grid-template-columns: 380px 1fr 400px;
+    max-width: 1800px;
+    margin: 0 auto;
+  }
+}
+
+/* Legacy support for old class name */
 @media (min-width: 820px) {
   .tablet-orders-grid {
     grid-template-columns: minmax(260px, 1fr) minmax(300px, 1fr) minmax(280px, 1.1fr);
