@@ -64,6 +64,25 @@ export class VapiService {
       return aliases[lower];
     }
 
+    if (lower.includes('store') && lower.includes('status')) {
+      return 'getStoreStatus';
+    }
+    if (lower.includes('menu') && lower.includes('search')) {
+      return 'searchMenu';
+    }
+    if (lower.includes('menu') && lower.includes('item')) {
+      return 'getMenuItem';
+    }
+    if (lower.includes('order') && lower.includes('quote')) {
+      return 'quoteOrder';
+    }
+    if (lower.includes('order') && (lower.includes('create') || lower.includes('place') || lower.includes('submit'))) {
+      return 'createOrder';
+    }
+    if (lower.includes('order') && lower.includes('status')) {
+      return 'checkOrderStatus';
+    }
+
     return trimmed.charAt(0).toLowerCase() + trimmed.slice(1);
   }
 
