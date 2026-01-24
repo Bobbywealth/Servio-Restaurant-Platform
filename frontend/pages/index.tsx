@@ -1,17 +1,19 @@
-import React from 'react'
+import React, { useState } from 'react'
 import Head from 'next/head'
 import Link from 'next/link'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   Mic, Bot, Shield, Zap, Clock, Users,
   Phone, Smartphone, RefreshCw, BarChart3,
   CheckCircle2, MessageSquare, Headphones,
   Utensils, ShoppingCart, Package,
   Calendar, DollarSign, TrendingUp,
-  ArrowRight, PlayCircle, Star
+  ArrowRight, PlayCircle, Star, Menu, X
 } from 'lucide-react'
 
 export default function HomePage() {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+
   return (
     <>
       <Head>
@@ -36,6 +38,8 @@ export default function HomePage() {
                     className="h-8 w-auto brightness-0 invert"
                   />
                 </div>
+
+              {/* Desktop Navigation */}
               <div className="hidden md:flex items-center space-x-8">
                 <a href="#top" className="text-gray-300 hover:text-white font-medium transition-colors">Home</a>
                 <a href="#services" className="text-gray-300 hover:text-white font-medium transition-colors">Services</a>
@@ -44,9 +48,94 @@ export default function HomePage() {
                 <a href="#faq" className="text-gray-300 hover:text-white font-medium transition-colors">FAQ</a>
                 <Link href="/login" className="text-gray-300 hover:text-white font-medium transition-colors">Login</Link>
               </div>
+
+              {/* Mobile Menu Button */}
+              <button
+                onClick={() => setMobileMenuOpen(true)}
+                className="md:hidden p-2 rounded-lg text-gray-300 hover:text-white hover:bg-gray-800 transition-colors"
+                aria-label="Open menu"
+              >
+                <Menu className="w-6 h-6" />
+              </button>
             </div>
           </div>
         </nav>
+
+        {/* Mobile Menu Overlay */}
+        <AnimatePresence>
+          {mobileMenuOpen && (
+            <>
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setMobileMenuOpen(false)}
+                className="fixed inset-0 bg-black/60 z-50 md:hidden"
+              />
+              <motion.div
+                initial={{ x: '100%' }}
+                animate={{ x: 0 }}
+                exit={{ x: '100%' }}
+                transition={{ type: 'tween', duration: 0.3 }}
+                className="fixed top-0 right-0 bottom-0 w-3/4 max-w-sm bg-gray-900 border-l border-gray-800 z-50 md:hidden"
+              >
+                <div className="flex items-center justify-between p-4 border-b border-gray-800">
+                  <span className="text-lg font-bold text-white">Menu</span>
+                  <button
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="p-2 rounded-lg text-gray-300 hover:text-white hover:bg-gray-800 transition-colors"
+                    aria-label="Close menu"
+                  >
+                    <X className="w-6 h-6" />
+                  </button>
+                </div>
+                <nav className="flex flex-col p-4 space-y-1">
+                  <a
+                    href="#top"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="px-4 py-3 rounded-lg text-gray-300 hover:text-white hover:bg-gray-800 font-medium transition-colors"
+                  >
+                    Home
+                  </a>
+                  <a
+                    href="#services"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="px-4 py-3 rounded-lg text-gray-300 hover:text-white hover:bg-gray-800 font-medium transition-colors"
+                  >
+                    Services
+                  </a>
+                  <a
+                    href="#features"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="px-4 py-3 rounded-lg text-gray-300 hover:text-white hover:bg-gray-800 font-medium transition-colors"
+                  >
+                    Features
+                  </a>
+                  <a
+                    href="#pricing"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="px-4 py-3 rounded-lg text-gray-300 hover:text-white hover:bg-gray-800 font-medium transition-colors"
+                  >
+                    Pricing
+                  </a>
+                  <a
+                    href="#faq"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="px-4 py-3 rounded-lg text-gray-300 hover:text-white hover:bg-gray-800 font-medium transition-colors"
+                  >
+                    FAQ
+                  </a>
+                  <Link
+                    href="/login"
+                    className="px-4 py-3 rounded-lg bg-teal-600 hover:bg-teal-700 text-white font-semibold text-center transition-colors mt-4"
+                  >
+                    Login
+                  </Link>
+                </nav>
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>
 
         {/* Hero Section */}
         <div className="relative min-h-screen flex items-center justify-center overflow-hidden py-24 md:py-0">

@@ -258,7 +258,7 @@ export default function BookDemoPage() {
                     ))}
                   </div>
 
-                  <div className="grid grid-cols-7 gap-2">
+                  <div className="grid grid-cols-7 gap-1 sm:gap-2">
                     {calendarCells.map((cell) => {
                       const ymd = toYmd(cell.date)
                       const isSelected = selectedDate && toYmd(selectedDate) === ymd
@@ -275,7 +275,7 @@ export default function BookDemoPage() {
                             setError(null)
                           }}
                           className={[
-                            'h-10 rounded-lg border text-sm transition-colors',
+                            'h-9 sm:h-10 rounded-lg border text-xs sm:text-sm transition-colors min-w-[40px]',
                             disabled ? 'opacity-40 cursor-not-allowed bg-gray-700 border-gray-600' : 'bg-gray-700 border-gray-600 hover:border-teal-400 hover:bg-teal-500/20 text-white',
                             isSelected ? 'ring-2 ring-teal-400 border-teal-400 bg-teal-500/30' : '',
                             [0, 6].includes(cell.date.getDay()) && cell.inMonth ? 'text-gray-400' : 'text-white'
