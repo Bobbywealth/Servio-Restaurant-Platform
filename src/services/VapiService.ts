@@ -87,6 +87,8 @@ export class VapiService {
   }
 
   async handleWebhook(payload: VapiWebhookPayload): Promise<VapiResponse> {
+    console.log('🔵 [VAPI WEBHOOK] Type:', payload?.message?.type || (payload as any)?.type);
+    console.log('🔵 [VAPI WEBHOOK] Full payload:', JSON.stringify(payload, null, 2));
     const { message } = payload;
     
     logger.info('Vapi webhook received:', { 
