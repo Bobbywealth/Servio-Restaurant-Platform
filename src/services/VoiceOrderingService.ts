@@ -38,6 +38,15 @@ export class VoiceOrderingService {
     }
   }
 
+  private normalizeRestaurantId(input?: string | null) {
+    const trimmed = String(input || '').trim();
+    if (!trimmed) return null;
+    if (trimmed.toLowerCase() === 'unions') {
+      return 'sasheys-kitchen-union';
+    }
+    return trimmed;
+  }
+
   private resolveRestaurantId(input?: string | null) {
     // Try: input → env var. Avoid hardcoded fallbacks to prevent wrong-restaurant lookups.
     const resolved = input || process.env.VAPI_RESTAURANT_ID || null;
@@ -62,7 +71,7 @@ export class VoiceOrderingService {
   }
 
   public async resolveRestaurantIdFromSlug(slug?: string | null) {
-    const trimmed = String(slug || '').trim();
+    const trimmed = this.normalizeRestaurantId(slug);
     if (!trimmed) return null;
     try {
       const db = DatabaseService.getInstance().getDatabase();
@@ -311,23 +320,25 @@ export class VoiceOrderingService {
     return this.menuData;
   }
 
-  public searchMenu(query: string) {
+  private getMenuItemPrice(item: any) {
+    let price = item.price || 0;
+    if (!price && item.modifierGroups) {
+      const sizeGroup = item.modifierGroups.find((g: any) => g.id === 'size' || g.name.toLowerCase().includes('size'));
+      if (sizeGroup && sizeGroup.options?.[0]) {
+        price = sizeGroup.options[0].priceDelta || 0;
+      }
+    }
+    return price;
+  }
+
+  private getMenuItemsFromData(predicate?: (item: any, category: any) => boolean) {
     if (!this.menuData) return [];
     const results: any[] = [];
-    const q = query.toLowerCase();
 
     this.menuData.categories.forEach((cat: any) => {
       cat.items.forEach((item: any) => {
-        if (item.name.toLowerCase().includes(q)) {
-          // Determine base price
-          let price = item.price || 0;
-          if (!price && item.modifierGroups) {
-            const sizeGroup = item.modifierGroups.find((g: any) => g.id === 'size' || g.name.toLowerCase().includes('size'));
-            if (sizeGroup && sizeGroup.options?.[0]) {
-              price = sizeGroup.options[0].priceDelta || 0;
-            }
-          }
-
+        if (!predicate || predicate(item, cat)) {
+          const price = this.getMenuItemPrice(item);
           results.push({
             id: item.id,
             name: item.name,
@@ -341,19 +352,67 @@ export class VoiceOrderingService {
     return results;
   }
 
+  private getPopularMenuItems() {
+    const popularTags = new Set([
+      'popular',
+      'recommended',
+      'featured',
+      'best-seller',
+      'bestseller',
+      'signature'
+    ]);
+    return this.getMenuItemsFromData((item) => {
+      const tags = (item.tags || []).map((tag: string) => tag.toLowerCase());
+      return tags.some((tag: string) => popularTags.has(tag));
+    });
+  }
+
+  private isGeneralMenuQuery(query: string) {
+    const normalized = String(query || '').toLowerCase().trim();
+    if (!normalized) return true;
+    const cleaned = normalized.replace(/[^a-z0-9\s]/g, '').trim();
+    if (!cleaned) return true;
+
+    const exactMatches = new Set([
+      'menu',
+      'full menu',
+      'full',
+      'all',
+      'all items',
+      'everything',
+      'popular',
+      'popular items',
+      'recommendations',
+      'recommendation',
+      'specials',
+      'special'
+    ]);
+    if (exactMatches.has(cleaned)) return true;
+
+    const tokens = cleaned.split(/\s+/).filter(Boolean);
+    if (tokens.length <= 4 && tokens.includes('menu')) return true;
+    if (tokens.some((token) => ['popular', 'recommend', 'recommendations', 'specials', 'special'].includes(token))) return true;
+
+    return false;
+  }
+
+  public searchMenu(query: string) {
+    if (!this.menuData) return [];
+    if (this.isGeneralMenuQuery(query)) {
+      const popular = this.getPopularMenuItems();
+      return popular.length > 0 ? popular : this.getMenuItemsFromData();
+    }
+    const q = query.toLowerCase();
+    return this.getMenuItemsFromData((item) => item.name.toLowerCase().includes(q));
+  }
+
   public getMenuItem(id: string) {
     if (!this.menuData) return null;
     for (const cat of this.menuData.categories) {
       const item = cat.items.find((i: any) => i.id === id);
       if (item) {
         // Determine base price for response
-        let basePrice = item.price || 0;
-        if (!basePrice && item.modifierGroups) {
-          const sizeGroup = item.modifierGroups.find((g: any) => g.id === 'size' || g.name.toLowerCase().includes('size'));
-          if (sizeGroup && sizeGroup.options?.[0]) {
-            basePrice = sizeGroup.options[0].priceDelta || 0;
-          }
-        }
+        let basePrice = this.getMenuItemPrice(item);
 
         // Return structured data for Vapi
         return {
