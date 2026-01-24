@@ -2,7 +2,19 @@ import Head from 'next/head';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/router';
 import clsx from 'clsx';
-import { CheckCircle2, RefreshCcw, ArrowRight, ChevronDown, User, Printer, Settings2 } from 'lucide-react';
+import {
+  CheckCircle2,
+  RefreshCcw,
+  ChevronDown,
+  Printer,
+  Settings2,
+  Home,
+  Clock,
+  Receipt,
+  UtensilsCrossed,
+  Menu,
+  Info,
+} from 'lucide-react';
 import { useSocket } from '../../lib/socket';
 import { PrintReceipt } from '../../components/PrintReceipt';
 import type { ReceiptPaperWidth, ReceiptOrder, ReceiptRestaurant } from '../../utils/receiptGenerator';
@@ -88,6 +100,21 @@ function normalizeStatus(s: string | null | undefined) {
   const lower = v.toLowerCase();
   if (lower === 'new') return 'received';
   return lower;
+}
+
+function statusBadgeClassesForStatus(status: string) {
+  switch (status) {
+    case 'received':
+      return 'bg-[#c4a661] text-[#1a1a1a]';
+    case 'preparing':
+      return 'bg-[#3a3a3a] text-white ring-1 ring-[#4a5f8c]';
+    case 'ready':
+      return 'bg-[#4a7c59] text-white';
+    case 'scheduled':
+      return 'bg-[#2a2a2a] text-[#8a8a8a]';
+    default:
+      return 'bg-[#3a3a3a] text-white';
+  }
 }
 
 // Audio handling with browser autoplay unlock
@@ -964,9 +991,9 @@ export default function TabletOrdersPage() {
   const connectionLabel = isOnline ? (socketConnected ? 'Online' : 'Reconnecting') : 'Offline';
   const connectionClasses = isOnline
     ? socketConnected
-      ? 'bg-emerald-500/20 text-emerald-700 border-emerald-500/30'
-      : 'bg-amber-500/20 text-amber-700 border-amber-500/30'
-    : 'bg-red-500/20 text-red-700 border-red-500/30';
+      ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40'
+      : 'bg-amber-500/20 text-amber-400 border-amber-500/40'
+    : 'bg-red-500/20 text-red-400 border-red-500/40';
 
   if (authLoading || !user) {
     return (
@@ -977,7 +1004,7 @@ export default function TabletOrdersPage() {
   }
 
   return (
-    <div className="min-h-screen bg-white text-black font-sans">
+    <div className="min-h-screen bg-[#1a1a1a] text-white font-sans">
       <Head>
         <title>Orders • Servio</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0" />
@@ -989,316 +1016,357 @@ export default function TabletOrdersPage() {
         {receiptHtml ? <PrintReceipt receiptHtml={receiptHtml} copies={2} paperWidth={paperWidth} /> : null}
       </div>
 
-      {/* Header */}
-      <div className="no-print sticky top-0 z-20 bg-black text-white px-4 py-3 flex items-center justify-between shadow-lg">
-        <div className="flex items-center gap-3">
-          <div className="bg-white rounded-lg p-1">
-            <img
-              src="/images/servio_icon_tight.png"
-              alt="Servio"
-              className="h-8 w-8"
+      <div className="no-print flex min-h-screen">
+        <aside className="w-[76px] bg-[#161616] border-r border-[#202020] flex flex-col items-center py-4 gap-4">
+          <div className="relative w-[70px] h-[70px] flex items-center justify-center rounded-xl bg-[#1f1f1f] hover:bg-[#262319] transition-colors">
+            <img src="/images/servio_icon_tight.png" alt="Servio" className="h-10 w-10 object-contain" />
+            <span
+              className={clsx(
+                'absolute top-2 right-2 h-2 w-2 rounded-full',
+                isOnline && socketConnected ? 'bg-emerald-400' : 'bg-amber-400'
+              )}
             />
           </div>
-          <div className="bg-white text-black font-black px-2 py-0.5 rounded text-lg italic">SERVIO</div>
-          <div className={`ml-2 px-2 py-1 text-xs font-black uppercase border rounded-full ${connectionClasses}`}>
-            {connectionLabel}
-          </div>
-          {cachedAt && (
-            <div className="text-xs text-white/70 font-semibold">Cached: {new Date(cachedAt).toLocaleTimeString()}</div>
-          )}
-        </div>
-        <div className="flex items-center gap-4">
-          <div className="text-right">
-            <div className="text-2xl font-mono font-bold">
-              {now ? new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => router.push('/tablet/settings')}
-            className="flex items-center gap-2 rounded-lg px-3 py-2 text-base font-black uppercase bg-white/10 hover:bg-white/20 transition-colors"
-            title="Settings"
-          >
-            <Settings2 className="h-6 w-6" />
-          </button>
-          <button 
-            onClick={refresh}
-            className="bg-white/10 hover:bg-white/20 p-3 rounded-full transition-colors"
-          >
-            <RefreshCcw className={clsx("h-7 w-7", loading && "animate-spin")} />
-          </button>
-        </div>
-      </div>
+          <nav className="flex flex-col items-center gap-4 mt-2 text-[#6a6a6a]">
+            {[
+              { icon: Home, label: 'Dashboard' },
+              { icon: Clock, label: 'Recent' },
+              { icon: Receipt, label: 'Orders', active: true },
+              { icon: UtensilsCrossed, label: 'Menu' },
+              { icon: Menu, label: 'Categories' },
+              { icon: Info, label: 'Info' },
+              { icon: Settings2, label: 'Settings', onClick: () => router.push('/tablet/settings') },
+            ].map(({ icon: Icon, label, active, onClick }) => (
+              <button
+                key={label}
+                type="button"
+                onClick={onClick}
+                className={clsx(
+                  'relative h-12 w-12 rounded-2xl flex items-center justify-center transition',
+                  active
+                    ? 'bg-[#262319] text-[#c4a661] shadow-[0_2px_8px_rgba(0,0,0,0.3)]'
+                    : 'hover:bg-[#202020] text-[#6a6a6a]'
+                )}
+                aria-label={label}
+              >
+                {active && <span className="absolute left-0 h-7 w-1 rounded-full bg-[#c4a661]" />}
+                <Icon className="h-6 w-6" />
+              </button>
+            ))}
+          </nav>
+        </aside>
 
-      {showUpdateBanner && (
-        <div className="no-print bg-blue-600 text-white px-4 py-3 flex items-center justify-between">
-          <div className="font-semibold">Update available — refresh to get the latest tablet improvements.</div>
-          <button
-            type="button"
-            className="bg-white text-blue-700 px-3 py-1 rounded-lg font-black"
-            onClick={() => window.location.reload()}
-          >
-            Refresh
-          </button>
-        </div>
-      )}
-
-      <div className="no-print p-4">
-        {filtered.length === 0 && !loading ? (
-          <div className="flex flex-col items-center justify-center py-32 text-slate-400">
-            <CheckCircle2 className="h-32 w-32 mb-6 opacity-20" />
-            <h2 className="text-5xl font-black">ALL CLEAR</h2>
-            <p className="text-2xl mt-3 font-bold uppercase tracking-widest">No active orders</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[320px_1fr_320px]">
-            {/* Left Panel: Order List */}
-            <div className="rounded-3xl border-4 border-black bg-white shadow-2xl flex flex-col min-h-[70vh]">
-              <div className="px-4 py-3 border-b-2 border-slate-200 flex items-center justify-between">
-                <div className="text-2xl font-black uppercase">Orders</div>
-                <div className="text-lg font-bold text-slate-500">{filtered.length} Active</div>
+        <main className="flex-1 bg-[#1a1a1a] text-white px-6 py-6">
+          <div className="flex flex-col gap-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-xs uppercase tracking-[0.2em] text-[#6a6a6a]">Order Management</div>
+                <div className="text-3xl font-semibold">All Orders</div>
               </div>
-              <div className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
-                {filtered.map((o, index) => {
-                  const status = normalizeStatus(o.status);
-                  const isNew = status === 'received';
-                  const isPreparing = status === 'preparing';
-                  const isReady = status === 'ready';
-                  const timeStr = formatTimeAgo(o.created_at, now);
-                  const itemCount = (o.items || []).reduce((sum, it) => sum + (it.quantity || 1), 0);
-                  const hasPendingAction = pendingActions.has(o.id);
-                  const isLatest = index === 0;
+              <div className="flex items-center gap-3">
+                <div className={`px-3 py-1 text-xs font-semibold uppercase border rounded-full ${connectionClasses}`}>
+                  {connectionLabel}
+                </div>
+                {cachedAt && (
+                  <div className="text-xs text-white/60 font-medium">
+                    Cached: {new Date(cachedAt).toLocaleTimeString()}
+                  </div>
+                )}
+                <div className="text-right">
+                  <div className="text-2xl font-semibold tabular-nums">
+                    {now ? new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}
+                  </div>
+                </div>
+                <button
+                  onClick={refresh}
+                  className="bg-[#242424] hover:brightness-110 p-3 rounded-full transition shadow-[0_2px_8px_rgba(0,0,0,0.3)]"
+                  aria-label="Refresh"
+                >
+                  <RefreshCcw className={clsx('h-5 w-5', loading && 'animate-spin')} />
+                </button>
+              </div>
+            </div>
 
-                  return (
-                    <div
-                      key={o.id}
-                      className={clsx(
-                        "rounded-2xl border-2 p-3 shadow-lg",
-                        isLatest ? "border-blue-600 ring-4 ring-blue-100" : "border-slate-200",
-                        isReady && "opacity-60 grayscale"
-                      )}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="text-lg font-black uppercase text-slate-500">Order</div>
-                        {isLatest && (
-                          <div className="text-xs font-black uppercase bg-blue-600 text-white px-2 py-1 rounded-full">
-                            Latest
+            {showUpdateBanner && (
+              <div className="bg-[#242424] text-white px-4 py-3 flex items-center justify-between rounded-xl border border-[#3a3a3a] shadow-[0_2px_8px_rgba(0,0,0,0.3)]">
+                <div className="font-semibold">Update available — refresh to get the latest tablet improvements.</div>
+                <button
+                  type="button"
+                  className="bg-[#c4a661] text-[#1a1a1a] px-3 py-1 rounded-lg font-semibold"
+                  onClick={() => window.location.reload()}
+                >
+                  Refresh
+                </button>
+              </div>
+            )}
+
+            {filtered.length === 0 && !loading ? (
+              <div className="flex flex-col items-center justify-center py-32 text-[#6a6a6a]">
+                <CheckCircle2 className="h-24 w-24 mb-6 opacity-20" />
+                <h2 className="text-3xl font-semibold">All Clear</h2>
+                <p className="text-base mt-3 font-medium uppercase tracking-widest">No active orders</p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-6 lg:flex-row">
+                {/* Left Panel: Order Queue */}
+                <section className="lg:w-[38%] w-full bg-[#1c1c1c] rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.3)] border border-[#2a2a2a] flex flex-col min-h-[70vh]">
+                  <div className="px-4 py-4 border-b border-[#2a2a2a] flex items-center justify-between">
+                    <button className="flex items-center gap-2 text-sm font-semibold uppercase text-[#d4b896]">
+                      All Orders
+                      <ChevronDown className="h-4 w-4" />
+                    </button>
+                    <div className="text-xs font-semibold text-[#6a6a6a]">{filtered.length} Active</div>
+                  </div>
+                  <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+                    {filtered.map((o, index) => {
+                      const status = normalizeStatus(o.status);
+                      const isNew = status === 'received';
+                      const isPreparing = status === 'preparing';
+                      const isReady = status === 'ready';
+                      const isScheduled = status === 'scheduled';
+                      const timeStr = formatTimeAgo(o.created_at, now);
+                      const itemCount = (o.items || []).reduce((sum, it) => sum + (it.quantity || 1), 0);
+                      const hasPendingAction = pendingActions.has(o.id);
+                      const isLatest = index === 0;
+                      const isSelected = selectedOrder?.id === o.id;
+
+                      const statusLabel = isNew ? 'NEW' : isPreparing ? 'IN PROGRESS' : isReady ? 'READY' : 'SCHEDULED';
+                      const statusBadgeClasses = isNew
+                        ? 'bg-[#c4a661] text-[#1a1a1a]'
+                        : isPreparing
+                          ? 'bg-[#3a3a3a] text-white ring-1 ring-[#4a5f8c]'
+                          : isReady
+                            ? 'bg-[#4a7c59] text-white'
+                            : 'bg-[#2a2a2a] text-[#8a8a8a]';
+
+                      return (
+                        <button
+                          key={o.id}
+                          type="button"
+                          onClick={() => setSelectedOrder(o)}
+                          className={clsx(
+                            'w-full text-left rounded-lg border border-[#2a2a2a] p-4 shadow-[0_2px_8px_rgba(0,0,0,0.3)] transition transform hover:brightness-110 hover:scale-[1.01]',
+                            isSelected && 'bg-[#4a5f8c] border-[#5d7099] shadow-[0_4px_12px_rgba(93,112,153,0.45)]',
+                            !isSelected && 'bg-[#202020]'
+                          )}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className={clsx('text-[11px] font-semibold tracking-widest px-2 py-1 rounded-full', statusBadgeClasses)}>
+                              {statusLabel}
+                            </span>
+                            {isLatest && (
+                              <span className="text-[11px] font-semibold uppercase text-[#d4b896]">Newest</span>
+                            )}
+                          </div>
+                          <div className="mt-2 flex items-center justify-between">
+                            <div className={clsx('text-lg font-semibold truncate', isSelected ? 'text-white' : 'text-white')}>
+                              {o.customer_name || 'Guest'}
+                            </div>
+                            <div className="flex items-center gap-2 text-sm text-[#6a6a6a]">
+                              <Clock className="h-4 w-4" />
+                              <span className="tabular-nums">{timeStr}</span>
+                            </div>
+                          </div>
+                          <div className="mt-2 flex items-center justify-between text-sm text-[#6a6a6a]">
+                            <span>{itemCount} item{itemCount !== 1 ? 's' : ''}</span>
+                            <span className="text-white font-semibold">{formatMoney(o.total_amount)}</span>
+                          </div>
+                          {hasPendingAction && (
+                            <div className="mt-2 text-[11px] font-semibold uppercase text-[#d4b896]">
+                              Pending Sync
+                            </div>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+
+                {/* Right Panel: Order Details */}
+                <section className="lg:w-[62%] w-full flex flex-col gap-6">
+                  <div className="bg-[#1c1c1c] rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.3)] border border-[#2a2a2a]">
+                    <div className="px-6 py-5 border-b border-[#2a2a2a]">
+                      <div className="text-2xl font-semibold">
+                        {selectedOrder ? (
+                          <>ORDER #{selectedOrder.external_id ? selectedOrder.external_id.slice(-4).toUpperCase() : selectedOrder.id.slice(-4).toUpperCase()} - {(selectedOrder.customer_name || 'Guest').toUpperCase()}</>
+                        ) : (
+                          'ORDER DETAILS'
+                        )}
+                      </div>
+                    </div>
+                    {selectedOrder ? (
+                      <div className="px-6 py-5 space-y-6">
+                        <div className="bg-[#242424] rounded-lg p-5 flex flex-col gap-4">
+                          <div className="flex items-center gap-4">
+                            <div className="h-14 w-14 rounded-full bg-[#3a3a3a] flex items-center justify-center text-xl font-semibold">
+                              {(selectedOrder.customer_name || 'G')[0]}
+                            </div>
+                            <div className="flex-1">
+                              <div className="text-lg font-semibold">{selectedOrder.customer_name || 'Guest'}</div>
+                              <div className="text-sm text-[#6a6a6a]">{selectedOrder.customer_phone || 'No contact provided'}</div>
+                              <div className="mt-3 flex flex-wrap gap-3 text-sm">
+                                <span className="text-[11px] uppercase tracking-widest text-[#6a6a6a]">
+                                  {selectedOrder.order_type || 'Pickup'}
+                                </span>
+                                <span className="text-white">
+                                  {selectedOrder.pickup_time
+                                    ? new Date(selectedOrder.pickup_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                                    : 'Ready ASAP'}
+                                </span>
+                                <span className="text-[#6a6a6a]">
+                                  {selectedOrder.pickup_time
+                                    ? new Date(selectedOrder.pickup_time).toLocaleDateString()
+                                    : new Date().toLocaleDateString()}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="flex flex-col gap-2">
+                              <span className={clsx('px-3 py-1 rounded-full text-[11px] font-semibold uppercase text-center', statusBadgeClassesForStatus(normalizeStatus(selectedOrder.status)))}>
+                                {normalizeStatus(selectedOrder.status)}
+                              </span>
+                              <span className="px-3 py-1 rounded-full text-[11px] font-semibold uppercase text-center bg-[#2a2a2a] text-[#8a8a8a]">
+                                {selectedOrder.channel || 'POS'}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between border-b border-[#2a2a2a] pb-4">
+                          <span className="text-sm text-[#6a6a6a] uppercase">Total Cost</span>
+                          <span className="text-3xl font-semibold">{formatMoney(selectedOrder.total_amount)}</span>
+                        </div>
+
+                        <div>
+                          <div className="text-lg font-semibold mb-3">Items ({selectedOrder.items?.length || 0})</div>
+                          <div className="space-y-3 max-h-[320px] overflow-y-auto pr-2">
+                            {(selectedOrder.items || []).map((it, idx) => (
+                              <div key={idx} className="flex items-center gap-4 pb-3 border-b border-[#2a2a2a] last:border-0">
+                                <div className="h-14 w-14 rounded-md bg-[#2f2f2f] flex items-center justify-center text-sm text-[#6a6a6a]">
+                                  {it.quantity || 1}
+                                </div>
+                                <div className="flex-1">
+                                  <div className="text-base font-semibold">{it.name}</div>
+                                  <div className="text-sm text-[#6a6a6a]">Prepared fresh</div>
+                                </div>
+                                <div className="text-base font-semibold">
+                                  {formatMoney((it.unit_price || it.price || 0) * (it.quantity || 1))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {selectedOrder.special_instructions && (
+                          <div className="bg-[#2a2a2a] rounded-lg p-4">
+                            <div className="text-[11px] uppercase tracking-widest text-[#d4b896] mb-2">
+                              Special Instructions
+                            </div>
+                            <div className="text-sm text-white/90">{selectedOrder.special_instructions}</div>
                           </div>
                         )}
                       </div>
-                      <div className="flex items-center justify-between mt-1">
-                        <div className="text-3xl font-black font-mono">
-                          #{o.external_id ? o.external_id.slice(-4).toUpperCase() : o.id.slice(-4).toUpperCase()}
-                        </div>
-                        <div className="text-right">
-                          <div className="text-xs font-black uppercase text-slate-500">
-                            {isNew ? 'NEW' : isPreparing ? 'PREP' : 'READY'}
-                          </div>
-                          <div className={clsx(
-                            "text-xl font-black tabular-nums",
-                            timeStr.includes('m') && parseInt(timeStr) > 15 ? "text-red-600" : "text-black"
-                          )}>
-                            {timeStr}
-                          </div>
-                        </div>
+                    ) : (
+                      <div className="px-6 py-16 text-center text-[#6a6a6a]">
+                        Waiting for orders...
                       </div>
-                      <div className="mt-2 flex items-center justify-between">
-                        <div className="text-lg font-black uppercase truncate">{o.customer_name || 'Guest'}</div>
-                        <div className="text-sm font-black uppercase bg-slate-200 text-black px-2 py-1 rounded">
-                          {o.channel || 'POS'}
-                        </div>
-                      </div>
-                      <div className="mt-2 flex items-center justify-between">
-                        <div className="text-base font-bold text-slate-600">
-                          {itemCount} item{itemCount !== 1 ? 's' : ''}
-                        </div>
-                        <div className="text-lg font-black">{formatMoney(o.total_amount)}</div>
-                      </div>
-                      {hasPendingAction && (
-                        <div className="mt-2 text-xs font-black uppercase text-amber-700">
-                          Pending Sync
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+                    )}
+                  </div>
 
-            {/* Center Panel: Order Items */}
-            <div className="rounded-3xl border-4 border-black bg-white shadow-2xl flex flex-col min-h-[70vh]">
-              <div className="px-4 py-3 border-b-2 border-slate-200 flex items-center justify-between">
-                <div className="text-2xl font-black uppercase">Latest Order</div>
-                {selectedOrder ? (
-                  <div className="text-lg font-black font-mono">
-                    #{selectedOrder.external_id ? selectedOrder.external_id.slice(-4).toUpperCase() : selectedOrder.id.slice(-4).toUpperCase()}
-                  </div>
-                ) : null}
-              </div>
-              {selectedOrder ? (
-                <div className="flex-1 overflow-y-auto px-4 py-3 min-h-0">
-                  <div className="text-base font-black text-slate-500 uppercase mb-2">Items</div>
-                  <div className="space-y-3">
-                    {(selectedOrder.items || []).map((it, idx) => (
-                      <div key={idx} className="flex items-center gap-3 py-2 border-b border-slate-200 last:border-0">
-                        <div className="flex-shrink-0 bg-black text-white w-10 h-10 rounded-lg flex items-center justify-center text-xl font-black">
-                          {it.quantity || 1}
-                        </div>
-                        <div className="flex-grow min-w-0">
-                          <div className="text-xl font-black leading-tight text-black break-words uppercase truncate">
-                            {it.name}
-                          </div>
-                        </div>
-                        <div className="text-xl font-black text-black flex-shrink-0">
-                          {formatMoney((it.unit_price || it.price || 0) * (it.quantity || 1))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  {selectedOrder.special_instructions && (
-                    <div className="mt-3 p-3 bg-yellow-50 border-2 border-yellow-200 rounded-xl">
-                      <div className="text-base font-black text-yellow-700 uppercase mb-1">Special Instructions</div>
-                      <div className="text-lg font-bold text-yellow-900">{selectedOrder.special_instructions}</div>
+                  {selectedOrder && (
+                    <div className="flex flex-col gap-3">
+                      {normalizeStatus(selectedOrder.status) === 'received' && (
+                        <>
+                          <button
+                            disabled={busyId === selectedOrder.id}
+                            onClick={() => acceptOrder(selectedOrder)}
+                            className="h-14 rounded-full bg-[#c4a661] text-[#1a1a1a] font-semibold uppercase shadow-[0_2px_8px_rgba(0,0,0,0.3)] transition hover:brightness-110 active:scale-95 disabled:opacity-50"
+                          >
+                            Confirm Order
+                          </button>
+                          <button
+                            disabled={busyId === selectedOrder.id}
+                            onClick={() => declineOrder(selectedOrder)}
+                            className="h-14 rounded-full border-2 border-[#4a4a4a] text-white font-semibold uppercase transition hover:brightness-110 active:scale-95 disabled:opacity-50"
+                          >
+                            Decline
+                          </button>
+                        </>
+                      )}
+                      {normalizeStatus(selectedOrder.status) === 'preparing' && (
+                        <>
+                          <button
+                            disabled={busyId === selectedOrder.id}
+                            onClick={() => setStatus(selectedOrder.id, 'ready')}
+                            className="h-14 rounded-full bg-[#4a7c59] text-white font-semibold uppercase shadow-[0_2px_8px_rgba(0,0,0,0.3)] transition hover:brightness-110 active:scale-95 disabled:opacity-50"
+                          >
+                            Ready for Pickup
+                          </button>
+                          <button
+                            onClick={() => printOrder(selectedOrder.id)}
+                            disabled={printingOrderId === selectedOrder.id}
+                            className="h-14 rounded-full border-2 border-[#4a4a4a] text-white font-semibold uppercase transition hover:brightness-110 active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
+                          >
+                            <Printer className="h-5 w-5" />
+                            Print
+                          </button>
+                        </>
+                      )}
+                      {normalizeStatus(selectedOrder.status) === 'ready' && (
+                        <>
+                          <button
+                            disabled={busyId === selectedOrder.id}
+                            onClick={() => {
+                              if (window.confirm('Mark this order as completed?')) {
+                                setStatus(selectedOrder.id, 'completed');
+                                setSelectedOrder(null);
+                              }
+                            }}
+                            className="h-14 rounded-full bg-[#4a7c59] text-white font-semibold uppercase shadow-[0_2px_8px_rgba(0,0,0,0.3)] transition hover:brightness-110 active:scale-95 disabled:opacity-50"
+                          >
+                            Complete Order
+                          </button>
+                          <button
+                            className="h-14 rounded-full border-2 border-[#4a4a4a] text-white font-semibold uppercase transition hover:brightness-110 active:scale-95"
+                            type="button"
+                          >
+                            Assign Driver
+                          </button>
+                        </>
+                      )}
                     </div>
                   )}
-                </div>
-              ) : (
-                <div className="flex-1 flex items-center justify-center text-2xl font-bold text-slate-400">
-                  Waiting for orders...
-                </div>
-              )}
-            </div>
-
-            {/* Right Panel: Customer & Actions */}
-            <div className="rounded-3xl border-4 border-black bg-white shadow-2xl flex flex-col min-h-[70vh]">
-              <div className="px-4 py-3 border-b-2 border-slate-200 flex items-center justify-between">
-                <div className="text-2xl font-black uppercase">Details</div>
-                {selectedOrder ? (
-                  <div className="text-sm font-black uppercase text-slate-500">
-                    {normalizeStatus(selectedOrder.status)}
-                  </div>
-                ) : null}
+                </section>
               </div>
-              {selectedOrder ? (
-                <>
-                  <div className="px-4 py-3 border-b-2 border-slate-200">
-                    <div className="text-2xl font-black uppercase text-black">{selectedOrder.customer_name || 'Guest'}</div>
-                    {selectedOrder.customer_phone && (
-                      <div className="text-lg font-bold text-slate-600">{selectedOrder.customer_phone}</div>
-                    )}
-                    <div className="mt-2 flex items-center gap-2">
-                      <div className="bg-black text-white px-3 py-1 rounded-lg text-base font-black uppercase">
-                        {selectedOrder.channel || 'POS'}
-                      </div>
-                      {selectedOrder.order_type && (
-                        <div className="text-base font-bold text-slate-600">{selectedOrder.order_type}</div>
-                      )}
-                    </div>
-                  </div>
-                  <div className="px-4 py-3 border-b-2 border-slate-200">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xl font-black text-black uppercase">Total</span>
-                      <span className="text-3xl font-black text-black">{formatMoney(selectedOrder.total_amount)}</span>
-                    </div>
-                    {selectedOrder.pickup_time && (
-                      <div className="text-lg font-bold text-slate-600 mt-1">
-                        Pickup: {new Date(selectedOrder.pickup_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </div>
-                    )}
-                  </div>
-                  <div className="px-4 py-4 flex-1 flex flex-col justify-end">
-                    {normalizeStatus(selectedOrder.status) === 'received' && (
-                      <div className="flex gap-3">
-                        <button
-                          disabled={busyId === selectedOrder.id}
-                          onClick={() => declineOrder(selectedOrder)}
-                          className="flex-1 bg-red-600 hover:bg-red-700 active:scale-95 text-white py-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-xl disabled:opacity-50"
-                        >
-                          <span className="text-2xl font-black uppercase">Decline</span>
-                        </button>
-                        <button
-                          disabled={busyId === selectedOrder.id}
-                          onClick={() => acceptOrder(selectedOrder)}
-                          className="flex-[2] bg-green-600 hover:bg-green-700 active:scale-95 text-white py-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-xl disabled:opacity-50"
-                        >
-                          <span className="text-2xl font-black uppercase">Accept</span>
-                          <CheckCircle2 className="h-7 w-7 stroke-[3px]" />
-                        </button>
-                      </div>
-                    )}
-                    {normalizeStatus(selectedOrder.status) === 'preparing' && (
-                      <div className="flex gap-3">
-                        <button
-                          onClick={() => printOrder(selectedOrder.id)}
-                          disabled={printingOrderId === selectedOrder.id}
-                          className="flex-1 bg-slate-200 hover:bg-slate-300 active:scale-95 text-black py-4 rounded-xl flex items-center justify-center gap-2 transition-all disabled:opacity-50"
-                        >
-                          <Printer className="h-6 w-6" />
-                          <span className="text-xl font-black uppercase">Print</span>
-                        </button>
-                        <button
-                          disabled={busyId === selectedOrder.id}
-                          onClick={() => {
-                            setStatus(selectedOrder.id, 'ready');
-                          }}
-                          className="flex-[2] bg-black hover:bg-slate-800 active:scale-95 text-white py-4 rounded-xl flex items-center justify-center gap-2 transition-all shadow-xl disabled:opacity-50"
-                        >
-                          <span className="text-2xl font-black uppercase">Ready</span>
-                          <CheckCircle2 className="h-7 w-7 stroke-[3px]" />
-                        </button>
-                      </div>
-                    )}
-                    {normalizeStatus(selectedOrder.status) === 'ready' && (
-                      <button
-                        disabled={busyId === selectedOrder.id}
-                        onClick={() => {
-                          if (window.confirm('Mark this order as completed?')) {
-                            setStatus(selectedOrder.id, 'completed');
-                            setSelectedOrder(null);
-                          }
-                        }}
-                        className="w-full bg-slate-500 hover:bg-slate-600 active:scale-95 text-white py-4 rounded-xl flex items-center justify-center gap-2 transition-all disabled:opacity-50"
-                      >
-                        <span className="text-2xl font-black uppercase">Complete</span>
-                      </button>
-                    )}
-                  </div>
-                </>
-              ) : (
-                <div className="flex-1 flex items-center justify-center text-2xl font-bold text-slate-400">
-                  Waiting for orders...
-                </div>
-              )}
-            </div>
+            )}
           </div>
-        )}
+        </main>
       </div>
 
       {/* Print Prompt Modal (when auto-print is OFF) */}
       {showPrintPrompt && (
         <div className="no-print fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="bg-white rounded-3xl shadow-2xl p-8 w-full max-w-md">
+          <div className="bg-[#1c1c1c] rounded-3xl shadow-[0_12px_30px_rgba(0,0,0,0.5)] p-8 w-full max-w-md border border-[#2a2a2a]">
             <div className="text-center mb-6">
-              <Printer className="h-16 w-16 mx-auto text-slate-400 mb-4" />
-              <h3 className="text-3xl font-black mb-2">Print Receipt?</h3>
-              <p className="text-xl text-slate-600">Order has been accepted. Would you like to print it?</p>
+              <Printer className="h-14 w-14 mx-auto text-[#6a6a6a] mb-4" />
+              <h3 className="text-2xl font-semibold mb-2">Print Receipt?</h3>
+              <p className="text-sm text-[#6a6a6a]">Order has been accepted. Would you like to print it?</p>
             </div>
             <div className="flex gap-4">
               <button
-                className="flex-1 px-6 py-5 rounded-2xl bg-slate-200 hover:bg-slate-300 text-2xl font-black transition-colors"
+                className="flex-1 px-6 py-4 rounded-2xl border-2 border-[#4a4a4a] text-sm font-semibold uppercase transition hover:brightness-110"
                 onClick={() => setShowPrintPrompt(null)}
               >
-                NO
+                No
               </button>
               <button
-                className="flex-1 px-6 py-5 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white text-2xl font-black transition-colors"
+                className="flex-1 px-6 py-4 rounded-2xl bg-[#c4a661] text-[#1a1a1a] text-sm font-semibold uppercase transition hover:brightness-110"
                 onClick={() => {
                   const orderId = showPrintPrompt;
                   setShowPrintPrompt(null);
                   printOrder(orderId, { markAsPrinted: true });
                 }}
               >
-                YES, PRINT
+                Yes, Print
               </button>
             </div>
           </div>
