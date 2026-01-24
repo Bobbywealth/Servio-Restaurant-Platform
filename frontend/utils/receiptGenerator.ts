@@ -94,8 +94,10 @@ export function generateReceiptHtml(args: {
   restaurant: ReceiptRestaurant | null;
   order: ReceiptOrder;
   paperWidth: ReceiptPaperWidth;
+  headerText?: string;
+  footerText?: string;
 }) {
-  const { restaurant, order, paperWidth } = args;
+  const { restaurant, order, paperWidth, headerText, footerText } = args;
   const rName = (restaurant?.name || 'SERVIO').toString();
   const rPhone = formatReceiptPhone(restaurant?.phone || '');
   const logoUrl = resolveMediaUrl(restaurant?.logo_url || '');
@@ -157,6 +159,7 @@ export function generateReceiptHtml(args: {
 
   return `
     <div class="receipt paper-${paperWidth}">
+      ${headerText ? `<div class="receipt-custom-header">${escapeHtml(headerText)}</div><div class="receipt-divider"></div>` : ''}
       <div class="receipt-header">
         ${logoUrl ? `<img class="receipt-logo" src="${logoUrl}" alt="Restaurant logo" />` : ''}
         <div class="receipt-title">${escapeHtml(rName)}</div>
@@ -203,7 +206,7 @@ export function generateReceiptHtml(args: {
       ` : ''}
 
       <div class="receipt-divider"></div>
-      <div class="receipt-footer">THANK YOU</div>
+      <div class="receipt-footer">${footerText ? escapeHtml(footerText) : 'THANK YOU'}</div>
     </div>
   `;
 }

@@ -94,10 +94,14 @@ export default function SettingsPage() {
   const [printerSettings, setPrinterSettings] = useState({
     autoPrintEnabled: false,
     paperWidth: '80mm',
-    printMode: 'system'
+    printMode: 'system',
+    numberOfCopies: 1,
+    receiptHeaderText: '',
+    receiptFooterText: ''
   })
   const [isSavingPrinterSettings, setIsSavingPrinterSettings] = useState(false)
   const [isTestingPrinter, setIsTestingPrinter] = useState(false)
+  const [printerSaveStatus, setPrinterSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
 
   // Load Vapi settings when phone tab is active
   useEffect(() => {
@@ -142,7 +146,10 @@ export default function SettingsPage() {
       setPrinterSettings({
         autoPrintEnabled: Boolean(settings.printer_auto_print_enabled),
         paperWidth: settings.printer_paper_width || '80mm',
-        printMode: settings.printer_mode || 'system'
+        printMode: settings.printer_mode || 'system',
+        numberOfCopies: settings.printer_number_of_copies || 1,
+        receiptHeaderText: settings.printer_receipt_header_text || '',
+        receiptFooterText: settings.printer_receipt_footer_text || ''
       })
     } catch (err) {
       console.error('Failed to load printer settings:', err)
@@ -167,15 +174,22 @@ export default function SettingsPage() {
   const savePrinterSettings = async () => {
     if (!user?.restaurantId) return
     setIsSavingPrinterSettings(true)
+    setPrinterSaveStatus('saving')
     try {
       await api.put('/api/restaurant/settings', {
         printer_auto_print_enabled: printerSettings.autoPrintEnabled,
         printer_paper_width: printerSettings.paperWidth,
-        printer_mode: printerSettings.printMode
+        printer_mode: printerSettings.printMode,
+        printer_number_of_copies: printerSettings.numberOfCopies,
+        printer_receipt_header_text: printerSettings.receiptHeaderText,
+        printer_receipt_footer_text: printerSettings.receiptFooterText
       })
-      alert('Printer settings saved!')
+      setPrinterSaveStatus('saved')
+      setTimeout(() => setPrinterSaveStatus('idle'), 2000)
     } catch (err: any) {
-      alert(getErrorMessage(err, 'Failed to save printer settings'))
+      setPrinterSaveStatus('error')
+      setTimeout(() => setPrinterSaveStatus('idle'), 3000)
+      console.error(getErrorMessage(err, 'Failed to save printer settings'))
     } finally {
       setIsSavingPrinterSettings(false)
     }
@@ -561,76 +575,239 @@ export default function SettingsPage() {
       case 'printing':
         return (
           <div className="space-y-6">
-            <div className="bg-surface-50 dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-lg p-4">
+            {/* Header Info */}
+            <div className="bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800 rounded-lg p-4">
               <div className="flex items-start">
-                <Printer className="w-5 h-5 text-surface-700 dark:text-surface-300 mr-3 mt-0.5" />
+                <Printer className="w-5 h-5 text-primary-600 dark:text-primary-400 mr-3 mt-0.5" />
                 <div>
-                  <h3 className="text-sm font-medium text-surface-900 dark:text-surface-100">
-                    Printer Settings
+                  <h3 className="text-sm font-medium text-primary-900 dark:text-primary-300">
+                    Receipt Printing Configuration
                   </h3>
-                  <p className="text-xs text-surface-600 dark:text-surface-400 mt-1">
-                    Configure how orders are printed on the tablet.
+                  <p className="text-xs text-primary-700 dark:text-primary-400 mt-1">
+                    Configure how order receipts are printed on your tablet. These settings will be used across all devices.
                   </p>
                 </div>
               </div>
             </div>
 
-            <div className="flex items-start justify-between py-4 border-b border-surface-200 dark:border-surface-700">
-              <div>
-                <h4 className="font-medium text-surface-900 dark:text-surface-100">Auto-Print Orders</h4>
-                <p className="text-sm text-surface-600 dark:text-surface-400 mt-1">
-                  Automatically print new orders when they arrive.
-                </p>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  className="sr-only"
-                  checked={printerSettings.autoPrintEnabled}
-                  onChange={(e) => setPrinterSettings(prev => ({ ...prev, autoPrintEnabled: e.target.checked }))}
-                />
-                <div className={`w-11 h-6 rounded-full transition-colors ${
-                  printerSettings.autoPrintEnabled ? 'bg-primary-500' : 'bg-surface-300 dark:bg-surface-600'
-                }`}>
-                  <div className={`w-4 h-4 bg-white rounded-full shadow-sm transform transition-transform ${
-                    printerSettings.autoPrintEnabled ? 'translate-x-6' : 'translate-x-1'
-                  } mt-1`} />
+            {/* Auto-Print Toggle */}
+            <div className="bg-white dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-xl p-5">
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <h4 className="font-semibold text-surface-900 dark:text-surface-100 flex items-center space-x-2">
+                    <span>Auto-Print Orders</span>
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                      printerSettings.autoPrintEnabled
+                        ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                        : 'bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-400'
+                    }`}>
+                      {printerSettings.autoPrintEnabled ? 'Enabled' : 'Disabled'}
+                    </span>
+                  </h4>
+                  <p className="text-sm text-surface-600 dark:text-surface-400 mt-1">
+                    Automatically print receipts when new orders arrive. When disabled, you'll be prompted to print manually.
+                  </p>
                 </div>
-              </label>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-surface-900 dark:text-surface-100 mb-2">
-                  Paper Width
+                <label className="relative inline-flex items-center cursor-pointer ml-4">
+                  <input
+                    type="checkbox"
+                    className="sr-only"
+                    checked={printerSettings.autoPrintEnabled}
+                    onChange={(e) => setPrinterSettings(prev => ({ ...prev, autoPrintEnabled: e.target.checked }))}
+                  />
+                  <div className={`w-11 h-6 rounded-full transition-colors ${
+                    printerSettings.autoPrintEnabled ? 'bg-primary-500' : 'bg-surface-300 dark:bg-surface-600'
+                  }`}>
+                    <div className={`w-4 h-4 bg-white rounded-full shadow-sm transform transition-transform ${
+                      printerSettings.autoPrintEnabled ? 'translate-x-6' : 'translate-x-1'
+                    } mt-1`} />
+                  </div>
                 </label>
-                <select
-                  className="input-field"
-                  value={printerSettings.paperWidth}
-                  onChange={(e) => setPrinterSettings(prev => ({ ...prev, paperWidth: e.target.value }))}
-                >
-                  <option value="80mm">80mm</option>
-                  <option value="58mm">58mm</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-surface-900 dark:text-surface-100 mb-2">
-                  Print Mode
-                </label>
-                <select
-                  className="input-field"
-                  value={printerSettings.printMode}
-                  onChange={(e) => setPrinterSettings(prev => ({ ...prev, printMode: e.target.value }))}
-                >
-                  <option value="system">System Print</option>
-                  <option value="rawbt">RawBT</option>
-                  <option value="bluetooth">WebBluetooth</option>
-                  <option value="bridge">Print Bridge</option>
-                </select>
               </div>
             </div>
 
-            <div className="pt-4">
+            {/* Print Mode Selection */}
+            <div className="bg-white dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-xl p-5">
+              <h4 className="font-semibold text-surface-900 dark:text-surface-100 mb-4">Print Mode</h4>
+              <div className="space-y-3">
+                <label className="flex items-start p-4 rounded-lg border-2 transition-all cursor-pointer hover:bg-surface-50 dark:hover:bg-surface-700/50 has-[:checked]:border-primary-500 has-[:checked]:bg-primary-50 dark:has-[:checked]:bg-primary-900/20">
+                  <input
+                    type="radio"
+                    name="printMode"
+                    value="rawbt"
+                    checked={printerSettings.printMode === 'rawbt'}
+                    onChange={(e) => setPrinterSettings(prev => ({ ...prev, printMode: e.target.value as any }))}
+                    className="mt-1 w-4 h-4 text-primary-600"
+                  />
+                  <div className="ml-3 flex-1">
+                    <div className="flex items-center space-x-2">
+                      <span className="font-medium text-surface-900 dark:text-surface-100">RawBT (Recommended)</span>
+                      <span className="px-2 py-0.5 bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 text-xs font-medium rounded-full">
+                        Best for Android
+                      </span>
+                    </div>
+                    <p className="text-sm text-surface-600 dark:text-surface-400 mt-1">
+                      Prints directly to Bluetooth thermal printers via the RawBT app - no dialogs or prompts. Fast and reliable.
+                    </p>
+                  </div>
+                </label>
+
+                <label className="flex items-start p-4 rounded-lg border-2 transition-all cursor-pointer hover:bg-surface-50 dark:hover:bg-surface-700/50 has-[:checked]:border-primary-500 has-[:checked]:bg-primary-50 dark:has-[:checked]:bg-primary-900/20">
+                  <input
+                    type="radio"
+                    name="printMode"
+                    value="system"
+                    checked={printerSettings.printMode === 'system'}
+                    onChange={(e) => setPrinterSettings(prev => ({ ...prev, printMode: e.target.value as any }))}
+                    className="mt-1 w-4 h-4 text-primary-600"
+                  />
+                  <div className="ml-3 flex-1">
+                    <span className="font-medium text-surface-900 dark:text-surface-100">System Print Dialog</span>
+                    <p className="text-sm text-surface-600 dark:text-surface-400 mt-1">
+                      Uses the device's native print dialog. Requires selecting the printer each time. Works with most printers.
+                    </p>
+                  </div>
+                </label>
+
+                <label className="flex items-start p-4 rounded-lg border-2 transition-all cursor-pointer hover:bg-surface-50 dark:hover:bg-surface-700/50 has-[:checked]:border-primary-500 has-[:checked]:bg-primary-50 dark:has-[:checked]:bg-primary-900/20">
+                  <input
+                    type="radio"
+                    name="printMode"
+                    value="bluetooth"
+                    checked={printerSettings.printMode === 'bluetooth'}
+                    onChange={(e) => setPrinterSettings(prev => ({ ...prev, printMode: e.target.value as any }))}
+                    className="mt-1 w-4 h-4 text-primary-600"
+                  />
+                  <div className="ml-3 flex-1">
+                    <div className="flex items-center space-x-2">
+                      <span className="font-medium text-surface-900 dark:text-surface-100">WebBluetooth ESC/POS</span>
+                      <span className="px-2 py-0.5 bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 text-xs font-medium rounded-full">
+                        BLE Only
+                      </span>
+                    </div>
+                    <p className="text-sm text-surface-600 dark:text-surface-400 mt-1">
+                      Direct ESC/POS printing via WebBluetooth. Only works with BLE thermal printers (not Classic Bluetooth).
+                    </p>
+                  </div>
+                </label>
+
+                <label className="flex items-start p-4 rounded-lg border-2 transition-all cursor-pointer hover:bg-surface-50 dark:hover:bg-surface-700/50 has-[:checked]:border-primary-500 has-[:checked]:bg-primary-50 dark:has-[:checked]:bg-primary-900/20">
+                  <input
+                    type="radio"
+                    name="printMode"
+                    value="bridge"
+                    checked={printerSettings.printMode === 'bridge'}
+                    onChange={(e) => setPrinterSettings(prev => ({ ...prev, printMode: e.target.value as any }))}
+                    className="mt-1 w-4 h-4 text-primary-600"
+                  />
+                  <div className="ml-3 flex-1">
+                    <span className="font-medium text-surface-900 dark:text-surface-100">Print Bridge</span>
+                    <p className="text-sm text-surface-600 dark:text-surface-400 mt-1">
+                      For network (LAN) or USB connected printers via a bridge service. Requires additional setup.
+                    </p>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            {/* Paper Configuration */}
+            <div className="bg-white dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-xl p-5">
+              <h4 className="font-semibold text-surface-900 dark:text-surface-100 mb-4">Paper Configuration</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-medium text-surface-900 dark:text-surface-100 mb-2">
+                    Paper Width
+                  </label>
+                  <div className="flex space-x-3">
+                    <button
+                      type="button"
+                      onClick={() => setPrinterSettings(prev => ({ ...prev, paperWidth: '80mm' }))}
+                      className={`flex-1 px-4 py-2.5 rounded-lg border-2 font-medium transition-all ${
+                        printerSettings.paperWidth === '80mm'
+                          ? 'border-primary-500 bg-primary-50 text-primary-700 dark:bg-primary-900/20 dark:text-primary-300'
+                          : 'border-surface-300 dark:border-surface-600 text-surface-700 dark:text-surface-300 hover:border-surface-400 dark:hover:border-surface-500'
+                      }`}
+                    >
+                      80mm
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPrinterSettings(prev => ({ ...prev, paperWidth: '58mm' }))}
+                      className={`flex-1 px-4 py-2.5 rounded-lg border-2 font-medium transition-all ${
+                        printerSettings.paperWidth === '58mm'
+                          ? 'border-primary-500 bg-primary-50 text-primary-700 dark:bg-primary-900/20 dark:text-primary-300'
+                          : 'border-surface-300 dark:border-surface-600 text-surface-700 dark:text-surface-300 hover:border-surface-400 dark:hover:border-surface-500'
+                      }`}
+                    >
+                      58mm
+                    </button>
+                  </div>
+                  <p className="text-xs text-surface-500 dark:text-surface-400 mt-2">
+                    Most thermal printers use 80mm paper. Use 58mm for compact portable printers.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-surface-900 dark:text-surface-100 mb-2">
+                    Number of Copies
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="5"
+                    value={printerSettings.numberOfCopies}
+                    onChange={(e) => setPrinterSettings(prev => ({ ...prev, numberOfCopies: Math.max(1, Math.min(5, parseInt(e.target.value) || 1)) }))}
+                    className="input-field w-full"
+                  />
+                  <p className="text-xs text-surface-500 dark:text-surface-400 mt-2">
+                    How many copies to print per order (1-5). Kitchen copy, customer copy, etc.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Receipt Customization */}
+            <div className="bg-white dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-xl p-5">
+              <h4 className="font-semibold text-surface-900 dark:text-surface-100 mb-4">Receipt Customization</h4>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-surface-900 dark:text-surface-100 mb-2">
+                    Header Text (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g., Thank you for your order!"
+                    value={printerSettings.receiptHeaderText}
+                    onChange={(e) => setPrinterSettings(prev => ({ ...prev, receiptHeaderText: e.target.value }))}
+                    className="input-field w-full"
+                    maxLength={50}
+                  />
+                  <p className="text-xs text-surface-500 dark:text-surface-400 mt-1">
+                    Custom text to appear at the top of receipts. Max 50 characters.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-surface-900 dark:text-surface-100 mb-2">
+                    Footer Text (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g., Visit us again soon!"
+                    value={printerSettings.receiptFooterText}
+                    onChange={(e) => setPrinterSettings(prev => ({ ...prev, receiptFooterText: e.target.value }))}
+                    className="input-field w-full"
+                    maxLength={50}
+                  />
+                  <p className="text-xs text-surface-500 dark:text-surface-400 mt-1">
+                    Custom text to appear at the bottom of receipts. Max 50 characters.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="pt-2">
               <div className="flex flex-wrap gap-3">
                 <motion.button
                   onClick={savePrinterSettings}
@@ -641,10 +818,14 @@ export default function SettingsPage() {
                 >
                   {isSavingPrinterSettings ? (
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : printerSaveStatus === 'saved' ? (
+                    <Check className="w-4 h-4" />
                   ) : (
                     <Save className="w-4 h-4" />
                   )}
-                  <span>{isSavingPrinterSettings ? 'Saving...' : 'Save Printer Settings'}</span>
+                  <span>
+                    {isSavingPrinterSettings ? 'Saving...' : printerSaveStatus === 'saved' ? 'Saved!' : 'Save Settings'}
+                  </span>
                 </motion.button>
                 <motion.button
                   onClick={testPrinter}
@@ -658,9 +839,34 @@ export default function SettingsPage() {
                   ) : (
                     <Printer className="w-4 h-4" />
                   )}
-                  <span>{isTestingPrinter ? 'Sending...' : 'Send Test Print'}</span>
+                  <span>{isTestingPrinter ? 'Sending Test...' : 'Send Test Print'}</span>
                 </motion.button>
               </div>
+
+              {/* Status Messages */}
+              {printerSaveStatus === 'saved' && (
+                <div className="mt-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg flex items-center space-x-2">
+                  <Check className="w-4 h-4 text-green-600 dark:text-green-400" />
+                  <span className="text-sm text-green-700 dark:text-green-300">Settings saved successfully!</span>
+                </div>
+              )}
+              {printerSaveStatus === 'error' && (
+                <div className="mt-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-center space-x-2">
+                  <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400" />
+                  <span className="text-sm text-red-700 dark:text-red-300">Failed to save settings. Please try again.</span>
+                </div>
+              )}
+            </div>
+
+            {/* Help Section */}
+            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+              <h4 className="text-sm font-medium text-blue-900 dark:text-blue-300 mb-2">Need Help?</h4>
+              <ul className="text-xs text-blue-700 dark:text-blue-400 space-y-1">
+                <li>• <strong>RawBT Mode:</strong> Install the RawBT app from Play Store and pair your printer in the app first</li>
+                <li>• <strong>System Print:</strong> Works with any printer but requires manual selection each time</li>
+                <li>• <strong>Test Print:</strong> Sends a test signal to your tablet - make sure your tablet is connected</li>
+                <li>• <strong>Auto-Print:</strong> Only works when your tablet app is open and connected</li>
+              </ul>
             </div>
           </div>
         )
