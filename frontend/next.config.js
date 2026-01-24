@@ -102,7 +102,8 @@ const nextConfig = {
   // EXPERIMENTAL FEATURES FOR SPEED
   experimental: {
     scrollRestoration: true,
-    optimizeCss: true, // Enable CSS optimization
+    // optimizeCss requires critters package - disabled until lock file is synced
+    // optimizeCss: true,
   },
 
   // PREVENT WATCH LOOPS IN DEV
