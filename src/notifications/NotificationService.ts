@@ -3,6 +3,7 @@ import type { DomainEvent, NotificationEventType } from './types';
 import { buildNotificationDraft } from './templates';
 import { NotificationStore } from './NotificationStore';
 import { NotificationDispatcher } from './NotificationDispatcher';
+import { OrderNotificationService } from '../services/OrderNotificationService';
 
 const handledEvents: NotificationEventType[] = [
   'staff.clock_in',
@@ -56,5 +57,31 @@ export class NotificationService {
         }
       });
     }
+
+    // Register order notification handlers for SMS/Email
+    const orderNotificationService = OrderNotificationService.getInstance();
+
+    // Send confirmation when order is created
+    this.bus.on('order.created_web', async (event: DomainEvent) => {
+      const orderId = event.payload?.orderId;
+      if (orderId) {
+        await orderNotificationService.sendOrderConfirmation(orderId, event.restaurantId);
+      }
+    });
+
+    this.bus.on('order.created_vapi', async (event: DomainEvent) => {
+      const orderId = event.payload?.orderId;
+      if (orderId) {
+        await orderNotificationService.sendOrderConfirmation(orderId, event.restaurantId);
+      }
+    });
+
+    // Send status update when order status changes
+    this.bus.on('order.status_changed', async (event: DomainEvent) => {
+      const { orderId, newStatus } = event.payload || {};
+      if (orderId && newStatus) {
+        await orderNotificationService.sendOrderStatusUpdate(orderId, event.restaurantId, newStatus);
+      }
+    });
   }
 }

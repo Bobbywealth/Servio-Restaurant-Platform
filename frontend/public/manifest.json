@@ -1,12 +1,13 @@
 {
-  "name": "Servio Restaurant OS",
+  "name": "Servio Restaurant Platform",
   "short_name": "Servio",
-  "description": "Premium restaurant operating system for voice-first operations.",
+  "description": "Premium restaurant operating system for voice-first operations. Lightning fast performance on all devices.",
   "start_url": "/login",
   "display": "standalone",
+  "display_override": ["standalone", "fullscreen", "minimal-ui"],
   "background_color": "#F9FAFB",
   "theme_color": "#14B8A6",
-  "orientation": "portrait-primary",
+  "orientation": "any",
   "scope": "/",
   "lang": "en",
   "dir": "ltr",
@@ -59,6 +60,19 @@
       ]
     },
     {
+      "name": "Tablet Mode",
+      "short_name": "Tablet",
+      "description": "Kitchen tablet view",
+      "url": "/tablet/orders",
+      "icons": [
+        {
+          "src": "/icons/servio-icon-192.svg",
+          "sizes": "192x192",
+          "type": "image/svg+xml"
+        }
+      ]
+    },
+    {
       "name": "Dashboard",
       "short_name": "Dashboard",
       "description": "Restaurant dashboard",
@@ -72,6 +86,10 @@
       ]
     }
   ],
+  "handle_links": "preferred",
+  "launch_handler": {
+    "client_mode": "focus-existing"
+  },
   "related_applications": [],
   "prefer_related_applications": false
 }

@@ -1,8 +1,9 @@
 import axios from 'axios'
+import { safeLocalStorage } from './utils'
 
 const BACKEND_URL =
-  process.env.NEXT_PUBLIC_API_URL || 
-  process.env.NEXT_PUBLIC_BACKEND_URL || 
+  process.env.NEXT_PUBLIC_API_URL ||
+  process.env.NEXT_PUBLIC_BACKEND_URL ||
   'http://localhost:3002'
 
 if (process.env.NODE_ENV === 'production' && !process.env.NEXT_PUBLIC_API_URL && !process.env.NEXT_PUBLIC_BACKEND_URL) {
@@ -10,8 +11,8 @@ if (process.env.NODE_ENV === 'production' && !process.env.NEXT_PUBLIC_API_URL &&
 }
 
 // Ensure URL has protocol
-const baseURL = BACKEND_URL.startsWith('http') 
-  ? BACKEND_URL 
+const baseURL = BACKEND_URL.startsWith('http')
+  ? BACKEND_URL
   : `https://${BACKEND_URL}`
 
 export const api = axios.create({
@@ -24,24 +25,90 @@ export const api = axios.create({
 
 const refreshClient = axios.create({
   baseURL,
-  timeout: 60_000,
+  timeout: 30_000, // Shorter timeout for refresh
   headers: {
     'Content-Type': 'application/json'
   }
 })
 
 let refreshInFlight: Promise<string | null> | null = null
+let lastRefreshTime = 0
+const MIN_REFRESH_INTERVAL = 30_000 // Don't refresh more than once per 30 seconds
+
+// Check if token is about to expire (within 2 minutes)
+function isTokenExpiringSoon(token: string): boolean {
+  try {
+    const parts = token.split('.')
+    if (parts.length !== 3) return true
+
+    const payload = JSON.parse(atob(parts[1]))
+    if (!payload.exp) return false
+
+    const expiresAt = payload.exp * 1000
+    const now = Date.now()
+    const twoMinutes = 2 * 60 * 1000
+
+    return expiresAt - now < twoMinutes
+  } catch {
+    return false
+  }
+}
+
+// Proactive token refresh
+async function proactiveRefresh(): Promise<string | null> {
+  if (typeof window === 'undefined') return null
+
+  const now = Date.now()
+  if (now - lastRefreshTime < MIN_REFRESH_INTERVAL) {
+    return safeLocalStorage.getItem('servio_access_token')
+  }
+
+  const refreshToken = safeLocalStorage.getItem('servio_refresh_token')
+  if (!refreshToken) return null
+
+  if (!refreshInFlight) {
+    refreshInFlight = refreshClient
+      .post('/api/auth/refresh', { refreshToken })
+      .then((resp) => {
+        const newAccessToken = resp?.data?.data?.accessToken as string | undefined
+        if (!newAccessToken) return null
+        safeLocalStorage.setItem('servio_access_token', newAccessToken)
+        lastRefreshTime = Date.now()
+        if (process.env.NODE_ENV !== 'production') {
+          console.info('[api] proactively refreshed access token')
+        }
+        return newAccessToken
+      })
+      .catch(() => null)
+      .finally(() => {
+        refreshInFlight = null
+      })
+  }
+
+  return refreshInFlight
+}
 
 api.interceptors.request.use(async (config) => {
   if (typeof window === 'undefined') return config
-  const token = localStorage.getItem('servio_access_token')
+
+  let token = safeLocalStorage.getItem('servio_access_token')
+
+  // Check if token exists and is expiring soon
+  if (token && isTokenExpiringSoon(token)) {
+    // Proactively refresh before request
+    const newToken = await proactiveRefresh()
+    if (newToken) {
+      token = newToken
+    }
+  }
+
   if (token) {
     config.headers = config.headers ?? {}
     config.headers.Authorization = `Bearer ${token}`
     return config
   }
 
-  const refreshToken = localStorage.getItem('servio_refresh_token')
+  const refreshToken = safeLocalStorage.getItem('servio_refresh_token')
   if (!refreshToken) return config
 
   if (!refreshInFlight) {
@@ -50,7 +117,8 @@ api.interceptors.request.use(async (config) => {
       .then((resp) => {
         const newAccessToken = resp?.data?.data?.accessToken as string | undefined
         if (!newAccessToken) return null
-        localStorage.setItem('servio_access_token', newAccessToken)
+        safeLocalStorage.setItem('servio_access_token', newAccessToken)
+        lastRefreshTime = Date.now()
         if (process.env.NODE_ENV !== 'production') {
           console.info('[api] refreshed access token (request)')
         }
@@ -93,13 +161,15 @@ api.interceptors.response.use(
       return Promise.reject(error)
     }
 
+    // Handle 401 with retry logic
     if (status === 401 && !originalConfig?._retry) {
       originalConfig._retry = true
-      const refreshToken = localStorage.getItem('servio_refresh_token')
+      const refreshToken = safeLocalStorage.getItem('servio_refresh_token')
+
       if (!refreshToken) {
-        localStorage.removeItem('servio_access_token')
-        localStorage.removeItem('servio_refresh_token')
-        localStorage.removeItem('servio_user')
+        safeLocalStorage.removeItem('servio_access_token')
+        safeLocalStorage.removeItem('servio_refresh_token')
+        safeLocalStorage.removeItem('servio_user')
         window.location.href = getLoginUrl()
         return Promise.reject(error)
       }
@@ -110,7 +180,8 @@ api.interceptors.response.use(
           .then((resp) => {
             const newAccessToken = resp?.data?.data?.accessToken as string | undefined
             if (!newAccessToken) return null
-            localStorage.setItem('servio_access_token', newAccessToken)
+            safeLocalStorage.setItem('servio_access_token', newAccessToken)
+            lastRefreshTime = Date.now()
             if (process.env.NODE_ENV !== 'production') {
               console.info('[api] refreshed access token')
             }
@@ -129,9 +200,9 @@ api.interceptors.response.use(
         return api.request(originalConfig)
       }
 
-      localStorage.removeItem('servio_access_token')
-      localStorage.removeItem('servio_refresh_token')
-      localStorage.removeItem('servio_user')
+      safeLocalStorage.removeItem('servio_access_token')
+      safeLocalStorage.removeItem('servio_refresh_token')
+      safeLocalStorage.removeItem('servio_user')
       if (process.env.NODE_ENV !== 'production') {
         console.info('[api] refresh failed, redirecting to login', message)
       }
@@ -141,3 +212,9 @@ api.interceptors.response.use(
     return Promise.reject(error)
   }
 )
+
+// Export helper for manual token refresh (used by keep-alive)
+export async function refreshAccessToken(): Promise<boolean> {
+  const newToken = await proactiveRefresh()
+  return !!newToken
+}

@@ -2,7 +2,7 @@ import '../styles/globals.css'
 import type { AppProps } from 'next/app'
 import Head from 'next/head'
 import { useRouter } from 'next/router'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Router from 'next/router'
 import dynamic from 'next/dynamic'
 import { UserProvider } from '../contexts/UserContext'
@@ -14,6 +14,7 @@ const inter = Inter({
   subsets: ['latin'],
   variable: '--font-inter',
   display: 'swap',
+  preload: true,
 })
 
 // LAZY LOAD TOAST PROVIDER FOR PERFORMANCE
@@ -22,10 +23,46 @@ const ToastProvider = dynamic(() => import('../components/ui/Toast'), {
   loading: () => null
 })
 
+// Session keep-alive interval (refresh token proactively)
+const SESSION_KEEPALIVE_INTERVAL = 10 * 60 * 1000 // 10 minutes
+
 export default function App({ Component, pageProps }: AppProps) {
   const [routeLoading, setRouteLoading] = useState(false)
   const router = useRouter()
   const isTabletRoute = router.pathname.startsWith('/tablet')
+
+  // Proactive session keep-alive to prevent auto-logout
+  const keepSessionAlive = useCallback(async () => {
+    if (typeof window === 'undefined') return
+
+    const refreshToken = window.localStorage.getItem('servio_refresh_token')
+    const accessToken = window.localStorage.getItem('servio_access_token')
+
+    // Only refresh if we have tokens
+    if (!refreshToken) return
+
+    try {
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL ||
+        process.env.NEXT_PUBLIC_BACKEND_URL ||
+        'http://localhost:3002'
+
+      const response = await fetch(`${baseUrl}/api/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken })
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        const newAccessToken = data?.data?.accessToken
+        if (newAccessToken) {
+          window.localStorage.setItem('servio_access_token', newAccessToken)
+        }
+      }
+    } catch (error) {
+      // Silent fail - token refresh will happen on next API call if needed
+    }
+  }, [])
 
   useEffect(() => {
     // Route loading indicator
@@ -42,6 +79,35 @@ export default function App({ Component, pageProps }: AppProps) {
     }
   }, [])
 
+  // Proactive session keep-alive
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    // Initial keep-alive after 1 minute
+    const initialTimeout = setTimeout(keepSessionAlive, 60 * 1000)
+
+    // Regular interval keep-alive
+    const interval = setInterval(keepSessionAlive, SESSION_KEEPALIVE_INTERVAL)
+
+    // Keep alive on user activity (debounced)
+    let activityTimeout: ReturnType<typeof setTimeout> | null = null
+    const handleActivity = () => {
+      if (activityTimeout) clearTimeout(activityTimeout)
+      activityTimeout = setTimeout(keepSessionAlive, 5 * 60 * 1000) // 5 min after activity
+    }
+
+    const events = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll']
+    events.forEach(event => window.addEventListener(event, handleActivity, { passive: true }))
+
+    return () => {
+      clearTimeout(initialTimeout)
+      clearInterval(interval)
+      if (activityTimeout) clearTimeout(activityTimeout)
+      events.forEach(event => window.removeEventListener(event, handleActivity))
+    }
+  }, [keepSessionAlive])
+
+  // Service worker registration with update handling
   useEffect(() => {
     if (process.env.NODE_ENV !== 'production') return
     if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return
@@ -74,7 +140,7 @@ export default function App({ Component, pageProps }: AppProps) {
           })
         })
         .catch(() => {
-          // Ignore registration failures to avoid breaking the app
+          // Ignore registration failures
         })
     }
 
@@ -94,7 +160,7 @@ export default function App({ Component, pageProps }: AppProps) {
     <>
       <Head>
         {/* OPTIMIZE VIEWPORT */}
-        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no, maximum-scale=1" />
 
         {/* PWA META TAGS */}
         <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -107,13 +173,33 @@ export default function App({ Component, pageProps }: AppProps) {
         <link rel="manifest" href={isTabletRoute ? '/manifest-tablet.webmanifest' : '/manifest.json'} />
         <link rel="apple-touch-icon" href="/images/servio_logo_transparent_tight.png" />
 
-        {/* PERFORMANCE HINTS */}
+        {/* PERFORMANCE HINTS - CRITICAL */}
         <meta httpEquiv="x-dns-prefetch-control" content="on" />
+        <link rel="dns-prefetch" href="//fonts.googleapis.com" />
+        <link rel="dns-prefetch" href="//fonts.gstatic.com" />
+        <link rel="preconnect" href="https://fonts.googleapis.com" crossOrigin="anonymous" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+
+        {/* PRELOAD CRITICAL RESOURCES */}
+        <link rel="preload" href="/manifest.json" as="fetch" crossOrigin="anonymous" />
+        {isTabletRoute && (
+          <link rel="preload" href="/manifest-tablet.webmanifest" as="fetch" crossOrigin="anonymous" />
+        )}
       </Head>
 
       <style jsx global>{`
         html {
           font-family: ${inter.style.fontFamily};
+        }
+        /* CRITICAL: Prevent layout shift */
+        html, body {
+          overflow-x: hidden;
+          scroll-behavior: smooth;
+        }
+        /* GPU acceleration for animations */
+        .animate-route-progress {
+          transform: translateZ(0);
+          will-change: transform;
         }
       `}</style>
 
