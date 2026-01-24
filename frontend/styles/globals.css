@@ -138,7 +138,7 @@ img, video {
 
 @media (min-width: 820px) {
   .tablet-orders-grid {
-    grid-template-columns: minmax(260px, 1fr) minmax(320px, 1.4fr) minmax(260px, 1fr);
+    grid-template-columns: minmax(260px, 1fr) minmax(300px, 1fr) minmax(280px, 1.1fr);
   }
 }
 

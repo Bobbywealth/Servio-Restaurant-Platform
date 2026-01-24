@@ -923,11 +923,12 @@ export default function TabletOrdersPage() {
       if (selectedOrder) setSelectedOrder(null);
       return;
     }
-    const latest = sortedOrders[0];
-    if (!selectedOrder || selectedOrder.id !== latest.id) {
+    // Only auto-select if no order is currently selected
+    if (!selectedOrder) {
+      const latest = sortedOrders[0];
       setSelectedOrder(latest);
     }
-  }, [sortedOrders, selectedOrder?.id]);
+  }, [sortedOrders, selectedOrder]);
 
   const receivedOrders = useMemo(() => {
     return activeOrders.filter((o) => normalizeStatus(o.status) === 'received');
