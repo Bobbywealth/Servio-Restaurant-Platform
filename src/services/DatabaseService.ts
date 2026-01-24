@@ -1,5 +1,3 @@
-import { open } from 'sqlite';
-import sqlite3 from 'sqlite3';
 import path from 'path';
 import fs from 'fs';
 import { Pool, QueryResult } from 'pg';
@@ -7,14 +5,11 @@ import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import { logger } from '../utils/logger';
 
-type DatabaseDialect = 'sqlite' | 'postgres';
-
 export interface RunResult {
   changes: number;
 }
 
 export interface DbClient {
-  dialect: DatabaseDialect;
   all<T = any>(sql: string, params?: any[]): Promise<T[]>;
   get<T = any>(sql: string, params?: any[]): Promise<T | undefined>;
   run(sql: string, params?: any[]): Promise<RunResult>;
@@ -35,67 +30,8 @@ function asNumber(value: any): number {
   return Number(value ?? 0);
 }
 
-function stripSqlComments(sql: string): string {
-  return sql
-    .replace(/--.*$/gm, '')
-    .replace(/\/\*[\s\S]*?\*\//g, '');
-}
-
-function splitSqlStatements(sql: string): string[] {
-  const statements: string[] = [];
-  let current = '';
-  let inSingleQuote = false;
-  let inDoubleQuote = false;
-
-  for (let i = 0; i < sql.length; i += 1) {
-    const char = sql[i];
-    const prev = sql[i - 1];
-
-    if (char === "'" && prev !== '\\' && !inDoubleQuote) {
-      inSingleQuote = !inSingleQuote;
-    }
-    if (char === '"' && prev !== '\\' && !inSingleQuote) {
-      inDoubleQuote = !inDoubleQuote;
-    }
-
-    if (char === ';' && !inSingleQuote && !inDoubleQuote) {
-      statements.push(current);
-      current = '';
-      continue;
-    }
-
-    current += char;
-  }
-
-  if (current.trim()) {
-    statements.push(current);
-  }
-
-  return statements;
-}
-
-function normalizeIdentifier(value: string): string {
-  return value.replace(/^(?:`|"|\[)/, '').replace(/(?:`|"|])$/, '');
-}
-
-function isIgnorableSqliteError(error: any, statement: string): boolean {
-  const message = String(error?.message || error || '');
-  const normalized = statement.trim().toUpperCase();
-
-  if (message.includes('duplicate column name')) return true;
-  if (message.includes('already exists')) return true;
-
-  if (message.includes('no such column') || message.includes('no such table')) {
-    return normalized.startsWith('CREATE INDEX') || normalized.startsWith('CREATE UNIQUE INDEX');
-  }
-
-  return false;
-}
-
 export class DatabaseService {
   private static instance: DatabaseService;
-  private _dialect: DatabaseDialect | null = null;
-  private sqliteDb: any | null = null;
   private pgPool: Pool | null = null;
 
   private constructor() {}
@@ -116,22 +52,16 @@ export class DatabaseService {
 
   public static async close(): Promise<void> {
     const service = DatabaseService.getInstance();
-    if (service.sqliteDb) {
-      await service.sqliteDb.close();
-      service.sqliteDb = null;
-    }
     if (service.pgPool) {
       await service.pgPool.end();
       service.pgPool = null;
     }
-    service._dialect = null;
     logger.info('Database connection closed');
   }
 
   private async runMigrations(): Promise<void> {
     const db = this.getDatabase();
-    const isPg = db.dialect === 'postgres';
-    
+
     // Try to find migrations directory in multiple possible locations
     const possiblePaths = [
       path.join(__dirname, '../database/migrations'),        // After build: dist/database/migrations
@@ -139,11 +69,11 @@ export class DatabaseService {
       path.join(process.cwd(), 'src/database/migrations'),   // From project root
       path.join(process.cwd(), 'backend/src/database/migrations') // From workspace root
     ];
-    
+
     let migrationsDir = '';
     logger.info(`📍 Current working directory: ${process.cwd()}`);
     logger.info(`📍 __dirname: ${__dirname}`);
-    
+
     for (const possiblePath of possiblePaths) {
       if (fs.existsSync(possiblePath)) {
         migrationsDir = possiblePath;
@@ -153,37 +83,27 @@ export class DatabaseService {
         logger.info(`❌ Not found: ${possiblePath}`);
       }
     }
-    
+
     if (!migrationsDir) {
       logger.error(`🚨 Could not find migrations directory anywhere. Database setup will be skipped.`);
       logger.error(`Tried paths: ${possiblePaths.join(', ')}`);
       return;
     }
 
-    // 1. Ensure migrations table exists
-    if (isPg) {
-      await db.exec(`
-        CREATE TABLE IF NOT EXISTS _migrations (
-          id SERIAL PRIMARY KEY,
-          name TEXT UNIQUE NOT NULL,
-          applied_at TIMESTAMPTZ DEFAULT NOW()
-        )
-      `);
-    } else {
-      await db.exec(`
-        CREATE TABLE IF NOT EXISTS _migrations (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          name TEXT UNIQUE NOT NULL,
-          applied_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )
-      `);
-    }
+    // Ensure migrations table exists
+    await db.exec(`
+      CREATE TABLE IF NOT EXISTS _migrations (
+        id SERIAL PRIMARY KEY,
+        name TEXT UNIQUE NOT NULL,
+        applied_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
 
-    // 2. Get applied migrations
+    // Get applied migrations
     const appliedRows = await db.all<{ name: string }>('SELECT name FROM _migrations');
     const appliedMigrations = new Set(appliedRows.map(r => r.name));
 
-    // 3. Read and sort migration files
+    // Read and sort migration files
     const files = fs.readdirSync(migrationsDir)
       .filter(f => f.endsWith('.sql'))
       .sort();
@@ -191,100 +111,39 @@ export class DatabaseService {
     logger.info(`🔍 Checking ${files.length} migrations in ${migrationsDir}...`);
     logger.info(`📄 Migration files found: ${files.join(', ')}`);
 
+    // SQLite-only migrations to skip on PostgreSQL
     const sqliteOnlyMigrations = new Set([
       '009_fix_missing_columns.sql'
-    ]);
-    const postgresOnlyMigrations = new Set([
-      '015_fix_postgres_columns.sql',
-      '020_ensure_completed_column.sql'
     ]);
 
     for (const file of files) {
       if (appliedMigrations.has(file)) continue;
 
-      if (isPg && sqliteOnlyMigrations.has(file)) {
-        logger.info(`⏭️ Skipping SQLite-only migration on PostgreSQL: ${file}`);
-        await db.run('INSERT INTO _migrations (name) VALUES (?)', [file]);
-        continue;
-      }
-
-      if (!isPg && postgresOnlyMigrations.has(file)) {
-        logger.info(`⏭️ Skipping PostgreSQL-only migration on SQLite: ${file}`);
+      // Skip SQLite-only migrations
+      if (sqliteOnlyMigrations.has(file)) {
+        logger.info(`⏭️ Skipping SQLite-only migration: ${file}`);
         await db.run('INSERT INTO _migrations (name) VALUES (?)', [file]);
         continue;
       }
 
       logger.info(`🚀 Running migration: ${file}`);
       const filePath = path.join(migrationsDir, file);
-      let sql = fs.readFileSync(filePath, 'utf8');
-
-      // SQLite compatibility fixes
-      if (!isPg) {
-        // Remove PG-only extension creation
-        sql = sql.replace(/CREATE EXTENSION IF NOT EXISTS "uuid-ossp";/gi, '-- Extension skipped for SQLite');
-        // Standardize NOW() to CURRENT_TIMESTAMP for SQLite
-        sql = sql.replace(/DEFAULT NOW\(\)/gi, 'DEFAULT CURRENT_TIMESTAMP');
-        sql = sql.replace(/TIMESTAMPTZ/gi, 'TEXT');
-      }
+      const sql = fs.readFileSync(filePath, 'utf8');
 
       try {
-        // Split by semicolon but be careful with functions/triggers if any
-        // For simplicity, we run the whole block or split by common patterns
-        // Some migrations might have multiple statements
-        
-        if (isPg) {
-          // PG can handle multiple statements in one query often, or we use a transaction
-          await db.exec('BEGIN');
-          try {
-            await db.exec(sql);
-            await db.run('INSERT INTO _migrations (name) VALUES (?)', [file]);
-            await db.exec('COMMIT');
-          } catch (err) {
-            await db.exec('ROLLBACK');
-            throw err;
-          }
-        } else {
-      // SQLite: run statements one by one to allow idempotent ALTERs
-      const cleanedSql = stripSqlComments(sql);
-      const statements = splitSqlStatements(cleanedSql);
-      await db.exec('BEGIN TRANSACTION');
-      try {
-        for (const statement of statements) {
-          const trimmed = statement.trim();
-          if (!trimmed) continue;
-
-          const alterMatch = trimmed.match(/^ALTER TABLE\s+([^\s]+)\s+ADD COLUMN\s+([^\s]+)/i);
-          if (alterMatch) {
-            const tableName = normalizeIdentifier(alterMatch[1]);
-            const columnName = normalizeIdentifier(alterMatch[2]);
-            const columns = await db.all<{ name: string }>(`PRAGMA table_info(${tableName})`);
-            if (columns.some((col) => col.name === columnName)) {
-              continue;
-            }
-          }
-
-          try {
-            await db.exec(trimmed);
-          } catch (err) {
-            if (isIgnorableSqliteError(err, trimmed)) {
-              logger.warn(`SQLite migration warning (skipped): ${trimmed}`);
-              continue;
-            }
-            throw err;
-          }
-        }
-
-        await db.run('INSERT INTO _migrations (name) VALUES (?)', [file]);
-        await db.exec('COMMIT');
-      } catch (err) {
-        await db.exec('ROLLBACK');
-        throw err;
-      }
+        // PostgreSQL can handle multiple statements in one query with transactions
+        await db.exec('BEGIN');
+        try {
+          await db.exec(sql);
+          await db.run('INSERT INTO _migrations (name) VALUES (?)', [file]);
+          await db.exec('COMMIT');
+        } catch (err) {
+          await db.exec('ROLLBACK');
+          throw err;
         }
         logger.info(`✅ Migration ${file} applied successfully`);
       } catch (error: any) {
         logger.error(`❌ Migration ${file} failed:`, error.message);
-        // We don't want to continue if a migration fails
         throw error;
       }
     }
@@ -296,51 +155,34 @@ export class DatabaseService {
     try {
       const databaseUrl = process.env.DATABASE_URL;
 
-      if (databaseUrl && databaseUrl.startsWith('postgres')) {
-        this._dialect = 'postgres';
-
-        const ssl =
-          process.env.DATABASE_SSL === 'true'
-            ? { rejectUnauthorized: false }
-            : undefined;
-
-        // OPTIMIZED CONNECTION POOL CONFIGURATION
-        this.pgPool = new Pool({
-          connectionString: databaseUrl,
-          ssl,
-          // CONNECTION POOL OPTIMIZATION
-          max: 20,                    // Maximum pool size
-          min: 2,                     // Minimum connections
-          idleTimeoutMillis: 30000,   // Close idle connections after 30s
-          connectionTimeoutMillis: 5000, // Connection timeout
-          // PERFORMANCE TUNING
-          query_timeout: 10000,       // 10s query timeout
-          statement_timeout: 15000,   // 15s statement timeout
-          idle_in_transaction_session_timeout: 10000 // 10s idle transaction timeout
-        });
-
-        // sanity query
-        await this.pgPool.query('SELECT 1 as ok');
-
-        logger.info('Connected to PostgreSQL database via DATABASE_URL');
-        return;
+      if (!databaseUrl || !databaseUrl.startsWith('postgres')) {
+        throw new Error('DATABASE_URL is required and must be a PostgreSQL connection string');
       }
 
-      // Default: SQLite (local/dev)
-      this._dialect = 'sqlite';
+      const ssl =
+        process.env.DATABASE_SSL === 'true'
+          ? { rejectUnauthorized: false }
+          : undefined;
 
-      const dbDir = path.join(__dirname, '../../data');
-      if (!fs.existsSync(dbDir)) {
-        fs.mkdirSync(dbDir, { recursive: true });
-      }
-
-      const dbPath = path.join(dbDir, 'servio.db');
-      this.sqliteDb = await open({
-        filename: dbPath,
-        driver: sqlite3.Database
+      // OPTIMIZED CONNECTION POOL CONFIGURATION
+      this.pgPool = new Pool({
+        connectionString: databaseUrl,
+        ssl,
+        // CONNECTION POOL OPTIMIZATION
+        max: 20,                    // Maximum pool size
+        min: 2,                     // Minimum connections
+        idleTimeoutMillis: 30000,   // Close idle connections after 30s
+        connectionTimeoutMillis: 5000, // Connection timeout
+        // PERFORMANCE TUNING
+        query_timeout: 10000,       // 10s query timeout
+        statement_timeout: 15000,   // 15s statement timeout
+        idle_in_transaction_session_timeout: 10000 // 10s idle transaction timeout
       });
 
-      logger.info(`Connected to SQLite database at ${dbPath}`);
+      // sanity query
+      await this.pgPool.query('SELECT 1 as ok');
+
+      logger.info('Connected to PostgreSQL database via DATABASE_URL');
 
       // Apply optimizations
       await this.optimizeDatabase();
@@ -352,29 +194,15 @@ export class DatabaseService {
 
   private async optimizeDatabase(): Promise<void> {
     const db = this.getDatabase();
-    const isPg = db.dialect === 'postgres';
 
-    if (isPg) {
-      try {
-        await db.exec('SET work_mem = "64MB"');
-        await db.exec('SET maintenance_work_mem = "256MB"');
-        await db.exec('SET effective_cache_size = "1GB"');
-        await db.exec('SET random_page_cost = 1.1');
-        await db.exec('SET checkpoint_completion_target = 0.9');
-      } catch (error: any) {
-        logger.warn('PostgreSQL performance tuning skipped:', error?.message || error);
-      }
-    } else {
-      try {
-        await db.exec('PRAGMA journal_mode = WAL');
-        await db.exec('PRAGMA synchronous = NORMAL');
-        await db.exec('PRAGMA cache_size = 10000');
-        await db.exec('PRAGMA temp_store = MEMORY');
-        await db.exec('PRAGMA mmap_size = 268435456'); // 256MB
-        await db.exec('PRAGMA optimize');
-      } catch (error: any) {
-        logger.warn('SQLite optimization warning:', error?.message || error);
-      }
+    try {
+      await db.exec('SET work_mem = \'64MB\'');
+      await db.exec('SET maintenance_work_mem = \'256MB\'');
+      await db.exec('SET effective_cache_size = \'1GB\'');
+      await db.exec('SET random_page_cost = 1.1');
+      await db.exec('SET checkpoint_completion_target = 0.9');
+    } catch (error: any) {
+      logger.warn('PostgreSQL performance tuning skipped:', error?.message || error);
     }
   }
 
@@ -383,7 +211,7 @@ export class DatabaseService {
 
     logger.info('Ensuring demo users exist with valid credentials...');
     const restaurantId = 'demo-restaurant-1';
-    
+
     // Create demo restaurant if it doesn't exist
     await db.run(
       `INSERT INTO restaurants (
@@ -402,7 +230,7 @@ export class DatabaseService {
           sat: ['09:00', '21:00']
         }),
         'America/New_York',
-        'We’re temporarily closed right now...'
+        'We're temporarily closed right now...'
       ]
     );
 
@@ -565,30 +393,7 @@ export class DatabaseService {
     logger.info('Database seeded with sample data');
   }
 
-  public getDialect(): DatabaseDialect {
-    if (!this._dialect) throw new Error('Database not connected');
-    return this._dialect;
-  }
-
   public getDatabase(): DbClient {
-    if (!this._dialect) throw new Error('Database not connected');
-
-    if (this._dialect === 'sqlite') {
-      if (!this.sqliteDb) throw new Error('SQLite database not connected');
-
-      const sqliteDb = this.sqliteDb;
-      return {
-        dialect: 'sqlite',
-        all: (sql: string, params: any[] = []) => sqliteDb.all(sql, params),
-        get: (sql: string, params: any[] = []) => sqliteDb.get(sql, params),
-        run: async (sql: string, params: any[] = []) => {
-          const result = await sqliteDb.run(sql, params);
-          return { changes: asNumber(result?.changes) };
-        },
-        exec: (sql: string) => sqliteDb.exec(sql)
-      };
-    }
-
     if (!this.pgPool) throw new Error('PostgreSQL pool not connected');
     const pool = this.pgPool;
 
@@ -598,7 +403,6 @@ export class DatabaseService {
     };
 
     return {
-      dialect: 'postgres',
       all: async (sql: string, params: any[] = []) => {
         const res = await query(sql, params);
         return res.rows;

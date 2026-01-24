@@ -800,7 +800,7 @@ router.get('/analytics', asyncHandler(async (req: Request, res: Response) => {
   const { timeframe = '30d' } = req.query;
   const db = DatabaseService.getInstance().getDatabase();
   const restaurantId = req.user?.restaurantId;
-  const optedInValue = db.dialect === 'postgres' ? true : 1;
+  const optedInValue = true;
 
   // Calculate date range
   const daysBack = timeframe === '7d' ? 7 : timeframe === '30d' ? 30 : 90;
@@ -886,7 +886,7 @@ router.get('/analytics', asyncHandler(async (req: Request, res: Response) => {
  */
 async function sendCampaign(campaignId: string) {
   const db = DatabaseService.getInstance().getDatabase();
-  const optedInValue = db.dialect === 'postgres' ? true : 1;
+  const optedInValue = true;
   
   try {
     const campaign = await db.get('SELECT * FROM marketing_campaigns WHERE id = ?', [campaignId]);
@@ -910,13 +910,8 @@ async function sendCampaign(campaignId: string) {
       customerQuery += ' AND (';
       targetCriteria.tags.forEach((tag: string, index: number) => {
         if (index > 0) customerQuery += ' OR ';
-        if (db.dialect === 'postgres') {
-          customerQuery += 'tags ILIKE ?';
-          queryParams.push(`%\"${tag}\"%`);
-        } else {
-          customerQuery += 'JSON_EXTRACT(tags, ?) LIKE ?';
-          queryParams.push(`$[*]`, `%${tag}%`);
-        }
+        customerQuery += 'tags ILIKE ?';
+        queryParams.push(`%\"${tag}\"%`);
       });
       customerQuery += ')';
     }

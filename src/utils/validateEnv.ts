@@ -5,7 +5,7 @@ export interface EnvStatus {
   errors: string[];
   warnings: string[];
   services: {
-    database: 'configured' | 'sqlite-fallback' | 'missing';
+    database: 'configured' | 'missing';
     assistant: 'available' | 'unavailable';
     auth: 'secure' | 'insecure';
     uploads: 'configured' | 'default';
@@ -24,11 +24,9 @@ export function validateEnvironment(): EnvStatus {
   // === DATABASE ===
   const hasDbUrl = !!process.env.DATABASE_URL;
   const dbSsl = process.env.DATABASE_SSL;
-  
-  if (!hasDbUrl && isProd) {
-    errors.push('DATABASE_URL is required in production (no SQLite fallback available)');
-  } else if (!hasDbUrl) {
-    warnings.push('DATABASE_URL not set - using SQLite (OK for development)');
+
+  if (!hasDbUrl) {
+    errors.push('DATABASE_URL is required - PostgreSQL is the only supported database');
   }
 
   // DATABASE_SSL parsing
@@ -77,7 +75,7 @@ export function validateEnvironment(): EnvStatus {
   logger.info('       ENVIRONMENT VALIDATION');
   logger.info('========================================');
   logger.info(`NODE_ENV:        ${process.env.NODE_ENV || 'development'}`);
-  logger.info(`DATABASE_URL:    ${hasDbUrl ? '[CONFIGURED]' : '[NOT SET - SQLite fallback]'}`);
+  logger.info(`DATABASE_URL:    ${hasDbUrl ? '[CONFIGURED]' : '[NOT SET - REQUIRED]'}`);
   logger.info(`DATABASE_SSL:    ${dbSsl || 'false'}`);
   logger.info(`JWT_SECRET:      ${isInsecureJwt ? '[INSECURE DEFAULT]' : '[CONFIGURED]'}`);
   logger.info(`FRONTEND_URL:    ${frontendUrl || '[NOT SET - localhost]'}`);
@@ -115,7 +113,7 @@ export function validateEnvironment(): EnvStatus {
     errors,
     warnings,
     services: {
-      database: hasDbUrl ? 'configured' : (isProd ? 'missing' : 'sqlite-fallback'),
+      database: hasDbUrl ? 'configured' : 'missing',
       assistant: hasOpenAI ? 'available' : 'unavailable',
       auth: isInsecureJwt ? 'insecure' : 'secure',
       uploads: uploadsDir ? 'configured' : 'default',
