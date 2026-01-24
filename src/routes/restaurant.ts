@@ -112,7 +112,8 @@ router.put('/profile', upload.fields([
     deliveryRadius,
     deliveryFee,
     minimumOrder,
-    customDomain
+    customDomain,
+    settings
   } = req.body;
 
   const db = DatabaseService.getInstance().getDatabase();
@@ -244,6 +245,11 @@ router.put('/profile', upload.fields([
   if (operatingHours !== undefined) {
     updateFields.push('operating_hours = ?');
     updateValues.push(JSON.stringify(operatingHours));
+  }
+  if (settings !== undefined) {
+    const settingsValue = typeof settings === 'string' ? settings : JSON.stringify(settings);
+    updateFields.push('settings = ?');
+    updateValues.push(settingsValue);
   }
   if (onlineOrderingEnabled !== undefined) {
     updateFields.push('online_ordering_enabled = ?');

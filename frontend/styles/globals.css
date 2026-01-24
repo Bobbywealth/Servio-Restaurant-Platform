@@ -65,6 +65,42 @@ img, video {
     --surface-950: 249 250 251;
   }
 
+.tablet-theme {
+    --tablet-bg: #1a1a1a;
+    --tablet-surface: #1c1c1c;
+    --tablet-surface-alt: #242424;
+    --tablet-card: #202020;
+    --tablet-border: #2a2a2a;
+    --tablet-border-strong: #3a3a3a;
+    --tablet-sidebar: #161616;
+    --tablet-sidebar-border: #202020;
+    --tablet-muted: #6a6a6a;
+    --tablet-muted-strong: #8a8a8a;
+    --tablet-text: #ffffff;
+    --tablet-accent: #c4a661;
+    --tablet-accent-contrast: #1a1a1a;
+    --tablet-success: #4a7c59;
+    --tablet-info: #4a5f8c;
+  }
+
+  .light .tablet-theme {
+    --tablet-bg: #f7f7f8;
+    --tablet-surface: #ffffff;
+    --tablet-surface-alt: #f3f4f6;
+    --tablet-card: #ffffff;
+    --tablet-border: #e5e7eb;
+    --tablet-border-strong: #d1d5db;
+    --tablet-sidebar: #ffffff;
+    --tablet-sidebar-border: #e5e7eb;
+    --tablet-muted: #6b7280;
+    --tablet-muted-strong: #9ca3af;
+    --tablet-text: #111827;
+    --tablet-accent: #b08a3a;
+    --tablet-accent-contrast: #111827;
+    --tablet-success: #2e7d32;
+    --tablet-info: #3651a3;
+  }
+
   html {
     scroll-behavior: smooth;
     overflow-x: hidden;
@@ -97,6 +133,12 @@ img, video {
 
   ::-webkit-scrollbar-thumb:hover {
     @apply bg-surface-400 dark:bg-surface-500;
+  }
+}
+
+@media (min-width: 820px) {
+  .tablet-orders-grid {
+    grid-template-columns: minmax(260px, 1fr) minmax(320px, 1.4fr) minmax(260px, 1fr);
   }
 }
 
