@@ -32,14 +32,42 @@ const refreshClient = axios.create({
 
 let refreshInFlight: Promise<string | null> | null = null
 
-api.interceptors.request.use((config) => {
+api.interceptors.request.use(async (config) => {
   if (typeof window === 'undefined') return config
-  // Try both common token keys
   const token = localStorage.getItem('servio_access_token')
   if (token) {
     config.headers = config.headers ?? {}
     config.headers.Authorization = `Bearer ${token}`
+    return config
   }
+
+  const refreshToken = localStorage.getItem('servio_refresh_token')
+  if (!refreshToken) return config
+
+  if (!refreshInFlight) {
+    refreshInFlight = refreshClient
+      .post('/api/auth/refresh', { refreshToken })
+      .then((resp) => {
+        const newAccessToken = resp?.data?.data?.accessToken as string | undefined
+        if (!newAccessToken) return null
+        localStorage.setItem('servio_access_token', newAccessToken)
+        if (process.env.NODE_ENV !== 'production') {
+          console.info('[api] refreshed access token (request)')
+        }
+        return newAccessToken
+      })
+      .catch(() => null)
+      .finally(() => {
+        refreshInFlight = null
+      })
+  }
+
+  const newToken = await refreshInFlight
+  if (newToken) {
+    config.headers = config.headers ?? {}
+    config.headers.Authorization = `Bearer ${newToken}`
+  }
+
   return config
 })
 
