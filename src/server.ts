@@ -41,10 +41,21 @@ app.get('/health', (_req, res) => {
 });
 
 // Get CORS origins from environment (FRONTEND_URL + ALLOWED_ORIGINS)
+// In production, FRONTEND_URL should be set to your actual frontend URL
+// In development, it defaults to localhost:3000
 const corsOrigins = getCorsOrigins(FRONTEND_ORIGIN);
-logger.info(`CORS origins: ${corsOrigins.join(', ')}`);
-if (process.env.FRONTEND_URL && process.env.FRONTEND_URL !== FRONTEND_ORIGIN) {
-  logger.warn(`FRONTEND_URL env does not match expected origin: ${process.env.FRONTEND_URL} (expected ${FRONTEND_ORIGIN})`);
+logger.info('========================================');
+logger.info('       CORS CONFIGURATION');
+logger.info('========================================');
+logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
+logger.info(`Allowed CORS Origins:`);
+corsOrigins.forEach(origin => logger.info(`  ✓ ${origin}`));
+logger.info('========================================');
+
+// Warn if production is using default localhost
+if (process.env.NODE_ENV === 'production' && corsOrigins.some(origin => origin.includes('localhost'))) {
+  logger.warn('⚠️  WARNING: Production environment is allowing localhost origins!');
+  logger.warn('⚠️  Set FRONTEND_URL environment variable to your production frontend URL');
 }
 
 const corsOriginSet = new Set(corsOrigins);
@@ -207,8 +218,30 @@ app.use(helmet({
   }
 }));
 
+// Dynamic CORS handler with better logging
 app.use(cors({
-  origin: corsOrigins,
+  origin: (origin, callback) => {
+    // Allow requests with no origin (mobile apps, curl, Postman, etc.)
+    if (!origin) {
+      return callback(null, true);
+    }
+
+    // Check if origin is in allowed list
+    if (corsOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+
+    // In development, allow any localhost origin
+    if (process.env.NODE_ENV !== 'production' && origin.includes('localhost')) {
+      logger.info(`[CORS] Allowing localhost origin in development: ${origin}`);
+      return callback(null, true);
+    }
+
+    // Block and log rejected origins
+    logger.warn(`[CORS] Blocked request from unauthorized origin: ${origin}`);
+    logger.warn(`[CORS] Allowed origins: ${corsOrigins.join(', ')}`);
+    return callback(new Error('CORS policy: Origin not allowed'));
+  },
   credentials: true,
   optionsSuccessStatus: 200,
   preflightContinue: false,
@@ -218,7 +251,14 @@ app.use(cors({
 // Ensure OPTIONS preflight is handled for all routes (including /api/auth/login).
 // This guarantees CORS headers are present even when no explicit route exists for OPTIONS.
 app.options(/.*/, cors({
-  origin: corsOrigins,
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    if (corsOrigins.includes(origin)) return callback(null, true);
+    if (process.env.NODE_ENV !== 'production' && origin.includes('localhost')) {
+      return callback(null, true);
+    }
+    return callback(new Error('CORS policy: Origin not allowed'));
+  },
   credentials: true,
   optionsSuccessStatus: 200,
   preflightContinue: false
