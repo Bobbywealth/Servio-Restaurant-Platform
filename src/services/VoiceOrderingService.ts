@@ -389,12 +389,18 @@ export class VoiceOrderingService {
 
   public searchMenu(query: string) {
     if (!this.menuData) return [];
+    let items: any[] = [];
     if (this.isGeneralMenuQuery(query)) {
       const popular = this.getPopularMenuItems();
-      return popular.length > 0 ? popular : this.getMenuItemsFromData();
+      items = popular.length > 0 ? popular : this.getMenuItemsFromData();
+    } else {
+      const q = query.toLowerCase();
+      items = this.getMenuItemsFromData((item) => item.name.toLowerCase().includes(q));
     }
-    const q = query.toLowerCase();
-    return this.getMenuItemsFromData((item) => item.name.toLowerCase().includes(q));
+
+    console.log('🔍 [searchMenu] Returning items:', JSON.stringify(items, null, 2));
+
+    return items;
   }
 
   public getMenuItem(id: string) {
