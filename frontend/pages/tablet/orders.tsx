@@ -244,14 +244,6 @@ export default function TabletOrdersPage() {
     }
   }, [authLoading, user, router]);
 
-  if (authLoading || !user) {
-    return (
-      <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
-        <p className="text-sm text-gray-300">Redirecting to login…</p>
-      </div>
-    );
-  }
-
   useEffect(() => {
     if (typeof window === 'undefined') return;
     setIsOnline(navigator.onLine);
@@ -955,6 +947,14 @@ export default function TabletOrdersPage() {
       ? 'bg-emerald-500/20 text-emerald-700 border-emerald-500/30'
       : 'bg-amber-500/20 text-amber-700 border-amber-500/30'
     : 'bg-red-500/20 text-red-700 border-red-500/30';
+
+  if (authLoading || !user) {
+    return (
+      <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
+        <p className="text-sm text-gray-300">Redirecting to login…</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-white text-black font-sans">
