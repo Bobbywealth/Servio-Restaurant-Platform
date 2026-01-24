@@ -345,22 +345,34 @@ export default function TabletOrdersPage() {
     };
   }, []);
 
+  // Extended idle timeout - 8 hours for tablet use (restaurant shift duration)
+  // Session is kept alive by _app.tsx proactive token refresh
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const idleMs = 15 * 60 * 1000;
+    // 8 hours = 28800000ms - covers a full restaurant shift
+    const idleMs = 8 * 60 * 60 * 1000;
     let idleTimer: number | null = null;
+    let lastActivity = Date.now();
+
     const handleIdleLogout = () => {
-      removeAuthTokens();
-      const next = router.asPath || '/tablet/orders';
-      router.replace(`/tablet/login?next=${encodeURIComponent(next)}`);
+      // Only logout if truly idle (no activity for the full duration)
+      if (Date.now() - lastActivity >= idleMs) {
+        removeAuthTokens();
+        const next = router.asPath || '/tablet/orders';
+        router.replace(`/tablet/login?next=${encodeURIComponent(next)}`);
+      }
     };
+
     const resetIdleTimer = () => {
+      lastActivity = Date.now();
       if (idleTimer) window.clearTimeout(idleTimer);
       idleTimer = window.setTimeout(handleIdleLogout, idleMs);
     };
+
     resetIdleTimer();
-    const events = ['mousemove', 'mousedown', 'touchstart', 'keydown'];
-    events.forEach((eventName) => window.addEventListener(eventName, resetIdleTimer));
+    const events = ['mousemove', 'mousedown', 'touchstart', 'touchmove', 'keydown', 'scroll', 'click'];
+    events.forEach((eventName) => window.addEventListener(eventName, resetIdleTimer, { passive: true }));
+
     return () => {
       if (idleTimer) window.clearTimeout(idleTimer);
       events.forEach((eventName) => window.removeEventListener(eventName, resetIdleTimer));
@@ -1060,7 +1072,7 @@ export default function TabletOrdersPage() {
                 <p className="text-base mt-3 font-medium uppercase tracking-widest">No active orders</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 gap-6 tablet-orders-grid">
+              <div className="grid grid-cols-1 gap-4 sm:gap-6 tablet-orders-responsive">
                 {/* Left Panel: Order Queue */}
                 <section className="bg-[var(--tablet-surface)] rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.3)] border border-[var(--tablet-border)] flex flex-col min-h-[50vh] lg:min-h-[70vh]">
                   <div className="px-4 py-4 border-b border-[var(--tablet-border)] flex items-center justify-between">
@@ -1349,6 +1361,40 @@ export default function TabletOrdersPage() {
         body {
           overscroll-behavior-y: contain;
           -webkit-tap-highlight-color: transparent;
+        }
+        /* Mobile-first responsive adjustments */
+        @media (max-width: 639px) {
+          .tablet-theme main {
+            padding: 0.75rem;
+          }
+          .tablet-theme .text-3xl {
+            font-size: 1.5rem;
+          }
+          .tablet-theme .text-2xl {
+            font-size: 1.25rem;
+          }
+        }
+        /* Tablet portrait */
+        @media (min-width: 640px) and (max-width: 1023px) {
+          .tablet-theme main {
+            padding: 1rem;
+          }
+        }
+        /* Ensure touch targets are large enough */
+        .tablet-theme button {
+          min-height: 44px;
+          touch-action: manipulation;
+        }
+        /* Smooth scrolling for order lists */
+        .tablet-theme .overflow-y-auto {
+          -webkit-overflow-scrolling: touch;
+          scroll-behavior: smooth;
+        }
+        /* Prevent text selection on interactive elements */
+        .tablet-theme button,
+        .tablet-theme [role="button"] {
+          -webkit-user-select: none;
+          user-select: none;
         }
       `}</style>
     </div>
