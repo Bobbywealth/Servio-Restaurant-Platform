@@ -86,6 +86,15 @@ interface MarketingAnalytics {
   recent_activity: any[];
 }
 
+interface Staff {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  role: string;
+  status: string;
+}
+
 const StatCard = ({ icon: Icon, title, value, change, changeType, color }: {
   icon: any;
   title: string;
@@ -435,6 +444,201 @@ const CampaignForm = ({ onSave, onCancel }: {
   );
 };
 
+const QuickSendForm = ({ onClose, customers, staff }: {
+  onClose: () => void;
+  customers: Customer[];
+  staff: Staff[];
+}) => {
+  const [formData, setFormData] = useState({
+    type: 'sms' as 'sms' | 'email',
+    recipientType: 'customer' as 'customer' | 'staff',
+    recipient: '',
+    subject: '',
+    message: ''
+  });
+  const [sending, setSending] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.recipient || !formData.message) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+
+    setSending(true);
+    try {
+      if (formData.recipientType === 'customer') {
+        const customer = customers.find(c => c.id === formData.recipient);
+        if (!customer) {
+          toast.error('Customer not found');
+          return;
+        }
+
+        const endpoint = formData.type === 'sms' ? '/api/marketing/send-sms' : '/api/marketing/send-email';
+        const payload = formData.type === 'sms'
+          ? { phone: customer.phone, message: formData.message, customerId: customer.id }
+          : { email: customer.email, subject: formData.subject, message: formData.message, customerId: customer.id };
+
+        const response = await api.post(endpoint, payload);
+        if (response.data.success) {
+          toast.success(`${formData.type.toUpperCase()} sent successfully!`);
+          onClose();
+        } else {
+          toast.error(response.data.error?.message || 'Failed to send message');
+        }
+      } else {
+        // Staff messaging
+        const response = await api.post('/api/marketing/send-staff-message', {
+          staffId: formData.recipient,
+          message: formData.message,
+          method: formData.type
+        });
+        if (response.data.success) {
+          toast.success('Message sent to staff member!');
+          onClose();
+        } else {
+          toast.error(response.data.error?.message || 'Failed to send message');
+        }
+      }
+    } catch (error) {
+      console.error('Error sending message:', error);
+      toast.error('Failed to send message');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const recipients = formData.recipientType === 'customer' ? customers : staff;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.95 }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50"
+    >
+      <div className="bg-white dark:bg-gray-800 rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="p-6">
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-6">
+            Quick Send Test Message
+          </h2>
+
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Recipient Type *
+                </label>
+                <select
+                  value={formData.recipientType}
+                  onChange={(e) => setFormData({ ...formData, recipientType: e.target.value as 'customer' | 'staff', recipient: '' })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                >
+                  <option value="customer">Customer</option>
+                  <option value="staff">Staff</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Message Type *
+                </label>
+                <select
+                  value={formData.type}
+                  onChange={(e) => setFormData({ ...formData, type: e.target.value as 'sms' | 'email' })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                >
+                  <option value="sms">SMS</option>
+                  <option value="email">Email</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Select Recipient *
+              </label>
+              <select
+                value={formData.recipient}
+                onChange={(e) => setFormData({ ...formData, recipient: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                required
+              >
+                <option value="">Select a {formData.recipientType}...</option>
+                {recipients.map((r: any) => (
+                  <option key={r.id} value={r.id}>
+                    {r.name} - {formData.type === 'sms' ? r.phone : r.email}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {formData.type === 'email' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Subject *
+                </label>
+                <input
+                  type="text"
+                  value={formData.subject}
+                  onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                  placeholder="Email subject"
+                  required
+                />
+              </div>
+            )}
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Message *
+              </label>
+              <textarea
+                value={formData.message}
+                onChange={(e) => setFormData({ ...formData, message: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                placeholder={
+                  formData.type === 'sms'
+                    ? 'Test message (160 characters max)'
+                    : 'Test email message'
+                }
+                rows={formData.type === 'sms' ? 3 : 6}
+                required
+              />
+              {formData.type === 'sms' && (
+                <p className={`text-sm mt-1 ${
+                  formData.message.length > 160 ? 'text-red-600' : 'text-gray-500'
+                }`}>
+                  {formData.message.length}/160 characters
+                </p>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end space-x-4 pt-6 border-t border-gray-200 dark:border-gray-700">
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={sending}
+                className="px-6 py-2 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={sending}
+                className="px-6 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors flex items-center space-x-2 disabled:opacity-50"
+              >
+                <Send className="h-4 w-4" />
+                <span>{sending ? 'Sending...' : 'Send Test Message'}</span>
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </motion.div>
+  );
+};
+
 const CustomerForm = ({ customer, onSave, onCancel }: {
   customer?: Customer;
   onSave: (data: any) => void;
@@ -621,9 +825,11 @@ export default function Marketing() {
   const [analytics, setAnalytics] = useState<MarketingAnalytics | null>(null);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [staff, setStaff] = useState<Staff[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCampaignForm, setShowCampaignForm] = useState(false);
   const [showCustomerForm, setShowCustomerForm] = useState(false);
+  const [showQuickSend, setShowQuickSend] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -671,6 +877,18 @@ export default function Marketing() {
     }
   }, []);
 
+  const fetchStaff = useCallback(async () => {
+    try {
+      const response = await api.get('/api/marketing/staff');
+      const data = response.data;
+      if (data.success) {
+        setStaff(data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching staff:', error);
+    }
+  }, []);
+
   useEffect(() => {
     const loadData = async () => {
       if (typeof window !== 'undefined') {
@@ -681,11 +899,11 @@ export default function Marketing() {
         }
       }
       setLoading(true);
-      await Promise.all([fetchAnalytics(), fetchCustomers(), fetchCampaigns()]);
+      await Promise.all([fetchAnalytics(), fetchCustomers(), fetchCampaigns(), fetchStaff()]);
       setLoading(false);
     };
     loadData();
-  }, [fetchAnalytics, fetchCustomers, fetchCampaigns]);
+  }, [fetchAnalytics, fetchCustomers, fetchCampaigns, fetchStaff]);
 
   const handleSaveCampaign = async (formData: any) => {
     try {
@@ -779,6 +997,13 @@ export default function Marketing() {
                 Manage your customer relationships and marketing campaigns
               </p>
             </div>
+            <button
+              onClick={() => setShowQuickSend(true)}
+              className="flex items-center space-x-2 bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 transition-colors"
+            >
+              <Send className="h-4 w-4" />
+              <span>Quick Send Test</span>
+            </button>
           </div>
 
           {/* Tab Navigation */}
@@ -1014,6 +1239,16 @@ export default function Marketing() {
                   setShowCustomerForm(false);
                   setEditingCustomer(null);
                 }}
+              />
+            )}
+          </AnimatePresence>
+
+          <AnimatePresence>
+            {showQuickSend && (
+              <QuickSendForm
+                onClose={() => setShowQuickSend(false)}
+                customers={customers}
+                staff={staff}
               />
             )}
           </AnimatePresence>

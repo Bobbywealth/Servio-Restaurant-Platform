@@ -726,12 +726,118 @@ async function sendCampaign(campaignId: string) {
 
   } catch (error) {
     logger.error(`Campaign ${campaignId} failed:`, error);
-    
+
     await db.run(
       'UPDATE marketing_campaigns SET status = ? WHERE id = ?',
       ['failed', campaignId]
     );
   }
 }
+
+// ============================================================================
+// STAFF MESSAGING
+// ============================================================================
+
+/**
+ * POST /api/marketing/send-staff-message
+ * Send message to a specific staff member
+ */
+router.post('/send-staff-message', asyncHandler(async (req: Request, res: Response) => {
+  const { staffId, message, method = 'both' } = req.body;
+
+  if (!staffId || !message) {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'Staff ID and message are required' }
+    });
+  }
+
+  const { OrderNotificationService } = await import('../services/OrderNotificationService');
+  const notificationService = OrderNotificationService.getInstance();
+
+  try {
+    const results = await notificationService.sendStaffMessage(staffId, message, method);
+
+    res.json({
+      success: true,
+      data: results
+    });
+  } catch (error: any) {
+    logger.error('Staff message error:', error);
+    res.status(500).json({
+      success: false,
+      error: { message: 'Failed to send message to staff', details: error.message }
+    });
+  }
+}));
+
+/**
+ * POST /api/marketing/broadcast-staff
+ * Broadcast message to all staff
+ */
+router.post('/broadcast-staff', asyncHandler(async (req: Request, res: Response) => {
+  const { message, method = 'both' } = req.body;
+  const restaurantId = req.user?.restaurantId;
+
+  if (!message) {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'Message is required' }
+    });
+  }
+
+  const { OrderNotificationService } = await import('../services/OrderNotificationService');
+  const notificationService = OrderNotificationService.getInstance();
+
+  try {
+    const results = await notificationService.broadcastToStaff(restaurantId!, message, method);
+
+    const successful = results.filter(r => r.success).length;
+    const failed = results.filter(r => !r.success).length;
+
+    res.json({
+      success: true,
+      data: {
+        total: results.length,
+        successful,
+        failed,
+        results
+      }
+    });
+  } catch (error: any) {
+    logger.error('Staff broadcast error:', error);
+    res.status(500).json({
+      success: false,
+      error: { message: 'Failed to broadcast to staff', details: error.message }
+    });
+  }
+}));
+
+/**
+ * GET /api/marketing/staff
+ * Get all staff for messaging
+ */
+router.get('/staff', asyncHandler(async (req: Request, res: Response) => {
+  const db = DatabaseService.getInstance().getDatabase();
+  const restaurantId = req.user?.restaurantId;
+
+  const staff = await db.all(`
+    SELECT
+      id,
+      name,
+      email,
+      phone,
+      role,
+      status
+    FROM staff
+    WHERE restaurant_id = ?
+    ORDER BY name ASC
+  `, [restaurantId]);
+
+  res.json({
+    success: true,
+    data: staff
+  });
+}));
 
 export default router;
