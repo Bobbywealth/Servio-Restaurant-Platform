@@ -1107,9 +1107,9 @@ export default function TabletOrdersPage() {
                 <p className="text-base mt-3 font-medium uppercase tracking-widest">No active orders</p>
               </div>
             ) : (
-              <div className="flex flex-col gap-6 lg:flex-row">
+              <div className="flex gap-6 overflow-x-auto">
                 {/* Left Panel: Order Queue */}
-                <section className="lg:w-[38%] w-full bg-[#1c1c1c] rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.3)] border border-[#2a2a2a] flex flex-col min-h-[70vh]">
+                <section className="w-[320px] shrink-0 bg-[#1c1c1c] rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.3)] border border-[#2a2a2a] flex flex-col min-h-[70vh]">
                   <div className="px-4 py-4 border-b border-[#2a2a2a] flex items-center justify-between">
                     <button className="flex items-center gap-2 text-sm font-semibold uppercase text-[#d4b896]">
                       All Orders
@@ -1182,98 +1182,100 @@ export default function TabletOrdersPage() {
                   </div>
                 </section>
 
-                {/* Right Panel: Order Details */}
-                <section className="lg:w-[62%] w-full flex flex-col gap-6">
-                  <div className="bg-[#1c1c1c] rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.3)] border border-[#2a2a2a]">
-                    <div className="px-6 py-5 border-b border-[#2a2a2a]">
-                      <div className="text-2xl font-semibold">
-                        {selectedOrder ? (
-                          <>ORDER #{selectedOrder.external_id ? selectedOrder.external_id.slice(-4).toUpperCase() : selectedOrder.id.slice(-4).toUpperCase()} - {(selectedOrder.customer_name || 'Guest').toUpperCase()}</>
-                        ) : (
-                          'ORDER DETAILS'
-                        )}
-                      </div>
+                {/* Center Panel: Order Details */}
+                <section className="min-w-[420px] flex-1 bg-[#1c1c1c] rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.3)] border border-[#2a2a2a]">
+                  <div className="px-6 py-5 border-b border-[#2a2a2a]">
+                    <div className="text-2xl font-semibold">
+                      {selectedOrder ? (
+                        <>ORDER #{selectedOrder.external_id ? selectedOrder.external_id.slice(-4).toUpperCase() : selectedOrder.id.slice(-4).toUpperCase()} - {(selectedOrder.customer_name || 'Guest').toUpperCase()}</>
+                      ) : (
+                        'ORDER DETAILS'
+                      )}
                     </div>
-                    {selectedOrder ? (
-                      <div className="px-6 py-5 space-y-6">
-                        <div className="bg-[#242424] rounded-lg p-5 flex flex-col gap-4">
-                          <div className="flex items-center gap-4">
-                            <div className="h-14 w-14 rounded-full bg-[#3a3a3a] flex items-center justify-center text-xl font-semibold">
-                              {(selectedOrder.customer_name || 'G')[0]}
-                            </div>
-                            <div className="flex-1">
-                              <div className="text-lg font-semibold">{selectedOrder.customer_name || 'Guest'}</div>
-                              <div className="text-sm text-[#6a6a6a]">{selectedOrder.customer_phone || 'No contact provided'}</div>
-                              <div className="mt-3 flex flex-wrap gap-3 text-sm">
-                                <span className="text-[11px] uppercase tracking-widest text-[#6a6a6a]">
-                                  {selectedOrder.order_type || 'Pickup'}
-                                </span>
-                                <span className="text-white">
-                                  {selectedOrder.pickup_time
-                                    ? new Date(selectedOrder.pickup_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                                    : 'Ready ASAP'}
-                                </span>
-                                <span className="text-[#6a6a6a]">
-                                  {selectedOrder.pickup_time
-                                    ? new Date(selectedOrder.pickup_time).toLocaleDateString()
-                                    : new Date().toLocaleDateString()}
-                                </span>
-                              </div>
-                            </div>
-                            <div className="flex flex-col gap-2">
-                              <span className={clsx('px-3 py-1 rounded-full text-[11px] font-semibold uppercase text-center', statusBadgeClassesForStatus(normalizeStatus(selectedOrder.status)))}>
-                                {normalizeStatus(selectedOrder.status)}
-                              </span>
-                              <span className="px-3 py-1 rounded-full text-[11px] font-semibold uppercase text-center bg-[#2a2a2a] text-[#8a8a8a]">
-                                {selectedOrder.channel || 'POS'}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center justify-between border-b border-[#2a2a2a] pb-4">
-                          <span className="text-sm text-[#6a6a6a] uppercase">Total Cost</span>
-                          <span className="text-3xl font-semibold">{formatMoney(selectedOrder.total_amount)}</span>
-                        </div>
-
-                        <div>
-                          <div className="text-lg font-semibold mb-3">Items ({selectedOrder.items?.length || 0})</div>
-                          <div className="space-y-3 max-h-[320px] overflow-y-auto pr-2">
-                            {(selectedOrder.items || []).map((it, idx) => (
-                              <div key={idx} className="flex items-center gap-4 pb-3 border-b border-[#2a2a2a] last:border-0">
-                                <div className="h-14 w-14 rounded-md bg-[#2f2f2f] flex items-center justify-center text-sm text-[#6a6a6a]">
-                                  {it.quantity || 1}
-                                </div>
-                                <div className="flex-1">
-                                  <div className="text-base font-semibold">{it.name}</div>
-                                  <div className="text-sm text-[#6a6a6a]">Prepared fresh</div>
-                                </div>
-                                <div className="text-base font-semibold">
-                                  {formatMoney((it.unit_price || it.price || 0) * (it.quantity || 1))}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-
-                        {selectedOrder.special_instructions && (
-                          <div className="bg-[#2a2a2a] rounded-lg p-4">
-                            <div className="text-[11px] uppercase tracking-widest text-[#d4b896] mb-2">
-                              Special Instructions
-                            </div>
-                            <div className="text-sm text-white/90">{selectedOrder.special_instructions}</div>
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="px-6 py-16 text-center text-[#6a6a6a]">
-                        Waiting for orders...
-                      </div>
-                    )}
                   </div>
+                  {selectedOrder ? (
+                    <div className="px-6 py-5 space-y-6">
+                      <div className="bg-[#242424] rounded-lg p-5 flex flex-col gap-4">
+                        <div className="flex items-center gap-4">
+                          <div className="h-14 w-14 rounded-full bg-[#3a3a3a] flex items-center justify-center text-xl font-semibold">
+                            {(selectedOrder.customer_name || 'G')[0]}
+                          </div>
+                          <div className="flex-1">
+                            <div className="text-lg font-semibold">{selectedOrder.customer_name || 'Guest'}</div>
+                            <div className="text-sm text-[#6a6a6a]">{selectedOrder.customer_phone || 'No contact provided'}</div>
+                            <div className="mt-3 flex flex-wrap gap-3 text-sm">
+                              <span className="text-[11px] uppercase tracking-widest text-[#6a6a6a]">
+                                {selectedOrder.order_type || 'Pickup'}
+                              </span>
+                              <span className="text-white">
+                                {selectedOrder.pickup_time
+                                  ? new Date(selectedOrder.pickup_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                                  : 'Ready ASAP'}
+                              </span>
+                              <span className="text-[#6a6a6a]">
+                                {selectedOrder.pickup_time
+                                  ? new Date(selectedOrder.pickup_time).toLocaleDateString()
+                                  : new Date().toLocaleDateString()}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="flex flex-col gap-2">
+                            <span className={clsx('px-3 py-1 rounded-full text-[11px] font-semibold uppercase text-center', statusBadgeClassesForStatus(normalizeStatus(selectedOrder.status)))}>
+                              {normalizeStatus(selectedOrder.status)}
+                            </span>
+                            <span className="px-3 py-1 rounded-full text-[11px] font-semibold uppercase text-center bg-[#2a2a2a] text-[#8a8a8a]">
+                              {selectedOrder.channel || 'POS'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
 
-                  {selectedOrder && (
-                    <div className="flex flex-col gap-3">
+                      <div className="flex items-center justify-between border-b border-[#2a2a2a] pb-4">
+                        <span className="text-sm text-[#6a6a6a] uppercase">Total Cost</span>
+                        <span className="text-3xl font-semibold">{formatMoney(selectedOrder.total_amount)}</span>
+                      </div>
+
+                      <div>
+                        <div className="text-lg font-semibold mb-3">Items ({selectedOrder.items?.length || 0})</div>
+                        <div className="space-y-3 max-h-[320px] overflow-y-auto pr-2">
+                          {(selectedOrder.items || []).map((it, idx) => (
+                            <div key={idx} className="flex items-center gap-4 pb-3 border-b border-[#2a2a2a] last:border-0">
+                              <div className="h-14 w-14 rounded-md bg-[#2f2f2f] flex items-center justify-center text-sm text-[#6a6a6a]">
+                                {it.quantity || 1}
+                              </div>
+                              <div className="flex-1">
+                                <div className="text-base font-semibold">{it.name}</div>
+                                <div className="text-sm text-[#6a6a6a]">Prepared fresh</div>
+                              </div>
+                              <div className="text-base font-semibold">
+                                {formatMoney((it.unit_price || it.price || 0) * (it.quantity || 1))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {selectedOrder.special_instructions && (
+                        <div className="bg-[#2a2a2a] rounded-lg p-4">
+                          <div className="text-[11px] uppercase tracking-widest text-[#d4b896] mb-2">
+                            Special Instructions
+                          </div>
+                          <div className="text-sm text-white/90">{selectedOrder.special_instructions}</div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="px-6 py-16 text-center text-[#6a6a6a]">
+                      Waiting for orders...
+                    </div>
+                  )}
+                </section>
+
+                {/* Right Panel: Order Actions */}
+                <section className="w-[280px] shrink-0 bg-[#1c1c1c] rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.3)] border border-[#2a2a2a] p-6">
+                  <div className="text-sm font-semibold uppercase text-[#6a6a6a]">Order Status</div>
+                  {selectedOrder ? (
+                    <div className="mt-5 flex flex-col gap-3">
                       {normalizeStatus(selectedOrder.status) === 'received' && (
                         <>
                           <button
@@ -1334,6 +1336,8 @@ export default function TabletOrdersPage() {
                         </>
                       )}
                     </div>
+                  ) : (
+                    <div className="mt-5 text-sm text-[#6a6a6a]">Select an order to update its status.</div>
                   )}
                 </section>
               </div>
