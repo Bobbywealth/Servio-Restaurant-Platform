@@ -970,27 +970,31 @@ export class VapiService {
     2. Ask if it is for pickup or delivery.
     3. If pickup, ask for the pickup time.
     4. Take the order.
-    5. For any item tagged "dinner", you MUST ask for:
-       - Rice choice (Rice & Peas OR White Rice)
-       - Cabbage (Yes or No)
-       - Spice level (Mild, Medium, or Spicy)
-    6. For Fish dinners, ask for style (Escovitch or Brown Stewed).
-    7. For Wings, ask for size and sauce.
-    8. For Ackee, ask if they want to add callaloo for $3.
-    9. For Oxtail, ask if they want gravy on the side ($0.50).
-    10. Confirm the full order and total (use quoteOrder to compute totals).
-    11. Collect customer details before placing the order:
+    5. For any entree/dinner item, you MUST ask for:
+       - Size (if the item has sizes like medium/large)
+       - Side choice (required, 1–2 selections max; anything beyond 2 is out of plate)
+       - Gravy amount (No gravy, Moderate, A lot)
+       - Gravy type (if not specified, assume "Same as meat")
+       - Exception: Jerk Chicken Rasta Pasta only needs gravy amount + gravy type (no size or sides).
+    6. For Red Snapper, ask how they want their fish (Brown Stew, Fried, Steamed).
+    7. For Salmon, ask how they want it done (Garlic Butter, Fried, Sweet Chili, Honey Jerk, Baked).
+    8. For Wings, ask for size and sauce.
+    9. For Ackee, ask if they want to add callaloo for $3.
+    10. For Oxtail, ask if they want gravy on the side ($0.50).
+    11. Confirm the full order and total (use quoteOrder to compute totals).
+    12. Collect customer details before placing the order:
        - Full name
        - Phone number (confirm if caller ID is available)
        - Email address (optional)
-    12. Place the order using createOrder with items, modifiers, customer details, and totals.
-    13. Upsell a drink or side.
-    14. Close the call.
+    13. Place the order using createOrder with items, modifiers, customer details, and totals if available.
+    14. Upsell a drink or side.
+    15. Close the call.
 
     IMPORTANT PHONE CALL GUIDELINES:
     - Keep responses concise and conversational.
     - Confirm phone numbers and names clearly.
-    - For dinners, always get the defaults (Rice, Cabbage, Spice).
+    - For entrees, always get size, side choice (1–2 max), gravy amount, and gravy type (except for Jerk Chicken Rasta Pasta), but do not block the order if a modifier is missing.
+    - Missing modifiers should be logged and confirmed verbally when possible, but the order can proceed.
     - If the store is closed, do not take orders.
     `;
   }
