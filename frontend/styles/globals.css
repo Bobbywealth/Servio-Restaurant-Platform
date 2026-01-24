@@ -65,7 +65,7 @@ img, video {
     --surface-950: 249 250 251;
   }
 
-  .tablet-theme {
+.tablet-theme {
     --tablet-bg: #1a1a1a;
     --tablet-surface: #1c1c1c;
     --tablet-surface-alt: #242424;
@@ -133,6 +133,12 @@ img, video {
 
   ::-webkit-scrollbar-thumb:hover {
     @apply bg-surface-400 dark:bg-surface-500;
+  }
+}
+
+@media (min-width: 820px) {
+  .tablet-orders-grid {
+    grid-template-columns: minmax(260px, 1fr) minmax(320px, 1.4fr) minmax(260px, 1fr);
   }
 }
 

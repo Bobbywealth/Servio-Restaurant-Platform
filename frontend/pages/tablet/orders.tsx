@@ -1059,7 +1059,7 @@ export default function TabletOrdersPage() {
                 <p className="text-base mt-3 font-medium uppercase tracking-widest">No active orders</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(280px,1fr)_minmax(360px,1.6fr)]">
+              <div className="grid grid-cols-1 gap-6 tablet-orders-grid">
                 {/* Left Panel: Order Queue */}
                 <section className="bg-[var(--tablet-surface)] rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.3)] border border-[var(--tablet-border)] flex flex-col min-h-[50vh] lg:min-h-[70vh]">
                   <div className="px-4 py-4 border-b border-[var(--tablet-border)] flex items-center justify-between">
@@ -1134,6 +1134,7 @@ export default function TabletOrdersPage() {
                   </div>
                 </section>
 
+                {/* Middle Panel: Order Details */}
                 <section className="flex flex-col gap-6">
                   {/* Order Details */}
                   <div className="bg-[var(--tablet-surface)] rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.3)] border border-[var(--tablet-border)]">
@@ -1180,7 +1181,10 @@ export default function TabletOrdersPage() {
                     )}
                   </div>
 
-                  {/* Customer + Actions */}
+                </section>
+
+                {/* Right Panel: Customer + Actions */}
+                <section className="flex flex-col gap-6">
                   <div className="bg-[var(--tablet-surface)] rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.3)] border border-[var(--tablet-border)]">
                     <div className="px-6 py-5 border-b border-[var(--tablet-border)]">
                       <div className="text-xl font-semibold">Customer</div>

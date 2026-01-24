@@ -1,6 +1,6 @@
 import { useRouter } from 'next/router';
 import clsx from 'clsx';
-import { Home, Moon, Receipt, Settings2, Sun } from 'lucide-react';
+import { Clock, Home, Info, Menu, Moon, Receipt, Settings2, Sparkles, Sun } from 'lucide-react';
 import { useTheme } from '../../contexts/ThemeContext';
 
 type NavItem = {
@@ -15,6 +15,10 @@ type TabletSidebarProps = {
 
 const navItems: NavItem[] = [
   { label: 'Orders', href: '/tablet/orders', icon: Receipt },
+  { label: 'History', href: '/tablet/history', icon: Clock },
+  { label: 'Menu', href: '/tablet/menu', icon: Menu },
+  { label: 'Assistant', href: '/tablet/assistant', icon: Sparkles },
+  { label: 'Info', href: '/tablet/info', icon: Info },
   { label: 'Settings', href: '/tablet/settings', icon: Settings2 },
 ];
 
