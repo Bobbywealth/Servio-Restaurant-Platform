@@ -203,15 +203,27 @@ async function syncModifiers() {
   let attachmentCount = 0;
 
   for (const category of menuData.categories) {
+    const categoryRow = await db.get(
+      'SELECT id FROM menu_categories WHERE restaurant_id = ? AND LOWER(name) = LOWER(?)',
+      [restaurantId, category.name]
+    );
+    const categoryId = categoryRow?.id ?? null;
+
     for (const item of category.items) {
       if (!item.modifierGroups || item.modifierGroups.length === 0) {
         continue;
       }
 
-      const itemRow = await db.get(
+      let itemRow = await db.get(
         'SELECT id FROM menu_items WHERE id = ? AND restaurant_id = ?',
         [item.id, restaurantId]
       );
+      if (!itemRow && categoryId) {
+        itemRow = await db.get(
+          'SELECT id FROM menu_items WHERE restaurant_id = ? AND category_id = ? AND LOWER(name) = LOWER(?)',
+          [restaurantId, categoryId, item.name]
+        );
+      }
       if (!itemRow) {
         logger.warn(`Menu item not found in DB, skipping modifiers: ${item.name} (${item.id})`);
         continue;
@@ -227,7 +239,7 @@ async function syncModifiers() {
           optionCount += 1;
         }
 
-        await attachGroupToItem(db, item.id, group.id, groupIndex);
+        await attachGroupToItem(db, itemRow.id, group.id, groupIndex);
         attachmentCount += 1;
       }
     }
