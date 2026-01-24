@@ -230,7 +230,7 @@ export class DatabaseService {
           sat: ['09:00', '21:00']
         }),
         'America/New_York',
-        'We're temporarily closed right now...'
+        "We're temporarily closed right now..."
       ]
     );
 
