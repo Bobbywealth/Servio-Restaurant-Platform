@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { safeLocalStorage } from './utils'
 
 const BACKEND_URL =
   process.env.NEXT_PUBLIC_API_URL || 
@@ -34,14 +35,14 @@ let refreshInFlight: Promise<string | null> | null = null
 
 api.interceptors.request.use(async (config) => {
   if (typeof window === 'undefined') return config
-  const token = localStorage.getItem('servio_access_token')
+  const token = safeLocalStorage.getItem('servio_access_token')
   if (token) {
     config.headers = config.headers ?? {}
     config.headers.Authorization = `Bearer ${token}`
     return config
   }
 
-  const refreshToken = localStorage.getItem('servio_refresh_token')
+  const refreshToken = safeLocalStorage.getItem('servio_refresh_token')
   if (!refreshToken) return config
 
   if (!refreshInFlight) {
@@ -50,7 +51,7 @@ api.interceptors.request.use(async (config) => {
       .then((resp) => {
         const newAccessToken = resp?.data?.data?.accessToken as string | undefined
         if (!newAccessToken) return null
-        localStorage.setItem('servio_access_token', newAccessToken)
+        safeLocalStorage.setItem('servio_access_token', newAccessToken)
         if (process.env.NODE_ENV !== 'production') {
           console.info('[api] refreshed access token (request)')
         }
@@ -95,11 +96,11 @@ api.interceptors.response.use(
 
     if (status === 401 && !originalConfig?._retry) {
       originalConfig._retry = true
-      const refreshToken = localStorage.getItem('servio_refresh_token')
+      const refreshToken = safeLocalStorage.getItem('servio_refresh_token')
       if (!refreshToken) {
-        localStorage.removeItem('servio_access_token')
-        localStorage.removeItem('servio_refresh_token')
-        localStorage.removeItem('servio_user')
+        safeLocalStorage.removeItem('servio_access_token')
+        safeLocalStorage.removeItem('servio_refresh_token')
+        safeLocalStorage.removeItem('servio_user')
         window.location.href = getLoginUrl()
         return Promise.reject(error)
       }
@@ -110,7 +111,7 @@ api.interceptors.response.use(
           .then((resp) => {
             const newAccessToken = resp?.data?.data?.accessToken as string | undefined
             if (!newAccessToken) return null
-            localStorage.setItem('servio_access_token', newAccessToken)
+            safeLocalStorage.setItem('servio_access_token', newAccessToken)
             if (process.env.NODE_ENV !== 'production') {
               console.info('[api] refreshed access token')
             }
@@ -129,9 +130,9 @@ api.interceptors.response.use(
         return api.request(originalConfig)
       }
 
-      localStorage.removeItem('servio_access_token')
-      localStorage.removeItem('servio_refresh_token')
-      localStorage.removeItem('servio_user')
+      safeLocalStorage.removeItem('servio_access_token')
+      safeLocalStorage.removeItem('servio_refresh_token')
+      safeLocalStorage.removeItem('servio_user')
       if (process.env.NODE_ENV !== 'production') {
         console.info('[api] refresh failed, redirecting to login', message)
       }
