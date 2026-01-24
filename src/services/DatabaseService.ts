@@ -191,8 +191,28 @@ export class DatabaseService {
     logger.info(`🔍 Checking ${files.length} migrations in ${migrationsDir}...`);
     logger.info(`📄 Migration files found: ${files.join(', ')}`);
 
+    const sqliteOnlyMigrations = new Set([
+      '009_fix_missing_columns.sql'
+    ]);
+    const postgresOnlyMigrations = new Set([
+      '015_fix_postgres_columns.sql',
+      '020_ensure_completed_column.sql'
+    ]);
+
     for (const file of files) {
       if (appliedMigrations.has(file)) continue;
+
+      if (isPg && sqliteOnlyMigrations.has(file)) {
+        logger.info(`⏭️ Skipping SQLite-only migration on PostgreSQL: ${file}`);
+        await db.run('INSERT INTO _migrations (name) VALUES (?)', [file]);
+        continue;
+      }
+
+      if (!isPg && postgresOnlyMigrations.has(file)) {
+        logger.info(`⏭️ Skipping PostgreSQL-only migration on SQLite: ${file}`);
+        await db.run('INSERT INTO _migrations (name) VALUES (?)', [file]);
+        continue;
+      }
 
       logger.info(`🚀 Running migration: ${file}`);
       const filePath = path.join(migrationsDir, file);
