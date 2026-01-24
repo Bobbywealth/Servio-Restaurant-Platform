@@ -202,32 +202,36 @@ export class VapiService {
     restaurantSlug: string | null;
     source: string;
   } {
+    const safeGet = (root: any, path: string[]): any => {
+      return path.reduce((acc, key) => (acc && typeof acc === 'object' ? acc[key] : undefined), root);
+    };
+
   private async getRestaurantIdFromParams(
     parameters: any,
     message?: any
   ): Promise<{ restaurantId: string | null; restaurantSlug: string | null; source: string }> {
     // 1) explicit tool parameters (preferred)
     const fromParams =
-      parameters?.restaurantId ??
-      parameters?.restaurant_id ??
-      parameters?.restaurant?.id ??
-      parameters?.restaurant?.restaurantId;
+      (parameters && (parameters as any).restaurantId) ||
+      (parameters && (parameters as any).restaurant_id) ||
+      safeGet(parameters, ['restaurant', 'id']) ||
+      safeGet(parameters, ['restaurant', 'restaurantId']);
     if (typeof fromParams === 'string' && fromParams.trim()) {
       return { restaurantId: fromParams.trim(), restaurantSlug: null, source: 'parameters.restaurantId' };
     }
 
     // 2) webhook payload metadata (no JWT for Vapi)
     const fromPayload =
-      message?.restaurantId ||
-      message?.metadata?.restaurantId ||
-      message?.call?.restaurantId ||
-      message?.call?.metadata?.restaurantId;
+      (message && (message as any).restaurantId) ||
+      safeGet(message, ['metadata', 'restaurantId']) ||
+      safeGet(message, ['call', 'restaurantId']) ||
+      safeGet(message, ['call', 'metadata', 'restaurantId']);
     if (typeof fromPayload === 'string' && fromPayload.trim()) {
       return { restaurantId: fromPayload.trim(), restaurantSlug: null, source: 'payload.metadata' };
     }
 
     // 3) map phoneNumberId -> restaurantId (optional)
-    const phoneNumberId = message?.call?.phoneNumberId;
+    const phoneNumberId = safeGet(message, ['call', 'phoneNumberId']);
     const mapRaw = process.env.VAPI_PHONE_NUMBER_RESTAURANT_MAP;
     if (phoneNumberId && mapRaw) {
       try {
@@ -279,6 +283,10 @@ export class VapiService {
     }
 
     const fromSlug =
+      (parameters && (parameters as any).restaurantSlug) ||
+      (parameters && (parameters as any).restaurant_slug) ||
+      safeGet(parameters, ['restaurant', 'slug']) ||
+      (parameters && (parameters as any).slug) ||
       parameters?.restaurantSlug ??
       parameters?.restaurant_slug ??
       parameters?.restaurant?.slug ??
