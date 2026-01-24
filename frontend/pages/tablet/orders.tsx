@@ -1059,9 +1059,9 @@ export default function TabletOrdersPage() {
                 <p className="text-base mt-3 font-medium uppercase tracking-widest">No active orders</p>
               </div>
             ) : (
-              <div className="flex flex-col gap-6 lg:flex-row">
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(280px,1fr)_minmax(360px,1.6fr)]">
                 {/* Left Panel: Order Queue */}
-                <section className="lg:w-[38%] w-full bg-[var(--tablet-surface)] rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.3)] border border-[var(--tablet-border)] flex flex-col min-h-[50vh] lg:min-h-[70vh]">
+                <section className="bg-[var(--tablet-surface)] rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.3)] border border-[var(--tablet-border)] flex flex-col min-h-[50vh] lg:min-h-[70vh]">
                   <div className="px-4 py-4 border-b border-[var(--tablet-border)] flex items-center justify-between">
                     <button className="flex items-center gap-2 text-sm font-semibold uppercase text-[var(--tablet-accent)]">
                       All Orders
@@ -1134,8 +1134,8 @@ export default function TabletOrdersPage() {
                   </div>
                 </section>
 
-                {/* Right Panel: Order Details */}
-                <section className="lg:w-[62%] w-full flex flex-col gap-6">
+                <section className="flex flex-col gap-6">
+                  {/* Order Details */}
                   <div className="bg-[var(--tablet-surface)] rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.3)] border border-[var(--tablet-border)]">
                     <div className="px-6 py-5 border-b border-[var(--tablet-border)]">
                       <div className="text-2xl font-semibold">
@@ -1148,41 +1148,6 @@ export default function TabletOrdersPage() {
                     </div>
                     {selectedOrder ? (
                       <div className="px-6 py-5 space-y-6">
-                        <div className="rounded-lg p-5 flex flex-col gap-4">
-                          <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-                            <div className="h-14 w-14 rounded-full bg-[var(--tablet-border-strong)] flex items-center justify-center text-xl font-semibold">
-                              {(selectedOrder.customer_name || 'G')[0]}
-                            </div>
-                            <div className="flex-1">
-                              <div className="text-lg font-semibold">{selectedOrder.customer_name || 'Guest'}</div>
-                              <div className="text-sm text-[var(--tablet-muted)]">{selectedOrder.customer_phone || 'No contact provided'}</div>
-                              <div className="mt-3 flex flex-wrap gap-3 text-sm">
-                                <span className="text-[11px] uppercase tracking-widest text-[var(--tablet-muted)]">
-                                  {selectedOrder.order_type || 'Pickup'}
-                                </span>
-                                <span className="text-[var(--tablet-text)]">
-                                  {selectedOrder.pickup_time
-                                    ? new Date(selectedOrder.pickup_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                                    : 'Ready ASAP'}
-                                </span>
-                                <span className="text-[var(--tablet-muted)]">
-                                  {selectedOrder.pickup_time
-                                    ? new Date(selectedOrder.pickup_time).toLocaleDateString()
-                                    : new Date().toLocaleDateString()}
-                                </span>
-                              </div>
-                            </div>
-                            <div className="flex flex-row gap-2 sm:flex-col">
-                              <span className={clsx('px-3 py-1 rounded-full text-[11px] font-semibold uppercase text-center', statusBadgeClassesForStatus(normalizeStatus(selectedOrder.status)))}>
-                                {normalizeStatus(selectedOrder.status)}
-                              </span>
-                              <span className="px-3 py-1 rounded-full text-[11px] font-semibold uppercase text-center bg-[var(--tablet-border)] text-[var(--tablet-muted-strong)]">
-                                {selectedOrder.channel || 'POS'}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-
                         <div className="flex items-center justify-between border-b border-[var(--tablet-border)] pb-4">
                           <span className="text-sm text-[var(--tablet-muted)] uppercase">Total Cost</span>
                           <span className="text-3xl font-semibold">{formatMoney(selectedOrder.total_amount)}</span>
@@ -1206,7 +1171,55 @@ export default function TabletOrdersPage() {
                               </div>
                             ))}
                           </div>
-                          <div className="text-sm text-[var(--tablet-text)] opacity-90">{selectedOrder.special_instructions}</div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="px-6 py-16 text-center text-[var(--tablet-muted)]">
+                        Waiting for orders...
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Customer + Actions */}
+                  <div className="bg-[var(--tablet-surface)] rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.3)] border border-[var(--tablet-border)]">
+                    <div className="px-6 py-5 border-b border-[var(--tablet-border)]">
+                      <div className="text-xl font-semibold">Customer</div>
+                    </div>
+                    {selectedOrder ? (
+                      <div className="px-6 py-5 space-y-5">
+                        <div className="flex items-center gap-4">
+                          <div className="h-14 w-14 rounded-full bg-[var(--tablet-border-strong)] flex items-center justify-center text-xl font-semibold">
+                            {(selectedOrder.customer_name || 'G')[0]}
+                          </div>
+                          <div className="flex-1">
+                            <div className="text-lg font-semibold">{selectedOrder.customer_name || 'Guest'}</div>
+                            <div className="text-sm text-[var(--tablet-muted)]">{selectedOrder.customer_phone || 'No contact provided'}</div>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap gap-3 text-sm">
+                          <span className="text-[11px] uppercase tracking-widest text-[var(--tablet-muted)]">
+                            {selectedOrder.order_type || 'Pickup'}
+                          </span>
+                          <span className="text-[var(--tablet-text)]">
+                            {selectedOrder.pickup_time
+                              ? new Date(selectedOrder.pickup_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                              : 'Ready ASAP'}
+                          </span>
+                          <span className="text-[var(--tablet-muted)]">
+                            {selectedOrder.pickup_time
+                              ? new Date(selectedOrder.pickup_time).toLocaleDateString()
+                              : new Date().toLocaleDateString()}
+                          </span>
+                        </div>
+
+                        <div className="flex flex-wrap gap-2">
+                          <span className={clsx('px-3 py-1 rounded-full text-[11px] font-semibold uppercase text-center', statusBadgeClassesForStatus(normalizeStatus(selectedOrder.status)))}>
+                            {normalizeStatus(selectedOrder.status)}
+                          </span>
+                          <span className="px-3 py-1 rounded-full text-[11px] font-semibold uppercase text-center bg-[var(--tablet-border)] text-[var(--tablet-muted-strong)]">
+                            {selectedOrder.channel || 'POS'}
+                          </span>
                         </div>
 
                         {selectedOrder.special_instructions && (
@@ -1219,8 +1232,8 @@ export default function TabletOrdersPage() {
                         )}
                       </div>
                     ) : (
-                      <div className="px-6 py-16 text-center text-[var(--tablet-muted)]">
-                        Waiting for orders...
+                      <div className="px-6 py-12 text-center text-[var(--tablet-muted)]">
+                        Select an order to view customer details.
                       </div>
                     )}
                   </div>
