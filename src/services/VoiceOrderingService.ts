@@ -713,12 +713,12 @@ export class VoiceOrderingService {
 
     await db.run(`
       INSERT INTO orders (
-        id, restaurant_id, status, customer_name, customer_phone, last_initial,
+        id, restaurant_id, channel, status, customer_name, customer_phone, last_initial,
         order_type, pickup_time, items, subtotal, tax, fees, total, total_amount,
         source, call_id, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     `, [
-      orderId, restaurantId, 'received', input.customer?.name, input.customer?.phone, lastInitial,
+      orderId, restaurantId, input.source || 'vapi', 'received', input.customer?.name, input.customer?.phone, lastInitial,
       input.orderType, input.pickupTime, JSON.stringify(orderItems), quote.subtotal, quote.tax, quote.fees, quote.total, quote.total,
       input.source || 'vapi', input.callId
     ]);
@@ -727,10 +727,21 @@ export class VoiceOrderingService {
       const menuItem = this.getMenuItem(item.itemId);
       await db.run(`
         INSERT INTO order_items (
-          id, order_id, item_id, item_name_snapshot, qty, unit_price_snapshot, modifiers_json, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+          id, order_id, menu_item_id, item_id, name, item_name_snapshot,
+          quantity, qty, unit_price, unit_price_snapshot, modifiers_json, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
       `, [
-        uuidv4(), orderId, item.itemId, menuItem?.name, item.qty, item.price, JSON.stringify(item.modifiers || {})
+        uuidv4(),
+        orderId,
+        item.itemId,
+        item.itemId,
+        menuItem?.name || item.itemId,
+        menuItem?.name,
+        item.qty,
+        item.qty,
+        item.price,
+        item.price,
+        JSON.stringify(item.modifiers || {})
       ]);
     }
 
