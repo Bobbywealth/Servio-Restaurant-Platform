@@ -383,7 +383,10 @@ function TaskFormModal({ onClose, onSuccess }: { onClose: () => void; onSuccess:
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white dark:bg-surface-800 rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+      <div
+        className="bg-white dark:bg-surface-800 rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto"
+        style={{ maxHeight: 'calc(100vh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px))' }}
+      >
         <div className="p-6">
           <h2 className="text-xl font-bold text-surface-900 dark:text-surface-100 mb-4">
             Create New Task
@@ -396,9 +399,14 @@ function TaskFormModal({ onClose, onSuccess }: { onClose: () => void; onSuccess:
               </label>
               <input
                 type="text"
-                className="input-field w-full"
+                className="input-field w-full min-h-[44px] scroll-mt-24"
                 value={formData.title}
                 onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                onFocus={(e) => {
+                  setTimeout(() => {
+                    e.target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  }, 300);
+                }}
                 placeholder="Enter task title"
                 required
               />
@@ -409,21 +417,26 @@ function TaskFormModal({ onClose, onSuccess }: { onClose: () => void; onSuccess:
                 Description
               </label>
               <textarea
-                className="input-field w-full"
+                className="input-field w-full scroll-mt-24"
                 rows={3}
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                onFocus={(e) => {
+                  setTimeout(() => {
+                    e.target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  }, 300);
+                }}
                 placeholder="Enter task description"
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-2">
                   Status
                 </label>
                 <select
-                  className="input-field w-full"
+                  className="input-field w-full min-h-[44px]"
                   value={formData.status}
                   onChange={(e) =>
                     setFormData({ ...formData, status: e.target.value as Task['status'] })
@@ -440,7 +453,7 @@ function TaskFormModal({ onClose, onSuccess }: { onClose: () => void; onSuccess:
                   Priority
                 </label>
                 <select
-                  className="input-field w-full"
+                  className="input-field w-full min-h-[44px]"
                   value={formData.priority}
                   onChange={(e) =>
                     setFormData({ ...formData, priority: e.target.value as Task['priority'] })
@@ -459,22 +472,27 @@ function TaskFormModal({ onClose, onSuccess }: { onClose: () => void; onSuccess:
               </label>
               <input
                 type="date"
-                className="input-field w-full"
+                className="input-field w-full min-h-[44px] scroll-mt-24"
                 value={formData.dueDate}
                 onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
+                onFocus={(e) => {
+                  setTimeout(() => {
+                    e.target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  }, 300);
+                }}
               />
             </div>
 
-            <div className="flex gap-3 pt-4">
+            <div className="flex flex-col sm:flex-row gap-3 pt-4">
               <button
                 type="button"
                 onClick={onClose}
-                className="btn-secondary flex-1"
+                className="btn-secondary flex-1 min-h-[44px]"
                 disabled={isSubmitting}
               >
                 Cancel
               </button>
-              <button type="submit" className="btn-primary flex-1" disabled={isSubmitting}>
+              <button type="submit" className="btn-primary flex-1 min-h-[44px]" disabled={isSubmitting}>
                 {isSubmitting ? 'Creating...' : 'Create Task'}
               </button>
             </div>

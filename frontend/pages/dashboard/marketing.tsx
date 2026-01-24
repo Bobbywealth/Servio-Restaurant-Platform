@@ -181,9 +181,10 @@ const CustomerCard = ({ customer, onEdit }: {
       </div>
       <button
         onClick={() => onEdit(customer)}
-        className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
+        className="p-2.5 sm:p-3 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center shrink-0"
+        aria-label={`Edit ${customer.name}`}
       >
-        <Edit3 className="h-4 w-4" />
+        <Edit3 className="h-4 w-4 sm:h-5 sm:w-5" />
       </button>
     </div>
   </motion.div>
@@ -262,19 +263,21 @@ const CampaignCard = ({ campaign, onView, onSend }: {
             </div>
           )}
         </div>
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center gap-2">
           <button
             onClick={() => onView(campaign)}
-            className="p-2 text-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-colors"
+            className="p-2.5 sm:p-3 text-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
+            aria-label={`View ${campaign.name}`}
           >
-            <Eye className="h-4 w-4" />
+            <Eye className="h-4 w-4 sm:h-5 sm:w-5" />
           </button>
           {(campaign.status === 'draft' || campaign.status === 'scheduled') && (
             <button
               onClick={() => onSend(campaign.id)}
-              className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
+              className="p-2.5 sm:p-3 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
+              aria-label={`Send ${campaign.name}`}
             >
-              <Send className="h-4 w-4" />
+              <Send className="h-4 w-4 sm:h-5 sm:w-5" />
             </button>
           )}
         </div>

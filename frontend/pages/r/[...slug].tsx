@@ -377,10 +377,10 @@ export default function PublicProfile() {
                     transition={{ delay: (catIndex * 0.1) + (itemIndex * 0.05) }}
                     whileHover={{ y: -2 }}
                   >
-                    <div className="flex justify-between items-start gap-4">
-                      <div className="flex-1 flex gap-4">
+                    <div className="flex justify-between items-start gap-3 sm:gap-4">
+                      <div className="flex-1 flex gap-3 sm:gap-4">
                         {item.image && (
-                          <div className="w-20 h-20 rounded-xl overflow-hidden bg-slate-100 border border-slate-200 flex-shrink-0">
+                          <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-xl overflow-hidden bg-slate-100 border border-slate-200 flex-shrink-0">
                             <img
                               src={resolveMediaUrl(item.image)}
                               alt={item.name}
@@ -390,14 +390,15 @@ export default function PublicProfile() {
                           </div>
                         )}
                         <div className="min-w-0">
-                        <h3 className="font-bold text-lg text-slate-900 group-hover:text-blue-600 transition-colors">{item.name}</h3>
-                        <p className="text-slate-500 text-sm mt-1 line-clamp-2">{item.description}</p>
-                        <p className="font-black text-xl text-slate-900 mt-3">${item.price.toFixed(2)}</p>
+                        <h3 className="font-bold text-base sm:text-lg text-slate-900 group-hover:text-blue-600 transition-colors">{item.name}</h3>
+                        <p className="text-slate-500 text-xs sm:text-sm mt-1 line-clamp-2">{item.description}</p>
+                        <p className="font-black text-lg sm:text-xl text-slate-900 mt-2 sm:mt-3">${item.price.toFixed(2)}</p>
                         </div>
                       </div>
-                      <button 
+                      <button
                         onClick={() => addToCart(item)}
-                        className="shrink-0 p-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-600/20"
+                        className="shrink-0 p-2.5 sm:p-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-600/20 min-w-[44px] min-h-[44px] flex items-center justify-center"
+                        aria-label={`Add ${item.name} to cart`}
                       >
                         <Plus className="w-5 h-5" />
                       </button>
@@ -450,9 +451,10 @@ export default function PublicProfile() {
               className="fixed inset-0 bg-black/50 z-[60]" 
               onClick={() => { setIsCartOpen(false); setCheckoutStep('cart'); }} 
             />
-            <motion.div 
+            <motion.div
               initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
-              className="fixed bottom-0 left-0 right-0 bg-white rounded-t-3xl z-[70] p-6 max-h-[85vh] overflow-y-auto"
+              className="fixed bottom-0 left-0 right-0 bg-white rounded-t-3xl z-[70] p-6 pb-safe-bottom max-h-[90vh] overflow-y-auto"
+              style={{ maxHeight: 'calc(100vh - env(safe-area-inset-top, 0px))' }}
             >
               <div className="max-w-xl mx-auto">
                 {/* Step 1: Cart Review */}
@@ -519,8 +521,13 @@ export default function PublicProfile() {
                           type="text"
                           value={customerInfo.name}
                           onChange={(e) => setCustomerInfo(prev => ({ ...prev, name: e.target.value }))}
+                          onFocus={(e) => {
+                            setTimeout(() => {
+                              e.target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            }, 300);
+                          }}
                           placeholder="Enter your name"
-                          className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none text-lg"
+                          className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none text-lg scroll-mt-24"
                         />
                       </div>
 
@@ -531,10 +538,16 @@ export default function PublicProfile() {
                         </label>
                         <input
                           type="tel"
+                          inputMode="numeric"
                           value={customerInfo.phone}
                           onChange={(e) => setCustomerInfo(prev => ({ ...prev, phone: e.target.value }))}
+                          onFocus={(e) => {
+                            setTimeout(() => {
+                              e.target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            }, 300);
+                          }}
                           placeholder="(555) 123-4567"
-                          className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none text-lg"
+                          className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none text-lg scroll-mt-24"
                         />
                         <p className="text-sm text-gray-500 mt-1">We'll text you when your order is ready</p>
                       </div>
@@ -574,9 +587,14 @@ export default function PublicProfile() {
                         <textarea
                           value={customerInfo.specialInstructions}
                           onChange={(e) => setCustomerInfo(prev => ({ ...prev, specialInstructions: e.target.value }))}
+                          onFocus={(e) => {
+                            setTimeout(() => {
+                              e.target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            }, 300);
+                          }}
                           placeholder="Allergies, dietary requests, etc."
                           rows={2}
-                          className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none resize-none"
+                          className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none resize-none scroll-mt-24"
                         />
                       </div>
                     </div>

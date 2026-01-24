@@ -175,7 +175,7 @@ export default function OrdersPage() {
 
       <DashboardLayout>
         <div className="space-y-6">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
               <h1 className="text-2xl sm:text-3xl font-bold text-surface-900 dark:text-surface-100 flex items-center">
                 <ClipboardList className="w-6 h-6 mr-2 text-primary-600 dark:text-primary-400" />
@@ -186,24 +186,25 @@ export default function OrdersPage() {
               </p>
             </div>
 
-            <div className="flex gap-3">
+            <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
               <button
-                className="btn-primary inline-flex items-center"
+                className="btn-primary inline-flex items-center justify-center min-h-[44px]"
                 onClick={createTestOrder}
                 disabled={isLoading}
               >
                 <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-                Create Test Order
+                <span className="hidden sm:inline">Create Test Order</span>
+                <span className="sm:hidden">Test Order</span>
               </button>
-              
+
               <button
-                className="btn-secondary inline-flex items-center"
+                className="btn-secondary inline-flex items-center justify-center min-h-[44px]"
                 onClick={fetchData}
                 disabled={isLoading}
                 title="Refresh"
               >
-                <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-                Refresh
+                <RefreshCw className={`w-4 h-4 sm:mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+                <span className="hidden sm:inline">Refresh</span>
               </button>
             </div>
           </div>
@@ -241,17 +242,17 @@ export default function OrdersPage() {
           )}
 
           <div className="card">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="flex flex-col gap-4">
               <div className="flex items-center text-sm font-semibold text-surface-900 dark:text-surface-100">
                 <Filter className="w-4 h-4 mr-2 text-surface-500 dark:text-surface-400" />
                 Filters
               </div>
 
-              <div className="flex flex-col sm:flex-row gap-3">
-                <label className="text-sm text-surface-700 dark:text-surface-300">
-                  <span className="mr-2">Status</span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <label className="flex flex-col gap-1.5 text-sm text-surface-700 dark:text-surface-300">
+                  <span className="font-medium">Status</span>
                   <select
-                    className="input-field inline-block w-56"
+                    className="input-field w-full min-h-[44px]"
                     value={statusFilter}
                     onChange={(e) => setStatusFilter(e.target.value as any)}
                   >
@@ -264,10 +265,10 @@ export default function OrdersPage() {
                   </select>
                 </label>
 
-                <label className="text-sm text-surface-700 dark:text-surface-300">
-                  <span className="mr-2">Channel</span>
+                <label className="flex flex-col gap-1.5 text-sm text-surface-700 dark:text-surface-300">
+                  <span className="font-medium">Channel</span>
                   <select
-                    className="input-field inline-block w-56"
+                    className="input-field w-full min-h-[44px]"
                     value={channelFilter}
                     onChange={(e) => setChannelFilter(e.target.value)}
                   >
@@ -283,7 +284,8 @@ export default function OrdersPage() {
             </div>
           </div>
 
-          <div className="card overflow-x-auto">
+          {/* Desktop Table View */}
+          <div className="hidden md:block card overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-surface-200 dark:border-surface-700">
@@ -354,6 +356,89 @@ export default function OrdersPage() {
                 )}
               </tbody>
             </table>
+          </div>
+
+          {/* Mobile Card View */}
+          <div className="md:hidden space-y-4">
+            {orders.length === 0 ? (
+              <div className="card text-center py-12">
+                <ClipboardList className="w-12 h-12 mx-auto mb-3 text-surface-300 dark:text-surface-600" />
+                <p className="text-surface-500 dark:text-surface-400">
+                  {isLoading ? 'Loading orders…' : 'No orders found.'}
+                </p>
+              </div>
+            ) : (
+              orders.map((o) => (
+                <div key={o.id} className="card hover:shadow-lg transition-shadow">
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <div className="font-semibold text-base text-surface-900 dark:text-surface-100 truncate">
+                          {o.external_id || o.id}
+                        </div>
+                        <span className={statusBadgeClass(o.status)}>
+                          {statusLabel[o.status] || o.status}
+                        </span>
+                      </div>
+                      {o.created_at && (
+                        <div className="text-xs text-surface-500 dark:text-surface-400">
+                          {new Date(o.created_at).toLocaleString()}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 mb-3">
+                    <div>
+                      <div className="text-xs text-surface-500 dark:text-surface-400 mb-1">Customer</div>
+                      <div className="text-sm font-medium text-surface-900 dark:text-surface-100 truncate">
+                        {o.customer_name || '—'}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-surface-500 dark:text-surface-400 mb-1">Channel</div>
+                      <div className="text-sm font-medium text-surface-900 dark:text-surface-100">
+                        {o.channel || '—'}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-surface-500 dark:text-surface-400 mb-1">Items</div>
+                      <div className="text-sm font-medium text-surface-900 dark:text-surface-100">
+                        {Array.isArray(o.items) ? o.items.length : 0} item{Array.isArray(o.items) && o.items.length !== 1 ? 's' : ''}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-surface-500 dark:text-surface-400 mb-1">Total</div>
+                      <div className="text-sm font-semibold text-surface-900 dark:text-surface-100">
+                        {typeof o.total_amount === 'number' ? `$${o.total_amount.toFixed(2)}` : '—'}
+                      </div>
+                    </div>
+                  </div>
+
+                  {canUpdateOrders && (
+                    <div className="pt-3 border-t border-surface-200 dark:border-surface-700">
+                      <label className="block">
+                        <span className="text-xs font-medium text-surface-600 dark:text-surface-400 mb-1 block">
+                          Update Status
+                        </span>
+                        <select
+                          className="input-field w-full min-h-[44px]"
+                          value={o.status}
+                          disabled={updatingOrderId === o.id}
+                          onChange={(e) => updateOrderStatus(o.id, e.target.value as OrderStatus)}
+                        >
+                          <option value="received">Received</option>
+                          <option value="preparing">Preparing</option>
+                          <option value="ready">Ready</option>
+                          <option value="completed">Completed</option>
+                          <option value="cancelled">Cancelled</option>
+                        </select>
+                      </label>
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
           </div>
         </div>
       </DashboardLayout>
