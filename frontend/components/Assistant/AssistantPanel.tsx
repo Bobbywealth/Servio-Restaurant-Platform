@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react'
+import { StopCircle, RotateCcw, Trash2 } from 'lucide-react'
 import RealisticAvatar from '../../components/Assistant/RealisticAvatar'
 import MicrophoneButton from '../../components/Assistant/MicrophoneButton'
 import TranscriptFeed, { TranscriptMessage } from '../../components/Assistant/TranscriptFeed'
@@ -829,6 +830,37 @@ export default function AssistantPanel({ showHeader = true, className }: Assista
     }
   }, [state.wakeWordSupported, initializeWakeWordService]);
 
+  // User control functions
+  const handleStopSpeaking = useCallback(() => {
+    stopAudio()
+    addMessage({
+      type: 'system',
+      content: '🛑 Audio playback stopped',
+      metadata: { action: { type: 'stop_audio', status: 'completed' } }
+    })
+  }, [stopAudio, addMessage])
+
+  const handleReplayLast = useCallback(() => {
+    const lastAssistantMessage = [...state.messages].reverse().find(m => m.type === 'assistant')
+    if (lastAssistantMessage && state.currentAudioUrl) {
+      playAudio(state.currentAudioUrl)
+      addMessage({
+        type: 'system',
+        content: '🔁 Replaying last response',
+        metadata: { action: { type: 'replay', status: 'completed' } }
+      })
+    }
+  }, [state.messages, state.currentAudioUrl, playAudio, addMessage])
+
+  const handleClearConversation = useCallback(() => {
+    setState(prev => ({ ...prev, messages: [] }))
+    addMessage({
+      type: 'system',
+      content: '🗑️ Conversation cleared',
+      metadata: { action: { type: 'clear', status: 'completed' } }
+    })
+  }, [addMessage])
+
   const containerClasses = ['max-w-7xl mx-auto', className].filter(Boolean).join(' ')
 
   return (
@@ -878,6 +910,37 @@ export default function AssistantPanel({ showHeader = true, className }: Assista
                   <span className="w-2 h-2 bg-violet-500 rounded-full animate-pulse"></span>
                   {state.inConversationWindow ? 'Conversation Active' : 'Listening for "Servio"'}
                 </span>
+              )}
+            </div>
+
+            {/* Control Buttons */}
+            <div className="flex flex-wrap items-center gap-2">
+              {state.isSpeaking && (
+                <button
+                  onClick={handleStopSpeaking}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors shadow-sm"
+                >
+                  <StopCircle className="w-4 h-4" />
+                  Stop Speaking
+                </button>
+              )}
+              {state.currentAudioUrl && !state.isSpeaking && (
+                <button
+                  onClick={handleReplayLast}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg text-sm font-medium transition-colors shadow-sm"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  Replay
+                </button>
+              )}
+              {state.messages.length > 0 && (
+                <button
+                  onClick={handleClearConversation}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg text-sm font-medium transition-colors shadow-sm"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Clear
+                </button>
               )}
             </div>
           </div>
