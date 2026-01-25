@@ -17,7 +17,7 @@ router.get('/today', asyncHandler(async (req: Request, res: Response) => {
   const restaurantId = req.user?.restaurantId;
 
   let query = `
-    SELECT * FROM tasks
+    SELECT id, title, description, status, priority, type, assigned_to, due_date, created_at, updated_at, completed_at FROM tasks
     WHERE (type = 'daily'
     OR (due_date IS NOT NULL AND due_date::date = CURRENT_DATE)
     OR (type = 'one_time' AND status != 'completed'))
@@ -96,7 +96,7 @@ router.post('/:id/complete', asyncHandler(async (req: Request, res: Response) =>
 
   const db = DatabaseService.getInstance().getDatabase();
 
-  const task = await db.get('SELECT * FROM tasks WHERE id = ? AND restaurant_id = ?', [id, req.user?.restaurantId]);
+  const task = await db.get('SELECT id, title, description, status, priority, type, assigned_to, due_date, created_at, updated_at, completed_at FROM tasks WHERE id = ? AND restaurant_id = ?', [id, req.user?.restaurantId]);
   if (!task) {
     return res.status(404).json({
       success: false,
@@ -156,7 +156,7 @@ router.post('/:id/start', asyncHandler(async (req: Request, res: Response) => {
 
   const db = DatabaseService.getInstance().getDatabase();
 
-  const task = await db.get('SELECT * FROM tasks WHERE id = ? AND restaurant_id = ?', [id, req.user?.restaurantId]);
+  const task = await db.get('SELECT id, title, description, status, priority, type, assigned_to, due_date, created_at, updated_at, completed_at FROM tasks WHERE id = ? AND restaurant_id = ?', [id, req.user?.restaurantId]);
   if (!task) {
     return res.status(404).json({
       success: false,
@@ -334,7 +334,7 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
 
   const db = DatabaseService.getInstance().getDatabase();
 
-  const task = await db.get('SELECT * FROM tasks WHERE id = ? AND restaurant_id = ?', [id, req.user?.restaurantId]);
+  const task = await db.get('SELECT id, title, description, status, priority, type, assigned_to, due_date, created_at, updated_at, completed_at FROM tasks WHERE id = ? AND restaurant_id = ?', [id, req.user?.restaurantId]);
   if (!task) {
     return res.status(404).json({
       success: false,
@@ -438,7 +438,7 @@ router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
 
   const db = DatabaseService.getInstance().getDatabase();
 
-  const task = await db.get('SELECT * FROM tasks WHERE id = ? AND restaurant_id = ?', [id, req.user?.restaurantId]);
+  const task = await db.get('SELECT id, title, description, status, priority, type, assigned_to, due_date, created_at, updated_at, completed_at FROM tasks WHERE id = ? AND restaurant_id = ?', [id, req.user?.restaurantId]);
   if (!task) {
     return res.status(404).json({
       success: false,
