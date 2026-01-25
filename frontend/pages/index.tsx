@@ -268,14 +268,14 @@ export default function HomePage() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 md:gap-16 items-center">
               <div className="space-y-6">
                 <div className="inline-flex items-center px-4 py-2 rounded-full bg-blue-500/15 border border-blue-500/30 text-blue-200 text-sm font-medium">
-                  Vapi-Powered Phone Answering
+                  AI Phone Answering
                 </div>
                 <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold text-white leading-tight">
                   We answer every call<br />
                   <span className="text-teal-400">and take the order for you.</span>
                 </h2>
                 <p className="text-lg text-gray-300 leading-relaxed">
-                  Servio&apos;s Vapi voice agent picks up in two rings, speaks naturally, captures the order, respects your hours, syncs availability, and pushes tickets into your POS and delivery platforms—so no call or revenue is missed.
+                  Servio's AI voice agent picks up in two rings, speaks naturally, captures the order, respects your hours, syncs availability, and pushes tickets into your POS and delivery platforms—so no call or revenue is missed.
                 </p>
                 <p className="text-base text-gray-400 leading-relaxed">
                   Admins can tune call rules, hours, menus, and escalation from the dashboard, while each restaurant sees the agent inside their back office with your POS and delivery integrations already connected.
@@ -325,7 +325,7 @@ export default function HomePage() {
                       <div className="w-2 h-2 bg-teal-400 rounded-full"></div>
                       <span className="text-sm text-gray-300">LIVE CALL • SERVIO</span>
                     </div>
-                    <span className="text-xs text-gray-500">Vapi Agent</span>
+                    <span className="text-xs text-gray-500">AI Agent</span>
                   </div>
                   <div className="space-y-4">
                     <div className="flex items-start space-x-3">
@@ -389,7 +389,7 @@ export default function HomePage() {
                 </div>
                 <h3 className="text-xl font-semibold text-white mb-4">Assistant & Phone</h3>
                 <p className="text-gray-400 leading-relaxed">
-                  Vapi-powered voice for calls and in-app commands—answers in two rings and executes across your menus, orders, and ops.
+                  AI voice for calls and in-app commands—answers in two rings and executes across your menus, orders, and ops.
                 </p>
               </div>
 
