@@ -2,12 +2,13 @@ import React from 'react'
 import { LucideIcon } from 'lucide-react'
 import { motion, type HTMLMotionProps } from 'framer-motion'
 
-export interface ButtonProps extends Omit<HTMLMotionProps<'button'>, 'ref'> {
+export interface ButtonProps extends Omit<HTMLMotionProps<'button'>, 'ref' | 'children'> {
   variant?: 'primary' | 'secondary' | 'destructive' | 'ghost' | 'outline'
   size?: 'sm' | 'md' | 'lg'
   icon?: LucideIcon
   iconPosition?: 'left' | 'right'
   fullWidth?: boolean
+  children?: React.ReactNode
 }
 
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
