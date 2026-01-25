@@ -2,7 +2,9 @@ import React from 'react'
 import { Loader2 } from 'lucide-react'
 import { motion } from 'framer-motion'
 
-interface LoadingButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+type MotionButtonProps = React.ComponentPropsWithoutRef<typeof motion.button>
+
+interface LoadingButtonProps extends Omit<MotionButtonProps, 'children'> {
   isLoading?: boolean
   loadingText?: string
   variant?: 'primary' | 'secondary' | 'destructive' | 'ghost'
