@@ -14,6 +14,70 @@ if (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN) {
   twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
 }
 
+// ============================================================================
+// PHONE NUMBER UTILITIES
+// ============================================================================
+
+/**
+ * Format phone number to E.164 format for Twilio
+ * Handles various input formats and adds +1 country code for US numbers
+ */
+function formatPhoneNumber(phone: string): { formatted: string; isValid: boolean; error?: string } {
+  if (!phone) {
+    return { formatted: '', isValid: false, error: 'Phone number is required' };
+  }
+
+  // Remove all non-digit characters except leading +
+  let cleaned = phone.replace(/[^\d+]/g, '');
+
+  // If starts with +, preserve it
+  const hasPlus = cleaned.startsWith('+');
+  if (hasPlus) {
+    cleaned = cleaned.substring(1);
+  }
+
+  // Remove leading zeros
+  cleaned = cleaned.replace(/^0+/, '');
+
+  // Check if it's already in E.164 format with country code
+  if (hasPlus && cleaned.length >= 10 && cleaned.length <= 15) {
+    return { formatted: `+${cleaned}`, isValid: true };
+  }
+
+  // For US numbers (10 digits without country code)
+  if (cleaned.length === 10) {
+    return { formatted: `+1${cleaned}`, isValid: true };
+  }
+
+  // For US numbers with country code already (11 digits starting with 1)
+  if (cleaned.length === 11 && cleaned.startsWith('1')) {
+    return { formatted: `+${cleaned}`, isValid: true };
+  }
+
+  // For international numbers that may have been provided without +
+  if (cleaned.length >= 10 && cleaned.length <= 15) {
+    // Assume it needs +1 if it's exactly 10 digits, otherwise assume country code is included
+    if (cleaned.length === 10) {
+      return { formatted: `+1${cleaned}`, isValid: true };
+    }
+    return { formatted: `+${cleaned}`, isValid: true };
+  }
+
+  return {
+    formatted: phone,
+    isValid: false,
+    error: `Invalid phone number format. Expected 10 digits (e.g., 5551234567) or full E.164 format (e.g., +15551234567). Got: ${phone}`
+  };
+}
+
+/**
+ * Validate phone number format
+ */
+function validatePhoneNumber(phone: string): { isValid: boolean; error?: string } {
+  const result = formatPhoneNumber(phone);
+  return { isValid: result.isValid, error: result.error };
+}
+
 // Initialize email transporter (configure for your email provider)
 const emailTransporter = nodemailer.createTransport({
   host: process.env.EMAIL_HOST || 'smtp.gmail.com',
@@ -370,18 +434,47 @@ router.post('/send-sms', asyncHandler(async (req: Request, res: Response) => {
     });
   }
 
+  // Format and validate phone number
+  const phoneResult = formatPhoneNumber(phone);
+  if (!phoneResult.isValid) {
+    return res.status(400).json({
+      success: false,
+      error: {
+        message: 'Invalid phone number format',
+        details: phoneResult.error,
+        tip: 'Enter 10 digits (e.g., 5551234567) or full format with country code (e.g., +15551234567)'
+      }
+    });
+  }
+
+  const formattedPhone = phoneResult.formatted;
+
   if (!twilioClient) {
     return res.status(500).json({
       success: false,
-      error: { message: 'SMS service not configured. Please contact administrator.' }
+      error: {
+        message: 'SMS service not configured',
+        details: 'Twilio credentials are not set up. Please configure TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_PHONE_NUMBER environment variables.',
+        simulated: true
+      }
+    });
+  }
+
+  if (!process.env.TWILIO_PHONE_NUMBER) {
+    return res.status(500).json({
+      success: false,
+      error: {
+        message: 'Twilio phone number not configured',
+        details: 'TWILIO_PHONE_NUMBER environment variable is not set.'
+      }
     });
   }
 
   try {
     const result = await twilioClient.messages.create({
       body: message,
-      from: process.env.TWILIO_PHONE_NUMBER || '+1234567890',
-      to: phone
+      from: process.env.TWILIO_PHONE_NUMBER,
+      to: formattedPhone
     });
 
     // Log the SMS send
@@ -392,22 +485,25 @@ router.post('/send-sms', asyncHandler(async (req: Request, res: Response) => {
       ) VALUES (?, ?, ?, ?, ?, ?, ?)
     `, [
       uuidv4(),
-      customerId,
+      customerId || null,
       'sms',
-      phone,
+      formattedPhone,
       message,
       'sent',
       result.sid
     ]);
 
-    logger.info(`SMS sent to ${phone}: ${result.sid}`);
+    logger.info(`SMS sent to ${formattedPhone}: ${result.sid}`);
 
     res.json({
       success: true,
       data: {
         sid: result.sid,
-        status: result.status
-      }
+        status: result.status,
+        to: formattedPhone,
+        actuallyDelivered: true
+      },
+      message: `SMS successfully sent to ${formattedPhone}`
     });
   } catch (error: any) {
     logger.error('SMS send error:', error);
@@ -420,19 +516,201 @@ router.post('/send-sms', asyncHandler(async (req: Request, res: Response) => {
       ) VALUES (?, ?, ?, ?, ?, ?, ?)
     `, [
       uuidv4(),
-      customerId,
+      customerId || null,
       'sms',
-      phone,
+      formattedPhone,
       message,
       'failed',
       error.message
     ]);
 
+    // Provide more helpful error messages for common Twilio errors
+    let userMessage = 'Failed to send SMS';
+    let details = error.message;
+
+    if (error.code === 21211) {
+      userMessage = 'Invalid phone number';
+      details = `The phone number ${formattedPhone} is not a valid mobile number.`;
+    } else if (error.code === 21408) {
+      userMessage = 'Permission denied';
+      details = 'Your Twilio account does not have permission to send SMS to this region.';
+    } else if (error.code === 21610) {
+      userMessage = 'Unsubscribed recipient';
+      details = 'This phone number has opted out of receiving SMS messages.';
+    } else if (error.code === 21614) {
+      userMessage = 'Invalid destination';
+      details = `Cannot send SMS to ${formattedPhone}. The number may be a landline or VoIP number.`;
+    }
+
     res.status(500).json({
       success: false,
-      error: { message: 'Failed to send SMS', details: error.message }
+      error: {
+        message: userMessage,
+        details,
+        twilioCode: error.code
+      }
     });
   }
+}));
+
+/**
+ * POST /api/marketing/send-test-sms
+ * Send a test SMS to a custom phone number (for testing Twilio configuration)
+ */
+router.post('/send-test-sms', asyncHandler(async (req: Request, res: Response) => {
+  const { phone, message } = req.body;
+  const restaurantId = req.user?.restaurantId;
+
+  if (!phone) {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'Phone number is required' }
+    });
+  }
+
+  // Format and validate phone number
+  const phoneResult = formatPhoneNumber(phone);
+  if (!phoneResult.isValid) {
+    return res.status(400).json({
+      success: false,
+      error: {
+        message: 'Invalid phone number format',
+        details: phoneResult.error,
+        tip: 'Enter 10 digits (e.g., 5551234567) or full format with country code (e.g., +15551234567)',
+        originalInput: phone,
+        attemptedFormat: phoneResult.formatted
+      }
+    });
+  }
+
+  const formattedPhone = phoneResult.formatted;
+  const testMessage = message || `Test SMS from Servio Restaurant Platform. Your SMS configuration is working correctly! Sent at ${new Date().toLocaleString()}`;
+
+  // Check Twilio configuration
+  const configStatus = {
+    hasSid: !!process.env.TWILIO_ACCOUNT_SID,
+    hasToken: !!process.env.TWILIO_AUTH_TOKEN,
+    hasPhoneNumber: !!process.env.TWILIO_PHONE_NUMBER,
+    clientInitialized: !!twilioClient
+  };
+
+  if (!twilioClient) {
+    return res.status(500).json({
+      success: false,
+      error: {
+        message: 'SMS service not configured',
+        details: 'Twilio credentials are missing or invalid.',
+        configStatus
+      }
+    });
+  }
+
+  try {
+    const result = await twilioClient.messages.create({
+      body: testMessage,
+      from: process.env.TWILIO_PHONE_NUMBER,
+      to: formattedPhone
+    });
+
+    logger.info(`Test SMS sent to ${formattedPhone}: ${result.sid}`);
+
+    await DatabaseService.getInstance().logAudit(
+      restaurantId!,
+      req.user?.id || 'system',
+      'send_test_sms',
+      'marketing',
+      null,
+      { phone: formattedPhone, sid: result.sid }
+    );
+
+    res.json({
+      success: true,
+      data: {
+        sid: result.sid,
+        status: result.status,
+        to: formattedPhone,
+        from: process.env.TWILIO_PHONE_NUMBER,
+        actuallyDelivered: true
+      },
+      message: `Test SMS successfully sent to ${formattedPhone}. Check your phone!`
+    });
+  } catch (error: any) {
+    logger.error('Test SMS send error:', error);
+
+    let userMessage = 'Failed to send test SMS';
+    let details = error.message;
+
+    if (error.code === 21211) {
+      userMessage = 'Invalid phone number';
+      details = `The phone number ${formattedPhone} is not valid. Make sure it's a real mobile number.`;
+    } else if (error.code === 21408) {
+      userMessage = 'Permission denied';
+      details = 'Your Twilio account does not have permission to send SMS to this region. Check your Twilio geographic permissions.';
+    } else if (error.code === 21614) {
+      userMessage = 'Invalid destination';
+      details = `Cannot send SMS to ${formattedPhone}. The number may be a landline or VoIP number that cannot receive SMS.`;
+    }
+
+    res.status(500).json({
+      success: false,
+      error: {
+        message: userMessage,
+        details,
+        twilioCode: error.code,
+        formattedPhone,
+        configStatus
+      }
+    });
+  }
+}));
+
+/**
+ * GET /api/marketing/validate-phone
+ * Validate and format a phone number
+ */
+router.get('/validate-phone', asyncHandler(async (req: Request, res: Response) => {
+  const phone = req.query.phone as string;
+
+  if (!phone) {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'Phone number is required as query parameter' }
+    });
+  }
+
+  const result = formatPhoneNumber(phone);
+
+  res.json({
+    success: result.isValid,
+    data: {
+      original: phone,
+      formatted: result.formatted,
+      isValid: result.isValid,
+      error: result.error
+    }
+  });
+}));
+
+/**
+ * GET /api/marketing/sms-config-status
+ * Check if SMS/Twilio is properly configured
+ */
+router.get('/sms-config-status', asyncHandler(async (req: Request, res: Response) => {
+  const configStatus = {
+    hasSid: !!process.env.TWILIO_ACCOUNT_SID,
+    hasToken: !!process.env.TWILIO_AUTH_TOKEN,
+    hasPhoneNumber: !!process.env.TWILIO_PHONE_NUMBER,
+    clientInitialized: !!twilioClient,
+    isFullyConfigured: !!twilioClient && !!process.env.TWILIO_PHONE_NUMBER
+  };
+
+  res.json({
+    success: true,
+    data: configStatus,
+    message: configStatus.isFullyConfigured
+      ? 'SMS service is fully configured and ready to send messages'
+      : 'SMS service is not fully configured. Check your Twilio environment variables.'
+  });
 }));
 
 /**
@@ -522,7 +800,7 @@ router.get('/analytics', asyncHandler(async (req: Request, res: Response) => {
   const { timeframe = '30d' } = req.query;
   const db = DatabaseService.getInstance().getDatabase();
   const restaurantId = req.user?.restaurantId;
-  const optedInValue = db.dialect === 'postgres' ? true : 1;
+  const optedInValue = true;
 
   // Calculate date range
   const daysBack = timeframe === '7d' ? 7 : timeframe === '30d' ? 30 : 90;
@@ -608,7 +886,7 @@ router.get('/analytics', asyncHandler(async (req: Request, res: Response) => {
  */
 async function sendCampaign(campaignId: string) {
   const db = DatabaseService.getInstance().getDatabase();
-  const optedInValue = db.dialect === 'postgres' ? true : 1;
+  const optedInValue = true;
   
   try {
     const campaign = await db.get('SELECT * FROM marketing_campaigns WHERE id = ?', [campaignId]);
@@ -632,13 +910,8 @@ async function sendCampaign(campaignId: string) {
       customerQuery += ' AND (';
       targetCriteria.tags.forEach((tag: string, index: number) => {
         if (index > 0) customerQuery += ' OR ';
-        if (db.dialect === 'postgres') {
-          customerQuery += 'tags ILIKE ?';
-          queryParams.push(`%\"${tag}\"%`);
-        } else {
-          customerQuery += 'JSON_EXTRACT(tags, ?) LIKE ?';
-          queryParams.push(`$[*]`, `%${tag}%`);
-        }
+        customerQuery += 'tags ILIKE ?';
+        queryParams.push(`%\"${tag}\"%`);
       });
       customerQuery += ')';
     }
@@ -660,10 +933,15 @@ async function sendCampaign(campaignId: string) {
           if (!twilioClient) {
             throw new Error('SMS service not configured');
           }
+          // Format phone number before sending
+          const phoneResult = formatPhoneNumber(customer.phone);
+          if (!phoneResult.isValid) {
+            throw new Error(`Invalid phone number format: ${customer.phone}`);
+          }
           await twilioClient.messages.create({
             body: campaign.message,
-            from: process.env.TWILIO_PHONE_NUMBER || '+1234567890',
-            to: customer.phone
+            from: process.env.TWILIO_PHONE_NUMBER,
+            to: phoneResult.formatted
           });
         } else if (campaign.type === 'email') {
           await emailTransporter.sendMail({
@@ -726,12 +1004,118 @@ async function sendCampaign(campaignId: string) {
 
   } catch (error) {
     logger.error(`Campaign ${campaignId} failed:`, error);
-    
+
     await db.run(
       'UPDATE marketing_campaigns SET status = ? WHERE id = ?',
       ['failed', campaignId]
     );
   }
 }
+
+// ============================================================================
+// STAFF MESSAGING
+// ============================================================================
+
+/**
+ * POST /api/marketing/send-staff-message
+ * Send message to a specific staff member
+ */
+router.post('/send-staff-message', asyncHandler(async (req: Request, res: Response) => {
+  const { staffId, message, method = 'both' } = req.body;
+
+  if (!staffId || !message) {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'Staff ID and message are required' }
+    });
+  }
+
+  const { OrderNotificationService } = await import('../services/OrderNotificationService');
+  const notificationService = OrderNotificationService.getInstance();
+
+  try {
+    const results = await notificationService.sendStaffMessage(staffId, message, method);
+
+    res.json({
+      success: true,
+      data: results
+    });
+  } catch (error: any) {
+    logger.error('Staff message error:', error);
+    res.status(500).json({
+      success: false,
+      error: { message: 'Failed to send message to staff', details: error.message }
+    });
+  }
+}));
+
+/**
+ * POST /api/marketing/broadcast-staff
+ * Broadcast message to all staff
+ */
+router.post('/broadcast-staff', asyncHandler(async (req: Request, res: Response) => {
+  const { message, method = 'both' } = req.body;
+  const restaurantId = req.user?.restaurantId;
+
+  if (!message) {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'Message is required' }
+    });
+  }
+
+  const { OrderNotificationService } = await import('../services/OrderNotificationService');
+  const notificationService = OrderNotificationService.getInstance();
+
+  try {
+    const results = await notificationService.broadcastToStaff(restaurantId!, message, method);
+
+    const successful = results.filter(r => r.success).length;
+    const failed = results.filter(r => !r.success).length;
+
+    res.json({
+      success: true,
+      data: {
+        total: results.length,
+        successful,
+        failed,
+        results
+      }
+    });
+  } catch (error: any) {
+    logger.error('Staff broadcast error:', error);
+    res.status(500).json({
+      success: false,
+      error: { message: 'Failed to broadcast to staff', details: error.message }
+    });
+  }
+}));
+
+/**
+ * GET /api/marketing/staff
+ * Get all staff for messaging
+ */
+router.get('/staff', asyncHandler(async (req: Request, res: Response) => {
+  const db = DatabaseService.getInstance().getDatabase();
+  const restaurantId = req.user?.restaurantId;
+
+  const staff = await db.all(`
+    SELECT
+      id,
+      name,
+      email,
+      phone,
+      role,
+      status
+    FROM staff
+    WHERE restaurant_id = ?
+    ORDER BY name ASC
+  `, [restaurantId]);
+
+  res.json({
+    success: true,
+    data: staff
+  });
+}));
 
 export default router;

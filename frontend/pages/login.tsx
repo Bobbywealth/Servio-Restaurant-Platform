@@ -233,35 +233,35 @@ export default function LoginPage() {
               <div className="h-px flex-1 bg-gray-600" />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <button 
+            <div className="grid grid-cols-1 xs:grid-cols-2 gap-3">
+              <button
                 type="button"
                 onClick={() => handleDemoLogin('admin@servio.com', 'admin123')}
-                className="bg-gray-700/50 hover:bg-gray-700 p-3 rounded-xl text-left transition-all group border border-gray-600 hover:border-teal-500/50 hover:shadow-[0_10px_24px_-18px_rgba(20,184,166,0.3)]"
+                className="bg-gray-700/50 hover:bg-gray-700 p-3 rounded-xl text-left transition-all group border border-gray-600 hover:border-teal-500/50 hover:shadow-[0_10px_24px_-18px_rgba(20,184,166,0.3)] min-h-[56px]"
               >
                 <p className="text-[10px] font-bold text-gray-400 uppercase mb-1 group-hover:text-teal-400 transition-colors">Admin</p>
                 <p className="text-xs font-bold text-gray-300 italic">One-tap login</p>
               </button>
-              <button 
+              <button
                 type="button"
                 onClick={() => handleDemoLogin('owner@demo.servio', 'password')}
-                className="bg-gray-700/50 hover:bg-gray-700 p-3 rounded-xl text-left transition-all group border border-gray-600 hover:border-teal-500/50 hover:shadow-[0_10px_24px_-18px_rgba(20,184,166,0.3)]"
+                className="bg-gray-700/50 hover:bg-gray-700 p-3 rounded-xl text-left transition-all group border border-gray-600 hover:border-teal-500/50 hover:shadow-[0_10px_24px_-18px_rgba(20,184,166,0.3)] min-h-[56px]"
               >
                 <p className="text-[10px] font-bold text-gray-400 uppercase mb-1 group-hover:text-teal-400 transition-colors">Owner</p>
                 <p className="text-xs font-bold text-gray-300 italic">One-tap login</p>
               </button>
-              <button 
+              <button
                 type="button"
                 onClick={() => handleDemoLogin('manager@demo.servio', 'password')}
-                className="bg-gray-700/50 hover:bg-gray-700 p-3 rounded-xl text-left transition-all group border border-gray-600 hover:border-teal-500/50 hover:shadow-[0_10px_24px_-18px_rgba(20,184,166,0.3)]"
+                className="bg-gray-700/50 hover:bg-gray-700 p-3 rounded-xl text-left transition-all group border border-gray-600 hover:border-teal-500/50 hover:shadow-[0_10px_24px_-18px_rgba(20,184,166,0.3)] min-h-[56px]"
               >
                 <p className="text-[10px] font-bold text-gray-400 uppercase mb-1 group-hover:text-teal-400 transition-colors">Manager</p>
                 <p className="text-xs font-bold text-gray-300 italic">One-tap login</p>
               </button>
-              <button 
+              <button
                 type="button"
                 onClick={() => handleDemoLogin('staff@demo.servio', 'password')}
-                className="bg-gray-700/50 hover:bg-gray-700 p-3 rounded-xl text-left transition-all group border border-gray-600 hover:border-teal-500/50 hover:shadow-[0_10px_24px_-18px_rgba(20,184,166,0.3)]"
+                className="bg-gray-700/50 hover:bg-gray-700 p-3 rounded-xl text-left transition-all group border border-gray-600 hover:border-teal-500/50 hover:shadow-[0_10px_24px_-18px_rgba(20,184,166,0.3)] min-h-[56px]"
               >
                 <p className="text-[10px] font-bold text-gray-400 uppercase mb-1 group-hover:text-teal-400 transition-colors">Staff</p>
                 <p className="text-xs font-bold text-gray-300 italic">One-tap login</p>

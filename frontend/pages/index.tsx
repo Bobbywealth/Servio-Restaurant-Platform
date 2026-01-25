@@ -1,17 +1,19 @@
-import React from 'react'
+import React, { useState } from 'react'
 import Head from 'next/head'
 import Link from 'next/link'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   Mic, Bot, Shield, Zap, Clock, Users,
   Phone, Smartphone, RefreshCw, BarChart3,
   CheckCircle2, MessageSquare, Headphones,
   Utensils, ShoppingCart, Package,
   Calendar, DollarSign, TrendingUp,
-  ArrowRight, PlayCircle, Star
+  ArrowRight, PlayCircle, Star, Menu, X
 } from 'lucide-react'
 
 export default function HomePage() {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+
   return (
     <>
       <Head>
@@ -24,18 +26,20 @@ export default function HomePage() {
         <meta property="og:url" content="https://servio.com" />
       </Head>
 
-      <div className="min-h-screen bg-gray-900 text-white">
-        {/* Navigation */}
-        <nav className="fixed top-0 left-0 right-0 bg-gray-900/95 backdrop-blur-md border-b border-gray-800 z-50">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between items-center h-16" id="top">
-              <div className="flex items-center">
-                <img
-                  src="/images/servio_logo_transparent_tight.png"
-                  alt="Servio Logo"
-                  className="h-8 w-auto brightness-0 invert"
-                />
-              </div>
+        <div className="min-h-screen bg-gray-900 text-white">
+          {/* Navigation */}
+          <nav className="fixed top-0 left-0 right-0 bg-gray-900/95 backdrop-blur-md border-b border-gray-800 z-50">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+              <div className="flex justify-between items-center h-16" id="top">
+                <div className="flex items-center">
+                  <img
+                    src="/images/servio_logo_transparent_tight.png"
+                    alt="Servio Logo"
+                    className="h-8 w-auto brightness-0 invert"
+                  />
+                </div>
+
+              {/* Desktop Navigation */}
               <div className="hidden md:flex items-center space-x-8">
                 <a href="#top" className="text-gray-300 hover:text-white font-medium transition-colors">Home</a>
                 <a href="#services" className="text-gray-300 hover:text-white font-medium transition-colors">Services</a>
@@ -44,12 +48,97 @@ export default function HomePage() {
                 <a href="#faq" className="text-gray-300 hover:text-white font-medium transition-colors">FAQ</a>
                 <Link href="/login" className="text-gray-300 hover:text-white font-medium transition-colors">Login</Link>
               </div>
+
+              {/* Mobile Menu Button */}
+              <button
+                onClick={() => setMobileMenuOpen(true)}
+                className="md:hidden p-2 rounded-lg text-gray-300 hover:text-white hover:bg-gray-800 transition-colors"
+                aria-label="Open menu"
+              >
+                <Menu className="w-6 h-6" />
+              </button>
             </div>
           </div>
         </nav>
 
+        {/* Mobile Menu Overlay */}
+        <AnimatePresence>
+          {mobileMenuOpen && (
+            <>
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setMobileMenuOpen(false)}
+                className="fixed inset-0 bg-black/60 z-50 md:hidden"
+              />
+              <motion.div
+                initial={{ x: '100%' }}
+                animate={{ x: 0 }}
+                exit={{ x: '100%' }}
+                transition={{ type: 'tween', duration: 0.3 }}
+                className="fixed top-0 right-0 bottom-0 w-3/4 max-w-sm bg-gray-900 border-l border-gray-800 z-50 md:hidden"
+              >
+                <div className="flex items-center justify-between p-4 border-b border-gray-800">
+                  <span className="text-lg font-bold text-white">Menu</span>
+                  <button
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="p-2 rounded-lg text-gray-300 hover:text-white hover:bg-gray-800 transition-colors"
+                    aria-label="Close menu"
+                  >
+                    <X className="w-6 h-6" />
+                  </button>
+                </div>
+                <nav className="flex flex-col p-4 space-y-1">
+                  <a
+                    href="#top"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="px-4 py-3 rounded-lg text-gray-300 hover:text-white hover:bg-gray-800 font-medium transition-colors"
+                  >
+                    Home
+                  </a>
+                  <a
+                    href="#services"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="px-4 py-3 rounded-lg text-gray-300 hover:text-white hover:bg-gray-800 font-medium transition-colors"
+                  >
+                    Services
+                  </a>
+                  <a
+                    href="#features"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="px-4 py-3 rounded-lg text-gray-300 hover:text-white hover:bg-gray-800 font-medium transition-colors"
+                  >
+                    Features
+                  </a>
+                  <a
+                    href="#pricing"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="px-4 py-3 rounded-lg text-gray-300 hover:text-white hover:bg-gray-800 font-medium transition-colors"
+                  >
+                    Pricing
+                  </a>
+                  <a
+                    href="#faq"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="px-4 py-3 rounded-lg text-gray-300 hover:text-white hover:bg-gray-800 font-medium transition-colors"
+                  >
+                    FAQ
+                  </a>
+                  <Link
+                    href="/login"
+                    className="px-4 py-3 rounded-lg bg-teal-600 hover:bg-teal-700 text-white font-semibold text-center transition-colors mt-4"
+                  >
+                    Login
+                  </Link>
+                </nav>
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>
+
         {/* Hero Section */}
-        <div className="relative min-h-screen flex items-center justify-center overflow-hidden">
+        <div className="relative min-h-screen flex items-center justify-center overflow-hidden py-24 md:py-0">
           {/* Background Image */}
           <div className="absolute inset-0">
             <img 
@@ -65,7 +154,7 @@ export default function HomePage() {
               initial={{ opacity: 0, y: 30 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8 }}
-              className="space-y-8"
+              className="space-y-8 md:space-y-10"
             >
               {/* Badge */}
               <motion.div
@@ -77,32 +166,32 @@ export default function HomePage() {
                 Restaurant Operating System
               </motion.div>
 
-              <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold mb-8 leading-tight">
+              <h1 className="text-3xl sm:text-4xl md:text-6xl lg:text-7xl font-bold mb-6 sm:mb-8 leading-tight">
                 The premium, voice-first platform for restaurant teams.
               </h1>
 
-              <p className="text-xl md:text-2xl text-gray-300 mb-12 max-w-4xl mx-auto leading-relaxed">
+              <p className="text-lg sm:text-xl md:text-2xl text-gray-300 mb-8 sm:mb-12 max-w-4xl mx-auto leading-relaxed">
                 Servio unifies orders, inventory, staff operations, and communications into a single, app-like system.
               </p>
 
-              <div className="flex flex-col sm:flex-row gap-6 justify-center items-center">
+              <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 justify-center items-center">
                 <Link
                   href="/dashboard/assistant"
-                  className="bg-teal-600 hover:bg-teal-700 text-white px-8 py-4 rounded-lg font-semibold text-lg transition-all duration-200 transform hover:scale-105 shadow-xl"
+                  className="w-full sm:w-auto text-center bg-teal-600 hover:bg-teal-700 text-white px-6 sm:px-8 py-3 sm:py-4 rounded-lg font-semibold text-base sm:text-lg transition-all duration-200 transform hover:scale-105 shadow-xl"
                 >
                   Get Started
                 </Link>
 
                 <Link
                   href="/book-demo"
-                  className="bg-white hover:bg-gray-100 text-gray-900 px-8 py-4 rounded-lg font-semibold text-lg transition-all duration-200"
+                  className="w-full sm:w-auto text-center bg-white hover:bg-gray-100 text-gray-900 px-6 sm:px-8 py-3 sm:py-4 rounded-lg font-semibold text-base sm:text-lg transition-all duration-200"
                 >
                   Book Demo
                 </Link>
               </div>
 
               {/* Social Proof */}
-              <div className="flex flex-col items-center mb-16">
+              <div className="flex flex-col items-center mb-12 sm:mb-16">
                 <p className="text-sm text-gray-500 mb-4">Trusted by restaurants nationwide</p>
                 <div className="flex items-center space-x-2">
                   {[1, 2, 3, 4, 5].map((star) => (
@@ -120,10 +209,10 @@ export default function HomePage() {
                 className="relative mx-auto max-w-6xl"
               >
                 <div className="bg-white rounded-3xl shadow-2xl p-2 border border-gray-200">
-                  <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl p-8">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                  <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl p-5 sm:p-8">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 mb-6">
                       {/* Voice Interface */}
-                      <div className="bg-white p-6 rounded-xl shadow-sm">
+                      <div className="bg-white p-4 sm:p-6 rounded-xl shadow-sm">
                         <div className="flex items-center mb-4">
                           <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse mr-2"></div>
                           <span className="text-sm font-medium text-gray-700">Voice Active</span>
@@ -135,7 +224,7 @@ export default function HomePage() {
                       </div>
 
                       {/* Order Queue */}
-                      <div className="bg-white p-6 rounded-xl shadow-sm">
+                      <div className="bg-white p-4 sm:p-6 rounded-xl shadow-sm">
                         <h3 className="font-semibold text-gray-900 mb-4">Live Orders</h3>
                         <div className="space-y-2">
                           <div className="flex items-center justify-between">
@@ -150,7 +239,7 @@ export default function HomePage() {
                       </div>
 
                       {/* Staff Status */}
-                      <div className="bg-white p-6 rounded-xl shadow-sm">
+                      <div className="bg-white p-4 sm:p-6 rounded-xl shadow-sm">
                         <h3 className="font-semibold text-gray-900 mb-4">Staff Status</h3>
                         <div className="flex items-center space-x-2">
                           <Users className="w-4 h-4 text-blue-600" />
@@ -174,14 +263,14 @@ export default function HomePage() {
         </div>
 
         {/* Phone Orders Section */}
-        <section id="phone-orders" className="py-24 bg-gray-850 border-t border-b border-gray-800">
+        <section id="phone-orders" className="py-16 md:py-24 bg-gray-850 border-t border-b border-gray-800">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 md:gap-16 items-center">
               <div className="space-y-6">
                 <div className="inline-flex items-center px-4 py-2 rounded-full bg-blue-500/15 border border-blue-500/30 text-blue-200 text-sm font-medium">
                   Vapi-Powered Phone Answering
                 </div>
-                <h2 className="text-4xl md:text-5xl font-bold text-white leading-tight">
+                <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold text-white leading-tight">
                   We answer every call<br />
                   <span className="text-teal-400">and take the order for you.</span>
                 </h2>
@@ -283,18 +372,18 @@ export default function HomePage() {
         </section>
 
         {/* Services Section */}
-        <section id="services" className="py-24 bg-gray-900">
+        <section id="services" className="py-16 md:py-24 bg-gray-900">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="text-center mb-16">
-              <h2 className="text-4xl md:text-5xl font-bold text-white mb-6">What Servio runs</h2>
-              <p className="text-xl text-gray-300 max-w-3xl mx-auto">
+            <div className="text-center mb-10 sm:mb-16">
+              <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold text-white mb-4 sm:mb-6">What Servio runs</h2>
+              <p className="text-lg sm:text-xl text-gray-300 max-w-3xl mx-auto">
                 One operating system for the work that costs you time, labor, and mistakes.
               </p>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 md:gap-8">
               {/* Assistant & Phone */}
-              <div className="bg-gray-800 border border-gray-700 rounded-2xl p-8 hover:border-blue-500/50 transition-all duration-300">
+              <div className="bg-gray-800 border border-gray-700 rounded-2xl p-6 sm:p-8 hover:border-blue-500/50 transition-all duration-300">
                 <div className="w-12 h-12 bg-blue-500/20 rounded-lg flex items-center justify-center mb-6">
                   <Phone className="w-6 h-6 text-blue-400" />
                 </div>
@@ -305,7 +394,7 @@ export default function HomePage() {
               </div>
 
               {/* Orders */}
-              <div className="bg-gray-800 border border-gray-700 rounded-2xl p-8 hover:border-teal-500/50 transition-all duration-300">
+              <div className="bg-gray-800 border border-gray-700 rounded-2xl p-6 sm:p-8 hover:border-teal-500/50 transition-all duration-300">
                 <div className="w-12 h-12 bg-teal-500/20 rounded-lg flex items-center justify-center mb-6">
                   <ShoppingCart className="w-6 h-6 text-teal-400" />
                 </div>
@@ -316,7 +405,7 @@ export default function HomePage() {
               </div>
 
               {/* Menu */}
-              <div className="bg-gray-800 border border-gray-700 rounded-2xl p-8 hover:border-amber-500/50 transition-all duration-300">
+              <div className="bg-gray-800 border border-gray-700 rounded-2xl p-6 sm:p-8 hover:border-amber-500/50 transition-all duration-300">
                 <div className="w-12 h-12 bg-amber-500/20 rounded-lg flex items-center justify-center mb-6">
                   <Utensils className="w-6 h-6 text-amber-400" />
                 </div>
@@ -327,7 +416,7 @@ export default function HomePage() {
               </div>
 
               {/* Marketing */}
-              <div className="bg-gray-800 border border-gray-700 rounded-2xl p-8 hover:border-pink-500/50 transition-all duration-300">
+              <div className="bg-gray-800 border border-gray-700 rounded-2xl p-6 sm:p-8 hover:border-pink-500/50 transition-all duration-300">
                 <div className="w-12 h-12 bg-pink-500/20 rounded-lg flex items-center justify-center mb-6">
                   <MessageSquare className="w-6 h-6 text-pink-400" />
                 </div>
@@ -338,7 +427,7 @@ export default function HomePage() {
               </div>
 
               {/* Staff & Ops */}
-              <div className="bg-gray-800 border border-gray-700 rounded-2xl p-8 hover:border-purple-500/50 transition-all duration-300">
+              <div className="bg-gray-800 border border-gray-700 rounded-2xl p-6 sm:p-8 hover:border-purple-500/50 transition-all duration-300">
                 <div className="w-12 h-12 bg-purple-500/20 rounded-lg flex items-center justify-center mb-6">
                   <Users className="w-6 h-6 text-purple-400" />
                 </div>
@@ -349,7 +438,7 @@ export default function HomePage() {
               </div>
 
               {/* Inventory */}
-              <div className="bg-gray-800 border border-gray-700 rounded-2xl p-8 hover:border-orange-500/50 transition-all duration-300">
+              <div className="bg-gray-800 border border-gray-700 rounded-2xl p-6 sm:p-8 hover:border-orange-500/50 transition-all duration-300">
                 <div className="w-12 h-12 bg-orange-500/20 rounded-lg flex items-center justify-center mb-6">
                   <Package className="w-6 h-6 text-orange-400" />
                 </div>
@@ -360,7 +449,7 @@ export default function HomePage() {
               </div>
 
               {/* Receipts */}
-              <div className="bg-gray-800 border border-gray-700 rounded-2xl p-8 hover:border-green-500/50 transition-all duration-300">
+              <div className="bg-gray-800 border border-gray-700 rounded-2xl p-6 sm:p-8 hover:border-green-500/50 transition-all duration-300">
                 <div className="w-12 h-12 bg-green-500/20 rounded-lg flex items-center justify-center mb-6">
                   <CheckCircle2 className="w-6 h-6 text-green-400" />
                 </div>
@@ -371,7 +460,7 @@ export default function HomePage() {
               </div>
 
               {/* Integrations */}
-              <div className="bg-gray-800 border border-gray-700 rounded-2xl p-8 hover:border-cyan-500/50 transition-all duration-300">
+              <div className="bg-gray-800 border border-gray-700 rounded-2xl p-6 sm:p-8 hover:border-cyan-500/50 transition-all duration-300">
                 <div className="w-12 h-12 bg-cyan-500/20 rounded-lg flex items-center justify-center mb-6">
                   <RefreshCw className="w-6 h-6 text-cyan-400" />
                 </div>
@@ -382,7 +471,7 @@ export default function HomePage() {
               </div>
 
               {/* Profile */}
-              <div className="bg-gray-800 border border-gray-700 rounded-2xl p-8 hover:border-indigo-500/50 transition-all duration-300">
+              <div className="bg-gray-800 border border-gray-700 rounded-2xl p-6 sm:p-8 hover:border-indigo-500/50 transition-all duration-300">
                 <div className="w-12 h-12 bg-indigo-500/20 rounded-lg flex items-center justify-center mb-6">
                   <Smartphone className="w-6 h-6 text-indigo-400" />
                 </div>
@@ -396,18 +485,18 @@ export default function HomePage() {
         </section>
 
         {/* Dashboard Experience Section */}
-        <section className="py-24 bg-gray-850">
+        <section className="py-16 md:py-24 bg-gray-850">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 md:gap-16 items-center">
               <div>
                 <div className="inline-flex items-center px-4 py-2 rounded-full bg-teal-500/20 border border-teal-500/30 text-teal-300 text-sm font-medium mb-6">
                   Dashboard Experience
                 </div>
-                <h2 className="text-4xl md:text-5xl font-bold text-white mb-6 leading-tight">
+                <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold text-white mb-4 sm:mb-6 leading-tight">
                   See the whole shift in one glance.<br />
                   <span className="text-teal-400">Decide in seconds.</span>
                 </h2>
-                <p className="text-xl text-gray-300 mb-8 leading-relaxed">
+                <p className="text-lg sm:text-xl text-gray-300 mb-6 sm:mb-8 leading-relaxed">
                   Clear numbers, clear actions. The dashboards stay simple and fast so managers and staff can execute without digging through tabs.
                 </p>
                 
@@ -455,7 +544,7 @@ export default function HomePage() {
                   </div>
 
                   {/* Charts Section */}
-                  <div className="grid grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
                     <div className="bg-gray-900 rounded-lg p-4">
                       <p className="text-xs text-gray-500 mb-2">SALES MIX</p>
                       <div className="w-12 h-12 border-4 border-teal-400 border-t-transparent rounded-full mx-auto mb-2"></div>
@@ -486,18 +575,18 @@ export default function HomePage() {
         </section>
 
         {/* Features Grid Section */}
-        <section id="features" className="py-24 bg-gray-900">
+        <section id="features" className="py-16 md:py-24 bg-gray-900">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="text-center mb-16">
-              <h2 className="text-4xl md:text-5xl font-bold text-white mb-6">Built for speed on shift</h2>
-              <p className="text-xl text-gray-300 max-w-3xl mx-auto">
+            <div className="text-center mb-10 sm:mb-16">
+              <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold text-white mb-4 sm:mb-6">Built for speed on shift</h2>
+              <p className="text-lg sm:text-xl text-gray-300 max-w-3xl mx-auto">
                 Less busywork. Fewer missed details. More control.
               </p>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
               {/* Performance Analytics */}
-              <div className="bg-gray-800 border border-gray-700 rounded-2xl p-8 hover:border-teal-500/50 transition-all duration-300">
+              <div className="bg-gray-800 border border-gray-700 rounded-2xl p-6 sm:p-8 hover:border-teal-500/50 transition-all duration-300">
                 <div className="w-12 h-12 bg-teal-500/20 rounded-lg flex items-center justify-center mb-6">
                   <BarChart3 className="w-6 h-6 text-teal-400" />
                 </div>
@@ -508,7 +597,7 @@ export default function HomePage() {
               </div>
 
               {/* Staff Management */}
-              <div className="bg-gray-800 border border-gray-700 rounded-2xl p-8 hover:border-blue-500/50 transition-all duration-300">
+              <div className="bg-gray-800 border border-gray-700 rounded-2xl p-6 sm:p-8 hover:border-blue-500/50 transition-all duration-300">
                 <div className="w-12 h-12 bg-blue-500/20 rounded-lg flex items-center justify-center mb-6">
                   <Clock className="w-6 h-6 text-blue-400" />
                 </div>
@@ -519,7 +608,7 @@ export default function HomePage() {
               </div>
 
               {/* Receipt + Cost Tracking */}
-              <div className="bg-gray-800 border border-gray-700 rounded-2xl p-8 hover:border-green-500/50 transition-all duration-300">
+              <div className="bg-gray-800 border border-gray-700 rounded-2xl p-6 sm:p-8 hover:border-green-500/50 transition-all duration-300">
                 <div className="w-12 h-12 bg-green-500/20 rounded-lg flex items-center justify-center mb-6">
                   <CheckCircle2 className="w-6 h-6 text-green-400" />
                 </div>
@@ -530,7 +619,7 @@ export default function HomePage() {
               </div>
 
               {/* Always-on Support */}
-              <div className="bg-gray-800 border border-gray-700 rounded-2xl p-8 hover:border-purple-500/50 transition-all duration-300">
+              <div className="bg-gray-800 border border-gray-700 rounded-2xl p-6 sm:p-8 hover:border-purple-500/50 transition-all duration-300">
                 <div className="w-12 h-12 bg-purple-500/20 rounded-lg flex items-center justify-center mb-6">
                   <Headphones className="w-6 h-6 text-purple-400" />
                 </div>
@@ -541,7 +630,7 @@ export default function HomePage() {
               </div>
 
               {/* Secure by Design */}
-              <div className="bg-gray-800 border border-gray-700 rounded-2xl p-8 hover:border-yellow-500/50 transition-all duration-300">
+              <div className="bg-gray-800 border border-gray-700 rounded-2xl p-6 sm:p-8 hover:border-yellow-500/50 transition-all duration-300">
                 <div className="w-12 h-12 bg-yellow-500/20 rounded-lg flex items-center justify-center mb-6">
                   <Shield className="w-6 h-6 text-yellow-400" />
                 </div>
@@ -552,7 +641,7 @@ export default function HomePage() {
               </div>
 
               {/* Reliable & Fast */}
-              <div className="bg-gray-800 border border-gray-700 rounded-2xl p-8 hover:border-red-500/50 transition-all duration-300">
+              <div className="bg-gray-800 border border-gray-700 rounded-2xl p-6 sm:p-8 hover:border-red-500/50 transition-all duration-300">
                 <div className="w-12 h-12 bg-red-500/20 rounded-lg flex items-center justify-center mb-6">
                   <Zap className="w-6 h-6 text-red-400" />
                 </div>
@@ -566,18 +655,18 @@ export default function HomePage() {
         </section>
 
         {/* Pricing Section */}
-        <section id="pricing" className="py-24 bg-gray-850">
+        <section id="pricing" className="py-16 md:py-24 bg-gray-850">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="text-center mb-16">
-              <h2 className="text-4xl md:text-5xl font-bold text-white mb-6">Pricing</h2>
-              <p className="text-xl text-gray-300 max-w-3xl mx-auto">
+            <div className="text-center mb-10 sm:mb-16">
+              <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold text-white mb-4 sm:mb-6">Pricing</h2>
+              <p className="text-lg sm:text-xl text-gray-300 max-w-3xl mx-auto">
                 Pick the plan that matches your operation. Scale up as you add locations and workflows.
               </p>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8 max-w-5xl mx-auto">
               {/* Starter Plan */}
-              <div className="bg-gray-800 border border-gray-700 rounded-2xl p-8 hover:border-gray-600 transition-all duration-300">
+              <div className="bg-gray-800 border border-gray-700 rounded-2xl p-6 sm:p-8 hover:border-gray-600 transition-all duration-300">
                 <h3 className="text-2xl font-bold text-white mb-2">Starter</h3>
                 <div className="flex items-baseline mb-6">
                   <span className="text-4xl font-bold text-white">$49</span>
@@ -591,7 +680,7 @@ export default function HomePage() {
               </div>
 
               {/* Operations Plan - Most Popular */}
-              <div className="bg-gray-800 border-2 border-teal-500 rounded-2xl p-8 relative transform scale-105">
+              <div className="bg-gray-800 border-2 border-teal-500 rounded-2xl p-6 sm:p-8 relative md:transform md:scale-105">
                 <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
                   <span className="bg-teal-500 text-white px-4 py-1 rounded-full text-sm font-medium">
                     MOST POPULAR
@@ -610,7 +699,7 @@ export default function HomePage() {
               </div>
 
               {/* Voice Plan */}
-              <div className="bg-gray-800 border border-gray-700 rounded-2xl p-8 hover:border-gray-600 transition-all duration-300">
+              <div className="bg-gray-800 border border-gray-700 rounded-2xl p-6 sm:p-8 hover:border-gray-600 transition-all duration-300">
                 <h3 className="text-2xl font-bold text-white mb-2">Voice</h3>
                 <div className="flex items-baseline mb-6">
                   <span className="text-4xl font-bold text-white">$179</span>
@@ -627,10 +716,10 @@ export default function HomePage() {
         </section>
 
         {/* FAQ Section */}
-        <section id="faq" className="py-24 bg-gray-900">
+        <section id="faq" className="py-16 md:py-24 bg-gray-900">
           <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="text-center mb-16">
-              <h2 className="text-4xl md:text-5xl font-bold text-white mb-6">Frequently Asked Questions</h2>
+            <div className="text-center mb-10 sm:mb-16">
+              <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold text-white mb-4 sm:mb-6">Frequently Asked Questions</h2>
             </div>
             
             <div className="space-y-6">
@@ -678,7 +767,7 @@ export default function HomePage() {
             <div className="text-center mt-12">
               <Link
                 href="/dashboard/assistant"
-                className="inline-flex items-center bg-teal-600 hover:bg-teal-700 text-white px-8 py-4 rounded-lg font-semibold text-lg transition-all duration-200 transform hover:scale-105"
+                className="inline-flex w-full sm:w-auto justify-center items-center bg-teal-600 hover:bg-teal-700 text-white px-6 sm:px-8 py-3 sm:py-4 rounded-lg font-semibold text-base sm:text-lg transition-all duration-200 transform hover:scale-105"
               >
                 Try the Assistant
                 <ArrowRight className="ml-2 w-5 h-5" />

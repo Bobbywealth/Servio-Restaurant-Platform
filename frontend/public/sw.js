@@ -1,12 +1,13 @@
-// LIGHTNING FAST CACHING VERSION
-const CACHE_NAME = 'servio-v2.0.1-turbo'
-const STATIC_CACHE_NAME = 'servio-static-v2.0.1'
-const DYNAMIC_CACHE_NAME = 'servio-dynamic-v2.0.1'
-const API_CACHE_NAME = 'servio-api-v2.0.1'
-const IMAGE_CACHE_NAME = 'servio-images-v2.0.1'
+// LIGHTNING FAST CACHING VERSION v3.0.0 - ULTRA TURBO MODE
+const CACHE_VERSION = 'v3.0.0-ultra'
+const STATIC_CACHE_NAME = `servio-static-${CACHE_VERSION}`
+const DYNAMIC_CACHE_NAME = `servio-dynamic-${CACHE_VERSION}`
+const API_CACHE_NAME = `servio-api-${CACHE_VERSION}`
+const IMAGE_CACHE_NAME = `servio-images-${CACHE_VERSION}`
+const FONT_CACHE_NAME = `servio-fonts-${CACHE_VERSION}`
 
-// SAFE PRE-CACHING (assets + offline only; avoid HTML route caching)
-const STATIC_CACHE_URLS = [
+// AGGRESSIVE PRE-CACHING FOR INSTANT LOADS
+const CRITICAL_ASSETS = [
   '/offline',
   '/manifest.json',
   '/manifest-tablet.webmanifest',
@@ -16,85 +17,76 @@ const STATIC_CACHE_URLS = [
   '/images/servio_logo_transparent_tight.png'
 ]
 
-// CACHE STRATEGIES
-const CACHE_STRATEGIES = {
-  CACHE_FIRST: 'cache-first',
-  NETWORK_FIRST: 'network-first',
-  STALE_WHILE_REVALIDATE: 'stale-while-revalidate',
-  NETWORK_ONLY: 'network-only',
-  CACHE_ONLY: 'cache-only'
+// CACHE CONFIGURATION
+const CACHE_CONFIG = {
+  STATIC_TTL: 365 * 24 * 60 * 60 * 1000,    // 1 year for static assets
+  DYNAMIC_TTL: 24 * 60 * 60 * 1000,          // 1 day for dynamic content
+  API_TTL: 30 * 1000,                         // 30 seconds for API (mostly network-first)
+  IMAGES_TTL: 30 * 24 * 60 * 60 * 1000,      // 30 days for images
+  FONTS_TTL: 365 * 24 * 60 * 60 * 1000,      // 1 year for fonts
+  MAX_CACHE_SIZE: 100,                        // Max items per cache
+  STALE_THRESHOLD: 5 * 60 * 1000             // 5 minutes for stale-while-revalidate
 }
 
-// CACHE EXPIRATION TIMES
-const CACHE_EXPIRATION = {
-  STATIC: 365 * 24 * 60 * 60 * 1000, // 1 year
-  DYNAMIC: 24 * 60 * 60 * 1000,      // 1 day
-  API: 5 * 60 * 1000,                // 5 minutes
-  IMAGES: 30 * 24 * 60 * 60 * 1000   // 30 days
-}
-
-// AGGRESSIVE INSTALL EVENT - PRE-CACHE EVERYTHING CRITICAL
+// ULTRA FAST INSTALL - Pre-cache critical assets
 self.addEventListener('install', (event) => {
-  console.log('🚀 Servio SW: Turbo Installing...')
+  console.log('⚡ Servio SW v3.0.0: ULTRA TURBO Installing...')
 
   event.waitUntil(
     Promise.all([
-      // Pre-cache static assets
+      // Pre-cache static assets with high priority
       caches.open(STATIC_CACHE_NAME).then(cache => {
-        console.log('⚡ SW: Pre-caching static assets')
-        return cache.addAll(STATIC_CACHE_URLS.filter(url => !url.includes('/_next/')))
+        console.log('🚀 SW: Pre-caching critical assets')
+        return cache.addAll(CRITICAL_ASSETS.filter(url => !url.includes('/_next/')))
       }),
-      // Pre-cache dynamic routes
-      caches.open(DYNAMIC_CACHE_NAME).then(cache => {
-        console.log('🔥 SW: Pre-caching dynamic routes')
-        return Promise.resolve()
-      }),
-      // Initialize API cache
-      caches.open(API_CACHE_NAME).then(() => {
-        console.log('💾 SW: API cache initialized')
-        return Promise.resolve()
-      }),
-      // Initialize image cache
-      caches.open(IMAGE_CACHE_NAME).then(() => {
-        console.log('🖼️ SW: Image cache initialized')
-        return Promise.resolve()
-      })
+      // Initialize other caches
+      caches.open(DYNAMIC_CACHE_NAME),
+      caches.open(API_CACHE_NAME),
+      caches.open(IMAGE_CACHE_NAME),
+      caches.open(FONT_CACHE_NAME)
     ]).then(() => {
-      console.log('✅ SW: All caches initialized')
+      console.log('✅ SW: All caches initialized - ULTRA TURBO MODE')
       return self.skipWaiting()
     })
   )
 })
 
-// LIGHTNING FAST ACTIVATE EVENT - CLEAN UP OLD CACHES
+// LIGHTNING ACTIVATE - Clean old caches immediately
 self.addEventListener('activate', (event) => {
-  console.log('⚡ Servio SW: Turbo Activating...')
+  console.log('⚡ Servio SW: ULTRA TURBO Activating...')
 
-  const expectedCaches = [STATIC_CACHE_NAME, DYNAMIC_CACHE_NAME, API_CACHE_NAME, IMAGE_CACHE_NAME]
+  const currentCaches = [
+    STATIC_CACHE_NAME,
+    DYNAMIC_CACHE_NAME,
+    API_CACHE_NAME,
+    IMAGE_CACHE_NAME,
+    FONT_CACHE_NAME
+  ]
 
   event.waitUntil(
     Promise.all([
-      // Clean up old caches
+      // Clean old caches aggressively
       caches.keys().then(cacheNames => {
         return Promise.all(
           cacheNames.map(cache => {
-            if (!expectedCaches.includes(cache)) {
-              console.log('🗑️ SW: Deleting old cache:', cache)
+            if (!currentCaches.includes(cache)) {
+              console.log('🗑️ SW: Cleaning old cache:', cache)
               return caches.delete(cache)
             }
           })
         )
       }),
-      // Take control of all clients immediately
+      // Take control immediately
       self.clients.claim()
     ]).then(() => {
-      console.log('✅ SW: Activation complete - TURBO MODE ENABLED')
-      // Notify clients of update
+      console.log('✅ SW: ULTRA TURBO MODE ACTIVATED')
+      // Notify all clients
       self.clients.matchAll().then(clients => {
         clients.forEach(client => {
           client.postMessage({
             type: 'SW_ACTIVATED',
-            message: 'Servio is now running in TURBO MODE! ⚡'
+            version: CACHE_VERSION,
+            message: 'Servio ULTRA TURBO MODE activated! ⚡'
           })
         })
       })
@@ -102,74 +94,112 @@ self.addEventListener('activate', (event) => {
   )
 })
 
-// ULTRA-FAST FETCH EVENT WITH ADVANCED CACHING STRATEGIES
+// ULTRA-OPTIMIZED FETCH HANDLER
 self.addEventListener('fetch', (event) => {
   const { request } = event
   const url = new URL(request.url)
 
-  // Skip non-GET requests for caching (except for specific cases)
-  if (request.method !== 'GET' && !url.pathname.startsWith('/api/')) {
+  // Skip non-GET requests (except for API mutations we want to handle)
+  if (request.method !== 'GET') {
     return
   }
 
-  // STRATEGY 1: API REQUESTS - STALE WHILE REVALIDATE
+  // Skip chrome-extension and other non-http requests
+  if (!url.protocol.startsWith('http')) {
+    return
+  }
+
+  // STRATEGY 1: API REQUESTS - Network first, fast timeout
   if (url.pathname.startsWith('/api/')) {
     event.respondWith(handleAPIRequest(request))
     return
   }
 
-  // STRATEGY 2: STATIC ASSETS - CACHE FIRST (JS, CSS, fonts)
+  // STRATEGY 2: FONTS - Cache first (immutable)
+  if (isFont(url)) {
+    event.respondWith(handleFontRequest(request))
+    return
+  }
+
+  // STRATEGY 3: STATIC ASSETS - Cache first with background update
   if (isStaticAsset(url)) {
     event.respondWith(handleStaticAsset(request))
     return
   }
 
-  // STRATEGY 3: IMAGES - CACHE FIRST WITH FALLBACK
+  // STRATEGY 4: IMAGES - Cache first with lazy update
   if (isImageRequest(url)) {
     event.respondWith(handleImageRequest(request))
     return
   }
 
-  // STRATEGY 4: PAGE NAVIGATION - NETWORK FIRST WITH CACHE FALLBACK
+  // STRATEGY 5: NAVIGATION - Network first with instant offline fallback
   if (request.mode === 'navigate') {
     event.respondWith(handleNavigation(request))
     return
   }
 
-  // STRATEGY 5: OTHER REQUESTS - STALE WHILE REVALIDATE
+  // STRATEGY 6: OTHER - Stale while revalidate
   event.respondWith(handleGenericRequest(request))
 })
 
-// API REQUEST HANDLER - NETWORK ONLY (avoid stale auth/data issues)
+// API HANDLER - Network first with fast timeout for real-time data
 async function handleAPIRequest(request) {
+  const url = new URL(request.url)
+
+  // Never cache auth endpoints
+  if (url.pathname.includes('/auth/')) {
+    try {
+      return await fetch(request)
+    } catch (error) {
+      return createOfflineResponse()
+    }
+  }
+
+  // Use network with fast timeout for other API calls
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 3000) // 3s timeout
+
   try {
-    return await fetch(request)
+    const response = await fetch(request, { signal: controller.signal })
+    clearTimeout(timeoutId)
+    return response
   } catch (error) {
-    return new Response(
-      JSON.stringify({
-        error: 'Offline',
-        message: 'Network unavailable - please try again',
-        cached: false
-      }),
-      {
-        status: 503,
-        headers: { 'Content-Type': 'application/json' }
-      }
-    )
+    clearTimeout(timeoutId)
+    return createOfflineResponse()
   }
 }
 
-// STATIC ASSET HANDLER - AGGRESSIVE CACHE FIRST
+// FONT HANDLER - Aggressive cache first (fonts rarely change)
+async function handleFontRequest(request) {
+  const cache = await caches.open(FONT_CACHE_NAME)
+  const cached = await cache.match(request)
+
+  if (cached) {
+    return cached
+  }
+
+  try {
+    const response = await fetch(request)
+    if (response.ok) {
+      // Clone and cache with long TTL
+      cache.put(request, response.clone())
+    }
+    return response
+  } catch (error) {
+    // Return empty response for fonts (page still works)
+    return new Response('', { status: 503 })
+  }
+}
+
+// STATIC ASSET HANDLER - Cache first with instant delivery
 async function handleStaticAsset(request) {
   const cache = await caches.open(STATIC_CACHE_NAME)
   const cached = await cache.match(request)
 
   if (cached) {
-    // Return cached version immediately
-    // Update in background if expired
-    if (isCacheExpired(cached, CACHE_EXPIRATION.STATIC)) {
-      updateCacheInBackground(request, STATIC_CACHE_NAME)
-    }
+    // Background update for stale assets
+    updateInBackground(request, STATIC_CACHE_NAME)
     return cached
   }
 
@@ -180,79 +210,75 @@ async function handleStaticAsset(request) {
     }
     return response
   } catch (error) {
-    // Return a placeholder or throw
     throw error
   }
 }
 
-// IMAGE REQUEST HANDLER - CACHE FIRST WITH WEBP CONVERSION
+// IMAGE HANDLER - Cache first with placeholder fallback
 async function handleImageRequest(request) {
   const cache = await caches.open(IMAGE_CACHE_NAME)
   const cached = await cache.match(request)
 
-  if (cached) return cached
-
-  try {
-    const response = await fetch(request)
-    if (isCacheableResponse(response)) {
-      cache.put(request, response.clone())
-    }
-    return response
-  } catch (error) {
-    // Return placeholder image or throw
-    return new Response(
-      '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200"><rect width="200" height="200" fill="#f3f4f6"/><text x="50%" y="50%" text-anchor="middle" dy=".3em" fill="#9ca3af">Image Unavailable</text></svg>',
-      { headers: { 'Content-Type': 'image/svg+xml' } }
-    )
-  }
-}
-
-// NAVIGATION HANDLER - NETWORK ONLY WITH OFFLINE FALLBACK
-async function handleNavigation(request) {
-  try {
-    const response = await fetch(request)
-    return response
-  } catch (error) {
-    const offlinePage = await caches.match('/offline')
-    return offlinePage || new Response(
-      '<!DOCTYPE html><html><head><title>Offline</title></head><body><h1>You are offline</h1><p>Please check your connection and try again.</p></body></html>',
-      { headers: { 'Content-Type': 'text/html' } }
-    )
-  }
-}
-
-// GENERIC REQUEST HANDLER - STALE WHILE REVALIDATE
-async function handleGenericRequest(request) {
-  return staleWhileRevalidate(request, DYNAMIC_CACHE_NAME, CACHE_EXPIRATION.DYNAMIC)
-}
-
-// STALE WHILE REVALIDATE IMPLEMENTATION
-async function staleWhileRevalidate(request, cacheName, maxAge) {
-  const cache = await caches.open(cacheName)
-  const cached = await cache.match(request)
-
-  // Always try to fetch in the background
-  const fetchPromise = fetch(request).then(response => {
-    if (isCacheableResponse(response)) {
-      cache.put(request, response.clone())
-    }
-    return response
-  }).catch(() => null)
-
-  // Return cached version if available and not expired
-  if (cached && !isCacheExpired(cached, maxAge)) {
-    // Update cache in background
-    fetchPromise.catch(() => {})
+  if (cached) {
     return cached
   }
 
-  // Otherwise wait for network
   try {
-    return await fetchPromise
+    const response = await fetch(request)
+    if (isCacheableResponse(response)) {
+      // Limit image cache size
+      trimCache(IMAGE_CACHE_NAME, CACHE_CONFIG.MAX_CACHE_SIZE)
+      cache.put(request, response.clone())
+    }
+    return response
   } catch (error) {
-    // Return stale cache as last resort
-    return cached || Promise.reject(error)
+    return createPlaceholderImage()
   }
+}
+
+// NAVIGATION HANDLER - Network first with instant offline fallback
+async function handleNavigation(request) {
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 5000) // 5s timeout for navigation
+
+  try {
+    const response = await fetch(request, { signal: controller.signal })
+    clearTimeout(timeoutId)
+    return response
+  } catch (error) {
+    clearTimeout(timeoutId)
+    // Return offline page instantly
+    const offlinePage = await caches.match('/offline')
+    return offlinePage || createOfflinePage()
+  }
+}
+
+// GENERIC HANDLER - Stale while revalidate
+async function handleGenericRequest(request) {
+  const cache = await caches.open(DYNAMIC_CACHE_NAME)
+  const cached = await cache.match(request)
+
+  const fetchPromise = fetch(request)
+    .then(response => {
+      if (isCacheableResponse(response)) {
+        cache.put(request, response.clone())
+      }
+      return response
+    })
+    .catch(() => null)
+
+  // Return cached immediately if available
+  if (cached) {
+    fetchPromise.catch(() => {}) // Update in background
+    return cached
+  }
+
+  // Wait for network if no cache
+  const response = await fetchPromise
+  if (response) return response
+
+  // Return offline response as last resort
+  return createOfflineResponse()
 }
 
 // UTILITY FUNCTIONS
@@ -260,130 +286,180 @@ function isStaticAsset(url) {
   return url.pathname.includes('/_next/static/') ||
          url.pathname.endsWith('.js') ||
          url.pathname.endsWith('.css') ||
-         url.pathname.endsWith('.woff2') ||
+         url.pathname.endsWith('.json')
+}
+
+function isFont(url) {
+  return url.pathname.endsWith('.woff2') ||
          url.pathname.endsWith('.woff') ||
-         url.pathname.includes('/manifest.json')
+         url.pathname.endsWith('.ttf') ||
+         url.pathname.endsWith('.otf') ||
+         url.pathname.includes('fonts.googleapis.com') ||
+         url.pathname.includes('fonts.gstatic.com')
 }
 
 function isImageRequest(url) {
-  return url.pathname.match(/\.(jpg|jpeg|png|gif|webp|svg|ico)$/i)
+  return /\.(jpg|jpeg|png|gif|webp|svg|ico|avif)$/i.test(url.pathname)
 }
 
 function isCacheableResponse(response) {
-  if (!response) return false
-  if (response.status === 206) return false
+  if (!response || response.status === 206) return false
   const contentType = response.headers.get('content-type') || ''
+  // Don't cache HTML to avoid stale pages
   if (contentType.includes('text/html')) return false
   return response.ok
 }
 
-function isCacheExpired(response, maxAge) {
-  const dateHeader = response.headers.get('date')
-  if (!dateHeader) return true
-
-  const cacheDate = new Date(dateHeader)
-  return Date.now() - cacheDate.getTime() > maxAge
-}
-
-async function updateCacheInBackground(request, cacheName) {
+async function updateInBackground(request, cacheName) {
   try {
     const response = await fetch(request)
     if (isCacheableResponse(response)) {
       const cache = await caches.open(cacheName)
-      cache.put(request, response.clone())
+      cache.put(request, response)
     }
   } catch (error) {
-    // Ignore background update failures
+    // Silently fail background updates
   }
 }
 
-// BACKGROUND SYNC FOR OFFLINE ACTIONS - TURBO MODE
-self.addEventListener('sync', (event) => {
-  console.log('⚡ SW: Background sync triggered -', event.tag)
+async function trimCache(cacheName, maxSize) {
+  const cache = await caches.open(cacheName)
+  const keys = await cache.keys()
+  if (keys.length > maxSize) {
+    // Delete oldest entries
+    const toDelete = keys.slice(0, keys.length - maxSize)
+    await Promise.all(toDelete.map(key => cache.delete(key)))
+  }
+}
 
-  if (event.tag === 'background-sync') {
-    event.waitUntil(handleBackgroundSync())
+function createOfflineResponse() {
+  return new Response(
+    JSON.stringify({
+      error: 'Offline',
+      message: 'Network unavailable - please check your connection',
+      offline: true
+    }),
+    {
+      status: 503,
+      headers: { 'Content-Type': 'application/json' }
+    }
+  )
+}
+
+function createPlaceholderImage() {
+  return new Response(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200">
+      <rect width="200" height="200" fill="#1a1a1a"/>
+      <text x="50%" y="50%" text-anchor="middle" dy=".3em" fill="#6a6a6a" font-family="system-ui" font-size="12">
+        Image unavailable
+      </text>
+    </svg>`,
+    { headers: { 'Content-Type': 'image/svg+xml' } }
+  )
+}
+
+function createOfflinePage() {
+  return new Response(
+    `<!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1">
+      <title>Offline - Servio</title>
+      <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+          font-family: system-ui, -apple-system, sans-serif;
+          background: #1a1a1a; color: #fff;
+          min-height: 100vh; display: flex;
+          align-items: center; justify-content: center;
+          text-align: center; padding: 2rem;
+        }
+        h1 { font-size: 2rem; margin-bottom: 1rem; }
+        p { color: #888; margin-bottom: 2rem; }
+        button {
+          background: #c4a661; color: #1a1a1a;
+          border: none; padding: 1rem 2rem;
+          border-radius: 0.5rem; font-weight: 600;
+          cursor: pointer; font-size: 1rem;
+        }
+        button:hover { opacity: 0.9; }
+      </style>
+    </head>
+    <body>
+      <div>
+        <h1>You're Offline</h1>
+        <p>Check your internet connection and try again.</p>
+        <button onclick="window.location.reload()">Retry</button>
+      </div>
+    </body>
+    </html>`,
+    { headers: { 'Content-Type': 'text/html' } }
+  )
+}
+
+// BACKGROUND SYNC - Queue offline actions
+self.addEventListener('sync', (event) => {
+  console.log('⚡ SW: Background sync -', event.tag)
+  if (event.tag === 'servio-sync') {
+    event.waitUntil(processOfflineQueue())
   }
 })
 
-async function handleBackgroundSync() {
-  try {
-    // Sync any offline data
-    const offlineData = await getOfflineData()
-    if (offlineData.length > 0) {
-      console.log(`🔄 SW: Syncing ${offlineData.length} offline actions`)
-      await syncOfflineData(offlineData)
-    }
-  } catch (error) {
-    console.error('❌ SW: Background sync failed:', error)
-  }
+async function processOfflineQueue() {
+  // This will be handled by the app when back online
+  console.log('🔄 SW: Processing offline queue')
 }
 
-// ENHANCED PUSH NOTIFICATIONS
+// PUSH NOTIFICATIONS - Enhanced
 self.addEventListener('push', (event) => {
-  let options = {
+  const defaultOptions = {
     body: 'New notification from Servio',
-    icon: '/icons/icon-192x192.png',
-    badge: '/icons/badge-72x72.png',
+    icon: '/icons/servio-icon-192.svg',
+    badge: '/icons/servio-icon-192.svg',
     vibrate: [200, 100, 200],
-    data: {
-      dateOfArrival: Date.now(),
-      primaryKey: Date.now()
-    },
+    data: { dateOfArrival: Date.now() },
     actions: [
-      {
-        action: 'view',
-        title: '👀 View',
-        icon: '/icons/view.png'
-      },
-      {
-        action: 'dismiss',
-        title: '❌ Dismiss',
-        icon: '/icons/dismiss.png'
-      }
+      { action: 'view', title: 'View' },
+      { action: 'dismiss', title: 'Dismiss' }
     ],
-    requireInteraction: true,
-    silent: false
+    requireInteraction: true
   }
 
+  let options = defaultOptions
   if (event.data) {
     try {
-      const payload = event.data.json()
-      options = { ...options, ...payload }
-    } catch (error) {
+      options = { ...defaultOptions, ...event.data.json() }
+    } catch {
       options.body = event.data.text()
     }
   }
 
   event.waitUntil(
-    self.registration.showNotification('⚡ Servio Restaurant Platform', options)
+    self.registration.showNotification('⚡ Servio', options)
   )
 })
 
-// SMART NOTIFICATION CLICK HANDLING
+// NOTIFICATION CLICK - Smart routing
 self.addEventListener('notificationclick', (event) => {
   event.notification.close()
-
-  const action = event.action
   const data = event.notification.data || {}
 
-  if (action === 'view' || !action) {
-    event.waitUntil(
-      clients.matchAll({ type: 'window' }).then(clients => {
-        // Try to focus existing window
-        for (const client of clients) {
-          if (client.url.includes('/dashboard') && 'focus' in client) {
-            return client.focus()
-          }
+  event.waitUntil(
+    clients.matchAll({ type: 'window' }).then(clientList => {
+      // Focus existing window if available
+      for (const client of clientList) {
+        if ('focus' in client) {
+          return client.focus()
         }
-        // Open new window if none found
-        return clients.openWindow('/dashboard/')
-      })
-    )
-  }
+      }
+      // Open new window
+      return clients.openWindow(data.url || '/tablet/orders')
+    })
+  )
 })
 
-// ENHANCED MESSAGE HANDLING WITH PERFORMANCE METRICS
+// MESSAGE HANDLER - Inter-client communication
 self.addEventListener('message', (event) => {
   const { type, payload } = event.data || {}
 
@@ -392,59 +468,28 @@ self.addEventListener('message', (event) => {
       self.skipWaiting()
       break
 
-    case 'GET_CACHE_STATS':
-      event.ports[0].postMessage(getCacheStats())
+    case 'GET_VERSION':
+      event.ports[0]?.postMessage({ version: CACHE_VERSION })
       break
 
     case 'CLEAR_CACHES':
-      event.waitUntil(clearAllCaches().then(() => {
-        event.ports[0].postMessage({ success: true })
-      }))
+      event.waitUntil(
+        caches.keys().then(names =>
+          Promise.all(names.map(name => caches.delete(name)))
+        ).then(() => {
+          event.ports[0]?.postMessage({ success: true })
+        })
+      )
       break
 
-    case 'PERFORMANCE_MARK':
-      // Handle performance marks from client
-      console.log('📊 SW: Performance mark:', payload)
+    case 'KEEP_ALIVE':
+      // Used to prevent idle timeout - respond with acknowledgment
+      event.ports[0]?.postMessage({ alive: true, timestamp: Date.now() })
       break
 
     default:
-      console.log('🔔 SW: Received message:', event.data)
+      console.log('🔔 SW: Message received:', type)
   }
 })
 
-// UTILITY FUNCTIONS FOR OFFLINE SYNC
-async function getOfflineData() {
-  // In a real app, this would get data from IndexedDB
-  return []
-}
-
-async function syncOfflineData(data) {
-  // Sync offline data to server
-  return Promise.resolve()
-}
-
-async function getCacheStats() {
-  const cacheNames = await caches.keys()
-  const stats = {}
-
-  for (const cacheName of cacheNames) {
-    const cache = await caches.open(cacheName)
-    const keys = await cache.keys()
-    stats[cacheName] = keys.length
-  }
-
-  return stats
-}
-
-async function clearAllCaches() {
-  const cacheNames = await caches.keys()
-  return Promise.all(cacheNames.map(name => caches.delete(name)))
-}
-
-// PERFORMANCE MONITORING
-console.log('⚡ Servio Service Worker v2.0.0 - TURBO MODE ACTIVATED! 🚀')
-
-// Report SW performance metrics
-self.addEventListener('activate', () => {
-  console.log('📊 SW Performance: Activation time -', performance.now(), 'ms')
-})
+console.log(`⚡ Servio Service Worker ${CACHE_VERSION} - ULTRA TURBO MODE 🚀`)

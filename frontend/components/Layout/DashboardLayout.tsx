@@ -26,7 +26,8 @@ import {
   Mail,
   Store,
   Wifi,
-  FileText
+  FileText,
+  CheckCircle
 } from 'lucide-react';
 
 interface DashboardLayoutProps {
@@ -145,6 +146,14 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       roles: ['manager', 'owner', 'admin']
     },
     {
+      name: 'Tasks',
+      href: '/dashboard/tasks',
+      icon: CheckCircle,
+      description: 'Team task manager',
+      color: 'text-servio-green-500',
+      roles: ['manager', 'owner', 'admin']
+    },
+    {
       name: 'Integrations',
       href: '/dashboard/integrations',
       icon: Wifi,
@@ -175,7 +184,8 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     { name: 'Orders', href: '/dashboard/orders', icon: ClipboardList, roles: ['staff', 'manager', 'owner', 'admin'] },
     { name: 'Menu', href: '/dashboard/menu-management', icon: UtensilsCrossed, roles: ['manager', 'owner', 'admin'] },
     { name: 'Assistant', href: '/dashboard/assistant', icon: Mic, roles: ['manager', 'owner', 'admin'] },
-    { name: 'Staff', href: '/dashboard/staff', icon: Users, roles: ['manager', 'owner', 'admin'] }
+    { name: 'Staff', href: '/dashboard/staff', icon: Users, roles: ['manager', 'owner', 'admin'] },
+    { name: 'Tasks', href: '/dashboard/tasks', icon: CheckCircle, roles: ['manager', 'owner', 'admin'] }
   ];
 
   const mobileNav = allMobileNav.filter(item => 
