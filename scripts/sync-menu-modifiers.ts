@@ -122,15 +122,16 @@ async function upsertModifierOption(
   option: ModifierOption,
   displayOrder: number
 ) {
+  const existingById = await db.get(
+    `SELECT id, group_id FROM modifier_options WHERE id = ? AND deleted_at IS NULL`,
+    [option.id]
+  );
+  const existingByName = await db.get(
+    `SELECT id FROM modifier_options WHERE group_id = ? AND LOWER(name) = LOWER(?) AND deleted_at IS NULL`,
+    [groupId, option.name]
+  );
   const existing =
-    await db.get(
-      `SELECT id FROM modifier_options WHERE id = ? AND group_id = ? AND deleted_at IS NULL`,
-      [option.id, groupId]
-    ) ||
-    await db.get(
-      `SELECT id FROM modifier_options WHERE group_id = ? AND LOWER(name) = LOWER(?) AND deleted_at IS NULL`,
-      [groupId, option.name]
-    );
+    (existingById && existingById.group_id === groupId ? existingById : null) || existingByName;
 
   const priceDelta = option.priceDelta ?? 0;
   const isSoldOut = option.isSoldOut ? 1 : 0;
@@ -155,13 +156,14 @@ async function upsertModifierOption(
   }
 
   if (!existing) {
+    const resolvedOptionId = existingById ? uuidv4() : option.id;
     await db.run(
       `INSERT INTO modifier_options (
         id, group_id, restaurant_id, name, price_delta, is_sold_out, is_preselected,
         display_order, is_active, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
       [
-        option.id,
+        resolvedOptionId,
         groupId,
         restaurantId,
         option.name,
