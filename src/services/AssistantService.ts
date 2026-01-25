@@ -6,6 +6,7 @@ import { DatabaseService } from './DatabaseService';
 import { logger } from '../utils/logger';
 import { ensureUploadsDir } from '../utils/uploads';
 import { v4 as uuidv4 } from 'uuid';
+import { findBestMatches, fuzzyMatch, needsConfirmation, getConfidenceLevel } from '../utils/fuzzyMatch';
 
 interface AssistantResponse {
   transcript?: string;
@@ -57,6 +58,15 @@ export class AssistantService {
         };
       }
 
+      // Check if transcript is too short or unclear
+      if (transcript.trim().length < 3) {
+        return {
+          response: "I only heard a very short sound. Can you try again?",
+          actions: [],
+          processingTime: Date.now() - startTime
+        };
+      }
+
       // 2. Process the text with LLM
       const result = await this.processText(transcript, userId);
 
@@ -68,13 +78,24 @@ export class AssistantService {
 
     } catch (error) {
       logger.error('Failed to process audio:', error);
+
+      // Provide more specific error messages
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      let userMessage = "I'm having trouble processing your request right now. Please try again.";
+
+      if (errorMessage.includes('transcribe') || errorMessage.includes('audio')) {
+        userMessage = "I had trouble understanding the audio. Could you speak a bit louder or clearer?";
+      } else if (errorMessage.includes('timeout')) {
+        userMessage = "The request took too long. Can you try again with a shorter command?";
+      }
+
       return {
-        response: "I'm having trouble processing your request right now. Please try again.",
+        response: userMessage,
         actions: [{
           type: 'error',
           status: 'error',
           description: 'Audio processing failed',
-          error: error instanceof Error ? error.message : 'Unknown error'
+          error: errorMessage
         }],
         processingTime: Date.now() - startTime
       };
@@ -127,13 +148,28 @@ export class AssistantService {
 
     } catch (error) {
       logger.error('Failed to process text:', error);
+
+      // Provide more helpful error messages
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      let userMessage = "I'm having trouble understanding your request. Could you try rephrasing it?";
+
+      if (errorMessage.includes('not found')) {
+        userMessage = errorMessage; // Use the specific "not found" error message
+      } else if (errorMessage.includes('Did you mean')) {
+        userMessage = errorMessage; // Use the clarification question
+      } else if (errorMessage.includes('multiple items')) {
+        userMessage = errorMessage; // Use the disambiguation message
+      } else if (errorMessage.includes('API')) {
+        userMessage = "I'm temporarily having connection issues. Please try again in a moment.";
+      }
+
       return {
-        response: "I'm having trouble understanding your request. Could you try rephrasing it?",
+        response: userMessage,
         actions: [{
           type: 'error',
           status: 'error',
           description: 'Text processing failed',
-          error: error instanceof Error ? error.message : 'Unknown error'
+          error: errorMessage
         }],
         processingTime: Date.now() - startTime
       };
@@ -231,24 +267,42 @@ YOUR CAPABILITIES:
 4. Tasks: View daily tasks, mark as complete
 5. General info: Provide restaurant operational assistance
 
-SAFETY RULES:
-1. Always confirm destructive actions (86ing items, large inventory changes)
-2. If multiple items match a request, ask for clarification
-3. Log all actions for audit purposes
-4. For 86 operations, confirm which channels (DoorDash, Uber Eats, GrubHub)
+CRITICAL SAFETY & CLARIFICATION RULES:
+1. ALWAYS confirm destructive actions (86ing items, large inventory changes)
+2. If you're NOT 100% certain what the user means, ASK for clarification - NEVER guess
+3. If multiple items could match, list them and ask which one
+4. For unclear audio or ambiguous commands, say "Can you repeat that?" or "Did you mean [X]?"
+5. For 86 operations, confirm which channels (DoorDash, Uber Eats, GrubHub)
+6. When user says similar-sounding item names, confirm: "Do you mean [item A] or [item B]?"
+
+SMART MATCHING:
+- Use fuzzy matching to find items even with slight misspellings
+- If confidence is medium (70-84%), ask for confirmation: "Did you mean [best match]?"
+- If confidence is low (<70%), list top matches and ask user to clarify
+- Accept variations: "jerk chicken", "chicken jerk", "da jerk chicken" → all match "Jerk Chicken"
 
 RESPONSE STYLE:
 - Be concise and actionable
 - Use restaurant terminology naturally
 - Confirm actions taken with specific details
-- If you need clarification, ask direct questions
+- If you're unsure, ALWAYS ask - don't assume
+- After completing an action, confirm what was done
 
 Examples:
+✅ GOOD:
 - "I'm marking Jerk Chicken unavailable on all platforms. This will take about 30 seconds to sync."
-- "I found 3 orders waiting over 15 minutes: #214, #215, #217. Which one do you want to update?"
-- "Added 2 cases of chicken to inventory. Current level: 27 pieces."
+- "I found 3 pending orders: #214 (15 mins), #215 (18 mins), #217 (22 mins). Which one should I update?"
+- "Did you mean 'Jerk Chicken' or 'BBQ Chicken'? I found both in the menu."
+- "I didn't quite catch that. Can you repeat the item name?"
+- "Just to confirm - you want to 86 the Beef Patties, correct?"
 
-Use the available tools to perform actions. Always be helpful and professional.`;
+❌ BAD:
+- Guessing which item the user meant without asking
+- Performing destructive actions without confirmation
+- Assuming you understood unclear audio
+- Not listing options when multiple matches exist
+
+Use the available tools to perform actions. Always be helpful, professional, and CAUTIOUS.`;
   }
 
   private getTools(): any[] {
@@ -529,14 +583,41 @@ Use the available tools to perform actions. Always be helpful and professional.`
     const user = await this.db.get('SELECT restaurant_id FROM users WHERE id = ?', [userId]);
     const restaurantId = user?.restaurant_id || 'demo-restaurant-1';
 
-    // Find the menu item
-    const item = await this.db.get(
-      'SELECT * FROM menu_items WHERE name LIKE ? AND restaurant_id = ?',
-      [`%${itemName}%`, restaurantId]
+    // Get all menu items for fuzzy matching
+    const allItems = await this.db.all(
+      'SELECT * FROM menu_items WHERE restaurant_id = ?',
+      [restaurantId]
     );
 
+    if (allItems.length === 0) {
+      throw new Error('No menu items found in your restaurant');
+    }
+
+    // Try exact match first
+    let item = allItems.find((i: any) => i.name.toLowerCase() === itemName.toLowerCase());
+
+    // If no exact match, use fuzzy matching
     if (!item) {
-      throw new Error(`Menu item "${itemName}" not found`);
+      const matches = findBestMatches(itemName, allItems, 'name', 60, 5);
+
+      if (matches.length === 0) {
+        throw new Error(`I couldn't find any menu item similar to "${itemName}". Can you try again with the exact name?`);
+      }
+
+      // If top match needs confirmation (medium confidence)
+      if (matches.length === 1 && needsConfirmation(matches[0].score)) {
+        throw new Error(`Did you mean "${matches[0].item.name}"? Please confirm the exact item name.`);
+      }
+
+      // If multiple similar matches
+      if (matches.length > 1 && matches[0].score < 95) {
+        const matchList = matches.map((m, i) => `${i + 1}. ${m.item.name} (${m.score}% match)`).join('\n');
+        throw new Error(`I found multiple items similar to "${itemName}":\n${matchList}\n\nWhich one did you mean?`);
+      }
+
+      // High confidence match
+      item = matches[0].item;
+      logger.info(`Fuzzy matched "${itemName}" to "${item.name}" with ${matches[0].score}% confidence`);
     }
 
     // Update availability
@@ -605,14 +686,41 @@ Use the available tools to perform actions. Always be helpful and professional.`
     const user = await this.db.get('SELECT restaurant_id FROM users WHERE id = ?', [userId]);
     const restaurantId = user?.restaurant_id || 'demo-restaurant-1';
 
-    // Find the inventory item
-    const item = await this.db.get(
-      'SELECT * FROM inventory_items WHERE name LIKE ? AND restaurant_id = ?',
-      [`%${itemName}%`, restaurantId]
+    // Get all inventory items for fuzzy matching
+    const allItems = await this.db.all(
+      'SELECT * FROM inventory_items WHERE restaurant_id = ?',
+      [restaurantId]
     );
 
+    if (allItems.length === 0) {
+      throw new Error('No inventory items found in your restaurant');
+    }
+
+    // Try exact match first
+    let item = allItems.find((i: any) => i.name.toLowerCase() === itemName.toLowerCase());
+
+    // If no exact match, use fuzzy matching
     if (!item) {
-      throw new Error(`Inventory item "${itemName}" not found`);
+      const matches = findBestMatches(itemName, allItems, 'name', 60, 5);
+
+      if (matches.length === 0) {
+        throw new Error(`I couldn't find any inventory item similar to "${itemName}". Can you try again with the exact name?`);
+      }
+
+      // If top match needs confirmation (medium confidence)
+      if (matches.length === 1 && needsConfirmation(matches[0].score)) {
+        throw new Error(`Did you mean "${matches[0].item.name}"? Please confirm the exact item name.`);
+      }
+
+      // If multiple similar matches
+      if (matches.length > 1 && matches[0].score < 95) {
+        const matchList = matches.map((m, i) => `${i + 1}. ${m.item.name} (${m.score}% match)`).join('\n');
+        throw new Error(`I found multiple items similar to "${itemName}":\n${matchList}\n\nWhich one did you mean?`);
+      }
+
+      // High confidence match
+      item = matches[0].item;
+      logger.info(`Fuzzy matched "${itemName}" to "${item.name}" with ${matches[0].score}% confidence`);
     }
 
     const newQuantity = item.on_hand_qty + quantity;
