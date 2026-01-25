@@ -136,7 +136,7 @@ export function CategorySidebar({
 
   return (
     <aside className="w-full md:w-80 shrink-0 bg-gray-900/60 border border-gray-800 rounded-2xl p-4">
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
         <div className="text-sm font-bold tracking-wide text-gray-200 uppercase">Categories</div>
         <button
           type="button"
@@ -150,7 +150,7 @@ export function CategorySidebar({
 
       <DndContext sensors={sensors} onDragEnd={onDragEnd}>
         <SortableContext items={ids} strategy={verticalListSortingStrategy}>
-          <div className="space-y-2">
+          <div className="space-y-2 max-h-[50vh] overflow-y-auto md:max-h-none md:overflow-visible">
             {ordered.map((c) => (
               <SortableCategoryRow
                 key={c.id}
@@ -166,4 +166,3 @@ export function CategorySidebar({
     </aside>
   );
 }
-

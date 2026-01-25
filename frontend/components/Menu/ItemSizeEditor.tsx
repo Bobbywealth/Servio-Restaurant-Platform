@@ -51,15 +51,15 @@ export function ItemSizeEditor({ sizes, onCreate, onUpdate, onDelete }: Props) {
 
       <div className="mt-3 space-y-2">
         {ordered.map((s) => (
-          <div key={s.id} className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2">
+          <div key={s.id} className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 px-3 py-2">
             <input
-              className="w-28 rounded-lg border border-slate-200 px-2 py-1 text-sm font-semibold"
+              className="w-full sm:w-28 rounded-lg border border-slate-200 px-2 py-1 text-sm font-semibold"
               value={s.sizeName}
               onChange={(e) => onUpdate(s.id, { sizeName: e.target.value })}
               placeholder="Medium"
             />
             <input
-              className="w-28 rounded-lg border border-slate-200 px-2 py-1 text-sm font-semibold"
+              className="w-full sm:w-28 rounded-lg border border-slate-200 px-2 py-1 text-sm font-semibold"
               value={String(s.price)}
               onChange={(e) => {
                 const v = e.target.value;
@@ -73,7 +73,7 @@ export function ItemSizeEditor({ sizes, onCreate, onUpdate, onDelete }: Props) {
             <button
               type="button"
               className={clsx(
-                'ml-auto inline-flex items-center gap-2 rounded-lg px-2 py-1 text-sm font-bold',
+                'sm:ml-auto inline-flex items-center gap-2 rounded-lg px-2 py-1 text-sm font-bold',
                 s.isPreselected ? 'bg-teal-100 text-teal-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               )}
               disabled={busy === s.id}
@@ -112,22 +112,22 @@ export function ItemSizeEditor({ sizes, onCreate, onUpdate, onDelete }: Props) {
       </div>
 
       <div className="mt-4 rounded-xl border border-dashed border-slate-300 p-3">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <input
-            className="w-28 rounded-lg border border-slate-200 px-2 py-1 text-sm font-semibold"
+            className="w-full sm:w-28 rounded-lg border border-slate-200 px-2 py-1 text-sm font-semibold"
             value={draftName}
             onChange={(e) => setDraftName(e.target.value)}
             placeholder="Small"
             maxLength={40}
           />
           <input
-            className="w-28 rounded-lg border border-slate-200 px-2 py-1 text-sm font-semibold"
+            className="w-full sm:w-28 rounded-lg border border-slate-200 px-2 py-1 text-sm font-semibold"
             value={draftPrice}
             onChange={(e) => setDraftPrice(e.target.value)}
             placeholder="13.50"
             inputMode="decimal"
           />
-          <label className="ml-auto flex items-center gap-2 text-sm font-semibold text-slate-600">
+          <label className="sm:ml-auto flex items-center gap-2 text-sm font-semibold text-slate-600">
             <input
               type="checkbox"
               checked={draftPre}
@@ -138,7 +138,7 @@ export function ItemSizeEditor({ sizes, onCreate, onUpdate, onDelete }: Props) {
           <button
             type="button"
             disabled={!canAdd}
-            className="inline-flex items-center gap-2 rounded-lg bg-black text-white px-3 py-2 text-sm font-black disabled:opacity-50"
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-lg bg-black text-white px-3 py-2 text-sm font-black disabled:opacity-50"
             onClick={async () => {
               const price = Number(draftPrice);
               if (!draftName.trim() || !Number.isFinite(price)) return;
@@ -161,4 +161,3 @@ export function ItemSizeEditor({ sizes, onCreate, onUpdate, onDelete }: Props) {
     </div>
   );
 }
-
