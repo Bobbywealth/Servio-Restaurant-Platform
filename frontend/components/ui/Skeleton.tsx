@@ -182,3 +182,51 @@ export const StatCardSkeleton: React.FC = () => (
     </div>
   </div>
 )
+
+export const MenuItemSkeleton: React.FC = () => (
+  <div className="card">
+    <div className="flex items-start gap-4">
+      <Skeleton variant="rounded" width={80} height={80} />
+      <div className="flex-1 space-y-2">
+        <Skeleton variant="text" width="70%" height={18} />
+        <Skeleton variant="text" width="50%" height={14} />
+        <Skeleton variant="text" width="30%" height={16} />
+      </div>
+    </div>
+    <div className="mt-3 pt-3 border-t border-surface-200 dark:border-surface-700 flex gap-2">
+      <Skeleton variant="rounded" width={80} height={32} />
+      <Skeleton variant="rounded" width={80} height={32} />
+      <Skeleton variant="rounded" width={80} height={32} />
+    </div>
+  </div>
+)
+
+export const TaskSkeleton: React.FC = () => (
+  <div className="card">
+    <div className="flex items-start justify-between mb-3">
+      <div className="flex-1 space-y-2">
+        <Skeleton variant="text" width="60%" height={18} />
+        <Skeleton variant="text" width="80%" height={14} />
+      </div>
+      <Skeleton variant="rounded" width={70} height={24} />
+    </div>
+    <div className="flex items-center gap-3 mt-3 pt-3 border-t border-surface-200 dark:border-surface-700">
+      <Skeleton variant="circular" width={24} height={24} />
+      <Skeleton variant="text" width="30%" height={12} />
+      <Skeleton variant="text" width="25%" height={12} />
+    </div>
+  </div>
+)
+
+export const MessageSkeleton: React.FC = () => (
+  <div className="flex gap-3 mb-4">
+    <Skeleton variant="circular" width={40} height={40} />
+    <div className="flex-1 space-y-2">
+      <div className="flex items-center gap-2">
+        <Skeleton variant="text" width="30%" height={14} />
+        <Skeleton variant="text" width="20%" height={12} />
+      </div>
+      <Skeleton variant="rounded" width="80%" height={60} />
+    </div>
+  </div>
+)

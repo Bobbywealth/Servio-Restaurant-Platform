@@ -2,14 +2,14 @@ import React, { memo, useMemo, useEffect, useState } from 'react'
 import Head from 'next/head'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
-import dynamic from 'next/dynamic'
 import { useUser } from '../../contexts/UserContext'
 import { api } from '../../lib/api'
 import { useSocket } from '../../lib/socket'
-import { MessageCircle, ShoppingCart, Package, CheckSquare, TrendingUp, Sparkles, ArrowRight, Mic, Zap, Activity } from 'lucide-react'
+import { MessageCircle, ShoppingCart, Package, TrendingUp, Sparkles, ArrowRight, Mic, Zap, Activity, Clock } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 import DashboardLayout from '../../components/Layout/DashboardLayout'
+import LiveClock from '../../components/ui/LiveClock'
 
 // PREMIUM STAT CARD WITH GLASSMORPHISM
 const StatCard = memo(({ stat, index }: { stat: any; index: number }) => (
@@ -22,11 +22,11 @@ const StatCard = memo(({ stat, index }: { stat: any; index: number }) => (
   >
     {/* Gradient background glow */}
     <div className={`absolute inset-0 rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 blur-xl ${stat.glowColor || 'bg-primary-500/30'}`} />
-    
+
     <div className="relative bg-white/80 dark:bg-surface-800/80 backdrop-blur-xl rounded-3xl p-6 shadow-xl border border-white/50 dark:border-surface-700/50 overflow-hidden">
       {/* Decorative gradient orb */}
       <div className={`absolute -top-10 -right-10 w-32 h-32 rounded-full opacity-20 ${stat.color || 'bg-primary-500'} blur-2xl`} />
-      
+
       <div className="relative flex items-start justify-between">
         <div>
           <p className="text-sm font-semibold text-surface-500 dark:text-surface-400 uppercase tracking-wider mb-1">
@@ -49,16 +49,11 @@ const StatCard = memo(({ stat, index }: { stat: any; index: number }) => (
           <stat.icon className="h-7 w-7 text-white" />
         </motion.div>
       </div>
-      
-      <div className="mt-5 pt-4 border-t border-surface-200/50 dark:border-surface-700/50 flex items-center justify-between">
-        <span className={`text-sm font-bold inline-flex items-center gap-1 px-3 py-1.5 rounded-full ${
-          stat.changeType === 'increase'
-            ? 'text-emerald-700 bg-emerald-100 dark:text-emerald-300 dark:bg-emerald-900/30'
-            : 'text-rose-700 bg-rose-100 dark:text-rose-300 dark:bg-rose-900/30'
-        }`}>
-          {stat.changeType === 'increase' ? '↑' : '↓'} {stat.change}
+
+      <div className="mt-5 pt-4 border-t border-surface-200/50 dark:border-surface-700/50">
+        <span className="text-sm font-medium text-surface-600 dark:text-surface-400">
+          {stat.change}
         </span>
-        <span className="text-xs font-medium text-surface-400">vs yesterday</span>
       </div>
     </div>
   </motion.div>
@@ -68,7 +63,7 @@ StatCard.displayName = 'StatCard'
 
 // PREMIUM SKELETON LOADER
 const SkeletonCard = memo(({ index = 0 }: { index?: number }) => (
-  <motion.div 
+  <motion.div
     className="relative bg-white/60 dark:bg-surface-800/60 backdrop-blur-xl rounded-3xl p-6 shadow-xl border border-white/30 dark:border-surface-700/30 overflow-hidden"
     initial={{ opacity: 0, y: 20 }}
     animate={{ opacity: 1, y: 0 }}
@@ -76,7 +71,7 @@ const SkeletonCard = memo(({ index = 0 }: { index?: number }) => (
   >
     {/* Shimmer effect */}
     <div className="absolute inset-0 -translate-x-full animate-[shimmer_2s_infinite] bg-gradient-to-r from-transparent via-white/20 to-transparent" />
-    
+
     <div className="flex items-start justify-between mb-4">
       <div className="space-y-3">
         <div className="h-4 w-24 rounded-lg bg-surface-200/80 dark:bg-surface-700/80" />
@@ -99,20 +94,36 @@ const DashboardIndex = memo(() => {
   const [totalOrders, setTotalOrders] = useState(0)
   const [recentOrders, setRecentOrders] = useState<any[]>([])
   const [todaySales, setTodaySales] = useState(0)
+  const [pendingOrders, setPendingOrders] = useState(0)
+  const [todayOrderCount, setTodayOrderCount] = useState(0)
   const [isFetching, setIsFetching] = useState(true)
+  const [restaurantTimezone, setRestaurantTimezone] = useState('America/New_York')
+  const [isOpen, setIsOpen] = useState(true)
 
   const fetchStats = async () => {
     setIsFetching(true)
     try {
-      const [ordersRes, summaryRes] = await Promise.all([
+      const [ordersRes, summaryRes, settingsRes] = await Promise.all([
         api.get('/api/orders', { params: { limit: 5 } }),
-        api.get('/api/orders/stats/summary')
+        api.get('/api/orders/stats/summary'),
+        api.get('/api/settings').catch(() => ({ data: { data: { timezone: 'America/New_York' } } }))
       ])
-      
+
       setRecentOrders(ordersRes.data.data.orders)
-      setActiveOrders(summaryRes.data.data.activeOrders)
+      setActiveOrders(summaryRes.data.data.activeOrders || 0)
       setTotalOrders(summaryRes.data.data.totalOrders || 0)
       setTodaySales(summaryRes.data.data.completedTodaySales || 0)
+      setPendingOrders(summaryRes.data.data.pendingOrders || 0)
+      setTodayOrderCount(summaryRes.data.data.todayOrders || summaryRes.data.data.totalOrders || 0)
+
+      // Set restaurant timezone
+      if (settingsRes.data?.data?.timezone) {
+        setRestaurantTimezone(settingsRes.data.data.timezone)
+      }
+
+      // Determine if restaurant is open (simplified - can be enhanced)
+      const hours = new Date().getHours()
+      setIsOpen(hours >= 9 && hours < 22)
     } catch (err) {
       console.error('Failed to fetch dashboard stats', err)
     } finally {
@@ -138,42 +149,38 @@ const DashboardIndex = memo(() => {
   // STATS DATA WITH PREMIUM STYLING
   const stats = useMemo(() => [
     {
-      name: 'Active Orders',
-      value: activeOrders.toString(),
-      change: '2.5%',
-      changeType: 'increase' as const,
-      icon: ShoppingCart,
+      name: 'Pending Orders',
+      value: pendingOrders.toString(),
+      change: pendingOrders > 0 ? `${pendingOrders} waiting` : 'All clear',
+      icon: Clock,
       color: 'bg-gradient-to-br from-blue-500 to-indigo-600',
       glowColor: 'bg-blue-500/40'
     },
     {
-      name: 'Total Orders',
-      value: totalOrders.toString(),
-      change: '8.2%',
-      changeType: 'increase' as const,
+      name: 'Orders Today',
+      value: todayOrderCount.toString(),
+      change: `$${todaySales.toFixed(2)} revenue`,
       icon: Package,
       color: 'bg-gradient-to-br from-violet-500 to-purple-600',
       glowColor: 'bg-violet-500/40'
     },
     {
-      name: 'Items 86\'d',
-      value: '0',
-      change: '0',
-      changeType: 'increase' as const,
-      icon: CheckSquare,
-      color: 'bg-gradient-to-br from-rose-500 to-pink-600',
-      glowColor: 'bg-rose-500/40'
+      name: 'Active Orders',
+      value: activeOrders.toString(),
+      change: activeOrders > 0 ? 'In progress' : 'No active',
+      icon: Activity,
+      color: 'bg-gradient-to-br from-orange-500 to-amber-600',
+      glowColor: 'bg-orange-500/40'
     },
     {
       name: 'Today\'s Sales',
       value: `$${todaySales.toFixed(2)}`,
-      change: '12.5%',
-      changeType: 'increase' as const,
+      change: `${todayOrderCount} orders`,
       icon: TrendingUp,
       color: 'bg-gradient-to-br from-emerald-500 to-teal-600',
       glowColor: 'bg-emerald-500/40'
     }
-  ], [activeOrders, totalOrders, todaySales])
+  ], [activeOrders, totalOrders, todaySales, pendingOrders, todayOrderCount])
 
   // MEMOIZED QUICK ACTIONS FOR PERFORMANCE
   const quickActions = useMemo(() => [
@@ -227,9 +234,13 @@ const DashboardIndex = memo(() => {
                 >
                   <span className="text-sm font-semibold text-surface-500 dark:text-surface-400 uppercase tracking-widest">Dashboard</span>
                   <span className="text-surface-300 dark:text-surface-600">•</span>
-                  <span className="text-sm text-surface-400 dark:text-surface-500">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}</span>
+                  <LiveClock
+                    timezone={restaurantTimezone}
+                    showIcon={false}
+                    className="text-sm text-surface-400 dark:text-surface-500"
+                  />
                 </motion.div>
-                <motion.h1 
+                <motion.h1
                   className="text-4xl md:text-5xl font-black text-surface-900 dark:text-white tracking-tight"
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
@@ -238,20 +249,30 @@ const DashboardIndex = memo(() => {
                   Welcome back, {user?.name?.split(' ')[0] || 'Team'}
                 </motion.h1>
               </div>
-              
+
               <motion.div
                 className="flex items-center gap-3"
                 initial={{ opacity: 0, scale: 0.8 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ delay: 0.4 }}
               >
-                <div className="flex items-center gap-2 px-4 py-2.5 bg-emerald-50 dark:bg-emerald-900/20 rounded-full border border-emerald-200 dark:border-emerald-800">
+                <div className={`flex items-center gap-2 px-4 py-2.5 rounded-full border ${
+                  isOpen
+                    ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800'
+                    : 'bg-gray-50 dark:bg-gray-900/20 border-gray-200 dark:border-gray-800'
+                }`}>
                   <motion.div
-                    className="w-2.5 h-2.5 bg-emerald-500 rounded-full"
-                    animate={{ scale: [1, 1.3, 1], opacity: [1, 0.7, 1] }}
+                    className={`w-2.5 h-2.5 rounded-full ${isOpen ? 'bg-emerald-500' : 'bg-gray-500'}`}
+                    animate={isOpen ? { scale: [1, 1.3, 1], opacity: [1, 0.7, 1] } : {}}
                     transition={{ duration: 2, repeat: Infinity }}
                   />
-                  <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">Online</span>
+                  <span className={`text-sm font-semibold ${
+                    isOpen
+                      ? 'text-emerald-700 dark:text-emerald-300'
+                      : 'text-gray-700 dark:text-gray-300'
+                  }`}>
+                    {isOpen ? 'Open' : 'Closed'}
+                  </span>
                 </div>
               </motion.div>
             </div>
@@ -267,21 +288,21 @@ const DashboardIndex = memo(() => {
             {/* Multi-layer gradient background */}
             <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900" />
             <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/20 via-transparent to-orange-500/20" />
-            
+
             {/* Animated mesh gradient */}
             <div className="absolute inset-0 overflow-hidden">
-              <motion.div 
+              <motion.div
                 className="absolute -top-1/2 -left-1/2 w-full h-full bg-gradient-to-br from-emerald-400/30 to-transparent rounded-full blur-3xl"
-                animate={{ 
+                animate={{
                   x: [0, 100, 0],
                   y: [0, 50, 0],
                   scale: [1, 1.2, 1]
                 }}
                 transition={{ duration: 15, repeat: Infinity, ease: "easeInOut" }}
               />
-              <motion.div 
+              <motion.div
                 className="absolute -bottom-1/2 -right-1/2 w-full h-full bg-gradient-to-tl from-orange-400/30 to-transparent rounded-full blur-3xl"
-                animate={{ 
+                animate={{
                   x: [0, -100, 0],
                   y: [0, -50, 0],
                   scale: [1.2, 1, 1.2]
@@ -289,12 +310,12 @@ const DashboardIndex = memo(() => {
                 transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
               />
             </div>
-            
+
             {/* Grid pattern overlay */}
             <div className="absolute inset-0 opacity-[0.03]" style={{
               backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`
             }} />
-            
+
             <div className="relative px-8 py-10 md:px-12 md:py-12">
               <div className="flex flex-col lg:flex-row items-center justify-between gap-8">
                 {/* Content */}
@@ -314,8 +335,8 @@ const DashboardIndex = memo(() => {
                     <span className="text-sm font-semibold text-white/90">AI Assistant Online</span>
                     <Zap className="w-4 h-4 text-amber-400" />
                   </motion.div>
-                  
-                  <motion.h2 
+
+                  <motion.h2
                     className="text-4xl md:text-5xl font-black text-white mb-4 tracking-tight"
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -323,7 +344,7 @@ const DashboardIndex = memo(() => {
                   >
                     Your AI Command Center
                   </motion.h2>
-                  
+
                   <motion.p
                     className="text-lg text-white/70 mb-8 max-w-xl leading-relaxed"
                     initial={{ opacity: 0, y: 10 }}
@@ -332,7 +353,7 @@ const DashboardIndex = memo(() => {
                   >
                     Talk naturally to manage orders, check inventory, update menus, and run your restaurant hands-free.
                   </motion.p>
-                  
+
                   <motion.div
                     className="flex flex-col sm:flex-row items-center gap-4"
                     initial={{ opacity: 0, y: 10 }}
@@ -352,7 +373,7 @@ const DashboardIndex = memo(() => {
                       <span>Start Talking</span>
                       <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
                     </Link>
-                    
+
                     <div className="flex items-center gap-6 text-white/60">
                       <div className="flex items-center gap-2">
                         <Activity className="w-4 h-4 text-emerald-400" />
@@ -365,9 +386,9 @@ const DashboardIndex = memo(() => {
                     </div>
                   </motion.div>
                 </div>
-                
+
                 {/* Visual element */}
-                <motion.div 
+                <motion.div
                   className="hidden lg:flex items-center justify-center"
                   initial={{ opacity: 0, scale: 0.8 }}
                   animate={{ opacity: 1, scale: 1 }}
@@ -381,11 +402,11 @@ const DashboardIndex = memo(() => {
                       transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
                       style={{ width: 180, height: 180, margin: -20 }}
                     />
-                    
+
                     {/* Inner glowing orb */}
                       <motion.div
                       className="w-36 h-36 rounded-full bg-gradient-to-br from-emerald-400 via-emerald-500 to-orange-500 flex items-center justify-center shadow-2xl shadow-emerald-500/30"
-                      animate={{ 
+                      animate={{
                         boxShadow: [
                           "0 0 60px rgba(20,184,166,0.4)",
                           "0 0 80px rgba(20,184,166,0.6)",
@@ -401,7 +422,7 @@ const DashboardIndex = memo(() => {
                         <MessageCircle className="w-16 h-16 text-white" />
                       </motion.div>
                     </motion.div>
-                    
+
                     {/* Floating particles */}
                     <motion.div
                       className="absolute -top-2 -right-2 w-4 h-4 rounded-full bg-amber-400"
@@ -452,10 +473,10 @@ const DashboardIndex = memo(() => {
                   <span>Live Updates</span>
                 </motion.div>
               </div>
-              
+
               <div className="space-y-3">
                 {recentOrders.length === 0 ? (
-                  <motion.div 
+                  <motion.div
                     className="text-center py-12"
                     initial={{ opacity: 0, scale: 0.9 }}
                     animate={{ opacity: 1, scale: 1 }}
@@ -490,11 +511,11 @@ const DashboardIndex = memo(() => {
                           </p>
                         </div>
                       </div>
-                      
+
                       <div className="flex items-center space-x-3">
                         <span className={`px-3 py-1 rounded-full text-xs font-semibold shadow-sm ${
-                          order.status === 'ready' 
-                            ? 'bg-servio-green-100 dark:bg-servio-green-900/30 text-servio-green-700 dark:text-servio-green-300 ring-1 ring-servio-green-200 dark:ring-servio-green-800' 
+                          order.status === 'ready'
+                            ? 'bg-servio-green-100 dark:bg-servio-green-900/30 text-servio-green-700 dark:text-servio-green-300 ring-1 ring-servio-green-200 dark:ring-servio-green-800'
                             : order.status === 'preparing'
                             ? 'bg-servio-orange-100 dark:bg-servio-orange-900/30 text-servio-orange-700 dark:text-servio-orange-300 ring-1 ring-servio-orange-200 dark:ring-servio-orange-800'
                             : 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 ring-1 ring-primary-200 dark:ring-primary-800'
@@ -553,9 +574,9 @@ const DashboardIndex = memo(() => {
                       {action.highlight && (
                         <div className="absolute inset-0 bg-gradient-to-r from-servio-orange-500/5 to-primary-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
                       )}
-                      
+
                       <div className="relative flex items-center space-x-4">
-                        <motion.div 
+                        <motion.div
                           className={`flex-shrink-0 p-3 rounded-2xl shadow-lg ${
                             action.highlight
                               ? 'bg-gradient-to-br from-servio-orange-500 to-servio-orange-600 group-hover:shadow-servio-orange-200 dark:group-hover:shadow-servio-orange-900/50'
@@ -568,7 +589,7 @@ const DashboardIndex = memo(() => {
                         >
                           <action.icon className="h-6 w-6 text-white" />
                         </motion.div>
-                        
+
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between">
                             <h4 className="font-semibold text-surface-900 dark:text-surface-100 group-hover:text-surface-700 dark:group-hover:text-surface-200 transition-colors">
@@ -588,7 +609,7 @@ const DashboardIndex = memo(() => {
                                 whileHover={{ x: 4 }}
                                 transition={{ type: "spring", stiffness: 400, damping: 10 }}
                               >
-                                <ArrowRight className="w-5 h-5" />
+                                <ArrowRight className="w-5 w-5" />
                               </motion.div>
                             </div>
                           </div>
