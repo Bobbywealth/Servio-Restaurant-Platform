@@ -647,7 +647,7 @@ Use the available tools to perform actions. Always be helpful and professional.`
     const user = await this.db.get('SELECT restaurant_id FROM users WHERE id = ?', [userId]);
     const restaurantId = user?.restaurant_id || 'demo-restaurant-1';
 
-    let query = 'SELECT * FROM tasks WHERE restaurant_id = ?';
+    let query = 'SELECT id, title, description, status, priority, type, assigned_to, due_date, created_at, updated_at, completed_at FROM tasks WHERE restaurant_id = ?';
     const params: any[] = [restaurantId];
     const conditions: string[] = [];
 
@@ -662,7 +662,7 @@ Use the available tools to perform actions. Always be helpful and professional.`
     }
 
     if (conditions.length > 0) {
-      query += ' WHERE ' + conditions.join(' AND ');
+      query += ' AND ' + conditions.join(' AND ');
     }
 
     query += ' ORDER BY created_at DESC';
