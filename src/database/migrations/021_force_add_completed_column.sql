@@ -16,14 +16,16 @@ BEGIN
     END;
 
     -- Backfill existing completed tasks
-    -- Set completed = completed_at for tasks that are marked as completed
-    -- Only copy non-empty timestamps
+    -- Use NULLIF to convert empty strings to NULL before comparing
+    -- This prevents "invalid input syntax for type timestamp" errors
     UPDATE tasks
-    SET completed = completed_at
+    SET completed = CASE
+        WHEN completed_at IS NOT NULL AND completed_at != ''
+        THEN completed_at
+        ELSE NULL
+    END
     WHERE status = 'completed'
-      AND (completed IS NULL OR completed = '')
-      AND completed_at IS NOT NULL
-      AND completed_at != '';
+      AND (completed IS NULL OR completed = '');
 
     RAISE NOTICE 'Backfilled completed column from completed_at';
 END $$;
