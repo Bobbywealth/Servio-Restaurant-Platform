@@ -106,6 +106,122 @@ export class VoiceOrderingService {
     return Object.values(groups);
   }
 
+  /**
+   * Validate that all required modifiers have been provided for an item.
+   * Returns { valid: true, priceDelta: number } if valid, or { valid: false, missingModifiers: [...] } if invalid.
+   */
+  public async validateItemModifiers(
+    itemId: string,
+    restaurantId: string,
+    providedModifiers: Record<string, any> | null | undefined
+  ): Promise<{ valid: boolean; priceDelta: number; missingModifiers: Array<{ groupId: string; groupName: string; required: boolean }> }> {
+    const groups = await this.getModifierGroupsForItem(itemId, restaurantId);
+
+    if (!groups || groups.length === 0) {
+      // No modifiers defined for this item - always valid
+      return { valid: true, priceDelta: 0, missingModifiers: [] };
+    }
+
+    const modifiers = providedModifiers || {};
+    const missingModifiers: Array<{ groupId: string; groupName: string; required: boolean }> = [];
+    let priceDelta = 0;
+
+    for (const group of groups) {
+      const selection = modifiers[group.id];
+      const hasSelection = selection !== undefined && selection !== null && selection !== '' &&
+        !(Array.isArray(selection) && selection.length === 0);
+
+      if (group.required && !hasSelection) {
+        missingModifiers.push({
+          groupId: group.id,
+          groupName: group.name,
+          required: true
+        });
+      }
+
+      // Calculate price delta from selected options
+      if (hasSelection) {
+        const selectedIds = Array.isArray(selection) ? selection : [selection];
+        for (const selectedId of selectedIds) {
+          const option = group.options.find((opt: any) => opt.id === selectedId || opt.name.toLowerCase() === String(selectedId).toLowerCase());
+          if (option && option.priceDelta) {
+            priceDelta += option.priceDelta;
+          }
+        }
+      }
+    }
+
+    return {
+      valid: missingModifiers.length === 0,
+      priceDelta,
+      missingModifiers
+    };
+  }
+
+  /**
+   * Get modifier groups for an item formatted for Vapi AI to ask questions.
+   * Returns modifiers in exact display_order with question prompts.
+   */
+  public async getItemModifiersForVapi(itemId: string, restaurantId: string): Promise<any[]> {
+    const groups = await this.getModifierGroupsForItem(itemId, restaurantId);
+
+    if (!groups || groups.length === 0) {
+      return [];
+    }
+
+    // Format each modifier group with a natural language question
+    return groups.map((group: any, index: number) => {
+      const optionNames = group.options
+        .filter((opt: any) => !opt.isSoldOut)
+        .map((opt: any) => {
+          if (opt.priceDelta > 0) {
+            return `${opt.name} (+$${opt.priceDelta.toFixed(2)})`;
+          }
+          return opt.name;
+        });
+
+      // Generate a natural question based on the group name
+      let question = '';
+      const groupNameLower = group.name.toLowerCase();
+
+      if (groupNameLower.includes('size')) {
+        question = `What size would you like? Options are: ${optionNames.join(', ')}.`;
+      } else if (groupNameLower.includes('side') || groupNameLower.includes('choice')) {
+        question = `What would you like for your ${group.name.toLowerCase()}? Options are: ${optionNames.join(', ')}.`;
+      } else if (groupNameLower.includes('spice') || groupNameLower.includes('heat')) {
+        question = `What spice level would you like? Options are: ${optionNames.join(', ')}.`;
+      } else if (groupNameLower.includes('sauce')) {
+        question = `What sauce would you like? Options are: ${optionNames.join(', ')}.`;
+      } else if (groupNameLower.includes('add-on') || groupNameLower.includes('extra') || groupNameLower.includes('topping')) {
+        question = `Would you like any ${group.name.toLowerCase()}? Options are: ${optionNames.join(', ')}.`;
+      } else if (groupNameLower.includes('preparation') || groupNameLower.includes('style') || groupNameLower.includes('cooking')) {
+        question = `How would you like it prepared? Options are: ${optionNames.join(', ')}.`;
+      } else if (groupNameLower.includes('gravy')) {
+        question = `For gravy, would you like: ${optionNames.join(', ')}?`;
+      } else {
+        question = `For ${group.name}, please choose from: ${optionNames.join(', ')}.`;
+      }
+
+      return {
+        groupId: group.id,
+        groupName: group.name,
+        question,
+        required: group.required,
+        selectionType: group.selectionType,
+        minSelections: group.minSelect,
+        maxSelections: group.maxSelect,
+        displayOrder: index + 1,
+        options: group.options.map((opt: any) => ({
+          id: opt.id,
+          name: opt.name,
+          priceDelta: opt.priceDelta,
+          isSoldOut: opt.isSoldOut,
+          isDefault: opt.isPreselected
+        }))
+      };
+    });
+  }
+
   private resolveRestaurantId(input?: string | null) {
     // Try: input → env var. Avoid hardcoded fallbacks to prevent wrong-restaurant lookups.
     const resolved = input || process.env.VAPI_RESTAURANT_ID || null;
@@ -595,108 +711,39 @@ export class VoiceOrderingService {
       }
 
       let itemPrice = menuItem.basePrice || 0;
-      const tags = menuItem.tags || [];
       const itemName = menuItem.name.toLowerCase();
-      const itemId = menuItem.id.toLowerCase();
+      const itemIdLower = menuItem.id.toLowerCase();
 
-      // Robust tag inference
-      const isDinner = tags.includes('dinner') || itemName.includes('dinner');
-      const isFish = itemName.includes('fish') || itemName.includes('snapper');
-      const isWings = itemId.includes('wings') || itemName.includes('wings');
-      const isAckee = itemId.includes('ackee') || itemName.includes('ackee');
-      const isOxtail = itemId.includes('oxtail') || itemName.includes('oxtail');
+      // DATABASE-DRIVEN MODIFIER VALIDATION
+      // Validate required modifiers from Menu Management configuration
+      const modifierValidation = await this.validateItemModifiers(
+        menuItem.id,
+        restaurantId,
+        inputItem.modifiers
+      );
 
-      // MODIFIER VALIDATION - Log warnings but don't block order creation
-      // Note: VAPI AI collects modifiers verbally but may not pass them in structured format
-      // We'll allow orders to proceed with base prices and log missing modifiers for manual review
+      // Add modifier price delta to item price
+      itemPrice += modifierValidation.priceDelta;
 
-      const category = String(menuItem.category || '').toLowerCase();
-      const isEntree = isDinner || category.includes('entree');
-      const isRastaPastaJerk = itemName.includes('rasta pasta') && itemName.includes('jerk chicken');
-      const isSalmon = itemName.includes('salmon');
+      // Log and track missing required modifiers
+      if (!modifierValidation.valid && modifierValidation.missingModifiers.length > 0) {
+        const missingNames = modifierValidation.missingModifiers.map(m => m.groupName).join(', ');
+        console.log(`⚠️ [validateQuote] ${menuItem.name} missing required modifiers: ${missingNames}`);
 
-      // Entree defaults
-      if (isEntree) {
-        const modifierGroupIds = (menuItem.modifierGroups || []).map((group: any) => group.id);
-        const hasSize = modifierGroupIds.includes('size');
-        const hasSideChoice = modifierGroupIds.includes('side_choice');
-        const hasGravyAmount = modifierGroupIds.includes('gravy_amount');
-        const hasGravyType = modifierGroupIds.includes('gravy_type');
-
-        if (!isRastaPastaJerk) {
-          if (hasSize && !inputItem.modifiers?.size) {
-            console.log(`⚠️ [validateQuote] ${menuItem.name} missing size modifier (non-blocking)`);
-          }
-          const sideChoice = inputItem.modifiers?.side_choice;
-          if (hasSideChoice && !sideChoice) {
-            console.log(`⚠️ [validateQuote] ${menuItem.name} missing side_choice modifier (non-blocking)`);
-          } else if (Array.isArray(sideChoice) && sideChoice.length > 2) {
-            console.log(`⚠️ [validateQuote] ${menuItem.name} has ${sideChoice.length} side_choice selections; extras are out of plate`);
-          }
-        }
-        if (hasGravyAmount && !inputItem.modifiers?.gravy_amount) {
-          console.log(`⚠️ [validateQuote] ${menuItem.name} missing gravy_amount modifier (non-blocking)`);
-        }
-        if (hasGravyType && !inputItem.modifiers?.gravy_type) {
-          console.log(`⚠️ [validateQuote] ${menuItem.name} missing gravy_type modifier (non-blocking)`);
+        // Add errors for missing required modifiers (blocking)
+        for (const missing of modifierValidation.missingModifiers) {
+          errors.push(`${menuItem.name}: Missing required modifier "${missing.groupName}". Please ask customer for their ${missing.groupName.toLowerCase()} choice.`);
         }
       }
 
-      // Fish dinners
-      if (isFish && isDinner) {
-        if (!inputItem.modifiers?.fish_style) {
-          console.log(`⚠️ [validateQuote] ${menuItem.name} missing fish_style modifier (non-blocking)`);
-        }
-      }
+      // Legacy price adjustments for special cases not yet in modifier groups
+      // (Oxtail gravy on side, Ackee callaloo add)
+      const isOxtail = itemIdLower.includes('oxtail') || itemName.includes('oxtail');
+      const isAckee = itemIdLower.includes('ackee') || itemName.includes('ackee');
 
-      // Salmon preparation
-      if (isSalmon && !inputItem.modifiers?.salmon_preparation) {
-        console.log(`⚠️ [validateQuote] ${menuItem.name} missing salmon_preparation modifier (non-blocking)`);
-      }
-
-      // Wings
-      if (isWings) {
-        if (!inputItem.modifiers?.wings_size) {
-          console.log(`⚠️ [validateQuote] ${menuItem.name} missing wings_size modifier (non-blocking)`);
-        }
-        if (!inputItem.modifiers?.wings_sauce) {
-          console.log(`⚠️ [validateQuote] ${menuItem.name} missing wings_sauce modifier (non-blocking)`);
-        }
-      }
-
-      // Ackee
-      if (isAckee) {
-        if (!inputItem.modifiers?.callaloo_add) {
-          console.log(`⚠️ [validateQuote] ${menuItem.name} missing callaloo_add modifier (non-blocking)`);
-        }
-      }
-
-      // Calculate price from modifiers
-      if (menuItem.modifierGroups) {
-        menuItem.modifierGroups.forEach((group: any) => {
-          const selectedOptionId = inputItem.modifiers?.[group.id];
-          if (Array.isArray(selectedOptionId)) {
-            selectedOptionId.forEach((optionId: string) => {
-              const option = group.options.find((o: any) => o.id === optionId);
-              if (option) {
-                itemPrice += (option.priceDelta || 0);
-              }
-            });
-            return;
-          }
-          const option = group.options.find((o: any) => o.id === selectedOptionId);
-          if (option) {
-            itemPrice += (option.priceDelta || 0);
-          }
-        });
-      }
-
-      // Requirement: Oxtail gravy on side
       if (isOxtail && inputItem.modifiers?.gravy_on_side === 'yes') {
         itemPrice += 0.50;
       }
-
-      // Requirement: Ackee callaloo add
       if (isAckee && inputItem.modifiers?.callaloo_add === 'yes') {
         itemPrice += 3.00;
       }
@@ -706,17 +753,29 @@ export class VoiceOrderingService {
 
       subtotal += itemPrice * quantity;
 
-      // Return with the correct itemId (important for createOrder)
+      // Return with the correct itemId and any missing modifier info
       return {
         ...inputItem,
-        itemId: menuItem.id,  // Ensure itemId is set correctly
+        itemId: menuItem.id,
+        itemName: menuItem.name,
         price: itemPrice,
-        qty: quantity
+        qty: quantity,
+        missingModifiers: modifierValidation.missingModifiers
       };
     }));
 
     const tax = subtotal * 0.06625; // Using tax rate from JSON
     const total = subtotal + tax;
+
+    // Collect all missing modifiers across items
+    const validItems = validatedItems.filter(Boolean);
+    const allMissingModifiers = validItems
+      .filter((item: any) => item.missingModifiers && item.missingModifiers.length > 0)
+      .map((item: any) => ({
+        itemId: item.itemId,
+        itemName: item.itemName,
+        missingModifiers: item.missingModifiers
+      }));
 
     console.log('🛒 [validateQuote] Result:', {
       valid: errors.length === 0,
@@ -724,7 +783,8 @@ export class VoiceOrderingService {
       tax: parseFloat(tax.toFixed(2)),
       total: parseFloat(total.toFixed(2)),
       errorCount: errors.length,
-      errors
+      errors,
+      missingModifiersCount: allMissingModifiers.length
     });
 
     return {
@@ -734,7 +794,12 @@ export class VoiceOrderingService {
       fees: 0,
       total: parseFloat(total.toFixed(2)),
       errors,
-      items: validatedItems.filter(Boolean)
+      items: validItems,
+      // Include missing modifiers info so AI knows what to ask
+      ...(allMissingModifiers.length > 0 ? {
+        missingModifiers: allMissingModifiers,
+        message: 'Some items are missing required modifiers. Please collect the following before placing the order.'
+      } : {})
     };
   }
 
