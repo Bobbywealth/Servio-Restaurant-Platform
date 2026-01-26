@@ -200,9 +200,12 @@ export default function PublicProfile() {
   const addToCartWithSelections = () => {
     if (!selectedItem) return;
 
-    // Validate required modifiers
+    // Validate required modifiers (only for groups with selectable options)
     if (selectedItem.modifierGroups) {
-      for (const group of selectedItem.modifierGroups) {
+      const validGroups = selectedItem.modifierGroups.filter(
+        group => group.options && group.options.length > 0 && group.options.some(opt => opt.isActive && !opt.isSoldOut)
+      );
+      for (const group of validGroups) {
         if (group.isRequired) {
           const selections = selectedModifiers[group.id] || [];
           const totalSelected = selections.reduce((sum, sel) => sum + (sel.quantity || 1), 0);
@@ -958,7 +961,9 @@ export default function PublicProfile() {
                 )}
 
                 {/* Modifier Groups */}
-                {selectedItem.modifierGroups && selectedItem.modifierGroups.map(group => (
+                {selectedItem.modifierGroups && selectedItem.modifierGroups
+                  .filter(group => group.options && group.options.length > 0 && group.options.some(opt => opt.isActive && !opt.isSoldOut))
+                  .map(group => (
                   <div key={group.id} className="mb-6">
                     <div className="flex justify-between items-baseline mb-3">
                       <h3 className="font-semibold text-lg">
