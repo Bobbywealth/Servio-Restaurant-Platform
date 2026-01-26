@@ -17,11 +17,13 @@ BEGIN
 
     -- Backfill existing completed tasks
     -- Set completed = completed_at for tasks that are marked as completed
+    -- Only copy non-empty timestamps
     UPDATE tasks
     SET completed = completed_at
     WHERE status = 'completed'
       AND (completed IS NULL OR completed = '')
-      AND completed_at IS NOT NULL;
+      AND completed_at IS NOT NULL
+      AND completed_at != '';
 
     RAISE NOTICE 'Backfilled completed column from completed_at';
 END $$;
