@@ -99,7 +99,7 @@ router.post('/credentials', asyncHandler(async (req: Request, res: Response) => 
  */
 router.put('/credentials/:platform', asyncHandler(async (req: Request, res: Response) => {
   const restaurantId = req.user?.restaurantId;
-  const platform = req.params.platform;
+  const platform = Array.isArray(req.params.platform) ? req.params.platform[0] : req.params.platform;
   const { username, password, portalUrl, syncConfig, isActive } = req.body;
 
   if (!restaurantId) {
@@ -174,7 +174,7 @@ router.put('/credentials/:platform', asyncHandler(async (req: Request, res: Resp
  */
 router.delete('/credentials/:platform', asyncHandler(async (req: Request, res: Response) => {
   const restaurantId = req.user?.restaurantId;
-  const platform = req.params.platform;
+  const platform = Array.isArray(req.params.platform) ? req.params.platform[0] : req.params.platform;
 
   if (!restaurantId) {
     throw new UnauthorizedError('Restaurant ID required');
