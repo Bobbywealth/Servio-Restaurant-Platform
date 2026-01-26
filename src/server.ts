@@ -20,7 +20,7 @@ import { validateEnvironment, failFastIfInvalid, getCorsOrigins } from './utils/
 import { UPLOADS_DIR, checkUploadsHealth } from './utils/uploads';
 import { SocketService } from './services/SocketService';
 
-const FRONTEND_ORIGIN = 'https://servio-app.onrender.com';
+const FRONTEND_ORIGIN = 'https://servio.solutions';
 
 // ============================================================================
 // ENVIRONMENT VALIDATION (fail fast in production)
