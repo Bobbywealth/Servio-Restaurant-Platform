@@ -49,7 +49,7 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
   const db = DatabaseService.getInstance().getDatabase();
   const restaurantId = req.user?.restaurantId;
 
-  let query = 'SELECT t.*, u.name as assigned_to_name FROM tasks t LEFT JOIN users u ON t.assigned_to = u.id';
+  let query = 'SELECT t.id, t.restaurant_id, t.title, t.description, t.status, t.priority, t.type, t.assigned_to, t.due_date, t.created_at, t.updated_at, t.completed_at, u.name as assigned_to_name FROM tasks t LEFT JOIN users u ON t.assigned_to = u.id';
   const params: any[] = [restaurantId];
   const conditions: string[] = ['t.restaurant_id = ?'];
 
