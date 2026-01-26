@@ -1634,7 +1634,14 @@ const MenuManagement: React.FC = () => {
 
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                             <div>
-                              <label className="block text-sm font-bold text-gray-700 dark:text-gray-300">Price</label>
+                              <label className="block text-sm font-bold text-gray-700 dark:text-gray-300">
+                                Base Price
+                                {editItemSizes.length > 0 && (
+                                  <span className="ml-2 text-xs font-normal text-amber-600 dark:text-amber-400">
+                                    (Not used - sizes override)
+                                  </span>
+                                )}
+                              </label>
                               <input
                                 type="number"
                                 step="0.01"
@@ -1645,6 +1652,11 @@ const MenuManagement: React.FC = () => {
                                 }}
                                 className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                               />
+                              {editItemSizes.length === 0 && (
+                                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                                  Price customers pay. Add sizes in the Avail. tab for size-based pricing.
+                                </p>
+                              )}
                             </div>
                             <div>
                               <label className="block text-sm font-bold text-gray-700 dark:text-gray-300">Prep time (mins)</label>
@@ -2098,7 +2110,7 @@ const MenuManagement: React.FC = () => {
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Price</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Base Price</label>
                     <input
                       type="number"
                       step="0.01"
@@ -2107,6 +2119,9 @@ const MenuManagement: React.FC = () => {
                       className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                       placeholder="0.00"
                     />
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      Price customers pay. Add sizes after creating the item for size-based pricing.
+                    </p>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Prep time (mins)</label>
@@ -2388,7 +2403,14 @@ const MenuManagement: React.FC = () => {
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Price</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Base Price
+                      {editItemSizes.length > 0 && (
+                        <span className="ml-2 text-xs font-normal text-amber-600 dark:text-amber-400">
+                          (Not used - sizes override)
+                        </span>
+                      )}
+                    </label>
                     <input
                       type="number"
                       step="0.01"
@@ -2397,6 +2419,11 @@ const MenuManagement: React.FC = () => {
                       className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                       placeholder="0.00"
                     />
+                    {editItemSizes.length === 0 && (
+                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                        Price customers pay. Add sizes below for size-based pricing.
+                      </p>
+                    )}
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Prep time (mins)</label>
