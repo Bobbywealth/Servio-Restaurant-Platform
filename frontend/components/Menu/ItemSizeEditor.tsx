@@ -49,7 +49,21 @@ export function ItemSizeEditor({ sizes, onCreate, onUpdate, onDelete }: Props) {
         </div>
       </div>
 
+      {ordered.length > 0 && (
+        <div className="mt-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2">
+          <p className="text-xs font-semibold text-amber-900">
+            ⚠️ Size prices override the base price above. Enter the full final price customers will pay for each size (before modifiers).
+          </p>
+        </div>
+      )}
+
       <div className="mt-3 space-y-2">
+        {ordered.length > 0 && (
+          <div className="flex gap-2 px-3 text-xs font-semibold text-slate-500">
+            <div className="w-full sm:w-28">Size Name</div>
+            <div className="w-full sm:w-28">Final Price</div>
+          </div>
+        )}
         {ordered.map((s) => (
           <div key={s.id} className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 px-3 py-2">
             <input
@@ -57,6 +71,7 @@ export function ItemSizeEditor({ sizes, onCreate, onUpdate, onDelete }: Props) {
               value={s.sizeName}
               onChange={(e) => onUpdate(s.id, { sizeName: e.target.value })}
               placeholder="Medium"
+              aria-label="Size name"
             />
             <input
               className="w-full sm:w-28 rounded-lg border border-slate-200 px-2 py-1 text-sm font-semibold"
@@ -68,6 +83,8 @@ export function ItemSizeEditor({ sizes, onCreate, onUpdate, onDelete }: Props) {
               }}
               placeholder="25.00"
               inputMode="decimal"
+              aria-label="Final price for this size"
+              title="Final price customers pay for this size (before modifiers)"
             />
 
             <button
@@ -112,21 +129,28 @@ export function ItemSizeEditor({ sizes, onCreate, onUpdate, onDelete }: Props) {
       </div>
 
       <div className="mt-4 rounded-xl border border-dashed border-slate-300 p-3">
+        <div className="text-xs font-semibold text-slate-600 mb-2">Add New Size</div>
         <div className="flex flex-wrap items-center gap-2">
-          <input
-            className="w-full sm:w-28 rounded-lg border border-slate-200 px-2 py-1 text-sm font-semibold"
-            value={draftName}
-            onChange={(e) => setDraftName(e.target.value)}
-            placeholder="Small"
-            maxLength={40}
-          />
-          <input
-            className="w-full sm:w-28 rounded-lg border border-slate-200 px-2 py-1 text-sm font-semibold"
-            value={draftPrice}
-            onChange={(e) => setDraftPrice(e.target.value)}
-            placeholder="13.50"
-            inputMode="decimal"
-          />
+          <div className="flex-1 min-w-[120px]">
+            <label className="text-xs text-slate-500 font-medium">Size Name</label>
+            <input
+              className="w-full rounded-lg border border-slate-200 px-2 py-1 text-sm font-semibold mt-1"
+              value={draftName}
+              onChange={(e) => setDraftName(e.target.value)}
+              placeholder="Small"
+              maxLength={40}
+            />
+          </div>
+          <div className="flex-1 min-w-[120px]">
+            <label className="text-xs text-slate-500 font-medium">Final Price</label>
+            <input
+              className="w-full rounded-lg border border-slate-200 px-2 py-1 text-sm font-semibold mt-1"
+              value={draftPrice}
+              onChange={(e) => setDraftPrice(e.target.value)}
+              placeholder="24.78"
+              inputMode="decimal"
+            />
+          </div>
           <label className="sm:ml-auto flex items-center gap-2 text-sm font-semibold text-slate-600">
             <input
               type="checkbox"
