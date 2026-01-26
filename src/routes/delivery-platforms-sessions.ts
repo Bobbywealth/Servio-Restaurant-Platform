@@ -133,7 +133,7 @@ router.post('/test/:platform', asyncHandler(async (req: Request, res: Response) 
  */
 router.delete('/:platform', asyncHandler(async (req: Request, res: Response) => {
   const restaurantId = req.user?.restaurantId;
-  const platform = req.params.platform;
+  const platform = req.params.platform as string;
 
   if (!restaurantId) {
     throw new UnauthorizedError('Restaurant ID required');
