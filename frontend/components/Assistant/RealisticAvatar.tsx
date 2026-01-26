@@ -25,7 +25,11 @@ export default function RealisticAvatar({
 }: RealisticAvatarProps) {
   const [currentExpression, setCurrentExpression] = useState<'neutral' | 'listening' | 'speaking' | 'thinking'>('neutral');
   const [speechWaveHeight, setSpeechWaveHeight] = useState<number[]>([4, 8, 12, 16, 12, 8, 4]);
+  const [eyePosition, setEyePosition] = useState({ x: 0, y: 0 });
+  const [isBlinking, setIsBlinking] = useState(false);
+  const [headTilt, setHeadTilt] = useState(0);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const avatarRef = useRef<HTMLDivElement>(null);
 
   // Size configurations
   const sizeConfig = {
@@ -54,13 +58,59 @@ export default function RealisticAvatar({
     if (!isTalking) return;
 
     const interval = setInterval(() => {
-      setSpeechWaveHeight(prev => 
+      setSpeechWaveHeight(prev =>
         prev.map(() => Math.max(4, Math.floor(Math.random() * (audioLevel || 20))))
       );
     }, 150);
 
     return () => clearInterval(interval);
   }, [isTalking, audioLevel]);
+
+  // Eye tracking - eyes follow mouse cursor
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!avatarRef.current) return;
+
+      const rect = avatarRef.current.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+
+      // Calculate angle from avatar center to mouse
+      const deltaX = e.clientX - centerX;
+      const deltaY = e.clientY - centerY;
+
+      // Limit eye movement to small range (-3 to 3 pixels)
+      const maxMove = 3;
+      const eyeX = Math.max(-maxMove, Math.min(maxMove, deltaX / 50));
+      const eyeY = Math.max(-maxMove, Math.min(maxMove, deltaY / 50));
+
+      setEyePosition({ x: eyeX, y: eyeY });
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    return () => window.removeEventListener('mousemove', handleMouseMove);
+  }, []);
+
+  // Natural blinking animation
+  useEffect(() => {
+    const blinkInterval = setInterval(() => {
+      setIsBlinking(true);
+      setTimeout(() => setIsBlinking(false), 150);
+    }, Math.random() * 4000 + 2000); // Random blink every 2-6 seconds
+
+    return () => clearInterval(blinkInterval);
+  }, []);
+
+  // Head tilt animation
+  useEffect(() => {
+    if (isThinking) {
+      setHeadTilt(8); // Tilt head when thinking
+    } else if (isListening) {
+      setHeadTilt(-5); // Slight tilt when listening
+    } else {
+      setHeadTilt(0);
+    }
+  }, [isThinking, isListening]);
 
   // Avatar images - using AI-generated professional headshots
   const avatarImages = {
@@ -118,9 +168,14 @@ export default function RealisticAvatar({
   return (
     <div className={`flex flex-col items-center ${className}`}>
       {/* Main Avatar Container */}
-      <div 
-        className="relative"
-        style={{ width: currentSize.container, height: currentSize.container }}
+      <div
+        ref={avatarRef}
+        className="relative transition-transform duration-500"
+        style={{
+          width: currentSize.container,
+          height: currentSize.container,
+          transform: `rotate(${headTilt}deg)`
+        }}
       >
         {/* Background Glow Effect */}
         <motion.div
@@ -177,36 +232,140 @@ export default function RealisticAvatar({
           
           {/* Facial Features Simulation */}
           <div className="absolute inset-0 flex items-center justify-center">
-            {/* Eyes */}
-            <div className="absolute" style={{ top: '35%', left: '35%' }}>
-              <motion.div 
-                className="w-2 h-2 bg-gray-700 rounded-full"
-                animate={{
-                  scaleY: isListening ? [1, 0.3, 1] : 1,
-                }}
-                transition={{ duration: 0.15, repeat: isListening ? Infinity : 0 }}
-              />
-            </div>
-            <div className="absolute" style={{ top: '35%', right: '35%' }}>
-              <motion.div 
-                className="w-2 h-2 bg-gray-700 rounded-full"
-                animate={{
-                  scaleY: isListening ? [1, 0.3, 1] : 1,
-                }}
-                transition={{ duration: 0.15, repeat: isListening ? Infinity : 0, delay: 0.1 }}
-              />
-            </div>
-            
-            {/* Mouth */}
-            <motion.div 
-              className="absolute bg-red-400 rounded-full"
-              style={{ bottom: '35%', left: '50%', transform: 'translateX(-50%)' }}
-              animate={{
-                width: isTalking ? [12, 20, 12] : 12,
-                height: isTalking ? [4, 8, 4] : 4,
+            {/* Left Eyebrow */}
+            <motion.div
+              className="absolute bg-gray-800 rounded-full"
+              style={{
+                top: '28%',
+                left: '30%',
+                width: '16px',
+                height: '3px',
+                transform: `rotate(-10deg)`
               }}
-              transition={{ duration: 0.3, repeat: isTalking ? Infinity : 0 }}
+              animate={{
+                y: isThinking ? [-1, 0, -1] : 0,
+                scaleX: isListening ? [1, 1.1, 1] : 1
+              }}
+              transition={{ duration: 2, repeat: isThinking ? Infinity : 0 }}
             />
+
+            {/* Right Eyebrow */}
+            <motion.div
+              className="absolute bg-gray-800 rounded-full"
+              style={{
+                top: '28%',
+                right: '30%',
+                width: '16px',
+                height: '3px',
+                transform: `rotate(10deg)`
+              }}
+              animate={{
+                y: isThinking ? [-1, 0, -1] : 0,
+                scaleX: isListening ? [1, 1.1, 1] : 1
+              }}
+              transition={{ duration: 2, repeat: isThinking ? Infinity : 0, delay: 0.1 }}
+            />
+
+            {/* Left Eye Container */}
+            <div className="absolute" style={{ top: '35%', left: '35%' }}>
+              {/* Eye white */}
+              <div className="relative w-5 h-5 bg-white rounded-full shadow-inner">
+                {/* Pupil with eye tracking */}
+                <motion.div
+                  className="absolute top-1/2 left-1/2 w-2.5 h-2.5 bg-gray-900 rounded-full shadow-lg"
+                  style={{
+                    transform: `translate(calc(-50% + ${eyePosition.x}px), calc(-50% + ${eyePosition.y}px))`
+                  }}
+                  animate={{
+                    scaleY: isBlinking ? 0.1 : 1,
+                  }}
+                  transition={{ duration: 0.1 }}
+                >
+                  {/* Highlight for realism */}
+                  <div className="absolute top-0.5 left-0.5 w-1 h-1 bg-white rounded-full opacity-70" />
+                </motion.div>
+                {/* Eyelid for blinking */}
+                <motion.div
+                  className="absolute inset-0 bg-orange-200 rounded-full"
+                  animate={{
+                    scaleY: isBlinking ? 1 : 0,
+                    opacity: isBlinking ? 1 : 0
+                  }}
+                  style={{ transformOrigin: 'top' }}
+                  transition={{ duration: 0.1 }}
+                />
+              </div>
+            </div>
+
+            {/* Right Eye Container */}
+            <div className="absolute" style={{ top: '35%', right: '35%' }}>
+              {/* Eye white */}
+              <div className="relative w-5 h-5 bg-white rounded-full shadow-inner">
+                {/* Pupil with eye tracking */}
+                <motion.div
+                  className="absolute top-1/2 left-1/2 w-2.5 h-2.5 bg-gray-900 rounded-full shadow-lg"
+                  style={{
+                    transform: `translate(calc(-50% + ${eyePosition.x}px), calc(-50% + ${eyePosition.y}px))`
+                  }}
+                  animate={{
+                    scaleY: isBlinking ? 0.1 : 1,
+                  }}
+                  transition={{ duration: 0.1 }}
+                >
+                  {/* Highlight for realism */}
+                  <div className="absolute top-0.5 left-0.5 w-1 h-1 bg-white rounded-full opacity-70" />
+                </motion.div>
+                {/* Eyelid for blinking */}
+                <motion.div
+                  className="absolute inset-0 bg-orange-200 rounded-full"
+                  animate={{
+                    scaleY: isBlinking ? 1 : 0,
+                    opacity: isBlinking ? 1 : 0
+                  }}
+                  style={{ transformOrigin: 'top' }}
+                  transition={{ duration: 0.1 }}
+                />
+              </div>
+            </div>
+
+            {/* Nose */}
+            <div
+              className="absolute bg-gradient-to-b from-orange-300 to-orange-400 rounded-full shadow-md"
+              style={{
+                top: '47%',
+                left: '50%',
+                transform: 'translateX(-50%)',
+                width: '8px',
+                height: '12px',
+                borderRadius: '50% 50% 50% 50% / 60% 60% 40% 40%'
+              }}
+            />
+
+            {/* Mouth with more realistic movement */}
+            <motion.div
+              className="absolute bg-gradient-to-b from-red-300 to-red-400 shadow-inner"
+              style={{
+                bottom: '30%',
+                left: '50%',
+                transform: 'translateX(-50%)',
+                borderRadius: isTalking ? '50% 50% 50% 50%' : '50%'
+              }}
+              animate={{
+                width: isTalking ? [14, 22, 14] : 14,
+                height: isTalking ? [5, 10, 5] : 5,
+              }}
+              transition={{ duration: 0.25, repeat: isTalking ? Infinity : 0 }}
+            >
+              {/* Teeth for more realism when talking */}
+              {isTalking && (
+                <motion.div
+                  className="absolute top-0 left-1/2 transform -translate-x-1/2 w-full h-1 bg-white/80"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: [0, 0.8, 0] }}
+                  transition={{ duration: 0.25, repeat: Infinity }}
+                />
+              )}
+            </motion.div>
           </div>
 
           {/* State-specific overlays */}
