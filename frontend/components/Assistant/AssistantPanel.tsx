@@ -386,8 +386,17 @@ export default function AssistantPanel({ showHeader = true, className }: Assista
       }
 
       // Play assistant response audio
+      console.log('🔊 Audio URL from backend:', audioUrl);
       if (audioUrl) {
-        await playAudio(audioUrl)
+        console.log('🔊 Attempting to play audio:', audioUrl);
+        try {
+          await playAudio(audioUrl)
+          console.log('✅ Audio playback started successfully');
+        } catch (error) {
+          console.error('❌ Failed to play audio:', error);
+        }
+      } else {
+        console.warn('⚠️ No audioUrl in response - TTS may have failed or been skipped');
       }
 
     } catch (error) {
@@ -631,8 +640,17 @@ export default function AssistantPanel({ showHeader = true, className }: Assista
       }
 
       // Play response audio
+      console.log('🔊 Audio URL from backend (text):', audioUrl);
       if (audioUrl) {
-        await playAudio(audioUrl)
+        console.log('🔊 Attempting to play audio (text):', audioUrl);
+        try {
+          await playAudio(audioUrl)
+          console.log('✅ Audio playback started successfully (text)');
+        } catch (error) {
+          console.error('❌ Failed to play audio (text):', error);
+        }
+      } else {
+        console.warn('⚠️ No audioUrl in response (text) - TTS may have failed or been skipped');
       }
 
     } catch (error) {
