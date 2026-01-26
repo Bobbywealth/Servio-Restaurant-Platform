@@ -94,7 +94,10 @@ export default function AssistantPanel({ showHeader = true, className }: Assista
       const savedMessages = localStorage.getItem('servio_conversation_history')
       if (savedMessages) {
         try {
-          const messages = JSON.parse(savedMessages)
+          const messages = JSON.parse(savedMessages).map((msg: any) => ({
+            ...msg,
+            timestamp: new Date(msg.timestamp)
+          }))
           setState(prev => ({ ...prev, messages }))
         } catch (error) {
           console.error('Failed to load conversation history:', error)
