@@ -1187,7 +1187,6 @@ export default function AssistantPanel({ showHeader = true, className }: Assista
               )}
             </div>
           </div>
-        </div>
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-5">
