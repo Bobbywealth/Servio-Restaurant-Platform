@@ -23,6 +23,15 @@ interface AssistantResponse {
   processingTime: number;
 }
 
+interface StreamChunk {
+  type: 'content' | 'tool_call' | 'action' | 'audio' | 'done' | 'error';
+  content?: string;
+  action?: AssistantResponse['actions'][0];
+  audioUrl?: string;
+  error?: string;
+  processingTime?: number;
+}
+
 
 
 export class AssistantService {
@@ -110,7 +119,7 @@ export class AssistantService {
       const systemPrompt = await this.getSystemPrompt(userId);
 
       const completion = await this.openai.chat.completions.create({
-        model: 'gpt-4',
+        model: 'gpt-4-turbo',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: text }
@@ -172,6 +181,132 @@ export class AssistantService {
           error: errorMessage
         }],
         processingTime: Date.now() - startTime
+      };
+    }
+  }
+
+  async *processTextStream(text: string, userId: string): AsyncGenerator<StreamChunk> {
+    const startTime = Date.now();
+
+    try {
+      // Get system prompt with current context
+      const systemPrompt = await this.getSystemPrompt(userId);
+
+      const stream = await this.openai.chat.completions.create({
+        model: 'gpt-4-turbo',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: text }
+        ],
+        tools: this.getTools(),
+        tool_choice: 'auto',
+        temperature: 0.3,
+        stream: true
+      });
+
+      let fullResponse = '';
+      let toolCalls: OpenAI.Chat.Completions.ChatCompletionMessageToolCall[] = [];
+      let currentToolCall: any = null;
+
+      // Stream the response
+      for await (const chunk of stream) {
+        const delta = chunk.choices[0]?.delta;
+
+        if (!delta) continue;
+
+        // Handle content streaming
+        if (delta.content) {
+          fullResponse += delta.content;
+          yield {
+            type: 'content',
+            content: delta.content
+          };
+        }
+
+        // Handle tool calls
+        if (delta.tool_calls) {
+          for (const toolCallDelta of delta.tool_calls) {
+            const index = toolCallDelta.index;
+
+            if (!currentToolCall || currentToolCall.index !== index) {
+              // Start a new tool call
+              currentToolCall = {
+                index,
+                id: toolCallDelta.id || '',
+                type: 'function' as const,
+                function: {
+                  name: toolCallDelta.function?.name || '',
+                  arguments: toolCallDelta.function?.arguments || ''
+                }
+              };
+            } else {
+              // Append to existing tool call
+              if (toolCallDelta.function?.name) {
+                currentToolCall.function.name += toolCallDelta.function.name;
+              }
+              if (toolCallDelta.function?.arguments) {
+                currentToolCall.function.arguments += toolCallDelta.function.arguments;
+              }
+            }
+          }
+        }
+
+        // If tool call is complete, add to array
+        if (chunk.choices[0]?.finish_reason === 'tool_calls' || chunk.choices[0]?.finish_reason === 'stop') {
+          if (currentToolCall && currentToolCall.id) {
+            toolCalls.push(currentToolCall);
+            currentToolCall = null;
+          }
+        }
+      }
+
+      // Process tool calls after streaming is complete
+      const actions: AssistantResponse['actions'] = [];
+      if (toolCalls.length > 0) {
+        for (const toolCall of toolCalls) {
+          const action = await this.executeTool(toolCall, userId);
+          actions.push(action);
+          yield {
+            type: 'action',
+            action
+          };
+        }
+      }
+
+      // Generate TTS audio (optional - can be skipped for faster response)
+      const audioUrl = await this.generateSpeech(fullResponse);
+      if (audioUrl) {
+        yield {
+          type: 'audio',
+          audioUrl
+        };
+      }
+
+      // Send done signal with processing time
+      yield {
+        type: 'done',
+        processingTime: Date.now() - startTime
+      };
+
+    } catch (error) {
+      logger.error('Failed to process text stream:', error);
+
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      let userMessage = "I'm having trouble understanding your request. Could you try rephrasing it?";
+
+      if (errorMessage.includes('not found')) {
+        userMessage = errorMessage;
+      } else if (errorMessage.includes('Did you mean')) {
+        userMessage = errorMessage;
+      } else if (errorMessage.includes('multiple items')) {
+        userMessage = errorMessage;
+      } else if (errorMessage.includes('API')) {
+        userMessage = "I'm temporarily having connection issues. Please try again in a moment.";
+      }
+
+      yield {
+        type: 'error',
+        error: userMessage
       };
     }
   }
@@ -245,34 +380,32 @@ export class AssistantService {
     const user = await this.db.get('SELECT restaurant_id FROM users WHERE id = ?', [userId]);
     const restaurantId = user?.restaurant_id || 'demo-restaurant-1';
 
-    // Get current restaurant context with error handling
-    let orders = [];
-    let unavailableItems = [];
-    let lowStockItems = [];
-    let pendingTasks = [];
+    // Get current restaurant context with error handling - run queries in parallel
+    const [ordersResult, unavailableItemsResult, lowStockItemsResult, pendingTasksResult] = await Promise.allSettled([
+      this.db.all('SELECT * FROM orders WHERE restaurant_id = ? AND status != "completed" ORDER BY created_at DESC LIMIT 10', [restaurantId]),
+      this.db.all('SELECT * FROM menu_items WHERE restaurant_id = ? AND is_available = 0', [restaurantId]),
+      this.db.all('SELECT * FROM inventory_items WHERE restaurant_id = ? AND on_hand_qty <= low_stock_threshold', [restaurantId]),
+      this.db.all('SELECT id, title, description, status, priority, type, assigned_to, due_date, created_at, updated_at FROM tasks WHERE restaurant_id = ? AND status = "pending" LIMIT 5', [restaurantId])
+    ]);
 
-    try {
-      orders = await this.db.all('SELECT * FROM orders WHERE restaurant_id = ? AND status != "completed" ORDER BY created_at DESC LIMIT 10', [restaurantId]);
-    } catch (error) {
-      logger.warn('Failed to fetch orders for assistant context:', error);
+    // Extract results or use empty arrays on failure
+    const orders = ordersResult.status === 'fulfilled' ? ordersResult.value : [];
+    const unavailableItems = unavailableItemsResult.status === 'fulfilled' ? unavailableItemsResult.value : [];
+    const lowStockItems = lowStockItemsResult.status === 'fulfilled' ? lowStockItemsResult.value : [];
+    const pendingTasks = pendingTasksResult.status === 'fulfilled' ? pendingTasksResult.value : [];
+
+    // Log any failures
+    if (ordersResult.status === 'rejected') {
+      logger.warn('Failed to fetch orders for assistant context:', ordersResult.reason);
     }
-
-    try {
-      unavailableItems = await this.db.all('SELECT * FROM menu_items WHERE restaurant_id = ? AND is_available = 0', [restaurantId]);
-    } catch (error) {
-      logger.warn('Failed to fetch unavailable items for assistant context:', error);
+    if (unavailableItemsResult.status === 'rejected') {
+      logger.warn('Failed to fetch unavailable items for assistant context:', unavailableItemsResult.reason);
     }
-
-    try {
-      lowStockItems = await this.db.all('SELECT * FROM inventory_items WHERE restaurant_id = ? AND on_hand_qty <= low_stock_threshold', [restaurantId]);
-    } catch (error) {
-      logger.warn('Failed to fetch low stock items for assistant context:', error);
+    if (lowStockItemsResult.status === 'rejected') {
+      logger.warn('Failed to fetch low stock items for assistant context:', lowStockItemsResult.reason);
     }
-
-    try {
-      pendingTasks = await this.db.all('SELECT id, title, description, status, priority, type, assigned_to, due_date, created_at, updated_at FROM tasks WHERE restaurant_id = ? AND status = "pending" LIMIT 5', [restaurantId]);
-    } catch (error) {
-      logger.warn('Failed to fetch pending tasks for assistant context:', error);
+    if (pendingTasksResult.status === 'rejected') {
+      logger.warn('Failed to fetch pending tasks for assistant context:', pendingTasksResult.reason);
     }
 
     const context = {
