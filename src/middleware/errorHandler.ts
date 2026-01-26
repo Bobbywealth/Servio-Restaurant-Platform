@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { logger } from '../utils/logger';
 
-const FRONTEND_ORIGIN = 'https://servio-app.onrender.com';
+const FRONTEND_ORIGIN = 'https://servio.solutions';
 
 export interface AppError extends Error {
   statusCode?: number;
