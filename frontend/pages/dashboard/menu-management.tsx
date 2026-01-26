@@ -131,6 +131,9 @@ const MenuManagement: React.FC = () => {
   const [showAddCategoryModal, setShowAddCategoryModal] = useState(false);
   const [showEditItemModal, setShowEditItemModal] = useState(false);
   const [showAddModifierGroupModal, setShowAddModifierGroupModal] = useState(false);
+  const [showModifierManager, setShowModifierManager] = useState(false);
+  const [editingModifierGroup, setEditingModifierGroup] = useState<ModifierGroup | null>(null);
+  const [editingModifierOption, setEditingModifierOption] = useState<{ groupId: string; option: ModifierOption } | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isSavingModifier, setIsSavingModifier] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
@@ -465,7 +468,14 @@ const MenuManagement: React.FC = () => {
         isRequired: g.isRequired ?? g.is_required ?? false,
         displayOrder: g.display_order ?? 0,
         isActive: g.is_active ?? g.isActive ?? true,
-        options: g.options
+        options: Array.isArray(g.options) ? g.options.map((opt: any) => ({
+          id: opt.id,
+          name: opt.name,
+          description: opt.description,
+          priceDelta: Number(opt.price_delta ?? opt.priceDelta ?? 0),
+          isActive: opt.is_active ?? opt.isActive ?? true,
+          displayOrder: opt.display_order ?? 0
+        })) : []
       }));
       setModifierGroups(mappedGroups);
       const optionsMap: Record<string, ModifierOption[]> = {};
@@ -753,6 +763,70 @@ const MenuManagement: React.FC = () => {
     } catch (error) {
       console.error('Failed to add modifier option:', error);
       toast.error('Failed to add modifier option');
+    } finally {
+      setIsSavingModifier(false);
+    }
+  };
+
+  const handleUpdateModifierGroup = async (groupId: string, updates: Partial<ModifierGroup>) => {
+    setIsSavingModifier(true);
+    try {
+      await api.put(`/api/modifier-groups/${groupId}`, updates);
+      toast.success('Modifier group updated');
+      await loadModifierGroups();
+      setEditingModifierGroup(null);
+    } catch (error) {
+      console.error('Failed to update modifier group:', error);
+      toast.error('Failed to update modifier group');
+    } finally {
+      setIsSavingModifier(false);
+    }
+  };
+
+  const handleDeleteModifierGroup = async (groupId: string) => {
+    if (!confirm('Are you sure you want to delete this modifier group? This will remove it from all menu items.')) {
+      return;
+    }
+    setIsSavingModifier(true);
+    try {
+      await api.delete(`/api/modifier-groups/${groupId}`);
+      toast.success('Modifier group deleted');
+      await loadModifierGroups();
+    } catch (error) {
+      console.error('Failed to delete modifier group:', error);
+      toast.error('Failed to delete modifier group');
+    } finally {
+      setIsSavingModifier(false);
+    }
+  };
+
+  const handleUpdateModifierOption = async (optionId: string, updates: Partial<ModifierOption>) => {
+    setIsSavingModifier(true);
+    try {
+      await api.put(`/api/modifier-options/${optionId}`, updates);
+      toast.success('Option updated');
+      await loadModifierGroups();
+      setEditingModifierOption(null);
+    } catch (error) {
+      console.error('Failed to update modifier option:', error);
+      toast.error('Failed to update modifier option');
+    } finally {
+      setIsSavingModifier(false);
+    }
+  };
+
+  const handleDeleteModifierOption = async (optionId: string) => {
+    if (!confirm('Are you sure you want to delete this option?')) {
+      return;
+    }
+    setIsSavingModifier(true);
+    try {
+      await api.delete(`/api/modifier-options/${optionId}`);
+      toast.success('Option deleted');
+      await loadModifierGroups();
+    } catch (error) {
+      console.error('Failed to delete modifier option:', error);
+      toast.error('Failed to delete modifier option');
     } finally {
       setIsSavingModifier(false);
     }
@@ -1265,11 +1339,11 @@ const MenuManagement: React.FC = () => {
                 </button>
 
                 <button
-                  onClick={() => setShowAddModifierGroupModal(true)}
+                  onClick={() => setShowModifierManager(true)}
                   className="flex items-center gap-2 px-3 sm:px-4 py-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 active:bg-gray-200 dark:text-gray-400 dark:hover:text-white dark:hover:bg-gray-700 rounded-lg transition-colors min-h-[40px] touch-manipulation text-sm whitespace-nowrap"
                 >
                   <Tag className="w-4 h-4 shrink-0" />
-                  <span className="hidden sm:inline">Add Modifier Group</span>
+                  <span className="hidden sm:inline">Manage Modifiers</span>
                   <span className="sm:hidden">Modifiers</span>
                 </button>
 
@@ -2054,6 +2128,401 @@ const MenuManagement: React.FC = () => {
                   {isSavingModifier ? 'Saving...' : 'Create'}
                 </button>
               </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Modifier Manager Panel */}
+      <AnimatePresence>
+        {showModifierManager && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+            onClick={() => {
+              setShowModifierManager(false);
+              setEditingModifierGroup(null);
+              setEditingModifierOption(null);
+            }}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white dark:bg-gray-800 rounded-lg max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                <h2 className="text-xl font-bold text-gray-900 dark:text-white">Manage Modifier Groups</h2>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      setShowModifierManager(false);
+                      setShowAddModifierGroupModal(true);
+                    }}
+                    className="flex items-center gap-2 px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add Group
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowModifierManager(false);
+                      setEditingModifierGroup(null);
+                      setEditingModifierOption(null);
+                    }}
+                    className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-6">
+                {modifierGroups.length === 0 ? (
+                  <div className="text-center py-12">
+                    <Tag className="w-12 h-12 mx-auto text-gray-300 dark:text-gray-600" />
+                    <p className="mt-4 text-gray-500 dark:text-gray-400">No modifier groups yet.</p>
+                    <p className="text-sm text-gray-400 dark:text-gray-500">Create a modifier group to add options like sides, toppings, or customizations.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {modifierGroups.map((group) => {
+                      const isExpanded = expandedModifierGroups.has(group.id);
+                      const groupOptions = group.options || [];
+                      const draft = newModifierOptionDrafts[group.id] || { name: '', description: '', priceModifier: '' };
+
+                      return (
+                        <div
+                          key={group.id}
+                          className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden"
+                        >
+                          {/* Group Header */}
+                          <div
+                            className="flex items-center gap-3 p-4 bg-gray-50 dark:bg-gray-900 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800"
+                            onClick={() => toggleModifierGroupExpanded(group.id)}
+                          >
+                            <button className="text-gray-500">
+                              {isExpanded ? (
+                                <ChevronDown className="w-5 h-5" />
+                              ) : (
+                                <ChevronRight className="w-5 h-5" />
+                              )}
+                            </button>
+                            <div className="flex-1 min-w-0">
+                              <div className="font-bold text-gray-900 dark:text-white truncate">{group.name}</div>
+                              <div className="text-xs text-gray-500 dark:text-gray-400">
+                                {group.selectionType} · {group.isRequired ? 'Required' : 'Optional'} · {groupOptions.length} option{groupOptions.length !== 1 ? 's' : ''}
+                                {group.minSelections > 0 && ` · min ${group.minSelections}`}
+                                {group.maxSelections !== null && ` · max ${group.maxSelections}`}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                              <button
+                                onClick={() => setEditingModifierGroup(group)}
+                                className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg"
+                                title="Edit group"
+                              >
+                                <Edit3 className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteModifierGroup(group.id)}
+                                className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg"
+                                title="Delete group"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Expanded Content - Options List */}
+                          {isExpanded && (
+                            <div className="border-t border-gray-200 dark:border-gray-700">
+                              <div className="p-4 space-y-3">
+                                {groupOptions.length === 0 ? (
+                                  <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-2">
+                                    No options in this group yet. Add one below.
+                                  </p>
+                                ) : (
+                                  groupOptions.map((option) => (
+                                    <div
+                                      key={option.id}
+                                      className="flex items-center gap-3 p-3 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-lg"
+                                    >
+                                      <div className="flex-1 min-w-0">
+                                        <div className="font-medium text-gray-900 dark:text-white truncate">{option.name}</div>
+                                        <div className="text-xs text-gray-500 dark:text-gray-400">
+                                          {option.priceDelta > 0 ? `+$${option.priceDelta.toFixed(2)}` : option.priceDelta < 0 ? `-$${Math.abs(option.priceDelta).toFixed(2)}` : 'No extra charge'}
+                                        </div>
+                                      </div>
+                                      <div className="flex items-center gap-1">
+                                        <button
+                                          onClick={() => setEditingModifierOption({ groupId: group.id, option })}
+                                          className="p-1.5 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
+                                          title="Edit option"
+                                        >
+                                          <Edit3 className="w-3.5 h-3.5" />
+                                        </button>
+                                        <button
+                                          onClick={() => handleDeleteModifierOption(option.id)}
+                                          className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"
+                                          title="Delete option"
+                                        >
+                                          <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ))
+                                )}
+
+                                {/* Add new option form */}
+                                <div className="pt-3 border-t border-gray-100 dark:border-gray-700">
+                                  <div className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
+                                    Add new option
+                                  </div>
+                                  <div className="flex flex-col sm:flex-row gap-2">
+                                    <input
+                                      type="text"
+                                      placeholder="Option name"
+                                      value={draft.name}
+                                      onChange={(e) => setNewModifierOptionDrafts((prev) => ({
+                                        ...prev,
+                                        [group.id]: { ...draft, name: e.target.value }
+                                      }))}
+                                      className="flex-1 px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-700 dark:text-white"
+                                    />
+                                    <input
+                                      type="number"
+                                      step="0.01"
+                                      placeholder="Price (+/-)"
+                                      value={draft.priceModifier}
+                                      onChange={(e) => setNewModifierOptionDrafts((prev) => ({
+                                        ...prev,
+                                        [group.id]: { ...draft, priceModifier: e.target.value }
+                                      }))}
+                                      className="w-full sm:w-28 px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-700 dark:text-white"
+                                    />
+                                    <button
+                                      onClick={() => handleAddModifierOption(group.id)}
+                                      disabled={isSavingModifier || !draft.name.trim()}
+                                      className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-gray-300 text-white rounded-lg text-sm font-medium whitespace-nowrap"
+                                    >
+                                      Add
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Edit Modifier Group Modal */}
+      <AnimatePresence>
+        {editingModifierGroup && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[60]"
+            onClick={() => setEditingModifierGroup(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white dark:bg-gray-800 rounded-lg max-w-lg w-full p-6"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white">Edit Modifier Group</h2>
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const form = e.currentTarget;
+                  const formData = new FormData(form);
+                  handleUpdateModifierGroup(editingModifierGroup.id, {
+                    name: formData.get('name') as string,
+                    description: formData.get('description') as string || null,
+                    selectionType: formData.get('selectionType') as 'single' | 'multiple' | 'quantity',
+                    minSelections: Number(formData.get('minSelections') || 0),
+                    maxSelections: formData.get('maxSelections') ? Number(formData.get('maxSelections')) : null,
+                    isRequired: formData.get('isRequired') === 'on'
+                  });
+                }}
+                className="mt-4 space-y-4"
+              >
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Name</label>
+                  <input
+                    type="text"
+                    name="name"
+                    defaultValue={editingModifierGroup.name}
+                    className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Description</label>
+                  <textarea
+                    name="description"
+                    defaultValue={editingModifierGroup.description || ''}
+                    className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                    rows={2}
+                  />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Selection type</label>
+                    <select
+                      name="selectionType"
+                      defaultValue={editingModifierGroup.selectionType}
+                      className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                    >
+                      <option value="single">Single</option>
+                      <option value="multiple">Multiple</option>
+                      <option value="quantity">Quantity</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Min selections</label>
+                    <input
+                      type="number"
+                      name="minSelections"
+                      min={0}
+                      defaultValue={editingModifierGroup.minSelections}
+                      className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Max selections</label>
+                    <input
+                      type="number"
+                      name="maxSelections"
+                      min={0}
+                      defaultValue={editingModifierGroup.maxSelections ?? ''}
+                      placeholder="Unlimited"
+                      className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                    />
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    name="isRequired"
+                    id="edit-modifier-required"
+                    defaultChecked={editingModifierGroup.isRequired}
+                    className="h-4 w-4 text-red-600 border-gray-300 rounded"
+                  />
+                  <label htmlFor="edit-modifier-required" className="text-sm text-gray-700 dark:text-gray-300">
+                    Required group
+                  </label>
+                </div>
+                <div className="mt-6 flex justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setEditingModifierGroup(null)}
+                    className="px-4 py-2 rounded-lg border border-gray-200 text-gray-600 hover:text-gray-900 dark:border-gray-600 dark:text-gray-300"
+                    disabled={isSavingModifier}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white"
+                    disabled={isSavingModifier}
+                  >
+                    {isSavingModifier ? 'Saving...' : 'Save Changes'}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Edit Modifier Option Modal */}
+      <AnimatePresence>
+        {editingModifierOption && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[60]"
+            onClick={() => setEditingModifierOption(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white dark:bg-gray-800 rounded-lg max-w-md w-full p-6"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white">Edit Option</h2>
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const form = e.currentTarget;
+                  const formData = new FormData(form);
+                  handleUpdateModifierOption(editingModifierOption.option.id, {
+                    name: formData.get('name') as string,
+                    priceDelta: Number(formData.get('priceDelta') || 0)
+                  });
+                }}
+                className="mt-4 space-y-4"
+              >
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Option name</label>
+                  <input
+                    type="text"
+                    name="name"
+                    defaultValue={editingModifierOption.option.name}
+                    className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Price adjustment</label>
+                  <input
+                    type="number"
+                    name="priceDelta"
+                    step="0.01"
+                    defaultValue={editingModifierOption.option.priceDelta}
+                    className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                  />
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    Use positive values to add to price, negative to subtract
+                  </p>
+                </div>
+                <div className="mt-6 flex justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setEditingModifierOption(null)}
+                    className="px-4 py-2 rounded-lg border border-gray-200 text-gray-600 hover:text-gray-900 dark:border-gray-600 dark:text-gray-300"
+                    disabled={isSavingModifier}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white"
+                    disabled={isSavingModifier}
+                  >
+                    {isSavingModifier ? 'Saving...' : 'Save Changes'}
+                  </button>
+                </div>
+              </form>
             </motion.div>
           </motion.div>
         )}
