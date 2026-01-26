@@ -16,12 +16,12 @@ BEGIN
     END;
 
     -- Backfill existing completed tasks
-    -- Use NULLIF to convert empty strings to NULL before comparing
+    -- Use LENGTH to safely check for non-empty values
     -- This prevents "invalid input syntax for type timestamp" errors
     UPDATE tasks
     SET completed = CASE
-        WHEN completed_at IS NOT NULL AND completed_at != ''
-        THEN completed_at
+        WHEN LENGTH(COALESCE(completed_at::TEXT, '')) > 0
+        THEN completed_at::TEXT
         ELSE NULL
     END
     WHERE status = 'completed'
