@@ -1274,7 +1274,7 @@ export default function PublicProfile() {
                 )}
 
                 {/* Hidden section - we'll replace the old modifier groups rendering */}
-                {false && selectedItem && selectedItem.modifierGroups && selectedItem.modifierGroups
+                {false && selectedItem?.modifierGroups && selectedItem.modifierGroups
                   .filter(group => group.options && group.options.length > 0 && group.options.some(opt => opt.isActive && !opt.isSoldOut))
                   .map(group => (
                   <div key={group.id} className="mb-6">
