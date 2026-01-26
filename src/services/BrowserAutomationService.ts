@@ -49,21 +49,143 @@ export class BrowserAutomationService {
   }
 
   /**
-   * Initialize browser instance
+   * Initialize browser instance with anti-detection measures
    */
   private async initBrowser(): Promise<Browser> {
     if (!this.browser) {
+      // Allow headless override via environment variable
+      const headlessMode = process.env.HEADLESS !== 'false';
+
       this.browser = await chromium.launch({
-        headless: true,
+        headless: headlessMode,
         args: [
           '--no-sandbox',
           '--disable-setuid-sandbox',
           '--disable-dev-shm-usage',
-          '--disable-gpu'
+          '--disable-gpu',
+
+          // Anti-detection arguments
+          '--disable-blink-features=AutomationControlled',
+          '--disable-features=IsolateOrigins,site-per-process',
+          '--window-size=1920,1080',
+          '--start-maximized',
+          '--disable-features=VizDisplayCompositor'
         ]
       });
+
+      logger.info(`Browser launched in ${headlessMode ? 'headless' : 'headed'} mode`);
     }
     return this.browser;
+  }
+
+  /**
+   * Create stealth context with realistic fingerprint
+   */
+  private async createStealthContext(): Promise<BrowserContext> {
+    const browser = await this.initBrowser();
+
+    const context = await browser.newContext({
+      viewport: { width: 1920, height: 1080 },
+
+      // Realistic user agent (update periodically)
+      userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+
+      locale: 'en-US',
+      timezoneId: 'America/New_York',
+      javaScriptEnabled: true,
+
+      extraHTTPHeaders: {
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Connection': 'keep-alive',
+        'Upgrade-Insecure-Requests': '1',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'none',
+        'Sec-Fetch-User': '?1',
+        'Cache-Control': 'max-age=0'
+      }
+    });
+
+    // Inject anti-detection scripts
+    await context.addInitScript(() => {
+      // Override navigator.webdriver
+      Object.defineProperty(navigator, 'webdriver', {
+        get: () => undefined
+      });
+
+      // Make plugins look real
+      Object.defineProperty(navigator, 'plugins', {
+        get: () => [1, 2, 3, 4, 5]
+      });
+
+      // Override languages
+      Object.defineProperty(navigator, 'languages', {
+        get: () => ['en-US', 'en']
+      });
+
+      // Add chrome runtime
+      (window as any).chrome = { runtime: {} };
+
+      // Mock permissions
+      const originalQuery = window.navigator.permissions.query;
+      window.navigator.permissions.query = (parameters: any) => (
+        parameters.name === 'notifications' ?
+          Promise.resolve({ state: 'denied' } as PermissionStatus) :
+          originalQuery(parameters)
+      );
+    });
+
+    return context;
+  }
+
+  /**
+   * Random delay to mimic human behavior
+   */
+  private async humanDelay(min: number = 500, max: number = 2000): Promise<void> {
+    const delay = Math.floor(Math.random() * (max - min + 1)) + min;
+    await new Promise(resolve => setTimeout(resolve, delay));
+  }
+
+  /**
+   * Type text like a human with random delays
+   */
+  private async humanType(page: Page, selector: string, text: string): Promise<void> {
+    await page.click(selector);
+    await this.humanDelay(100, 300);
+
+    for (const char of text) {
+      await page.type(selector, char);
+      await this.humanDelay(50, 150);
+    }
+  }
+
+  /**
+   * Check if page has captcha
+   */
+  private async detectCaptcha(page: Page): Promise<boolean> {
+    try {
+      const captchaSelectors = [
+        '[class*="captcha"]',
+        '[id*="captcha"]',
+        'iframe[src*="recaptcha"]',
+        'iframe[src*="hcaptcha"]',
+        '[class*="challenge"]',
+        '#challenge-form'
+      ];
+
+      for (const selector of captchaSelectors) {
+        const element = await page.$(selector);
+        if (element) {
+          logger.warn(`Captcha detected: ${selector}`);
+          return true;
+        }
+      }
+      return false;
+    } catch {
+      return false;
+    }
   }
 
   /**
@@ -370,17 +492,14 @@ export class BrowserAutomationService {
   }
 
   /**
-   * DoorDash-specific sync implementation
+   * DoorDash-specific sync implementation with stealth mode
    */
   private async syncDoorDash(
     credentials: PlatformCredentials,
     menuItems: MenuItem[],
     syncType: string
   ): Promise<SyncResult> {
-    const browser = await this.initBrowser();
-    const context = await browser.newContext({
-      userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
-    });
+    const context = await this.createStealthContext();
     const page = await context.newPage();
 
     const result: SyncResult = {
@@ -396,40 +515,68 @@ export class BrowserAutomationService {
 
       // Navigate to DoorDash Merchant Portal
       const portalUrl = credentials.portalUrl || 'https://merchant-portal.doordash.com';
-      await page.goto(portalUrl, { waitUntil: 'networkidle' });
-      await page.waitForTimeout(2000);
+      logger.info(`Navigating to ${portalUrl}...`);
+      await page.goto(portalUrl, { waitUntil: 'networkidle', timeout: 30000 });
+      await this.humanDelay(2000, 3000);
 
-      // Login
-      logger.info('Attempting DoorDash login...');
+      // Check for captcha before login
+      if (await this.detectCaptcha(page)) {
+        throw new Error('Captcha detected before login. Set HEADLESS=false to solve manually.');
+      }
+
+      // Login with human-like behavior
+      logger.info('Attempting DoorDash login with stealth mode...');
       const emailSelector = 'input[name="email"], input[type="email"], #email';
       const passwordSelector = 'input[name="password"], input[type="password"], #password';
 
-      await page.fill(emailSelector, credentials.username);
-      await page.fill(passwordSelector, password);
+      // Type email like a human
+      await page.waitForSelector(emailSelector, { timeout: 10000 });
+      await this.humanType(page, emailSelector, credentials.username);
+      await this.humanDelay(500, 1000);
+
+      // Check for "Next" button (two-step login)
+      const nextButton = await page.$('button:has-text("Next"), button:has-text("Continue")');
+      if (nextButton) {
+        await nextButton.click();
+        await this.humanDelay(2000, 3000);
+      }
+
+      // Type password like a human
+      await page.waitForSelector(passwordSelector, { timeout: 10000 });
+      await this.humanType(page, passwordSelector, password);
+      await this.humanDelay(500, 1000);
 
       // Click login button
       await page.click('button[type="submit"], button:has-text("Sign In"), button:has-text("Log In")');
-      await page.waitForTimeout(5000);
+      await this.humanDelay(5000, 7000);
+
+      // Check for captcha after login attempt
+      if (await this.detectCaptcha(page)) {
+        throw new Error('Captcha detected after login. Set HEADLESS=false to solve manually.');
+      }
 
       // Check if login was successful
       const url = page.url();
       if (url.includes('login') || url.includes('signin')) {
-        throw new Error('Login failed - still on login page');
+        throw new Error('Login failed - still on login page. Check credentials or captcha.');
       }
 
-      logger.info('DoorDash login successful');
+      logger.info('DoorDash login successful (stealth mode)');
 
       // Navigate to menu management
-      await page.goto(`${portalUrl}/menu`, { waitUntil: 'networkidle' });
-      await page.waitForTimeout(3000);
+      logger.info('Navigating to menu management...');
+      await page.goto(`${portalUrl}/menu`, { waitUntil: 'networkidle', timeout: 30000 });
+      await this.humanDelay(2000, 3000);
 
-      // Sync each menu item
+      // Sync each menu item with human-like behavior
       for (const item of menuItems) {
         try {
-          // Search for the item
+          // Search for the item (human typing)
           const searchSelector = 'input[placeholder*="Search"], input[type="search"]';
-          await page.fill(searchSelector, item.name);
-          await page.waitForTimeout(1000);
+          if (await page.$(searchSelector)) {
+            await this.humanType(page, searchSelector, item.name);
+            await this.humanDelay(800, 1500);
+          }
 
           // Try to find and update the item
           const itemRow = await page.locator(`text="${item.name}"`).first();
@@ -437,7 +584,7 @@ export class BrowserAutomationService {
           if (await itemRow.isVisible()) {
             // Click to edit
             await itemRow.click();
-            await page.waitForTimeout(1000);
+            await this.humanDelay(1000, 2000);
 
             // Update availability toggle
             if (syncType === 'stock_update' || syncType === 'full_sync') {
@@ -448,7 +595,7 @@ export class BrowserAutomationService {
                 const isCurrentlyEnabled = await toggle.getAttribute('aria-checked') === 'true';
                 if (isCurrentlyEnabled !== item.isAvailable) {
                   await toggle.click();
-                  await page.waitForTimeout(500);
+                  await this.humanDelay(500, 800);
                 }
               }
             }
@@ -457,17 +604,19 @@ export class BrowserAutomationService {
             if (syncType === 'price_update' || syncType === 'full_sync') {
               const priceInput = page.locator('input[name*="price"], input[aria-label*="price"]').first();
               if (await priceInput.isVisible()) {
-                await priceInput.fill(item.price.toFixed(2));
-                await page.waitForTimeout(500);
+                await priceInput.fill(''); // Clear first
+                await this.humanDelay(200, 400);
+                await this.humanType(page, 'input[name*="price"], input[aria-label*="price"]', item.price.toFixed(2));
+                await this.humanDelay(500, 800);
               }
             }
 
             // Save changes
             await page.click('button:has-text("Save"), button:has-text("Update")');
-            await page.waitForTimeout(1000);
+            await this.humanDelay(1500, 2500);
 
             result.itemsSynced++;
-            logger.info(`Synced: ${item.name}`);
+            logger.info(`✓ Synced: ${item.name}`);
           } else {
             result.itemsFailed++;
             result.errors.push(`Item not found: ${item.name}`);
@@ -498,17 +647,14 @@ export class BrowserAutomationService {
   }
 
   /**
-   * UberEats-specific sync implementation
+   * UberEats-specific sync implementation with stealth mode
    */
   private async syncUberEats(
     credentials: PlatformCredentials,
     menuItems: MenuItem[],
     syncType: string
   ): Promise<SyncResult> {
-    const browser = await this.initBrowser();
-    const context = await browser.newContext({
-      userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
-    });
+    const context = await this.createStealthContext();
     const page = await context.newPage();
 
     const result: SyncResult = {
@@ -524,46 +670,62 @@ export class BrowserAutomationService {
 
       // Navigate to UberEats Manager
       const portalUrl = credentials.portalUrl || 'https://restaurant.uber.com';
-      await page.goto(`${portalUrl}/login`, { waitUntil: 'networkidle' });
-      await page.waitForTimeout(2000);
+      logger.info(`Navigating to ${portalUrl}/login...`);
+      await page.goto(`${portalUrl}/login`, { waitUntil: 'networkidle', timeout: 30000 });
+      await this.humanDelay(2000, 3000);
 
-      // Login
-      logger.info('Attempting UberEats login...');
+      // Check for captcha before login
+      if (await this.detectCaptcha(page)) {
+        throw new Error('Captcha detected before login. Set HEADLESS=false to solve manually.');
+      }
+
+      // Login with human-like behavior
+      logger.info('Attempting UberEats login with stealth mode...');
       const emailSelector = 'input[type="email"], input[name="email"], #email';
-      await page.fill(emailSelector, credentials.username);
+      await page.waitForSelector(emailSelector, { timeout: 10000 });
+      await this.humanType(page, emailSelector, credentials.username);
+      await this.humanDelay(500, 1000);
 
       // Click next/continue
       await page.click('button:has-text("Next"), button:has-text("Continue"), button[type="submit"]');
-      await page.waitForTimeout(2000);
+      await this.humanDelay(2000, 3000);
 
       // Enter password
       const passwordSelector = 'input[type="password"], input[name="password"], #password';
-      await page.fill(passwordSelector, password);
+      await page.waitForSelector(passwordSelector, { timeout: 10000 });
+      await this.humanType(page, passwordSelector, password);
+      await this.humanDelay(500, 1000);
 
       // Click login
       await page.click('button:has-text("Sign In"), button:has-text("Log In"), button[type="submit"]');
-      await page.waitForTimeout(5000);
+      await this.humanDelay(5000, 7000);
+
+      // Check for captcha after login attempt
+      if (await this.detectCaptcha(page)) {
+        throw new Error('Captcha detected after login. Set HEADLESS=false to solve manually.');
+      }
 
       // Check if login was successful
       const url = page.url();
       if (url.includes('login') || url.includes('signin')) {
-        throw new Error('Login failed - still on login page');
+        throw new Error('Login failed - still on login page. Check credentials or captcha.');
       }
 
-      logger.info('UberEats login successful');
+      logger.info('UberEats login successful (stealth mode)');
 
       // Navigate to menu management
-      await page.goto(`${portalUrl}/menu`, { waitUntil: 'networkidle' });
-      await page.waitForTimeout(3000);
+      logger.info('Navigating to menu management...');
+      await page.goto(`${portalUrl}/menu`, { waitUntil: 'networkidle', timeout: 30000 });
+      await this.humanDelay(2000, 3000);
 
-      // Sync each menu item
+      // Sync each menu item with human-like behavior
       for (const item of menuItems) {
         try {
           // Search for the item
           const searchSelector = 'input[placeholder*="Search"], input[type="search"]';
           if (await page.locator(searchSelector).isVisible()) {
-            await page.fill(searchSelector, item.name);
-            await page.waitForTimeout(1000);
+            await this.humanType(page, searchSelector, item.name);
+            await this.humanDelay(800, 1500);
           }
 
           // Try to find and update the item
@@ -571,7 +733,7 @@ export class BrowserAutomationService {
 
           if (await itemCard.isVisible()) {
             await itemCard.click();
-            await page.waitForTimeout(1500);
+            await this.humanDelay(1500, 2500);
 
             // Update availability toggle
             if (syncType === 'stock_update' || syncType === 'full_sync') {
@@ -581,7 +743,7 @@ export class BrowserAutomationService {
                 const isCurrentlyEnabled = await availabilityToggle.getAttribute('aria-checked') === 'true';
                 if (isCurrentlyEnabled !== item.isAvailable) {
                   await availabilityToggle.click();
-                  await page.waitForTimeout(500);
+                  await this.humanDelay(500, 800);
                 }
               }
             }
@@ -590,17 +752,19 @@ export class BrowserAutomationService {
             if (syncType === 'price_update' || syncType === 'full_sync') {
               const priceInput = page.locator('input[data-testid*="price"], input[name*="price"]').first();
               if (await priceInput.isVisible()) {
-                await priceInput.fill(item.price.toFixed(2));
-                await page.waitForTimeout(500);
+                await priceInput.fill(''); // Clear first
+                await this.humanDelay(200, 400);
+                await this.humanType(page, 'input[data-testid*="price"], input[name*="price"]', item.price.toFixed(2));
+                await this.humanDelay(500, 800);
               }
             }
 
             // Save changes
             await page.click('button:has-text("Save"), button:has-text("Done"), button:has-text("Update")');
-            await page.waitForTimeout(1500);
+            await this.humanDelay(1500, 2500);
 
             result.itemsSynced++;
-            logger.info(`Synced: ${item.name}`);
+            logger.info(`✓ Synced: ${item.name}`);
           } else {
             result.itemsFailed++;
             result.errors.push(`Item not found: ${item.name}`);
@@ -631,7 +795,7 @@ export class BrowserAutomationService {
   }
 
   /**
-   * Test platform credentials
+   * Test platform credentials with stealth mode
    */
   public async testCredentials(
     platform: string,
@@ -639,8 +803,7 @@ export class BrowserAutomationService {
     password: string,
     portalUrl?: string
   ): Promise<{ success: boolean; message: string }> {
-    const browser = await this.initBrowser();
-    const context = await browser.newContext();
+    const context = await this.createStealthContext();
     const page = await context.newPage();
 
     try {
@@ -651,30 +814,56 @@ export class BrowserAutomationService {
           : 'https://restaurant.uber.com/login';
       }
 
-      await page.goto(loginUrl, { waitUntil: 'networkidle' });
-      await page.waitForTimeout(2000);
+      logger.info(`Testing credentials for ${platform}...`);
+      await page.goto(loginUrl, { waitUntil: 'networkidle', timeout: 30000 });
+      await this.humanDelay(2000, 3000);
 
-      // Try to login
+      // Check for captcha
+      if (await this.detectCaptcha(page)) {
+        return {
+          success: false,
+          message: 'Captcha detected. Set HEADLESS=false to solve manually.'
+        };
+      }
+
+      // Try to login with human-like behavior
       const emailSelector = 'input[type="email"], input[name="email"]';
       const passwordSelector = 'input[type="password"], input[name="password"]';
 
-      await page.fill(emailSelector, username);
+      await page.waitForSelector(emailSelector, { timeout: 10000 });
+      await this.humanType(page, emailSelector, username);
+      await this.humanDelay(500, 1000);
+
       if (platform === 'ubereats') {
         await page.click('button:has-text("Next"), button:has-text("Continue")');
-        await page.waitForTimeout(1000);
+        await this.humanDelay(2000, 3000);
       }
-      await page.fill(passwordSelector, password);
+
+      await page.waitForSelector(passwordSelector, { timeout: 10000 });
+      await this.humanType(page, passwordSelector, password);
+      await this.humanDelay(500, 1000);
+
       await page.click('button[type="submit"]');
-      await page.waitForTimeout(5000);
+      await this.humanDelay(5000, 7000);
+
+      // Check for captcha after login
+      if (await this.detectCaptcha(page)) {
+        return {
+          success: false,
+          message: 'Captcha detected after login. Set HEADLESS=false to solve manually.'
+        };
+      }
 
       // Check if login successful
       const url = page.url();
       if (url.includes('login') || url.includes('signin')) {
-        return { success: false, message: 'Login failed - invalid credentials' };
+        return { success: false, message: 'Login failed - invalid credentials or blocked' };
       }
 
+      logger.info(`Credentials verified for ${platform}`);
       return { success: true, message: 'Credentials verified successfully' };
     } catch (error: any) {
+      logger.error(`Test failed for ${platform}:`, error);
       return { success: false, message: `Test failed: ${error.message}` };
     } finally {
       await context.close();

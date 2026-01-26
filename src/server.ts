@@ -123,6 +123,7 @@ async function initializeServer() {
     const { default: voiceHubRoutes } = await import('./routes/voice-hub');
     const { default: notificationsRoutes } = await import('./routes/notifications');
     const { default: deliveryPlatformsRoutes } = await import('./routes/delivery-platforms');
+    const { default: deliveryPlatformsSessionsRoutes } = await import('./routes/delivery-platforms-sessions');
 
     // API Routes
     app.use('/api/auth', authRoutes);
@@ -176,6 +177,7 @@ async function initializeServer() {
     app.use('/api/integrations', requireAuth, integrationsRoutes);
     app.use('/api/notifications', requireAuth, notificationsRoutes);
     app.use('/api/delivery-platforms', requireAuth, deliveryPlatformsRoutes);
+    app.use('/api/delivery-platforms-sessions', requireAuth, deliveryPlatformsSessionsRoutes);
 
     // Modifiers routes - MUST be last since it uses /api catch-all
     app.use('/api', requireAuth, modifiersRoutes);
