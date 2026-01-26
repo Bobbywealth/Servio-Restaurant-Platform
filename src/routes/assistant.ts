@@ -105,6 +105,51 @@ router.post('/process-text', asyncHandler(async (req: Request, res: Response) =>
 }));
 
 /**
+ * POST /api/assistant/process-text-stream
+ * Process text input with streaming response (Server-Sent Events)
+ */
+router.post('/process-text-stream', asyncHandler(async (req: Request, res: Response) => {
+  const { text } = req.body;
+  const userId = req.user?.id;
+
+  if (!text || typeof text !== 'string') {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'Text input is required' }
+    });
+  }
+
+  if (!userId) {
+    throw new UnauthorizedError();
+  }
+
+  logger.info(`Processing text stream for user ${userId}: "${text.substring(0, 100)}${text.length > 100 ? '...' : ''}"`);
+
+  // Set headers for Server-Sent Events
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
+
+  try {
+    // Stream the response
+    for await (const chunk of assistantService.processTextStream(text, userId)) {
+      res.write(`data: ${JSON.stringify(chunk)}\n\n`);
+    }
+
+    res.end();
+  } catch (error) {
+    logger.error('Text streaming error:', error);
+    const errorChunk = {
+      type: 'error',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    };
+    res.write(`data: ${JSON.stringify(errorChunk)}\n\n`);
+    res.end();
+  }
+}));
+
+/**
  * GET /api/assistant/status
  * Get assistant service status and configuration
  */

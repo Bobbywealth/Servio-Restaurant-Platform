@@ -633,60 +633,144 @@ export default function AssistantPanel({ showHeader = true, className }: Assista
       content: command
     })
 
-    // Process the text command
+    // Process the text command with streaming
     setState(prev => ({ ...prev, isProcessing: true }))
 
+    // Variables for streaming
+    let streamingMessageId: string | null = null;
+    let streamingContent = '';
+
     try {
-      console.log('Sending text command to backend...');
-      const response = await api.post(`/api/assistant/process-text`, {
-        text: command,
-        userId: user?.id || 'anonymous'
-      })
+      console.log('Sending text command to backend with streaming...');
 
-      const payload = response.data?.data || response.data
-      console.log('Backend response received:', payload);
-      const { response: assistantResponse, actions, audioUrl } = payload
+      // Get auth token
+      const token = localStorage.getItem('token');
+      const backendUrl = process.env.BACKEND_URL || 'http://localhost:3002';
 
-      // Add assistant response
-      if (assistantResponse) {
-        addMessage({
-          type: 'assistant',
-          content: assistantResponse,
-          metadata: {
-            duration: payload.processingTime
-          }
+      const response = await fetch(`${backendUrl}/api/assistant/process-text-stream`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token && { 'Authorization': `Bearer ${token}` })
+        },
+        body: JSON.stringify({
+          text: command,
+          userId: user?.id || 'anonymous'
         })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      // Add action messages
-      if (actions && actions.length > 0) {
-        actions.forEach((action: any) => {
-          addMessage({
-            type: 'action',
-            content: action.description,
-            metadata: {
-              action: {
-                type: action.type,
-                status: action.status,
-                details: action.details
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+
+      if (!reader) {
+        throw new Error('No reader available');
+      }
+
+      // Read the stream
+      while (true) {
+        const { done, value } = await reader.read();
+
+        if (done) break;
+
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n');
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = line.slice(6);
+
+            try {
+              const parsed = JSON.parse(data);
+
+              if (parsed.type === 'content') {
+                // Stream content - update or create message
+                streamingContent += parsed.content;
+
+                if (!streamingMessageId) {
+                  // Create new streaming message
+                  const id = `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+                  streamingMessageId = id;
+
+                  setState(prev => ({
+                    ...prev,
+                    messages: [...prev.messages, {
+                      id,
+                      type: 'assistant' as const,
+                      content: streamingContent,
+                      timestamp: new Date(),
+                      metadata: {}
+                    }]
+                  }));
+                } else {
+                  // Update existing message
+                  setState(prev => ({
+                    ...prev,
+                    messages: prev.messages.map(msg =>
+                      msg.id === streamingMessageId
+                        ? { ...msg, content: streamingContent }
+                        : msg
+                    )
+                  }));
+                }
+              } else if (parsed.type === 'action') {
+                // Add action message
+                addMessage({
+                  type: 'action',
+                  content: parsed.action.description,
+                  metadata: {
+                    action: {
+                      type: parsed.action.type,
+                      status: parsed.action.status,
+                      details: parsed.action.details
+                    }
+                  }
+                });
+              } else if (parsed.type === 'audio') {
+                // Play audio
+                console.log('🔊 Audio URL from stream:', parsed.audioUrl);
+                if (parsed.audioUrl) {
+                  try {
+                    await playAudio(parsed.audioUrl);
+                    console.log('✅ Audio playback started successfully (stream)');
+                  } catch (error) {
+                    console.error('❌ Failed to play audio (stream):', error);
+                  }
+                }
+              } else if (parsed.type === 'done') {
+                // Update processing time
+                if (streamingMessageId && parsed.processingTime) {
+                  setState(prev => ({
+                    ...prev,
+                    messages: prev.messages.map(msg =>
+                      msg.id === streamingMessageId
+                        ? { ...msg, metadata: { ...msg.metadata, duration: parsed.processingTime } }
+                        : msg
+                    )
+                  }));
+                }
+              } else if (parsed.type === 'error') {
+                // Handle error
+                addMessage({
+                  type: 'system',
+                  content: `❌ Error: ${parsed.error}`,
+                  metadata: {
+                    action: {
+                      type: 'error',
+                      status: 'error',
+                      details: parsed.error
+                    }
+                  }
+                });
               }
+            } catch (parseError) {
+              console.warn('Failed to parse SSE data:', parseError);
             }
-          })
-        })
-      }
-
-      // Play response audio
-      console.log('🔊 Audio URL from backend (text):', audioUrl);
-      if (audioUrl) {
-        console.log('🔊 Attempting to play audio (text):', audioUrl);
-        try {
-          await playAudio(audioUrl)
-          console.log('✅ Audio playback started successfully (text)');
-        } catch (error) {
-          console.error('❌ Failed to play audio (text):', error);
+          }
         }
-      } else {
-        console.warn('⚠️ No audioUrl in response (text) - TTS may have failed or been skipped');
       }
 
     } catch (error) {
