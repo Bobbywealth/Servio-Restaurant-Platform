@@ -1,25 +1,13 @@
--- Migration 021: Force Add Completed Column to Tasks (PostgreSQL)
+-- Migration 022: Ensure tasks.completed column exists and backfill safely
 -- Date: 2026-01-26
--- Purpose: Ensure the 'completed' column exists in tasks table
--- This migration uses exception handling to safely add the column
+-- Purpose: Force-add missing completed column and backfill without type errors
+
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS completed TEXT;
 
 DO $$
 DECLARE
     completed_type TEXT;
 BEGIN
-    -- Try to add the 'completed' column
-    -- If it already exists, PostgreSQL will raise an exception which we'll catch
-    BEGIN
-        ALTER TABLE tasks ADD COLUMN completed TEXT;
-        RAISE NOTICE 'Added completed column to tasks table';
-    EXCEPTION
-        WHEN duplicate_column THEN
-            RAISE NOTICE 'Column completed already exists in tasks table, skipping';
-    END;
-
-    -- Backfill existing completed tasks
-    -- Use NULLIF to avoid empty-string casts when checking completed_at
-    -- This prevents "invalid input syntax for type timestamp" errors
     SELECT data_type
       INTO completed_type
       FROM information_schema.columns
@@ -45,6 +33,4 @@ BEGIN
         WHERE status = 'completed'
           AND (completed IS NULL OR completed::TEXT = '');
     END IF;
-
-    RAISE NOTICE 'Backfilled completed column from completed_at';
 END $$;
