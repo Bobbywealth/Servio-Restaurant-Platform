@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react'
-import { StopCircle, RotateCcw, Trash2 } from 'lucide-react'
+import { StopCircle, RotateCcw, Trash2, Minimize2, Maximize2, Volume2, VolumeX, Download, Copy, RefreshCw, Sparkles } from 'lucide-react'
 import RealisticAvatar from '../../components/Assistant/RealisticAvatar'
 import MicrophoneButton from '../../components/Assistant/MicrophoneButton'
 import TranscriptFeed, { TranscriptMessage } from '../../components/Assistant/TranscriptFeed'
@@ -21,6 +21,10 @@ interface AssistantState {
   micToggleMode: boolean // Toggle mode vs hold-to-talk mode
   alwaysListening: boolean // Continuous listening mode
   inConversationWindow: boolean // Active conversation window (30s after saying "Servio")
+  isMinimized: boolean // Minimize/maximize state
+  audioSpeed: number // Playback speed (0.5x to 2x)
+  audioVolume: number // Volume (0 to 1)
+  isMuted: boolean // Mute state
 }
 
 type AssistantPanelProps = {
@@ -41,7 +45,11 @@ export default function AssistantPanel({ showHeader = true, className }: Assista
     wakeWordSupported: false, // Will be updated on client-side
     micToggleMode: true, // Default to toggle mode for easier testing
     alwaysListening: false, // Continuous listening mode
-    inConversationWindow: false // Active conversation window
+    inConversationWindow: false, // Active conversation window
+    isMinimized: false, // Start maximized
+    audioSpeed: 1.0, // Normal speed
+    audioVolume: 1.0, // Full volume
+    isMuted: false // Not muted
   })
 
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null)
@@ -79,6 +87,32 @@ export default function AssistantPanel({ showHeader = true, className }: Assista
   useEffect(() => {
     stateRef.current = state
   }, [state])
+
+  // Load conversation history from localStorage on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedMessages = localStorage.getItem('servio_conversation_history')
+      if (savedMessages) {
+        try {
+          const messages = JSON.parse(savedMessages)
+          setState(prev => ({ ...prev, messages }))
+        } catch (error) {
+          console.error('Failed to load conversation history:', error)
+        }
+      }
+    }
+  }, [])
+
+  // Save conversation history to localStorage whenever messages change
+  useEffect(() => {
+    if (typeof window !== 'undefined' && state.messages.length > 0) {
+      try {
+        localStorage.setItem('servio_conversation_history', JSON.stringify(state.messages))
+      } catch (error) {
+        console.error('Failed to save conversation history:', error)
+      }
+    }
+  }, [state.messages])
 
   const resolveAudioUrl = useCallback((audioUrl: string) => {
     // Backend returns /uploads/...; make it absolute for the browser.
@@ -121,6 +155,8 @@ export default function AssistantPanel({ showHeader = true, className }: Assista
 
     const audio = new Audio(url)
     audio.crossOrigin = 'anonymous'
+    audio.playbackRate = stateRef.current.audioSpeed
+    audio.volume = stateRef.current.isMuted ? 0 : stateRef.current.audioVolume
     audioRef.current = audio
 
     // Check if we're in the browser before accessing window
@@ -872,6 +908,9 @@ export default function AssistantPanel({ showHeader = true, className }: Assista
 
   const handleClearConversation = useCallback(() => {
     setState(prev => ({ ...prev, messages: [] }))
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('servio_conversation_history')
+    }
     addMessage({
       type: 'system',
       content: '🗑️ Conversation cleared',
@@ -879,24 +918,166 @@ export default function AssistantPanel({ showHeader = true, className }: Assista
     })
   }, [addMessage])
 
-  const containerClasses = ['max-w-7xl mx-auto', className].filter(Boolean).join(' ')
+  const toggleMinimize = useCallback(() => {
+    setState(prev => ({ ...prev, isMinimized: !prev.isMinimized }))
+  }, [])
+
+  const adjustSpeed = useCallback((speed: number) => {
+    setState(prev => ({ ...prev, audioSpeed: Math.max(0.5, Math.min(2, speed)) }))
+    if (audioRef.current) {
+      audioRef.current.playbackRate = speed
+    }
+  }, [])
+
+  const adjustVolume = useCallback((volume: number) => {
+    const newVolume = Math.max(0, Math.min(1, volume))
+    setState(prev => ({ ...prev, audioVolume: newVolume }))
+    if (audioRef.current && !stateRef.current.isMuted) {
+      audioRef.current.volume = newVolume
+    }
+  }, [])
+
+  const toggleMute = useCallback(() => {
+    setState(prev => {
+      const newMuted = !prev.isMuted
+      if (audioRef.current) {
+        audioRef.current.volume = newMuted ? 0 : prev.audioVolume
+      }
+      return { ...prev, isMuted: newMuted }
+    })
+  }, [])
+
+  const copyMessageToClipboard = useCallback((content: string) => {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(content).then(() => {
+        addMessage({
+          type: 'system',
+          content: '📋 Copied to clipboard',
+          metadata: { action: { type: 'copy', status: 'completed' } }
+        })
+      }).catch((error) => {
+        console.error('Failed to copy:', error)
+      })
+    }
+  }, [addMessage])
+
+  const retryMessage = useCallback((content: string) => {
+    handleQuickCommand(content)
+  }, [handleQuickCommand])
+
+  const exportConversation = useCallback(() => {
+    const conversationText = state.messages
+      .map(m => `[${m.type.toUpperCase()}] ${m.content}`)
+      .join('\n\n')
+
+    const blob = new Blob([conversationText], { type: 'text/plain' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `servio-conversation-${new Date().toISOString().split('T')[0]}.txt`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+
+    addMessage({
+      type: 'system',
+      content: '💾 Conversation exported',
+      metadata: { action: { type: 'export', status: 'completed' } }
+    })
+  }, [state.messages, addMessage])
+
+  const containerClasses = ['max-w-7xl mx-auto transition-all duration-300', className].filter(Boolean).join(' ')
+
+  // Minimized floating assistant
+  if (state.isMinimized) {
+    return (
+      <div className="fixed bottom-6 right-6 z-50">
+        <div className="relative group">
+          {/* Floating button with gradient */}
+          <button
+            onClick={toggleMinimize}
+            className="relative w-16 h-16 bg-gradient-to-br from-violet-600 via-fuchsia-600 to-pink-600 rounded-full shadow-2xl hover:shadow-violet-500/50 transition-all duration-300 hover:scale-110 flex items-center justify-center overflow-hidden"
+          >
+            {/* Animated pulse ring */}
+            {state.isRecording && (
+              <span className="absolute inset-0 w-full h-full">
+                <span className="absolute inset-0 w-full h-full rounded-full bg-red-500 animate-ping opacity-75"></span>
+              </span>
+            )}
+            {state.isProcessing && (
+              <span className="absolute inset-0 w-full h-full">
+                <span className="absolute inset-0 w-full h-full rounded-full bg-amber-500 animate-ping opacity-75"></span>
+              </span>
+            )}
+            {state.isSpeaking && (
+              <span className="absolute inset-0 w-full h-full">
+                <span className="absolute inset-0 w-full h-full rounded-full bg-emerald-500 animate-ping opacity-75"></span>
+              </span>
+            )}
+
+            {/* Icon */}
+            <Sparkles className="w-8 h-8 text-white relative z-10" />
+
+            {/* Notification badge */}
+            {state.messages.length > 0 && (
+              <span className="absolute -top-1 -right-1 w-6 h-6 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center shadow-lg z-20">
+                {state.messages.length > 9 ? '9+' : state.messages.length}
+              </span>
+            )}
+          </button>
+
+          {/* Tooltip */}
+          <div className="absolute bottom-full right-0 mb-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+            <div className="bg-gray-900 text-white text-sm px-3 py-2 rounded-lg shadow-xl whitespace-nowrap">
+              Open Servio Assistant
+              <div className="absolute top-full right-4 -mt-1">
+                <div className="w-2 h-2 bg-gray-900 transform rotate-45"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className={containerClasses}>
       {showHeader && (
         <div className="mb-6">
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2 mb-2">
+            <div className="flex-1">
+              <div className="flex items-center gap-3 mb-2">
+                <Sparkles className="w-5 h-5 text-violet-600 dark:text-violet-400" />
                 <span className="text-sm font-semibold text-surface-500 dark:text-surface-400 uppercase tracking-widest">AI Assistant</span>
               </div>
-              <h1 className="text-3xl md:text-4xl font-black text-surface-900 dark:text-white tracking-tight">
+              <h1 className="text-3xl md:text-4xl font-black bg-gradient-to-r from-violet-600 via-fuchsia-600 to-pink-600 bg-clip-text text-transparent tracking-tight">
                 Talk to Servio
               </h1>
               <p className="mt-2 text-surface-600 dark:text-surface-400 max-w-lg">
-                Manage orders, inventory, and tasks with natural voice commands.
+                Your intelligent restaurant assistant - manage orders, inventory, and tasks with voice or text.
               </p>
             </div>
+
+            {/* Quick Action Buttons */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={exportConversation}
+                disabled={state.messages.length === 0}
+                className="inline-flex items-center gap-2 px-3 py-2 bg-surface-100 dark:bg-surface-800 text-surface-700 dark:text-surface-300 rounded-lg text-sm font-medium hover:bg-surface-200 dark:hover:bg-surface-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Export conversation"
+              >
+                <Download className="w-4 h-4" />
+              </button>
+              <button
+                onClick={toggleMinimize}
+                className="inline-flex items-center gap-2 px-3 py-2 bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 rounded-lg text-sm font-medium hover:bg-violet-200 dark:hover:bg-violet-900/50 transition-colors shadow-sm"
+                title="Minimize assistant"
+              >
+                <Minimize2 className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
 
             <div className="flex flex-wrap items-center gap-2">
               {state.isRecording && (
@@ -931,15 +1112,59 @@ export default function AssistantPanel({ showHeader = true, className }: Assista
               )}
             </div>
 
-            {/* Control Buttons */}
-            <div className="flex flex-wrap items-center gap-2">
+            {/* Audio & Control Buttons */}
+            <div className="flex flex-wrap items-center gap-2 mt-4">
+              {/* Audio Controls */}
+              {(state.isSpeaking || state.currentAudioUrl) && (
+                <div className="flex items-center gap-2 px-4 py-2 bg-surface-100 dark:bg-surface-800 rounded-lg">
+                  <button
+                    onClick={toggleMute}
+                    className="p-1 hover:bg-surface-200 dark:hover:bg-surface-700 rounded transition-colors"
+                    title={state.isMuted ? 'Unmute' : 'Mute'}
+                  >
+                    {state.isMuted ? (
+                      <VolumeX className="w-4 h-4 text-red-600 dark:text-red-400" />
+                    ) : (
+                      <Volume2 className="w-4 h-4 text-surface-700 dark:text-surface-300" />
+                    )}
+                  </button>
+
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.1"
+                    value={state.audioVolume}
+                    onChange={(e) => adjustVolume(parseFloat(e.target.value))}
+                    className="w-20 h-1 bg-surface-300 dark:bg-surface-600 rounded-lg appearance-none cursor-pointer"
+                    title="Volume"
+                  />
+
+                  <span className="text-xs text-surface-600 dark:text-surface-400 mx-1">|</span>
+
+                  <select
+                    value={state.audioSpeed}
+                    onChange={(e) => adjustSpeed(parseFloat(e.target.value))}
+                    className="text-xs bg-transparent text-surface-700 dark:text-surface-300 cursor-pointer focus:outline-none"
+                    title="Speed"
+                  >
+                    <option value="0.5">0.5x</option>
+                    <option value="0.75">0.75x</option>
+                    <option value="1">1x</option>
+                    <option value="1.25">1.25x</option>
+                    <option value="1.5">1.5x</option>
+                    <option value="2">2x</option>
+                  </select>
+                </div>
+              )}
+
               {state.isSpeaking && (
                 <button
                   onClick={handleStopSpeaking}
                   className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors shadow-sm"
                 >
                   <StopCircle className="w-4 h-4" />
-                  Stop Speaking
+                  Stop
                 </button>
               )}
               {state.currentAudioUrl && !state.isSpeaking && (
@@ -1088,6 +1313,9 @@ export default function AssistantPanel({ showHeader = true, className }: Assista
                 <TranscriptFeed
                   messages={state.messages}
                   className="flex-1 overflow-y-auto"
+                  isProcessing={state.isProcessing}
+                  onCopyMessage={copyMessageToClipboard}
+                  onRetryMessage={retryMessage}
                 />
               </div>
 
