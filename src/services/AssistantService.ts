@@ -239,11 +239,35 @@ export class AssistantService {
     const user = await this.db.get('SELECT restaurant_id FROM users WHERE id = ?', [userId]);
     const restaurantId = user?.restaurant_id || 'demo-restaurant-1';
 
-    // Get current restaurant context
-    const orders = await this.db.all('SELECT * FROM orders WHERE restaurant_id = ? AND status != "completed" ORDER BY created_at DESC LIMIT 10', [restaurantId]);
-    const unavailableItems = await this.db.all('SELECT * FROM menu_items WHERE restaurant_id = ? AND is_available = 0', [restaurantId]);
-    const lowStockItems = await this.db.all('SELECT * FROM inventory_items WHERE restaurant_id = ? AND on_hand_qty <= low_stock_threshold', [restaurantId]);
-    const pendingTasks = await this.db.all('SELECT id, title, description, status, priority, type, assigned_to, due_date, created_at, updated_at FROM tasks WHERE restaurant_id = ? AND status = "pending" LIMIT 5', [restaurantId]);
+    // Get current restaurant context with error handling
+    let orders = [];
+    let unavailableItems = [];
+    let lowStockItems = [];
+    let pendingTasks = [];
+
+    try {
+      orders = await this.db.all('SELECT * FROM orders WHERE restaurant_id = ? AND status != "completed" ORDER BY created_at DESC LIMIT 10', [restaurantId]);
+    } catch (error) {
+      logger.warn('Failed to fetch orders for assistant context:', error);
+    }
+
+    try {
+      unavailableItems = await this.db.all('SELECT * FROM menu_items WHERE restaurant_id = ? AND is_available = 0', [restaurantId]);
+    } catch (error) {
+      logger.warn('Failed to fetch unavailable items for assistant context:', error);
+    }
+
+    try {
+      lowStockItems = await this.db.all('SELECT * FROM inventory_items WHERE restaurant_id = ? AND on_hand_qty <= low_stock_threshold', [restaurantId]);
+    } catch (error) {
+      logger.warn('Failed to fetch low stock items for assistant context:', error);
+    }
+
+    try {
+      pendingTasks = await this.db.all('SELECT id, title, description, status, priority, type, assigned_to, due_date, created_at, updated_at FROM tasks WHERE restaurant_id = ? AND status = "pending" LIMIT 5', [restaurantId]);
+    } catch (error) {
+      logger.warn('Failed to fetch pending tasks for assistant context:', error);
+    }
 
     const context = {
       activeOrders: orders.length,
