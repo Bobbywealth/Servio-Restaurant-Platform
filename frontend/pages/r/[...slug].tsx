@@ -22,15 +22,50 @@ import { api } from '../../lib/api';
 import toast from 'react-hot-toast';
 import { resolveMediaUrl } from '../../lib/utils';
 
+interface ItemSize {
+  id: string;
+  sizeName: string;
+  price: number;
+  isPreselected: boolean;
+  displayOrder: number;
+}
+
+interface ModifierOption {
+  id: string;
+  name: string;
+  description: string | null;
+  priceDelta: number;
+  isActive: boolean;
+  isSoldOut: boolean;
+  isPreselected: boolean;
+  displayOrder: number;
+}
+
+interface ModifierGroup {
+  id: string;
+  name: string;
+  description: string | null;
+  selectionType: 'single' | 'multiple' | 'quantity';
+  minSelections: number;
+  maxSelections: number;
+  isRequired: boolean;
+  displayOrder: number;
+  assignmentLevel: 'item' | 'category';
+  options: ModifierOption[];
+}
+
 interface MenuItem {
   id: string;
   name: string;
   description: string;
   price: number;
+  fromPrice?: number;
   is_available: boolean;
   category_name: string;
   images?: string[];
   image?: string;
+  sizes?: ItemSize[];
+  modifierGroups?: ModifierGroup[];
 }
 
 interface RestaurantInfo {
@@ -43,8 +78,20 @@ interface RestaurantInfo {
   description?: string;
 }
 
+interface SelectedModifier {
+  groupId: string;
+  groupName: string;
+  optionId: string;
+  optionName: string;
+  priceDelta: number;
+  quantity?: number;
+}
+
 interface CartItem extends MenuItem {
   quantity: number;
+  selectedSize?: ItemSize;
+  selectedModifiers: SelectedModifier[];
+  calculatedPrice: number; // Base price + size + modifiers
 }
 
 export default function PublicProfile() {
@@ -73,6 +120,11 @@ export default function PublicProfile() {
   });
   const [paymentMethod, setPaymentMethod] = useState<'pickup' | 'online'>('pickup');
   const [onlinePaymentsEnabled, setOnlinePaymentsEnabled] = useState(false);
+
+  // Item detail modal state
+  const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
+  const [selectedSize, setSelectedSize] = useState<ItemSize | null>(null);
+  const [selectedModifiers, setSelectedModifiers] = useState<Record<string, SelectedModifier[]>>({});
 
   useEffect(() => {
     if (!restaurantSlug) return;
@@ -116,28 +168,108 @@ export default function PublicProfile() {
     fetchData();
   }, [restaurantSlug]);
 
-  const addToCart = (item: MenuItem) => {
+  const openItemDetail = (item: MenuItem) => {
+    setSelectedItem(item);
+    // Pre-select size if only one or if one is marked as preselected
+    if (item.sizes && item.sizes.length > 0) {
+      const preselected = item.sizes.find(s => s.isPreselected);
+      setSelectedSize(preselected || item.sizes[0]);
+    } else {
+      setSelectedSize(null);
+    }
+    // Pre-select required modifiers
+    const preselectedMods: Record<string, SelectedModifier[]> = {};
+    if (item.modifierGroups) {
+      item.modifierGroups.forEach(group => {
+        const preselectedOptions = group.options.filter(opt => opt.isPreselected && !opt.isSoldOut);
+        if (preselectedOptions.length > 0) {
+          preselectedMods[group.id] = preselectedOptions.map(opt => ({
+            groupId: group.id,
+            groupName: group.name,
+            optionId: opt.id,
+            optionName: opt.name,
+            priceDelta: opt.priceDelta,
+            quantity: group.selectionType === 'quantity' ? 1 : undefined
+          }));
+        }
+      });
+    }
+    setSelectedModifiers(preselectedMods);
+  };
+
+  const addToCartWithSelections = () => {
+    if (!selectedItem) return;
+
+    // Validate required modifiers
+    if (selectedItem.modifierGroups) {
+      for (const group of selectedItem.modifierGroups) {
+        if (group.isRequired) {
+          const selections = selectedModifiers[group.id] || [];
+          const totalSelected = selections.reduce((sum, sel) => sum + (sel.quantity || 1), 0);
+          if (totalSelected < group.minSelections) {
+            toast.error(`Please select at least ${group.minSelections} option(s) for ${group.name}`);
+            return;
+          }
+        }
+      }
+    }
+
+    // Calculate price
+    const basePrice = selectedSize ? selectedSize.price : selectedItem.price;
+    const modifierPrice = Object.values(selectedModifiers)
+      .flat()
+      .reduce((sum, mod) => sum + (mod.priceDelta * (mod.quantity || 1)), 0);
+    const calculatedPrice = basePrice + modifierPrice;
+
+    const cartItem: CartItem = {
+      ...selectedItem,
+      quantity: 1,
+      selectedSize: selectedSize || undefined,
+      selectedModifiers: Object.values(selectedModifiers).flat(),
+      calculatedPrice
+    };
+
     setCart(prev => {
-      const existing = prev.find(i => i.id === item.id);
+      // Check if exact same item with same selections exists
+      const existing = prev.find(i =>
+        i.id === selectedItem.id &&
+        i.selectedSize?.id === cartItem.selectedSize?.id &&
+        JSON.stringify(i.selectedModifiers.sort()) === JSON.stringify(cartItem.selectedModifiers.sort())
+      );
+
       if (existing) {
-        return prev.map(i => i.id === item.id ? { ...i, quantity: i.quantity + 1 } : i);
+        return prev.map(i =>
+          i.id === existing.id &&
+          i.selectedSize?.id === existing.selectedSize?.id &&
+          JSON.stringify(i.selectedModifiers.sort()) === JSON.stringify(existing.selectedModifiers.sort())
+            ? { ...i, quantity: i.quantity + 1 }
+            : i
+        );
       }
-      return [...prev, { ...item, quantity: 1 }];
+      return [...prev, cartItem];
     });
+
     toast.success('Added to cart');
+    setSelectedItem(null);
+    setSelectedSize(null);
+    setSelectedModifiers({});
   };
 
-  const removeFromCart = (itemId: string) => {
+  const removeFromCart = (cartIndex: number) => {
     setCart(prev => {
-      const existing = prev.find(i => i.id === itemId);
-      if (existing && existing.quantity > 1) {
-        return prev.map(i => i.id === itemId ? { ...i, quantity: i.quantity - 1 } : i);
+      const item = prev[cartIndex];
+      if (item.quantity > 1) {
+        return prev.map((i, idx) => idx === cartIndex ? { ...i, quantity: i.quantity - 1 } : i);
       }
-      return prev.filter(i => i.id !== itemId);
+      return prev.filter((_, idx) => idx !== cartIndex);
     });
   };
 
-  const cartTotal = cart.reduce((sum, i) => sum + (i.price * i.quantity), 0);
+  const increaseCartItemQuantity = (cartIndex: number) => {
+    setCart(prev => prev.map((i, idx) => idx === cartIndex ? { ...i, quantity: i.quantity + 1 } : i));
+  };
+
+  const cartTotal = cart.reduce((sum, i) => sum + (i.calculatedPrice * i.quantity), 0);
 
   const validateCustomerInfo = () => {
     if (!customerInfo.name.trim()) {
@@ -175,7 +307,25 @@ export default function PublicProfile() {
     setIsSubmitting(true);
     try {
       const resp = await api.post(`/api/orders/public/${restaurantSlug}`, {
-        items: cart.map(i => ({ id: i.id, name: i.name, quantity: i.quantity, price: i.price })),
+        items: cart.map(i => ({
+          id: i.id,
+          name: i.name,
+          quantity: i.quantity,
+          price: i.calculatedPrice,
+          selectedSize: i.selectedSize ? {
+            id: i.selectedSize.id,
+            name: i.selectedSize.sizeName,
+            price: i.selectedSize.price
+          } : null,
+          selectedModifiers: i.selectedModifiers.map(mod => ({
+            groupId: mod.groupId,
+            groupName: mod.groupName,
+            optionId: mod.optionId,
+            optionName: mod.optionName,
+            priceDelta: mod.priceDelta,
+            quantity: mod.quantity
+          }))
+        })),
         customerName: customerInfo.name.trim(),
         customerPhone: customerInfo.phone.trim(),
         orderType: customerInfo.orderType,
@@ -392,11 +542,17 @@ export default function PublicProfile() {
                         <div className="min-w-0">
                         <h3 className="font-bold text-base sm:text-lg text-slate-900 group-hover:text-blue-600 transition-colors">{item.name}</h3>
                         <p className="text-slate-500 text-xs sm:text-sm mt-1 line-clamp-2">{item.description}</p>
-                        <p className="font-black text-lg sm:text-xl text-slate-900 mt-2 sm:mt-3">${item.price.toFixed(2)}</p>
+                        <p className="font-black text-lg sm:text-xl text-slate-900 mt-2 sm:mt-3">
+                          {item.sizes && item.sizes.length > 0 ? (
+                            <>From ${item.fromPrice?.toFixed(2) || item.price.toFixed(2)}</>
+                          ) : (
+                            <>${item.price.toFixed(2)}</>
+                          )}
+                        </p>
                         </div>
                       </div>
                       <button
-                        onClick={() => addToCart(item)}
+                        onClick={() => openItemDetail(item)}
                         className="shrink-0 p-2.5 sm:p-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-600/20 min-w-[44px] min-h-[44px] flex items-center justify-center"
                         aria-label={`Add ${item.name} to cart`}
                       >
@@ -466,16 +622,30 @@ export default function PublicProfile() {
                     </div>
                     
                     <div className="space-y-4 mb-6">
-                      {cart.map(item => (
-                        <div key={item.id} className="flex justify-between items-center">
-                          <div>
+                      {cart.map((item, index) => (
+                        <div key={index} className="flex justify-between items-start gap-3">
+                          <div className="flex-1">
                             <div className="font-semibold">{item.name}</div>
-                            <div className="text-sm text-gray-500">${item.price.toFixed(2)}</div>
+                            {item.selectedSize && (
+                              <div className="text-xs text-gray-500 mt-0.5">Size: {item.selectedSize.sizeName}</div>
+                            )}
+                            {item.selectedModifiers.length > 0 && (
+                              <div className="text-xs text-gray-500 mt-0.5">
+                                {item.selectedModifiers.map((mod, idx) => (
+                                  <div key={idx}>
+                                    {mod.optionName}
+                                    {mod.quantity && mod.quantity > 1 ? ` (x${mod.quantity})` : ''}
+                                    {mod.priceDelta > 0 && ` +$${mod.priceDelta.toFixed(2)}`}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            <div className="text-sm text-gray-900 font-medium mt-1">${item.calculatedPrice.toFixed(2)}</div>
                           </div>
                           <div className="flex items-center gap-3">
-                            <button onClick={() => removeFromCart(item.id)} className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200"><Minus className="w-4 h-4" /></button>
+                            <button onClick={() => removeFromCart(index)} className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200"><Minus className="w-4 h-4" /></button>
                             <span className="font-bold w-8 text-center">{item.quantity}</span>
-                            <button onClick={() => addToCart(item)} className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200"><Plus className="w-4 h-4" /></button>
+                            <button onClick={() => increaseCartItemQuantity(index)} className="p-2 rounded-lg bg-gray-100 hover:bg-gray-200"><Plus className="w-4 h-4" /></button>
                           </div>
                         </div>
                       ))}
@@ -726,6 +896,252 @@ export default function PublicProfile() {
                     </button>
                   </>
                 )}
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Item Detail Modal */}
+      <AnimatePresence>
+        {selectedItem && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/50 z-[60]"
+              onClick={() => setSelectedItem(null)}
+            />
+            <motion.div
+              initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
+              className="fixed bottom-0 left-0 right-0 bg-white rounded-t-3xl z-[70] p-6 pb-safe-bottom max-h-[90vh] overflow-y-auto"
+            >
+              <div className="max-w-xl mx-auto">
+                <div className="flex justify-between items-start mb-4">
+                  <div className="flex-1">
+                    <h2 className="text-2xl font-bold">{selectedItem.name}</h2>
+                    <p className="text-gray-600 mt-1">{selectedItem.description}</p>
+                  </div>
+                  <button onClick={() => setSelectedItem(null)} className="text-gray-400 font-bold ml-4">Close</button>
+                </div>
+
+                {selectedItem.image && (
+                  <div className="w-full h-48 rounded-xl overflow-hidden bg-gray-100 mb-6">
+                    <img
+                      src={resolveMediaUrl(selectedItem.image)}
+                      alt={selectedItem.name}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                )}
+
+                {/* Size Selection */}
+                {selectedItem.sizes && selectedItem.sizes.length > 0 && (
+                  <div className="mb-6">
+                    <h3 className="font-semibold text-lg mb-3">Select Size *</h3>
+                    <div className="space-y-2">
+                      {selectedItem.sizes.map(size => (
+                        <button
+                          key={size.id}
+                          onClick={() => setSelectedSize(size)}
+                          className={`w-full p-4 rounded-xl border-2 flex justify-between items-center transition-all ${
+                            selectedSize?.id === size.id
+                              ? 'border-blue-600 bg-blue-50'
+                              : 'border-gray-200 hover:border-gray-300'
+                          }`}
+                        >
+                          <span className="font-semibold">{size.sizeName}</span>
+                          <span className="font-bold text-lg">${size.price.toFixed(2)}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Modifier Groups */}
+                {selectedItem.modifierGroups && selectedItem.modifierGroups.map(group => (
+                  <div key={group.id} className="mb-6">
+                    <div className="flex justify-between items-baseline mb-3">
+                      <h3 className="font-semibold text-lg">
+                        {group.name}
+                        {group.isRequired && <span className="text-red-500 ml-1">*</span>}
+                      </h3>
+                      <span className="text-sm text-gray-500">
+                        {group.selectionType === 'single' && 'Choose 1'}
+                        {group.selectionType === 'multiple' && `Choose ${group.minSelections}-${group.maxSelections}`}
+                        {group.selectionType === 'quantity' && 'Add quantity'}
+                      </span>
+                    </div>
+                    {group.description && (
+                      <p className="text-sm text-gray-500 mb-3">{group.description}</p>
+                    )}
+
+                    <div className="space-y-2">
+                      {group.options.map(option => {
+                        const isSelected = selectedModifiers[group.id]?.some(m => m.optionId === option.id);
+                        const selectedMod = selectedModifiers[group.id]?.find(m => m.optionId === option.id);
+
+                        const handleToggle = () => {
+                          if (group.selectionType === 'single') {
+                            // Single selection - replace existing
+                            setSelectedModifiers(prev => ({
+                              ...prev,
+                              [group.id]: [{
+                                groupId: group.id,
+                                groupName: group.name,
+                                optionId: option.id,
+                                optionName: option.name,
+                                priceDelta: option.priceDelta
+                              }]
+                            }));
+                          } else if (group.selectionType === 'multiple') {
+                            // Multiple selection - toggle
+                            setSelectedModifiers(prev => {
+                              const current = prev[group.id] || [];
+                              if (isSelected) {
+                                const filtered = current.filter(m => m.optionId !== option.id);
+                                if (filtered.length === 0) {
+                                  const { [group.id]: _, ...rest } = prev;
+                                  return rest;
+                                }
+                                return { ...prev, [group.id]: filtered };
+                              } else {
+                                // Check max selections
+                                if (current.length >= group.maxSelections) {
+                                  toast.error(`Maximum ${group.maxSelections} selections allowed`);
+                                  return prev;
+                                }
+                                return {
+                                  ...prev,
+                                  [group.id]: [...current, {
+                                    groupId: group.id,
+                                    groupName: group.name,
+                                    optionId: option.id,
+                                    optionName: option.name,
+                                    priceDelta: option.priceDelta
+                                  }]
+                                };
+                              }
+                            });
+                          } else if (group.selectionType === 'quantity') {
+                            // Quantity - add with quantity 1
+                            if (!isSelected) {
+                              setSelectedModifiers(prev => ({
+                                ...prev,
+                                [group.id]: [...(prev[group.id] || []), {
+                                  groupId: group.id,
+                                  groupName: group.name,
+                                  optionId: option.id,
+                                  optionName: option.name,
+                                  priceDelta: option.priceDelta,
+                                  quantity: 1
+                                }]
+                              }));
+                            }
+                          }
+                        };
+
+                        const handleQuantityChange = (delta: number) => {
+                          setSelectedModifiers(prev => {
+                            const current = prev[group.id] || [];
+                            const mod = current.find(m => m.optionId === option.id);
+                            if (!mod) return prev;
+
+                            const newQuantity = (mod.quantity || 1) + delta;
+                            if (newQuantity <= 0) {
+                              const filtered = current.filter(m => m.optionId !== option.id);
+                              if (filtered.length === 0) {
+                                const { [group.id]: _, ...rest } = prev;
+                                return rest;
+                              }
+                              return { ...prev, [group.id]: filtered };
+                            }
+
+                            return {
+                              ...prev,
+                              [group.id]: current.map(m =>
+                                m.optionId === option.id ? { ...m, quantity: newQuantity } : m
+                              )
+                            };
+                          });
+                        };
+
+                        return (
+                          <div
+                            key={option.id}
+                            className={`p-4 rounded-xl border-2 transition-all ${
+                              option.isSoldOut
+                                ? 'border-gray-200 bg-gray-50 opacity-50'
+                                : isSelected
+                                ? 'border-blue-600 bg-blue-50'
+                                : 'border-gray-200 hover:border-gray-300'
+                            }`}
+                          >
+                            <div className="flex justify-between items-center">
+                              <button
+                                onClick={handleToggle}
+                                disabled={option.isSoldOut}
+                                className="flex-1 flex justify-between items-center text-left"
+                              >
+                                <div>
+                                  <div className="font-semibold">
+                                    {option.name}
+                                    {option.isSoldOut && <span className="text-sm text-red-500 ml-2">(Sold Out)</span>}
+                                  </div>
+                                  {option.description && (
+                                    <div className="text-sm text-gray-500 mt-0.5">{option.description}</div>
+                                  )}
+                                </div>
+                                {option.priceDelta > 0 && (
+                                  <span className="text-sm font-medium text-gray-700 ml-2">+${option.priceDelta.toFixed(2)}</span>
+                                )}
+                              </button>
+
+                              {group.selectionType === 'quantity' && isSelected && selectedMod && (
+                                <div className="flex items-center gap-2 ml-4">
+                                  <button
+                                    onClick={() => handleQuantityChange(-1)}
+                                    className="p-1.5 rounded-lg bg-gray-200 hover:bg-gray-300"
+                                  >
+                                    <Minus className="w-4 h-4" />
+                                  </button>
+                                  <span className="font-bold w-6 text-center">{selectedMod.quantity || 1}</span>
+                                  <button
+                                    onClick={() => handleQuantityChange(1)}
+                                    className="p-1.5 rounded-lg bg-gray-200 hover:bg-gray-300"
+                                  >
+                                    <Plus className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+
+                {/* Price Summary and Add to Cart Button */}
+                <div className="border-t pt-4 sticky bottom-0 bg-white">
+                  <div className="flex justify-between items-center mb-4">
+                    <span className="text-lg font-semibold">Item Total</span>
+                    <span className="text-2xl font-bold">
+                      ${(
+                        (selectedSize ? selectedSize.price : selectedItem.price) +
+                        Object.values(selectedModifiers)
+                          .flat()
+                          .reduce((sum, mod) => sum + (mod.priceDelta * (mod.quantity || 1)), 0)
+                      ).toFixed(2)}
+                    </span>
+                  </div>
+                  <button
+                    onClick={addToCartWithSelections}
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-xl text-lg font-bold flex items-center justify-center gap-2"
+                  >
+                    <ShoppingCart className="w-5 h-5" />
+                    Add to Cart
+                  </button>
+                </div>
               </div>
             </motion.div>
           </>

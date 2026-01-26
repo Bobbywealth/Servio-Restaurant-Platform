@@ -417,10 +417,29 @@ router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) =>
 
     // Create order items
     for (const item of parsedItems) {
+      // Build notes with size and modifiers info
+      const notesData: any = {};
+      if (item.selectedSize) {
+        notesData.size = {
+          id: item.selectedSize.id,
+          name: item.selectedSize.name,
+          price: item.selectedSize.price
+        };
+      }
+      if (item.selectedModifiers && item.selectedModifiers.length > 0) {
+        notesData.modifiers = item.selectedModifiers.map((mod: any) => ({
+          groupName: mod.groupName,
+          optionName: mod.optionName,
+          priceDelta: mod.priceDelta,
+          quantity: mod.quantity
+        }));
+      }
+      const notes = Object.keys(notesData).length > 0 ? JSON.stringify(notesData) : null;
+
       await db.run(`
-        INSERT INTO order_items (id, order_id, menu_item_id, name, quantity, unit_price)
-        VALUES (?, ?, ?, ?, ?, ?)
-      `, [uuidv4(), orderId, item.id, item.name, item.quantity, item.price]);
+        INSERT INTO order_items (id, order_id, menu_item_id, name, quantity, unit_price, notes)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `, [uuidv4(), orderId, item.id, item.name, item.quantity, item.price, notes]);
     }
 
   } catch (error) {
