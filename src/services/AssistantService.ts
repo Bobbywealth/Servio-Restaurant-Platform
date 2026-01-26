@@ -202,6 +202,7 @@ export class AssistantService {
   private async generateSpeech(text: string): Promise<string> {
     try {
       if (!process.env.OPENAI_API_KEY) {
+        logger.warn('TTS skipped: OPENAI_API_KEY not configured');
         return '';
       }
 
@@ -209,6 +210,8 @@ export class AssistantService {
       const input = text.length > 2000 ? text.slice(0, 2000) : text;
       const model = process.env.OPENAI_TTS_MODEL || 'tts-1';
       const voice = (process.env.OPENAI_TTS_VOICE || 'alloy') as any;
+
+      logger.info(`Generating TTS audio: model=${model}, voice=${voice}, length=${input.length}`);
 
       const speech = await this.openai.audio.speech.create({
         model,
@@ -227,8 +230,11 @@ export class AssistantService {
       const outPath = path.join(ttsDir, fileName);
       await fs.promises.writeFile(outPath, audioBuffer);
 
+      const audioUrl = `/uploads/tts/${fileName}`;
+      logger.info(`TTS audio generated successfully: ${audioUrl}`);
+
       // Served by backend static route: /uploads/*
-      return `/uploads/tts/${fileName}`;
+      return audioUrl;
     } catch (error) {
       logger.error('TTS generation failed:', error);
       return '';
