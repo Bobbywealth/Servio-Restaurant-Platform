@@ -125,6 +125,8 @@ export default function PublicProfile() {
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
   const [selectedSize, setSelectedSize] = useState<ItemSize | null>(null);
   const [selectedModifiers, setSelectedModifiers] = useState<Record<string, SelectedModifier[]>>({});
+  const [currentStep, setCurrentStep] = useState(0);
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!restaurantSlug) return;
@@ -170,6 +172,8 @@ export default function PublicProfile() {
 
   const openItemDetail = (item: MenuItem) => {
     setSelectedItem(item);
+    setCurrentStep(0);
+    setValidationError(null);
     // Pre-select size if only one or if one is marked as preselected
     if (item.sizes && item.sizes.length > 0) {
       const preselected = item.sizes.find(s => s.isPreselected);
@@ -256,6 +260,81 @@ export default function PublicProfile() {
     setSelectedItem(null);
     setSelectedSize(null);
     setSelectedModifiers({});
+    setCurrentStep(0);
+    setValidationError(null);
+  };
+
+  // Get steps for current item
+  const getSteps = () => {
+    if (!selectedItem) return [];
+    const steps: Array<{ type: 'size' | 'modifier', data?: ModifierGroup }> = [];
+
+    // Add size step if item has sizes
+    if (selectedItem.sizes && selectedItem.sizes.length > 0) {
+      steps.push({ type: 'size' });
+    }
+
+    // Add modifier group steps (only groups with selectable options)
+    if (selectedItem.modifierGroups) {
+      const validGroups = selectedItem.modifierGroups.filter(
+        group => group.options && group.options.length > 0 && group.options.some(opt => opt.isActive && !opt.isSoldOut)
+      );
+      validGroups.forEach(group => {
+        steps.push({ type: 'modifier', data: group });
+      });
+    }
+
+    return steps;
+  };
+
+  // Validate current step
+  const validateCurrentStep = () => {
+    if (!selectedItem) return true;
+    const steps = getSteps();
+    if (currentStep >= steps.length) return true;
+
+    const step = steps[currentStep];
+
+    if (step.type === 'size') {
+      if (!selectedSize) {
+        setValidationError('Please select a size to continue');
+        return false;
+      }
+    } else if (step.type === 'modifier' && step.data) {
+      const group = step.data;
+      if (group.isRequired) {
+        const selections = selectedModifiers[group.id] || [];
+        const totalSelected = selections.reduce((sum, sel) => sum + (sel.quantity || 1), 0);
+        if (totalSelected < group.minSelections) {
+          setValidationError(`Please select at least ${group.minSelections} option(s) for ${group.name}`);
+          return false;
+        }
+      }
+    }
+
+    setValidationError(null);
+    return true;
+  };
+
+  // Navigate to next step
+  const handleNext = () => {
+    if (!validateCurrentStep()) return;
+    const steps = getSteps();
+    if (currentStep < steps.length - 1) {
+      setCurrentStep(prev => prev + 1);
+      setValidationError(null);
+    } else {
+      // Last step, add to cart
+      addToCartWithSelections();
+    }
+  };
+
+  // Navigate to previous step
+  const handlePrevious = () => {
+    if (currentStep > 0) {
+      setCurrentStep(prev => prev - 1);
+      setValidationError(null);
+    }
   };
 
   const removeFromCart = (cartIndex: number) => {
@@ -937,31 +1016,265 @@ export default function PublicProfile() {
                   </div>
                 )}
 
-                {/* Size Selection */}
-                {selectedItem.sizes && selectedItem.sizes.length > 0 && (
-                  <div className="mb-6">
-                    <h3 className="font-semibold text-lg mb-3">Select Size *</h3>
-                    <div className="space-y-2">
-                      {selectedItem.sizes.map(size => (
-                        <button
-                          key={size.id}
-                          onClick={() => setSelectedSize(size)}
-                          className={`w-full p-4 rounded-xl border-2 flex justify-between items-center transition-all ${
-                            selectedSize?.id === size.id
-                              ? 'border-blue-600 bg-blue-50'
-                              : 'border-gray-200 hover:border-gray-300'
-                          }`}
-                        >
-                          <span className="font-semibold">{size.sizeName}</span>
-                          <span className="font-bold text-lg">${size.price.toFixed(2)}</span>
-                        </button>
-                      ))}
-                    </div>
+                {/* Step Progress Indicator */}
+                {(() => {
+                  const steps = getSteps();
+                  if (steps.length > 1) {
+                    return (
+                      <div className="mb-6">
+                        <div className="flex items-center justify-between">
+                          {steps.map((step, idx) => (
+                            <React.Fragment key={idx}>
+                              <div className="flex flex-col items-center flex-1">
+                                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+                                  idx < currentStep ? 'bg-green-600 text-white' :
+                                  idx === currentStep ? 'bg-blue-600 text-white' :
+                                  'bg-gray-200 text-gray-500'
+                                }`}>
+                                  {idx < currentStep ? '✓' : idx + 1}
+                                </div>
+                                <div className={`text-xs mt-1 text-center ${
+                                  idx === currentStep ? 'font-semibold text-blue-600' : 'text-gray-500'
+                                }`}>
+                                  {step.type === 'size' ? 'Size' : step.data?.name}
+                                </div>
+                              </div>
+                              {idx < steps.length - 1 && (
+                                <div className={`h-0.5 flex-1 mx-2 mb-6 ${
+                                  idx < currentStep ? 'bg-green-600' : 'bg-gray-200'
+                                }`} />
+                              )}
+                            </React.Fragment>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
+
+                {/* Current Step Content */}
+                {(() => {
+                  const steps = getSteps();
+                  if (steps.length === 0) return null;
+                  const step = steps[currentStep];
+
+                  if (step.type === 'size') {
+                    return (
+                      <div className="mb-6">
+                        <h3 className="font-semibold text-lg mb-3">Select Size *</h3>
+                        <div className="space-y-2">
+                          {selectedItem.sizes?.map(size => (
+                            <button
+                              key={size.id}
+                              onClick={() => {
+                                setSelectedSize(size);
+                                setValidationError(null);
+                              }}
+                              className={`w-full p-4 rounded-xl border-2 flex justify-between items-center transition-all ${
+                                selectedSize?.id === size.id
+                                  ? 'border-blue-600 bg-blue-50'
+                                  : 'border-gray-200 hover:border-gray-300'
+                              }`}
+                            >
+                              <span className="font-semibold">{size.sizeName}</span>
+                              <span className="font-bold text-lg">${size.price.toFixed(2)}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  if (step.type === 'modifier' && step.data) {
+                    const group = step.data;
+                    return (
+                      <div className="mb-6">
+                        <div className="flex justify-between items-baseline mb-3">
+                          <h3 className="font-semibold text-lg">
+                            {group.name}
+                            {group.isRequired && <span className="text-red-500 ml-1">*</span>}
+                          </h3>
+                          <span className="text-sm text-gray-500">
+                            {group.selectionType === 'single' && 'Choose 1'}
+                            {group.selectionType === 'multiple' && `Choose ${group.minSelections}-${group.maxSelections}`}
+                            {group.selectionType === 'quantity' && 'Add quantity'}
+                          </span>
+                        </div>
+                        {group.description && (
+                          <p className="text-sm text-gray-500 mb-3">{group.description}</p>
+                        )}
+
+                        <div className="space-y-2">
+                          {group.options.map(option => {
+                            const isSelected = selectedModifiers[group.id]?.some(m => m.optionId === option.id);
+                            const selectedMod = selectedModifiers[group.id]?.find(m => m.optionId === option.id);
+
+                            const handleToggle = () => {
+                              setValidationError(null);
+                              if (group.selectionType === 'single') {
+                                setSelectedModifiers(prev => ({
+                                  ...prev,
+                                  [group.id]: [{
+                                    groupId: group.id,
+                                    groupName: group.name,
+                                    optionId: option.id,
+                                    optionName: option.name,
+                                    priceDelta: option.priceDelta
+                                  }]
+                                }));
+                              } else if (group.selectionType === 'multiple') {
+                                setSelectedModifiers(prev => {
+                                  const current = prev[group.id] || [];
+                                  if (isSelected) {
+                                    const filtered = current.filter(m => m.optionId !== option.id);
+                                    if (filtered.length === 0) {
+                                      const { [group.id]: _, ...rest } = prev;
+                                      return rest;
+                                    }
+                                    return { ...prev, [group.id]: filtered };
+                                  } else {
+                                    if (current.length >= group.maxSelections) {
+                                      setValidationError(`Maximum ${group.maxSelections} selections allowed`);
+                                      return prev;
+                                    }
+                                    return {
+                                      ...prev,
+                                      [group.id]: [...current, {
+                                        groupId: group.id,
+                                        groupName: group.name,
+                                        optionId: option.id,
+                                        optionName: option.name,
+                                        priceDelta: option.priceDelta
+                                      }]
+                                    };
+                                  }
+                                });
+                              } else if (group.selectionType === 'quantity') {
+                                if (!isSelected) {
+                                  setSelectedModifiers(prev => ({
+                                    ...prev,
+                                    [group.id]: [...(prev[group.id] || []), {
+                                      groupId: group.id,
+                                      groupName: group.name,
+                                      optionId: option.id,
+                                      optionName: option.name,
+                                      priceDelta: option.priceDelta,
+                                      quantity: 1
+                                    }]
+                                  }));
+                                }
+                              }
+                            };
+
+                            const handleQuantityChange = (delta: number) => {
+                              setSelectedModifiers(prev => {
+                                const current = prev[group.id] || [];
+                                const modIndex = current.findIndex(m => m.optionId === option.id);
+                                if (modIndex === -1) return prev;
+
+                                const newQuantity = (current[modIndex].quantity || 1) + delta;
+                                if (newQuantity <= 0) {
+                                  const filtered = current.filter(m => m.optionId !== option.id);
+                                  if (filtered.length === 0) {
+                                    const { [group.id]: _, ...rest } = prev;
+                                    return rest;
+                                  }
+                                  return { ...prev, [group.id]: filtered };
+                                }
+
+                                const updated = [...current];
+                                updated[modIndex] = { ...updated[modIndex], quantity: newQuantity };
+                                return { ...prev, [group.id]: updated };
+                              });
+                            };
+
+                            return (
+                              <div key={option.id}>
+                                <button
+                                  onClick={handleToggle}
+                                  disabled={option.isSoldOut}
+                                  className={`w-full p-4 rounded-xl border-2 transition-all ${
+                                    option.isSoldOut ? 'opacity-50 cursor-not-allowed bg-gray-50' :
+                                    isSelected ? 'border-blue-600 bg-blue-50' :
+                                    'border-gray-200 hover:border-gray-300'
+                                  }`}
+                                >
+                                  <div className="flex justify-between items-center w-full">
+                                    <div className="text-left flex-1">
+                                      <div className="font-semibold">
+                                        {option.name}
+                                        {option.isSoldOut && <span className="ml-2 text-sm text-red-500">(Sold Out)</span>}
+                                      </div>
+                                      {option.description && (
+                                        <div className="text-sm text-gray-500 mt-1">{option.description}</div>
+                                      )}
+                                    </div>
+                                    {option.priceDelta !== 0 && (
+                                      <span className="text-sm font-medium text-gray-700 ml-2">
+                                        {option.priceDelta > 0 ? '+' : ''}${option.priceDelta.toFixed(2)}
+                                      </span>
+                                    )}
+                                  </div>
+                                </button>
+
+                                {group.selectionType === 'quantity' && isSelected && selectedMod && (
+                                  <div className="flex items-center gap-2 ml-4 mt-2">
+                                    <button
+                                      onClick={() => handleQuantityChange(-1)}
+                                      className="p-1.5 rounded-lg bg-gray-200 hover:bg-gray-300"
+                                    >
+                                      <Minus className="w-4 h-4" />
+                                    </button>
+                                    <span className="font-bold w-6 text-center">{selectedMod.quantity || 1}</span>
+                                    <button
+                                      onClick={() => handleQuantityChange(1)}
+                                      className="p-1.5 rounded-lg bg-gray-200 hover:bg-gray-300"
+                                    >
+                                      <Plus className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  return null;
+                })()}
+
+                {/* Validation Error Modal */}
+                {validationError && (
+                  <div className="fixed inset-0 bg-black/60 z-[80] flex items-center justify-center p-4">
+                    <motion.div
+                      initial={{ scale: 0.9, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-xl"
+                    >
+                      <div className="flex items-start gap-4 mb-4">
+                        <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+                          <AlertTriangle className="w-6 h-6 text-red-600" />
+                        </div>
+                        <div className="flex-1">
+                          <h3 className="font-bold text-lg mb-2">Selection Required</h3>
+                          <p className="text-gray-600">{validationError}</p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setValidationError(null)}
+                        className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-semibold"
+                      >
+                        Got it
+                      </button>
+                    </motion.div>
                   </div>
                 )}
 
-                {/* Modifier Groups */}
-                {selectedItem.modifierGroups && selectedItem.modifierGroups
+                {/* Hidden section - we'll replace the old modifier groups rendering */}
+                {false && selectedItem.modifierGroups && selectedItem.modifierGroups
                   .filter(group => group.options && group.options.length > 0 && group.options.some(opt => opt.isActive && !opt.isSoldOut))
                   .map(group => (
                   <div key={group.id} className="mb-6">
@@ -1126,7 +1439,7 @@ export default function PublicProfile() {
                   </div>
                 ))}
 
-                {/* Price Summary and Add to Cart Button */}
+                {/* Price Summary and Navigation Buttons */}
                 <div className="border-t pt-4 sticky bottom-0 bg-white">
                   <div className="flex justify-between items-center mb-4">
                     <span className="text-lg font-semibold">Item Total</span>
@@ -1139,13 +1452,42 @@ export default function PublicProfile() {
                       ).toFixed(2)}
                     </span>
                   </div>
-                  <button
-                    onClick={addToCartWithSelections}
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-xl text-lg font-bold flex items-center justify-center gap-2"
-                  >
-                    <ShoppingCart className="w-5 h-5" />
-                    Add to Cart
-                  </button>
+
+                  {(() => {
+                    const steps = getSteps();
+                    const isLastStep = currentStep === steps.length - 1;
+                    const isFirstStep = currentStep === 0;
+
+                    return (
+                      <div className="flex gap-3">
+                        {!isFirstStep && (
+                          <button
+                            onClick={handlePrevious}
+                            className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-4 rounded-xl text-lg font-bold flex items-center justify-center gap-2"
+                          >
+                            <ArrowLeft className="w-5 h-5" />
+                            Previous
+                          </button>
+                        )}
+                        <button
+                          onClick={handleNext}
+                          className={`${isFirstStep ? 'w-full' : 'flex-1'} bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-xl text-lg font-bold flex items-center justify-center gap-2`}
+                        >
+                          {isLastStep ? (
+                            <>
+                              <ShoppingCart className="w-5 h-5" />
+                              Add to Cart
+                            </>
+                          ) : (
+                            <>
+                              Next
+                              <ArrowRight className="w-5 h-5" />
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
             </motion.div>
