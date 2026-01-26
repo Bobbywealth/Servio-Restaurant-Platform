@@ -833,7 +833,7 @@ export default function PublicProfile() {
                       </div>
 
                       <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        <label className="block text-xs font-medium text-gray-500 mb-1">
                           Special Instructions (optional)
                         </label>
                         <textarea
@@ -846,7 +846,7 @@ export default function PublicProfile() {
                           }}
                           placeholder="Allergies, dietary requests, etc."
                           rows={2}
-                          className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none resize-none scroll-mt-24"
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:border-blue-400 focus:outline-none resize-none text-sm scroll-mt-24"
                         />
                       </div>
                     </div>
