@@ -20,12 +20,12 @@ BEGIN
     -- This prevents "invalid input syntax for type timestamp" errors
     UPDATE tasks
     SET completed = CASE
-        WHEN LENGTH(COALESCE(completed_at::TEXT, '')) > 0
+        WHEN NULLIF(completed_at::TEXT, '') IS NOT NULL
         THEN completed_at::TEXT
         ELSE NULL
     END
     WHERE status = 'completed'
-      AND (completed IS NULL OR completed = '');
+      AND (completed IS NULL OR completed::TEXT = '');
 
     RAISE NOTICE 'Backfilled completed column from completed_at';
 END $$;
