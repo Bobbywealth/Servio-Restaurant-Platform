@@ -1,6 +1,8 @@
 import Head from 'next/head';
+import Link from 'next/link';
 import AssistantPanel from '../../components/Assistant/AssistantPanel';
 import { TabletSidebar } from '../../components/tablet/TabletSidebar';
+import { Smartphone, Mic } from 'lucide-react';
 
 export default function TabletAssistantPage() {
   return (
@@ -19,6 +21,15 @@ export default function TabletAssistantPage() {
                 Ask questions, run quick actions, or get help with orders and menu updates.
               </p>
             </div>
+
+            {/* Mobile Voice Chat Link */}
+            <Link
+              href="/mobile/voice-chat"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-violet-500 to-fuchsia-600 text-white rounded-xl font-medium shadow-lg hover:shadow-violet-500/30 transition-all hover:scale-105"
+            >
+              <Smartphone className="w-4 h-4" />
+              Mobile Voice Chat
+            </Link>
           </div>
           <div className="bg-[var(--tablet-surface)] border border-[var(--tablet-border)] rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.3)] p-4 sm:p-6">
             <AssistantPanel showHeader={false} className="max-w-none" />

@@ -118,8 +118,6 @@ class SocketManager {
       this.reconnectAttempts = 0
       this.notifyConnectionListeners(true)
 
-      showToast.success('Connected to Servio')
-
       // Join user room if authenticated
       const user = this.getUserFromStorage()
       if (user) {
@@ -136,8 +134,6 @@ class SocketManager {
         // Server initiated disconnect - reconnect manually
         this.socket?.connect()
       }
-
-      showToast.warning('Disconnected from Servio')
     })
 
     this.socket.on('connect_error', (error) => {
@@ -151,17 +147,14 @@ class SocketManager {
 
     this.socket.on('reconnect', (attemptNumber) => {
       console.log('🔌 Socket reconnected after', attemptNumber, 'attempts')
-      showToast.success('Reconnected to Servio')
     })
 
     this.socket.on('reconnect_attempt', (attemptNumber) => {
       console.log('🔌 Reconnection attempt', attemptNumber)
-      showToast.info(`Reconnecting... (${attemptNumber}/${this.maxReconnectAttempts})`)
     })
 
     this.socket.on('reconnect_failed', () => {
       console.error('🔌 Socket reconnection failed')
-      showToast.error('Failed to reconnect to Servio. Please refresh the page.')
     })
 
     // System events
