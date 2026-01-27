@@ -192,19 +192,14 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const currentItem = navigation.find((item) => currentPath === normalizePath(item.href));
   const pageTitle = currentItem?.name || 'Dashboard';
 
-  // Mobile navigation - role-based
-  const allMobileNav = [
-    { name: 'Home', href: '/dashboard', icon: Home, roles: ['staff', 'manager', 'owner', 'admin'] },
-    { name: 'Orders', href: '/dashboard/orders', icon: ClipboardList, roles: ['staff', 'manager', 'owner', 'admin'] },
-    { name: 'Menu', href: '/dashboard/menu-management', icon: UtensilsCrossed, roles: ['manager', 'owner', 'admin'] },
-    { name: 'Assistant', href: '/dashboard/assistant', icon: Mic, roles: ['manager', 'owner', 'admin'] },
-    { name: 'Staff', href: '/dashboard/staff', icon: Users, roles: ['manager', 'owner', 'admin'] },
-    { name: 'Tasks', href: '/dashboard/tasks', icon: CheckCircle, roles: ['manager', 'owner', 'admin'] }
+  // Mobile navigation - always show these 5 items at bottom
+  const mobileNav = [
+    { name: 'Home', href: '/dashboard', icon: Home },
+    { name: 'Orders', href: '/dashboard/orders', icon: ClipboardList },
+    { name: 'Menu', href: '/dashboard/menu-management', icon: UtensilsCrossed },
+    { name: 'Assistant', href: '/dashboard/assistant', icon: Mic },
+    { name: 'More', href: '#', icon: Menu, isMenuButton: true }
   ];
-
-  const mobileNav = allMobileNav.filter(item => 
-    item.roles.includes(user.role)
-  );
 
   const closeSidebar = () => setSidebarOpen(false);
 
@@ -326,9 +321,6 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           <div className="px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between items-center h-16">
               <div className="flex items-center space-x-3">
-                <button onClick={() => setSidebarOpen(true)} className="lg:hidden btn-icon">
-                  <Menu className="w-6 h-6" />
-                </button>
                 <div className="text-sm font-semibold text-gray-900 dark:text-white">{pageTitle}</div>
               </div>
               <div className="flex items-center space-x-3">
@@ -353,7 +345,19 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-gray-900/95 border-t border-gray-200 dark:border-gray-700 backdrop-blur-md lg:hidden pb-safe-bottom">
         <div className="grid grid-cols-5 px-2 py-2">
           {mobileNav.map((item) => {
-            const isActive = currentPath === normalizePath(item.href);
+            const isActive = !item.isMenuButton && currentPath === normalizePath(item.href);
+            if (item.isMenuButton) {
+              return (
+                <button
+                  key={item.name}
+                  onClick={() => setSidebarOpen(true)}
+                  className={`flex flex-col items-center justify-center py-2 rounded-lg text-xs font-medium text-gray-500 dark:text-surface-400 hover:text-primary-700 dark:hover:text-primary-300 transition-colors`}
+                >
+                  <item.icon className="w-5 h-5" />
+                  <span className="mt-1">{item.name}</span>
+                </button>
+              );
+            }
             return (
               <Link
                 key={item.name}

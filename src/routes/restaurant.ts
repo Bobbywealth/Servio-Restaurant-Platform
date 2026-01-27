@@ -8,6 +8,7 @@ import sharp from 'sharp';
 import path from 'path';
 import fs from 'fs/promises';
 import QRCode from 'qrcode';
+import multer from 'multer';
 
 const router = Router();
 
@@ -1021,12 +1022,23 @@ router.post('/staff', asyncHandler(async (req: Request, res: Response) => {
   }
 
   // Generate unique 4-digit PIN
-  let pin: string;
+  let pin: string = '';
   let isUnique = false;
   while (!isUnique) {
-    pin = Math.floor(1000 + Math.random() * 9000).toString();
-    const existing = await db.get('SELECT id FROM users WHERE pin = ? AND restaurant_id = ?', [pin, restaurantId]);
-    if (!existing) isUnique = true;
+    const newPin = Math.floor(1000 + Math.random() * 9000).toString();
+    const existing = await db.get('SELECT id FROM users WHERE pin = ? AND restaurant_id = ?', [newPin, restaurantId]);
+    if (!existing) {
+      pin = newPin;
+      isUnique = true;
+    }
+  }
+
+  // Ensure pin is assigned (TypeScript narrowing)
+  if (!pin) {
+    return res.status(500).json({
+      success: false,
+      error: { message: 'Failed to generate unique PIN' }
+    });
   }
 
   const userId = uuidv4();
