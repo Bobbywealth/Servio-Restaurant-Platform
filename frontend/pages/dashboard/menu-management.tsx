@@ -553,8 +553,13 @@ const MenuManagement: React.FC = () => {
   }, [selectedCategory, categories, loadCategoryChoiceGroups]);
 
   // DnD sensors (must be defined at top-level for hooks)
-  const categoryGroupSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
-  const itemTableSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+  // Touch-friendly sensors with larger activation distance for tablet use
+  const categoryGroupSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
+  );
+  const itemTableSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
+  );
 
   // Load restaurant slug for public ordering link
   useEffect(() => {
@@ -1593,7 +1598,7 @@ const MenuManagement: React.FC = () => {
               <p className="text-gray-500 mt-2">Loading menu...</p>
             </div>
           ) : (
-            <div className="flex flex-col lg:flex-row gap-4 sm:gap-6">
+            <div className="flex flex-col md:flex-row gap-4 sm:gap-6 h-full">
               {/* Category Sidebar - Collapsible on mobile */}
               <CategorySidebar
                 categories={categories.map((c) => ({
@@ -1616,25 +1621,24 @@ const MenuManagement: React.FC = () => {
               />
 
               {/* Middle pane: Items */}
-              <div className="flex-1 min-w-0 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-                <div className="p-3 sm:p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between gap-2 sm:gap-3">
+              <div className="flex-1 min-w-0 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 flex flex-col">
+                <div className="p-3 sm:p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between gap-2 sm:gap-3 shrink-0">
                   <div className="min-w-0 flex-1">
-                    <div className="text-sm font-bold text-gray-900 dark:text-white truncate">
+                    <div className="text-base sm:text-sm font-bold text-gray-900 dark:text-white truncate">
                       {activeCategory ? activeCategory.name : 'Items'}
                     </div>
-                    <div className="text-xs text-gray-500 dark:text-gray-400">
+                    <div className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
                       {activeCategory ? `${activeCategory.items?.length || 0} items` : 'Select a category to view items.'}
                     </div>
                   </div>
                   <button
                     type="button"
-                    className="inline-flex items-center justify-center gap-1 sm:gap-2 rounded-lg bg-red-600 hover:bg-red-700 active:bg-red-800 text-white px-2.5 sm:px-3 py-2 text-xs sm:text-sm font-bold disabled:opacity-50 min-h-[40px] touch-manipulation"
+                    className="inline-flex items-center justify-center gap-1 sm:gap-2 rounded-lg bg-red-600 hover:bg-red-700 active:bg-red-800 text-white px-4 py-2.5 sm:px-3 sm:py-2 text-sm font-bold disabled:opacity-50 min-h-[44px] touch-manipulation"
                     disabled={!activeCategoryId}
                     onClick={() => openAddItemModal(activeCategoryId || undefined)}
                   >
-                    <Plus className="w-4 h-4" />
-                    <span className="hidden xs:inline">Add Item</span>
-                    <span className="xs:hidden">Add</span>
+                    <Plus className="w-5 h-5 sm:w-4 sm:h-4" />
+                    <span className="hidden sm:inline">Add Item</span>
                   </button>
                 </div>
 
@@ -1668,15 +1672,15 @@ const MenuManagement: React.FC = () => {
                       );
                     }
                     return (
-                      <div className="overflow-auto -mx-3 sm:mx-0">
+                      <div className="flex-1 overflow-auto -mx-3 sm:mx-0">
                         <table className="w-full text-sm min-w-[400px] sm:min-w-0">
                           <thead className="sticky top-0 bg-gray-50 dark:bg-gray-900/40 z-10">
                             <tr className="text-left text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                              <th className="px-2 sm:px-4 py-2 sm:py-3">Item</th>
+                              <th className="px-3 sm:px-4 py-3">Item</th>
                               <th className="hidden sm:table-cell px-4 py-3">Price</th>
-                              <th className="px-2 sm:px-4 py-2 sm:py-3">Status</th>
+                              <th className="px-3 sm:px-4 py-3">Status</th>
                               <th className="hidden md:table-cell px-4 py-3">Modifiers</th>
-                              <th className="px-2 sm:px-4 py-2 sm:py-3 text-right">Actions</th>
+                              <th className="px-3 sm:px-4 py-3 text-right">Actions</th>
                             </tr>
                           </thead>
                           <DndContext
@@ -3311,12 +3315,12 @@ const SortableItemTableRow = memo(function SortableItemTableRow({
       onClick={onSelect}
     >
       {/* Item info cell - mobile optimized with touch-friendly drag handle */}
-      <td className="px-2 sm:px-4 py-2 sm:py-3">
+      <td className="px-3 sm:px-4 py-3">
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           <button
             type="button"
             className={clsx(
-              'shrink-0 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 p-1 min-h-[44px] min-w-[44px] flex items-center justify-center touch-manipulation',
+              'shrink-0 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 p-1.5 min-h-[44px] min-w-[44px] flex items-center justify-center touch-manipulation',
               disableDrag && 'opacity-40 cursor-not-allowed'
             )}
             onClick={(e) => e.stopPropagation()}
@@ -3329,7 +3333,7 @@ const SortableItemTableRow = memo(function SortableItemTableRow({
             <GripVertical className="h-5 w-5" />
           </button>
 
-          <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-lg bg-gray-100 dark:bg-gray-700 overflow-hidden shrink-0">
+          <div className="h-12 w-12 sm:h-14 sm:w-14 rounded-lg bg-gray-100 dark:bg-gray-700 overflow-hidden shrink-0">
             {thumb ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={resolveMediaUrl(thumb)} alt="" className="h-full w-full object-cover" loading="lazy" />
@@ -3337,7 +3341,7 @@ const SortableItemTableRow = memo(function SortableItemTableRow({
           </div>
 
           <div className="min-w-0 flex-1">
-            <div className="font-semibold text-gray-900 dark:text-white truncate text-sm sm:text-base">{item.name}</div>
+            <div className="font-semibold text-gray-900 dark:text-white truncate text-base sm:text-base">{item.name}</div>
             {item.description ? (
               <div className="text-xs text-gray-500 dark:text-gray-400 truncate max-w-[150px] sm:max-w-none">{item.description}</div>
             ) : null}
@@ -3355,11 +3359,11 @@ const SortableItemTableRow = memo(function SortableItemTableRow({
       </td>
 
       {/* Availability toggle - touch-friendly */}
-      <td className="px-2 sm:px-4 py-2 sm:py-3">
+      <td className="px-3 sm:px-4 py-3">
         <button
           type="button"
           className={clsx(
-            'inline-flex items-center justify-center gap-1 sm:gap-2 rounded-lg px-2 sm:px-3 py-1.5 sm:py-2 font-bold text-xs sm:text-sm min-h-[36px] sm:min-h-[40px] touch-manipulation',
+            'inline-flex items-center justify-center gap-1 sm:gap-2 rounded-lg px-3 sm:px-3 py-2 font-bold text-xs sm:text-sm min-h-[40px] touch-manipulation w-full sm:w-auto',
             item.is_available
               ? 'bg-teal-100 text-teal-700 hover:bg-teal-200 active:bg-teal-300'
               : 'bg-gray-200 text-gray-700 hover:bg-gray-300 active:bg-gray-400 dark:bg-gray-700 dark:text-gray-200'
@@ -3377,11 +3381,11 @@ const SortableItemTableRow = memo(function SortableItemTableRow({
       <td className="hidden md:table-cell px-4 py-3 text-gray-700 dark:text-gray-200 text-sm">{modifierSummary}</td>
 
       {/* Actions - touch-friendly buttons */}
-      <td className="px-2 sm:px-4 py-2 sm:py-3 text-right">
-        <div className="inline-flex items-center gap-1 sm:gap-2">
+      <td className="px-3 sm:px-4 py-3 text-right">
+        <div className="inline-flex items-center gap-2">
           <button
             type="button"
-            className="inline-flex items-center justify-center gap-1 sm:gap-2 rounded-lg bg-gray-100 hover:bg-gray-200 active:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 px-2 sm:px-3 py-1.5 sm:py-2 font-bold text-gray-800 dark:text-gray-100 min-h-[36px] sm:min-h-[40px] touch-manipulation"
+            className="inline-flex items-center justify-center gap-1 sm:gap-2 rounded-lg bg-gray-100 hover:bg-gray-200 active:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 px-3 sm:px-3 py-2 font-bold text-gray-800 dark:text-gray-100 min-h-[40px] touch-manipulation"
             onClick={(e) => {
               e.stopPropagation();
               onSelect();
@@ -3401,7 +3405,7 @@ const SortableItemTableRow = memo(function SortableItemTableRow({
           </button>
           <button
             type="button"
-            className="inline-flex items-center justify-center rounded-lg bg-gray-100 px-2 sm:px-3 py-1.5 sm:py-2 font-bold text-red-500 hover:text-red-600 active:bg-red-100 dark:bg-gray-700 dark:text-red-400 dark:hover:text-red-300 disabled:opacity-50 min-h-[36px] sm:min-h-[40px] touch-manipulation"
+            className="inline-flex items-center justify-center rounded-lg bg-gray-100 px-3 sm:px-3 py-2 font-bold text-red-500 hover:text-red-600 active:bg-red-100 dark:bg-gray-700 dark:text-red-400 dark:hover:text-red-300 disabled:opacity-50 min-h-[40px] touch-manipulation"
             disabled={isDeleting}
             title="Delete item"
             onClick={(e) => {
