@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Head from 'next/head';
-import Link from 'next/link';
+import Link from 'next/Link';
 import Image from 'next/image';
 import {
   Clock,
@@ -14,8 +14,69 @@ import {
   Timer,
   User,
   TrendingUp,
-  Briefcase
+  Briefcase,
+  X
 } from 'lucide-react';
+
+// Confirmation Dialog Component
+interface ConfirmDialogProps {
+  isOpen: boolean;
+  title: string;
+  message: string;
+  confirmText: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+  variant?: 'success' | 'warning' | 'danger';
+}
+
+function ConfirmDialog({ isOpen, title, message, confirmText, onConfirm, onCancel, variant = 'success' }: ConfirmDialogProps) {
+  if (!isOpen) return null;
+
+  const variants = {
+    success: 'bg-emerald-500/20 border-emerald-500/30 text-emerald-400',
+    warning: 'bg-amber-500/20 border-amber-500/30 text-amber-400',
+    danger: 'bg-red-500/20 border-red-500/30 text-red-400'
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onCancel} />
+      <div className="relative bg-slate-800 rounded-3xl shadow-2xl w-full max-w-sm p-6 border border-slate-700">
+        <div className="text-center">
+          <div className={`w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center ${variants[variant]}`}>
+            {variant === 'success' ? (
+              <CheckCircle className="w-8 h-8" />
+            ) : variant === 'warning' ? (
+              <Coffee className="w-8 h-8" />
+            ) : (
+              <LogOut className="w-8 h-8" />
+            )}
+          </div>
+          <h2 className="text-xl font-bold text-white mb-2">{title}</h2>
+          <p className="text-slate-400 mb-6">{message}</p>
+          <button
+            onClick={onConfirm}
+            className={`w-full py-4 rounded-2xl font-semibold text-white mb-3 transition-all ${
+              variant === 'success'
+                ? 'bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700'
+                : variant === 'warning'
+                ? 'bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700'
+                : 'bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700'
+            }`}
+          >
+            {confirmText}
+          </button>
+          <button
+            onClick={onCancel}
+            className="w-full py-3 rounded-2xl font-medium text-slate-400 hover:text-white transition-all"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // PIN entry component - Redesigned with modern styling
 interface PINEntryProps {
@@ -538,6 +599,23 @@ export default function StaffClockPage() {
   const [weeklyHours, setWeeklyHours] = useState(0);
   const userRef = useRef<any>(null);
 
+  // Confirmation dialog state
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    confirmText: string;
+    onConfirm: () => void;
+    variant: 'success' | 'warning' | 'danger';
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    confirmText: 'Confirm',
+    onConfirm: () => {},
+    variant: 'success'
+  });
+
   // Check for existing session and set up periodic refresh
   useEffect(() => {
     const savedUser = localStorage.getItem('staffUser');
@@ -620,7 +698,7 @@ export default function StaffClockPage() {
     localStorage.removeItem('staffUser');
   };
 
-  const handleClockIn = async () => {
+  const doClockIn = async () => {
     if (!user) return;
     setLoading(true);
 
@@ -641,6 +719,18 @@ export default function StaffClockPage() {
           position: data.data.position,
           isOnBreak: false
         });
+        // Show confirmation and auto-logout
+        setConfirmDialog({
+          isOpen: true,
+          title: 'Clocked In!',
+          message: `You clocked in at ${new Date(data.data.clockInTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}. Have a great shift!`,
+          confirmText: 'Done',
+          variant: 'success',
+          onConfirm: () => {
+            setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+            handleLogout();
+          }
+        });
       } else {
         setError(data.error?.message || 'Failed to clock in');
       }
@@ -651,7 +741,7 @@ export default function StaffClockPage() {
     }
   };
 
-  const handleClockOut = async () => {
+  const doClockOut = async () => {
     if (!user || !currentShift) return;
     setLoading(true);
 
@@ -665,8 +755,21 @@ export default function StaffClockPage() {
       const data = await response.json();
 
       if (data.success) {
+        const totalHours = data.data.totalHours;
         setCurrentShift(null);
-        setWeeklyHours(prev => prev + data.data.totalHours);
+        setWeeklyHours(prev => prev + totalHours);
+        // Show confirmation and auto-logout
+        setConfirmDialog({
+          isOpen: true,
+          title: 'Clocked Out!',
+          message: `You worked ${totalHours.toFixed(2)} hours today. Thanks for your hard work!`,
+          confirmText: 'Done',
+          variant: 'success',
+          onConfirm: () => {
+            setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+            handleLogout();
+          }
+        });
       } else {
         setError(data.error?.message || 'Failed to clock out');
       }
@@ -677,7 +780,7 @@ export default function StaffClockPage() {
     }
   };
 
-  const handleStartBreak = async () => {
+  const doStartBreak = async () => {
     if (!user) return;
     setLoading(true);
     setError(null);
@@ -698,12 +801,20 @@ export default function StaffClockPage() {
           currentBreakStart: data.data.breakStart,
           breakMinutes: prev?.breakMinutes || 0
         }));
-        // Clear any previous error and refresh from server
-        setError(null);
-        await fetchUserStatus(userRef.current?.pin);
+        // Show confirmation and auto-logout
+        setConfirmDialog({
+          isOpen: true,
+          title: 'Break Started',
+          message: 'Enjoy your break! Enter your PIN when you\'re ready to return to work.',
+          confirmText: 'Done',
+          variant: 'warning',
+          onConfirm: () => {
+            setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+            handleLogout();
+          }
+        });
       } else {
         setError(data.error?.message || 'Failed to start break');
-        // Auto-refresh on error to sync with server state
         await fetchUserStatus(userRef.current?.pin);
       }
     } catch (err) {
@@ -713,7 +824,7 @@ export default function StaffClockPage() {
     }
   };
 
-  const handleEndBreak = async () => {
+  const doEndBreak = async () => {
     if (!user) return;
     setLoading(true);
     setError(null);
@@ -734,12 +845,20 @@ export default function StaffClockPage() {
           breakMinutes: data.data.totalBreakMinutes,
           currentBreakStart: null
         }));
-        // Clear any previous error and refresh from server
-        setError(null);
-        await fetchUserStatus(userRef.current?.pin);
+        // Show confirmation and auto-logout
+        setConfirmDialog({
+          isOpen: true,
+          title: 'Back to Work!',
+          message: `Welcome back! You took a ${Math.floor(data.data.durationMinutes)} minute break.`,
+          confirmText: 'Done',
+          variant: 'success',
+          onConfirm: () => {
+            setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+            handleLogout();
+          }
+        });
       } else {
         setError(data.error?.message || 'Failed to end break');
-        // Auto-refresh on error to sync with server state
         await fetchUserStatus(userRef.current?.pin);
       }
     } catch (err) {
@@ -855,13 +974,13 @@ export default function StaffClockPage() {
           {currentShift ? (
             <CurrentShiftCard
               shift={currentShift}
-              onStartBreak={handleStartBreak}
-              onEndBreak={handleEndBreak}
-              onClockOut={handleClockOut}
+              onStartBreak={doStartBreak}
+              onEndBreak={doEndBreak}
+              onClockOut={doClockOut}
               loading={loading}
             />
           ) : (
-            <ClockInCard onClockIn={handleClockIn} loading={loading} />
+            <ClockInCard onClockIn={doClockIn} loading={loading} />
           )}
 
           {/* Footer */}
@@ -872,6 +991,17 @@ export default function StaffClockPage() {
           </div>
         </main>
       </div>
+
+      {/* Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        confirmText={confirmDialog.confirmText}
+        onConfirm={confirmDialog.onConfirm}
+        onCancel={() => setConfirmDialog(prev => ({ ...prev, isOpen: false }))}
+        variant={confirmDialog.variant}
+      />
 
       {/* Register Service Worker */}
       <script
