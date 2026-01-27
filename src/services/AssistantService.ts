@@ -101,7 +101,7 @@ export class AssistantService {
       // Get system prompt with current context
       const systemPrompt = await this.getSystemPrompt(userId);
 
-      let response: string;
+      let response = "I understand, let me help with that.";
       const actions: AssistantResponse['actions'] = [];
 
       // Use MiniMax if configured, otherwise use OpenAI
