@@ -3,8 +3,123 @@
 import Head from 'next/head';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
+import { motion } from 'framer-motion';
 import { ArrowRight, Loader2, Lock, Mail } from 'lucide-react';
 import { useUser } from '../../contexts/UserContext';
+
+// Animated skeleton loader for tablet login
+function TabletLoginSkeleton() {
+  return (
+    <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center p-6 relative overflow-hidden">
+      <div className="absolute inset-0">
+        <div className="absolute inset-0 bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900" />
+        {/* Animated background elements */}
+        <motion.div
+          className="absolute top-1/4 left-1/4 w-96 h-96 bg-teal-500/10 rounded-full blur-3xl"
+          animate={{
+            scale: [1, 1.2, 1],
+            opacity: [0.3, 0.5, 0.3],
+          }}
+          transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
+        />
+        <motion.div
+          className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-teal-600/10 rounded-full blur-3xl"
+          animate={{
+            scale: [1.2, 1, 1.2],
+            opacity: [0.3, 0.5, 0.3],
+          }}
+          transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut', delay: 1 }}
+        />
+      </div>
+
+      <motion.div
+        className="w-full max-w-md bg-gray-800/80 rounded-2xl border border-gray-700 p-8 shadow-xl backdrop-blur relative z-10"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+      >
+        {/* Logo skeleton */}
+        <div className="flex items-center gap-3 mb-8">
+          <motion.div
+            className="h-9 w-9 bg-gray-700/80 rounded-lg"
+            animate={{ opacity: [0.5, 0.8, 0.5] }}
+            transition={{ duration: 1.5, repeat: Infinity }}
+          />
+          <div className="space-y-2">
+            <motion.div
+              className="h-3 w-20 bg-gray-700/80 rounded"
+              animate={{ opacity: [0.5, 0.8, 0.5] }}
+              transition={{ duration: 1.5, repeat: Infinity, delay: 0.2 }}
+            />
+            <motion.div
+              className="h-6 w-24 bg-gray-700/80 rounded"
+              animate={{ opacity: [0.5, 0.8, 0.5] }}
+              transition={{ duration: 1.5, repeat: Infinity, delay: 0.4 }}
+            />
+          </div>
+        </div>
+
+        {/* Form skeletons */}
+        <div className="space-y-4">
+          {[1, 2].map((i) => (
+            <motion.div
+              key={i}
+              className="space-y-2"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: i * 0.2 }}
+            >
+              <motion.div
+                className="h-4 w-20 bg-gray-700/80 rounded"
+                animate={{ opacity: [0.5, 0.7, 0.5] }}
+                transition={{ duration: 1.5, repeat: Infinity, delay: i * 0.3 }}
+              />
+              <motion.div
+                className="h-12 w-full bg-gray-700/60 rounded-xl"
+                animate={{ opacity: [0.5, 0.7, 0.5] }}
+                transition={{ duration: 1.5, repeat: Infinity, delay: i * 0.3 + 0.1 }}
+              />
+            </motion.div>
+          ))}
+        </div>
+
+        {/* Button skeleton */}
+        <motion.div
+          className="mt-8 h-12 w-full bg-gray-700/60 rounded-xl"
+          animate={{ opacity: [0.5, 0.7, 0.5] }}
+          transition={{ duration: 1.5, repeat: Infinity, delay: 0.6 }}
+        />
+
+        {/* Loading text */}
+        <motion.div
+          className="mt-6 text-center"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.8 }}
+        >
+          <div className="inline-flex items-center gap-2 text-teal-400">
+            <motion.span
+              className="w-2 h-2 bg-teal-400 rounded-full"
+              animate={{ scale: [1, 1.5, 1], opacity: [0.5, 1, 0.5] }}
+              transition={{ duration: 1, repeat: Infinity }}
+            />
+            <motion.span
+              className="w-2 h-2 bg-teal-400 rounded-full"
+              animate={{ scale: [1, 1.5, 1], opacity: [0.5, 1, 0.5] }}
+              transition={{ duration: 1, repeat: Infinity, delay: 0.2 }}
+            />
+            <motion.span
+              className="w-2 h-2 bg-teal-400 rounded-full"
+              animate={{ scale: [1, 1.5, 1], opacity: [0.5, 1, 0.5] }}
+              transition={{ duration: 1, repeat: Infinity, delay: 0.4 }}
+            />
+            <span className="ml-2 text-sm">Checking session...</span>
+          </div>
+        </motion.div>
+      </motion.div>
+    </div>
+  );
+}
 
 export default function TabletLoginPage() {
   const router = useRouter();
@@ -42,11 +157,7 @@ export default function TabletLoginPage() {
   };
 
   if (isLoading || user) {
-    return (
-      <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
-        <p className="text-sm text-gray-300">Checking session…</p>
-      </div>
-    );
+    return <TabletLoginSkeleton />;
   }
 
   return (

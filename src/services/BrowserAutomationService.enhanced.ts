@@ -80,29 +80,34 @@ export class EnhancedBrowserAutomationService {
 
     // Inject anti-detection scripts
     await context.addInitScript(() => {
+      // eslint-disable-next-line no-undef, @typescript-eslint/no-explicit-any
+      const win = window as any;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const nav = win.navigator;
+
       // Override the navigator.webdriver property
-      Object.defineProperty(navigator, 'webdriver', {
+      Object.defineProperty(nav, 'webdriver', {
         get: () => undefined
       });
 
       // Override plugins to make it look real
-      Object.defineProperty(navigator, 'plugins', {
+      Object.defineProperty(nav, 'plugins', {
         get: () => [1, 2, 3, 4, 5]
       });
 
       // Override languages
-      Object.defineProperty(navigator, 'languages', {
+      Object.defineProperty(nav, 'languages', {
         get: () => ['en-US', 'en']
       });
 
       // Chrome runtime
-      (window as any).chrome = {
+      win.chrome = {
         runtime: {}
       };
 
       // Permissions API
-      const originalQuery = window.navigator.permissions.query;
-      window.navigator.permissions.query = (parameters: any) => (
+      const originalQuery = win.navigator.permissions.query;
+      win.navigator.permissions.query = (parameters: any) => (
         parameters.name === 'notifications' ?
           Promise.resolve({ state: 'denied' } as PermissionStatus) :
           originalQuery(parameters)

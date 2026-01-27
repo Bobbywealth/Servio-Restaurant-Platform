@@ -150,7 +150,6 @@ router.post('/read-all', asyncHandler(async (req: Request, res: Response) => {
  */
 router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
   const user = req.user!;
-  const userId = user.id;
   const id = req.params.id;
 
   const db = DatabaseService.getInstance().getDatabase();

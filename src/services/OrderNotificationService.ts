@@ -1,11 +1,7 @@
 import { DatabaseService } from './DatabaseService';
 import { SmsService } from './SmsService';
 import { logger } from '../utils/logger';
-import type nodemailer from 'nodemailer';
 import { v4 as uuidv4 } from 'uuid';
-
-// Dynamic import for nodemailer to avoid type issues
-const nodemailerModule = require('nodemailer');
 
 interface OrderNotificationSettings {
   smsEnabled: boolean;
@@ -22,7 +18,9 @@ export class OrderNotificationService {
 
   private constructor() {
     this.smsService = SmsService.getInstance();
-    this.emailTransporter = nodemailerModule.createTransport({
+    // Dynamically require nodemailer to avoid type issues
+    const nodemailer = require('nodemailer');
+    this.emailTransporter = nodemailer.createTransport({
       host: process.env.EMAIL_HOST || 'smtp.gmail.com',
       port: parseInt(process.env.EMAIL_PORT || '587'),
       secure: false,
@@ -298,7 +296,7 @@ export class OrderNotificationService {
     }
   }
 
-  private async getNotificationSettings(restaurantId: string): Promise<OrderNotificationSettings> {
+  private async getNotificationSettings(_restaurantId: string): Promise<OrderNotificationSettings> {
     // For now, return defaults. In the future, these could be stored in DB
     return {
       smsEnabled: true,

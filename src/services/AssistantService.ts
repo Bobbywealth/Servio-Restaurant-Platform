@@ -239,7 +239,7 @@ export class AssistantService {
       }
 
       // Generate TTS audio
-      const audioUrl = await this.generateSpeech(fullResponse);
+      await this.generateSpeech(fullResponse);
 
       yield {
         type: 'done',

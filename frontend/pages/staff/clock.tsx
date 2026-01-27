@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Head from 'next/head';
-import Link from 'next/Link';
+import Link from 'next/link';
 import Image from 'next/image';
+import { motion } from 'framer-motion';
 import {
   Clock,
   Coffee,
@@ -592,10 +593,98 @@ function ErrorBanner({ error, onDismiss }: ErrorBannerProps) {
   );
 }
 
+// Animated skeleton loader for staff clock page
+function StaffClockSkeleton() {
+  return (
+    <div className="min-h-screen bg-slate-900 flex flex-col">
+      {/* Header skeleton */}
+      <header className="bg-slate-800/50 backdrop-blur-xl border-b border-slate-700/50 px-6 py-4">
+        <div className="max-w-md mx-auto flex items-center justify-center">
+          <div className="flex items-center gap-3">
+            <motion.div
+              className="h-10 w-10 bg-slate-700/80 rounded-lg"
+              animate={{ opacity: [0.5, 0.8, 0.5] }}
+              transition={{ duration: 1.5, repeat: Infinity }}
+            />
+            <div className="space-y-2">
+              <motion.div
+                className="h-5 w-20 bg-slate-700/80 rounded"
+                animate={{ opacity: [0.5, 0.8, 0.5] }}
+                transition={{ duration: 1.5, repeat: Infinity, delay: 0.2 }}
+              />
+              <motion.div
+                className="h-3 w-16 bg-slate-700/60 rounded"
+                animate={{ opacity: [0.5, 0.7, 0.5] }}
+                transition={{ duration: 1.5, repeat: Infinity, delay: 0.4 }}
+              />
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* Main content skeleton */}
+      <main className="flex-1 flex items-center justify-center p-6">
+        <div className="w-full max-w-md">
+          <div className="text-center mb-8">
+            {/* Avatar skeleton */}
+            <motion.div
+              className="w-20 h-20 bg-slate-700/80 rounded-2xl mx-auto mb-4"
+              animate={{ opacity: [0.5, 0.8, 0.5] }}
+              transition={{ duration: 1.5, repeat: Infinity }}
+            />
+            {/* Text skeletons */}
+            <motion.div
+              className="h-8 w-40 bg-slate-700/80 rounded mx-auto mb-2"
+              animate={{ opacity: [0.5, 0.8, 0.5] }}
+              transition={{ duration: 1.5, repeat: Infinity, delay: 0.3 }}
+            />
+            <motion.div
+              className="h-4 w-32 bg-slate-700/60 rounded mx-auto"
+              animate={{ opacity: [0.5, 0.7, 0.5] }}
+              transition={{ duration: 1.5, repeat: Infinity, delay: 0.5 }}
+            />
+          </div>
+
+          {/* PIN input skeleton */}
+          <div className="bg-slate-800/50 backdrop-blur-xl rounded-3xl p-8 border border-slate-700/50">
+            <div className="flex justify-center gap-4 mb-6">
+              {[1, 2, 3, 4].map((i) => (
+                <motion.div
+                  key={i}
+                  className="w-16 h-16 bg-slate-700/60 rounded-2xl"
+                  animate={{ opacity: [0.5, 0.7, 0.5] }}
+                  transition={{ duration: 1.5, repeat: Infinity, delay: i * 0.1 }}
+                />
+              ))}
+            </div>
+
+            {/* Loading dots */}
+            <motion.div
+              className="flex items-center justify-center gap-2"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.8 }}
+            >
+              {[0, 1, 2].map((i) => (
+                <motion.span
+                  key={i}
+                  className="w-2 h-2 bg-orange-500 rounded-full"
+                  animate={{ scale: [1, 1.5, 1], opacity: [0.5, 1, 0.5] }}
+                  transition={{ duration: 0.8, repeat: Infinity, delay: i * 0.15 }}
+                />
+              ))}
+            </motion.div>
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+}
+
 // Main clock page
 export default function StaffClockPage() {
   const [user, setUser] = useState<any>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true); // Start with loading=true
   const [error, setError] = useState<string | null>(null);
   const [currentShift, setCurrentShift] = useState<any>(null);
   const [weeklyHours, setWeeklyHours] = useState(0);
@@ -631,6 +720,8 @@ export default function StaffClockPage() {
         localStorage.removeItem('staffUser');
       }
     }
+    // Mark initial loading as complete
+    setLoading(false);
 
     // Refresh status every 30 seconds for live updates
     const refreshInterval = setInterval(() => {
@@ -948,6 +1039,11 @@ export default function StaffClockPage() {
       setLoading(false);
     }
   };
+
+  // Show loading skeleton while checking session
+  if (loading && !user) {
+    return <StaffClockSkeleton />;
+  }
 
   // Show login screen if not authenticated
   if (!user) {

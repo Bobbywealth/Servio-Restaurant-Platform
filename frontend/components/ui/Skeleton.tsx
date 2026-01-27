@@ -1,5 +1,5 @@
 import React from 'react'
-import { motion } from 'framer-motion'
+import { motion, Easing } from 'framer-motion'
 
 interface SkeletonProps {
   className?: string
@@ -8,6 +8,7 @@ interface SkeletonProps {
   height?: string | number
   animate?: boolean
   animationType?: 'pulse' | 'shimmer' | 'wave' | 'none'
+  style?: React.CSSProperties
 }
 
 // Premium gradient shimmer animation
@@ -16,7 +17,7 @@ const shimmerKeyframes = {
   x: [-100, 100, -100],
 }
 
-const shimmerTransition = {
+const shimmerTransition: { duration: number; repeat: number; ease: Easing } = {
   duration: 2,
   repeat: Infinity,
   ease: 'linear',
@@ -28,7 +29,7 @@ const pulseKeyframes = {
   scale: [0.98, 1.02, 0.98],
 }
 
-const pulseTransition = {
+const pulseTransition: { duration: number; repeat: number; ease: Easing } = {
   duration: 1.8,
   repeat: Infinity,
   ease: 'easeInOut',
@@ -39,7 +40,7 @@ const waveKeyframes = {
   opacity: [0.4, 0.7, 0.4, 0.7, 0.4],
 }
 
-const waveTransition = {
+const waveTransition: { duration: number; repeat: number; ease: Easing } = {
   duration: 2.5,
   repeat: Infinity,
   ease: 'easeInOut',

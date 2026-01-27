@@ -1022,7 +1022,7 @@ router.post('/staff', asyncHandler(async (req: Request, res: Response) => {
     });
   }
 
-  const { name, email, role = 'staff', position } = req.body;
+  const { name, email, role = 'staff' } = req.body;
 
   if (!name) {
     return res.status(400).json({

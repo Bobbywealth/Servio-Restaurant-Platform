@@ -70,14 +70,6 @@ function formatPhoneNumber(phone: string): { formatted: string; isValid: boolean
   };
 }
 
-/**
- * Validate phone number format
- */
-function validatePhoneNumber(phone: string): { isValid: boolean; error?: string } {
-  const result = formatPhoneNumber(phone);
-  return { isValid: result.isValid, error: result.error };
-}
-
 // Initialize email transporter (configure for your email provider)
 const emailTransporter = nodemailer.createTransport({
   host: process.env.EMAIL_HOST || 'smtp.gmail.com',
@@ -911,7 +903,7 @@ async function sendCampaign(campaignId: string) {
       targetCriteria.tags.forEach((tag: string, index: number) => {
         if (index > 0) customerQuery += ' OR ';
         customerQuery += 'tags ILIKE ?';
-        queryParams.push(`%\"${tag}\"%`);
+        queryParams.push(`%"${tag}"%`);
       });
       customerQuery += ')';
     }

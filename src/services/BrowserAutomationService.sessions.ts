@@ -14,10 +14,8 @@
  * 4. Session expires: User logs in again manually
  */
 
-import { chromium, Browser, Page, BrowserContext } from 'playwright';
+import { chromium, Browser, BrowserContext } from 'playwright';
 import { logger } from '../utils/logger';
-import { DatabaseService } from './DatabaseService';
-import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 
@@ -83,7 +81,8 @@ export class BrowserAutomationServiceWithSessions {
     const sessionPath = this.getSessionPath(restaurantId, platform);
     try {
       const stats = fs.statSync(sessionPath);
-      const sessionData = JSON.parse(fs.readFileSync(sessionPath, 'utf8'));
+      // Read but don't parse - we only need file stats for session info
+      fs.readFileSync(sessionPath, 'utf8');
 
       // Check if session is old (> 30 days)
       const ageInDays = (Date.now() - stats.mtimeMs) / (1000 * 60 * 60 * 24);
@@ -204,8 +203,8 @@ export class BrowserAutomationServiceWithSessions {
   public async initSession(
     restaurantId: string,
     platform: 'doordash' | 'ubereats',
-    username: string,
-    password: string
+    _username: string,
+    _password: string
   ): Promise<{ success: boolean; message: string }> {
     // Force headed mode for manual login
     const originalHeadless = process.env.HEADLESS;

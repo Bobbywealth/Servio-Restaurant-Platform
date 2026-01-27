@@ -4,6 +4,7 @@ import { Mic, Square, Send, X } from 'lucide-react'
 import Head from 'next/head'
 import { api } from '../../lib/api'
 import { useUser } from '../../contexts/UserContext'
+import { VoiceChatSkeleton } from '../../components/ui/Skeleton'
 
 interface Message {
   id: string
@@ -18,14 +19,23 @@ export default function MobileVoiceChat() {
   const [messages, setMessages] = useState<Message[]>([])
   const [isRecording, setIsRecording] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
   const [recordingTime, setRecordingTime] = useState(0)
   const [showWaveform, setShowWaveform] = useState(false)
-  
+
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const audioChunksRef = useRef<Blob[]>([])
   const recordingTimerRef = useRef<NodeJS.Timeout | null>(null)
   const waveformAnimationRef = useRef<number | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  // Simulate loading state for smooth UX
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsLoading(false)
+    }, 1200)
+    return () => clearTimeout(timer)
+  }, [])
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
@@ -255,8 +265,12 @@ export default function MobileVoiceChat() {
         {/* Messages Area */}
         <main className="pt-20 pb-32 px-4 max-w-md mx-auto h-screen overflow-hidden">
           <div className="h-full overflow-y-auto space-y-4 pb-4">
-            {/* Welcome message */}
-            {messages.length === 0 && (
+            {/* Loading skeleton */}
+            {isLoading ? (
+              <div className="pt-8">
+                <VoiceChatSkeleton />
+              </div>
+            ) : messages.length === 0 ? (
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -272,7 +286,7 @@ export default function MobileVoiceChat() {
                   Hold the button below and speak your command
                 </p>
               </motion.div>
-            )}
+            ) : null}
 
             {/* Messages */}
             <AnimatePresence>
