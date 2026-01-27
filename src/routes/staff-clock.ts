@@ -522,6 +522,103 @@ router.post('/end-break', asyncHandler(async (req: Request, res: Response) => {
 }));
 
 /**
+ * POST /api/staff/clock/end-pending-break
+ * End a break that was started but never properly ended
+ * This handles the case where user starts break, logs out, logs back in
+ */
+router.post('/end-pending-break', asyncHandler(async (req: Request, res: Response) => {
+  const { pin } = req.body;
+
+  if (!pin || pin.length !== 4) {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'PIN is required and must be 4 digits' }
+    });
+  }
+
+  const db = DatabaseService.getInstance().getDatabase();
+
+  const user = await db.get(`
+    SELECT * FROM users WHERE pin = ? AND is_active = TRUE
+  `, [pin]);
+
+  if (!user) {
+    return res.status(404).json({
+      success: false,
+      error: { message: 'User not found or inactive' }
+    });
+  }
+
+  // Find any pending break (break without end time) for this user
+  const pendingBreak = await db.get(`
+    SELECT tb.*, te.restaurant_id, te.clock_in_time
+    FROM time_entry_breaks tb
+    JOIN time_entries te ON tb.time_entry_id = te.id
+    WHERE te.user_id = ? AND tb.break_end IS NULL
+    ORDER BY tb.break_start DESC
+    LIMIT 1
+  `, [user.id]);
+
+  if (!pendingBreak) {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'No active break found' }
+    });
+  }
+
+  // End the break
+  const breakEnd = new Date().toISOString();
+  const breakStart = new Date(pendingBreak.break_start);
+  const breakEndTime = new Date(breakEnd);
+  const durationMinutes = Math.floor((breakEndTime.getTime() - breakStart.getTime()) / (1000 * 60));
+
+  await db.run(`
+    UPDATE time_entry_breaks
+    SET break_end = ?, duration_minutes = ?
+    WHERE id = ?
+  `, [breakEnd, durationMinutes, pendingBreak.id]);
+
+  // Update time entry with total break minutes
+  const totalBreaks = await db.get(`
+    SELECT COALESCE(SUM(duration_minutes), 0) as total_break_minutes
+    FROM time_entry_breaks
+    WHERE time_entry_id = ? AND duration_minutes IS NOT NULL
+  `, [pendingBreak.time_entry_id]);
+
+  await db.run(`
+    UPDATE time_entries
+    SET break_minutes = ?
+    WHERE id = ?
+  `, [totalBreaks.total_break_minutes, pendingBreak.time_entry_id]);
+
+  await DatabaseService.getInstance().logAudit(
+    pendingBreak.restaurant_id,
+    user.id,
+    'end_break',
+    'time_entry_break',
+    pendingBreak.id,
+    {
+      timeEntryId: pendingBreak.time_entry_id,
+      breakEnd,
+      durationMinutes,
+      totalBreakMinutes: totalBreaks.total_break_minutes
+    }
+  );
+
+  res.json({
+    success: true,
+    data: {
+      breakId: pendingBreak.id,
+      timeEntryId: pendingBreak.time_entry_id,
+      breakStart: pendingBreak.break_start,
+      breakEnd,
+      durationMinutes,
+      totalBreakMinutes: totalBreaks.total_break_minutes
+    }
+  });
+}));
+
+/**
  * GET /api/staff/clock/my-stats
  * Get current user's time tracking stats (public - authenticated by PIN)
  */

@@ -871,40 +871,66 @@ export default function StaffClockPage() {
         return;
       }
 
-      if (!statusData.data.currentShift?.isOnBreak) {
-        setError('You are not currently on a break. Your break may have already ended.');
-        // Update UI to reflect actual server state
-        setCurrentShift(statusData.data.currentShift);
+      // Get the current shift from server
+      const serverShift = statusData.data.currentShift;
+
+      if (!serverShift) {
+        setError('You are not currently clocked in. Please clock in first.');
         setLoading(false);
         return;
       }
 
-      // Now try to end the break
-      const response = await fetch('/api/staff/clock/end-break', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pin: user.pin })
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        // Show confirmation and auto-logout
-        setConfirmDialog({
-          isOpen: true,
-          title: 'Back to Work!',
-          message: `Welcome back! You took a ${Math.floor(data.data.durationMinutes)} minute break.`,
-          confirmText: 'Done',
-          variant: 'success',
-          onConfirm: () => {
-            setConfirmDialog(prev => ({ ...prev, isOpen: false }));
-            handleLogout();
-          }
+      if (serverShift.isOnBreak) {
+        // Normal case: server says we're on break, use normal end-break
+        const response = await fetch('/api/staff/clock/end-break', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pin: user.pin })
         });
+
+        const data = await response.json();
+
+        if (data.success) {
+          setConfirmDialog({
+            isOpen: true,
+            title: 'Back to Work!',
+            message: `Welcome back! You took a ${Math.floor(data.data.durationMinutes)} minute break.`,
+            confirmText: 'Done',
+            variant: 'success',
+            onConfirm: () => {
+              setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+              handleLogout();
+            }
+          });
+        } else {
+          setError(data.error?.message || 'Failed to end break');
+        }
       } else {
-        setError(data.error?.message || 'Failed to end break');
-        // Refresh to sync with server state
-        await fetchUserStatus(userRef.current?.pin);
+        // Special case: server says not on break, but try to end pending break
+        // This handles the case where user started break, logged out, logged back in
+        const pendingResponse = await fetch('/api/staff/clock/end-pending-break', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pin: user.pin })
+        });
+
+        const pendingData = await pendingResponse.json();
+
+        if (pendingData.success) {
+          setConfirmDialog({
+            isOpen: true,
+            title: 'Back to Work!',
+            message: `Welcome back! You took a ${Math.floor(pendingData.data.durationMinutes)} minute break.`,
+            confirmText: 'Done',
+            variant: 'success',
+            onConfirm: () => {
+              setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+              handleLogout();
+            }
+          });
+        } else {
+          setError('You are not currently on a break.');
+        }
       }
     } catch (err) {
       setError('Connection error. Please try again.');
