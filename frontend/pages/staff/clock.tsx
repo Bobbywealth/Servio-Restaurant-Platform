@@ -83,9 +83,11 @@ function PINEntry({ onLogin, error }: PINEntryProps) {
       <header className="bg-slate-800/50 backdrop-blur-xl border-b border-slate-700/50 px-6 py-4">
         <div className="max-w-md mx-auto flex items-center justify-center">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-orange-400 to-orange-500 rounded-xl flex items-center justify-center shadow-lg shadow-orange-500/20">
-              <Clock className="w-6 h-6 text-white" />
-            </div>
+            <img
+              src="/images/servio_icon_tight.png"
+              alt="Servio Logo"
+              className="h-10 w-auto"
+            />
             <div>
               <h1 className="text-lg font-bold text-white">Servio</h1>
               <p className="text-xs text-slate-400">Staff Clock-In</p>
@@ -677,9 +679,11 @@ export default function StaffClockPage() {
         <header className="bg-slate-800/50 backdrop-blur-xl border-b border-slate-700/50 sticky top-0 z-10">
           <div className="max-w-lg mx-auto px-4 py-4 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-orange-400 to-orange-500 rounded-xl flex items-center justify-center shadow-lg shadow-orange-500/20">
-                <Clock className="w-6 h-6 text-white" />
-              </div>
+              <img
+                src="/images/servio_icon_tight.png"
+                alt="Servio Logo"
+                className="h-10 w-auto"
+              />
               <div>
                 <h1 className="font-semibold text-white">Servio Staff</h1>
                 <p className="text-xs text-slate-400">{user.restaurantName}</p>
