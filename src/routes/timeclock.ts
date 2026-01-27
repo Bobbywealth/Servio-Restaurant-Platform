@@ -472,7 +472,7 @@ router.get('/current-staff', asyncHandler(async (req: Request, res: Response) =>
         ELSE 0
       END as is_on_break,
       teb.break_start as current_break_start,
-      ROUND(EXTRACT(EPOCH FROM (NOW() - te.clock_in_time)) / 3600, 2) as hours_worked
+      ROUND((EXTRACT(EPOCH FROM (NOW() - te.clock_in_time)) / 3600)::numeric, 2) as hours_worked
     FROM time_entries te
     JOIN users u ON te.user_id = u.id
     LEFT JOIN time_entry_breaks teb ON te.id = teb.time_entry_id AND teb.break_end IS NULL
@@ -512,7 +512,7 @@ router.get('/entries', asyncHandler(async (req: Request, res: Response) => {
       te.*,
       u.name as user_name,
       u.role as user_role,
-      ROUND(te.total_hours, 2) as total_hours
+      ROUND(COALESCE(te.total_hours, 0)::numeric, 2) as total_hours
     FROM time_entries te
     JOIN users u ON te.user_id = u.id
   `;
@@ -709,8 +709,8 @@ router.get('/stats', asyncHandler(async (req: Request, res: Response) => {
     db.get(`
       SELECT
         COUNT(*) as total_entries,
-        ROUND(SUM(te.total_hours), 2) as total_hours,
-        ROUND(AVG(te.total_hours), 2) as avg_hours_per_shift,
+        ROUND(COALESCE(SUM(te.total_hours), 0)::numeric, 2) as total_hours,
+        ROUND(COALESCE(AVG(te.total_hours), 0)::numeric, 2) as avg_hours_per_shift,
         SUM(te.break_minutes) as total_break_minutes
       ${baseQuery}
     `, params),
@@ -720,7 +720,7 @@ router.get('/stats', asyncHandler(async (req: Request, res: Response) => {
       SELECT
         te.clock_in_time::date as date,
         COUNT(*) as entries_count,
-        ROUND(SUM(te.total_hours), 2) as total_hours,
+        ROUND(COALESCE(SUM(te.total_hours), 0)::numeric, 2) as total_hours,
         COUNT(DISTINCT te.user_id) as unique_staff
       ${baseQuery}
       GROUP BY te.clock_in_time::date
@@ -734,8 +734,8 @@ router.get('/stats', asyncHandler(async (req: Request, res: Response) => {
         u.name,
         u.role,
         COUNT(*) as total_entries,
-        ROUND(SUM(te.total_hours), 2) as total_hours,
-        ROUND(AVG(te.total_hours), 2) as avg_hours_per_shift
+        ROUND(COALESCE(SUM(te.total_hours), 0)::numeric, 2) as total_hours,
+        ROUND(COALESCE(AVG(te.total_hours), 0)::numeric, 2) as avg_hours_per_shift
       ${baseQuery}
       GROUP BY u.id, u.name, u.role
       ORDER BY total_hours DESC
