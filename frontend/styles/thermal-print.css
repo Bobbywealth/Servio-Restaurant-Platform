@@ -51,6 +51,51 @@
   .receipt-copy-last {
     page-break-after: auto;
   }
+
+  /* Font Size Variants - Print Context */
+  /* Small */
+  .receipt.font-small {
+    font-size: 10px !important;
+  }
+  .receipt.font-small .receipt-title { font-size: 16px !important; }
+  .receipt.font-small .receipt-logo { width: 48px !important; height: 48px !important; }
+  .receipt.font-small .receipt-row-strong,
+  .receipt.font-small .receipt-item-qty { font-size: 12px !important; }
+  .receipt.font-small .receipt-custom-header { font-size: 12px !important; }
+  .receipt.font-small .receipt-item-modifiers { font-size: 9px !important; }
+
+  /* Medium (Default) */
+  .receipt.font-medium {
+    font-size: 12px !important;
+  }
+  .receipt.font-medium .receipt-title { font-size: 18px !important; }
+  .receipt.font-medium .receipt-logo { width: 64px !important; height: 64px !important; }
+  .receipt.font-medium .receipt-row-strong,
+  .receipt.font-medium .receipt-item-qty { font-size: 14px !important; }
+  .receipt.font-medium .receipt-custom-header { font-size: 14px !important; }
+  .receipt.font-medium .receipt-item-modifiers { font-size: 11px !important; }
+
+  /* Large */
+  .receipt.font-large {
+    font-size: 14px !important;
+  }
+  .receipt.font-large .receipt-title { font-size: 22px !important; }
+  .receipt.font-large .receipt-logo { width: 80px !important; height: 80px !important; }
+  .receipt.font-large .receipt-row-strong,
+  .receipt.font-large .receipt-item-qty { font-size: 16px !important; }
+  .receipt.font-large .receipt-custom-header { font-size: 16px !important; }
+  .receipt.font-large .receipt-item-modifiers { font-size: 13px !important; }
+
+  /* X-Large */
+  .receipt.font-xlarge {
+    font-size: 16px !important;
+  }
+  .receipt.font-xlarge .receipt-title { font-size: 28px !important; }
+  .receipt.font-xlarge .receipt-logo { width: 96px !important; height: 96px !important; }
+  .receipt.font-xlarge .receipt-row-strong,
+  .receipt.font-xlarge .receipt-item-qty { font-size: 18px !important; }
+  .receipt.font-xlarge .receipt-custom-header { font-size: 18px !important; }
+  .receipt.font-xlarge .receipt-item-modifiers { font-size: 15px !important; }
 }
 
 /* Receipt base styling (screen and print) */

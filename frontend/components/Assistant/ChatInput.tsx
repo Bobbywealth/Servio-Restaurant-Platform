@@ -1,9 +1,11 @@
 import React, { useState, useRef, KeyboardEvent } from 'react'
 import { motion } from 'framer-motion'
 import { Send, Loader2 } from 'lucide-react'
+import VoiceInput from './VoiceInput'
 
 interface ChatInputProps {
   onSendMessage: (message: string) => void
+  onSendVoice?: (audioBlob: Blob) => Promise<void>
   disabled?: boolean
   placeholder?: string
   className?: string
@@ -11,6 +13,7 @@ interface ChatInputProps {
 
 export default function ChatInput({
   onSendMessage,
+  onSendVoice,
   disabled = false,
   placeholder = "Type your command here... (e.g., 'no more jerk chicken')",
   className = ''
@@ -46,8 +49,23 @@ export default function ChatInput({
     textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px'
   }
 
+  const handleVoiceRecording = async (audioBlob: Blob) => {
+    if (onSendVoice) {
+      await onSendVoice(audioBlob)
+    }
+  }
+
   return (
     <div className={`flex items-end space-x-2 ${className}`}>
+      {/* Voice recording button (WhatsApp-style) */}
+      {onSendVoice && (
+        <VoiceInput
+          onSendVoice={handleVoiceRecording}
+          disabled={disabled || !!message.trim()}
+          className="flex-shrink-0"
+        />
+      )}
+
       <div className="flex-1 relative">
         <textarea
           ref={textareaRef}

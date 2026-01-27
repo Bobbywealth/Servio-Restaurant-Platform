@@ -1132,6 +1132,68 @@ export default function AssistantPage() {
               <div className="relative bg-white/80 dark:bg-surface-800/80 backdrop-blur-xl rounded-3xl p-5 shadow-xl border border-white/50 dark:border-surface-700/50">
                 <ChatInput
                   onSendMessage={handleQuickCommand}
+                  onSendVoice={async (audioBlob) => {
+                    // Add user message that voice is being processed
+                    addMessage({
+                      type: 'system',
+                      content: '🎤 Processing voice command...',
+                      metadata: { action: { type: 'voice_recording', status: 'pending' } }
+                    })
+                    
+                    // Process the voice recording
+                    try {
+                      const mimeType = 'audio/webm;codecs=opus'
+                      const formData = new FormData()
+                      formData.append('audio', audioBlob, 'recording.webm')
+                      formData.append('userId', user?.id || 'anonymous')
+
+                      const response = await api.post(`/api/assistant/process-audio`, formData, {
+                        headers: { 'Content-Type': 'multipart/form-data' }
+                      })
+
+                      const payload = response.data?.data || response.data
+                      const { transcript, response: assistantResponse, actions, audioUrl } = payload
+
+                      // Update the system message
+                      if (transcript) {
+                        addMessage({
+                          type: 'user',
+                          content: transcript,
+                          metadata: { confidence: payload.confidence || 0.9 }
+                        })
+                      }
+
+                      if (assistantResponse) {
+                        addMessage({
+                          type: 'assistant',
+                          content: assistantResponse,
+                          metadata: { duration: payload.processingTime }
+                        })
+                      }
+
+                      if (actions && actions.length > 0) {
+                        actions.forEach((action: any) => {
+                          addMessage({
+                            type: 'action',
+                            content: action.description,
+                            metadata: { action }
+                          })
+                        })
+                      }
+
+                      if (audioUrl) {
+                        await playAudio(audioUrl)
+                      }
+                    } catch (error) {
+                      console.error('Failed to process voice:', error)
+                      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+                      addMessage({
+                        type: 'system',
+                        content: `🎤 Voice processing failed: ${errorMessage}`,
+                        metadata: { action: { type: 'error', status: 'error', details: errorMessage } }
+                      })
+                    }
+                  }}
                   disabled={state.isProcessing || state.isRecording}
                   placeholder="Type a command... (e.g., '86 the chicken', 'check orders')"
                 />
