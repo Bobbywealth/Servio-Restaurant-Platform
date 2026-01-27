@@ -102,7 +102,6 @@ export class AssistantService {
       const systemPrompt = await this.getSystemPrompt(userId);
 
       let response: string;
-      let toolCalls: any[] = [];
       const actions: AssistantResponse['actions'] = [];
 
       // Use MiniMax if configured, otherwise fall back to OpenAI
@@ -262,7 +261,7 @@ export class AssistantService {
               }
               break;
 
-            case 'done':
+            case 'done': {
               // Process tool calls after streaming is complete
               const actions: AssistantResponse['actions'] = [];
               if (toolCalls.length > 0) {
@@ -295,6 +294,7 @@ export class AssistantService {
                 processingTime: Date.now() - startTime
               };
               return;
+            }
 
             case 'error':
               throw new Error(chunk.error);

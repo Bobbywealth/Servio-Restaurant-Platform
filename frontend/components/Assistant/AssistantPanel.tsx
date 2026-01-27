@@ -55,6 +55,8 @@ export default function AssistantPanel({ showHeader = true, className }: Assista
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null)
   const audioChunksRef = useRef<Blob[]>([])
   const [talkIntensity, setTalkIntensity] = useState(0)
+  const [aiModel, setAiModel] = useState<'miniMax' | 'gpt' | 'unknown'>('unknown')
+  const [isLoadingModel, setIsLoadingModel] = useState(true)
 
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const audioContextRef = useRef<AudioContext | null>(null)
@@ -971,6 +973,35 @@ export default function AssistantPanel({ showHeader = true, className }: Assista
     }
   }, [state.wakeWordSupported, initializeWakeWordService]);
 
+  // Fetch AI model configuration on mount
+  useEffect(() => {
+    const fetchAiModel = async () => {
+      try {
+        setIsLoadingModel(true);
+        const backendUrl = process.env.BACKEND_URL || 'http://localhost:3002';
+        const response = await fetch(`${backendUrl}/api/assistant/status`);
+        if (response.ok) {
+          const data = await response.json();
+          // Backend returns which AI provider is configured
+          if (data.data?.aiProvider === 'minimax' || data.data?.usesMiniMax) {
+            setAiModel('miniMax');
+          } else if (data.data?.aiProvider === 'openai' || data.data?.usesOpenAI) {
+            setAiModel('gpt');
+          } else {
+            setAiModel('unknown');
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch AI model:', error);
+        setAiModel('unknown');
+      } finally {
+        setIsLoadingModel(false);
+      }
+    };
+
+    fetchAiModel();
+  }, []);
+
   // User control functions
   const handleStopSpeaking = useCallback(() => {
     stopAudio()
@@ -1196,6 +1227,26 @@ export default function AssistantPanel({ showHeader = true, className }: Assista
                   <span className="w-2 h-2 bg-violet-500 rounded-full animate-pulse"></span>
                   {state.inConversationWindow ? 'Conversation Active' : 'Listening for "Servio"'}
                 </span>
+              )}
+
+              {/* AI Model Indicator */}
+              {!isLoadingModel && (
+                aiModel === 'miniMax' ? (
+                  <span className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white rounded-full text-sm font-bold shadow-lg">
+                    <Sparkles className="w-3 h-3" />
+                    MiniMax
+                  </span>
+                ) : aiModel === 'gpt' ? (
+                  <span className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-full text-sm font-bold shadow-lg">
+                    <Sparkles className="w-3 h-3" />
+                    GPT-4
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-2 px-4 py-2 bg-surface-200 dark:bg-surface-700 text-surface-500 dark:text-surface-400 rounded-full text-sm font-semibold">
+                    <Sparkles className="w-3 h-3" />
+                    Unknown
+                  </span>
+                )
               )}
             </div>
 

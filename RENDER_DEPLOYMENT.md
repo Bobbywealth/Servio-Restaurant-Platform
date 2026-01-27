@@ -74,6 +74,13 @@ OPENAI_API_KEY=sk-...your-key-here
 OPENAI_TTS_MODEL=tts-1
 OPENAI_TTS_VOICE=alloy
 
+# MiniMax API (Alternative to OpenAI - ~96% savings on chat, ~60% on TTS)
+# Get credentials at: https://api.minimax.io/
+MINIMAX_API_KEY=your-minimax-api-key
+MINIMAX_API_BASE=https://api.minimax.io/v1
+MINIMAX_CHAT_MODEL=m2.1
+MINIMAX_TTS_VOICE=male-shaun-2
+
 # Server Port (Render sets this automatically)
 PORT=3002
 ```
@@ -219,6 +226,10 @@ module.exports = nextConfig
 | `DATABASE_SSL` | No | Enable SSL for database | `true` |
 | `JWT_SECRET` | Yes | JWT signing secret | `random_secure_string` |
 | `OPENAI_API_KEY` | Yes** | OpenAI API key | `sk-...` |
+| `MINIMAX_API_KEY` | No | MiniMax API key (alternative) | `...` |
+| `MINIMAX_API_BASE` | No | MiniMax API base URL | `https://api.minimax.io/v1` |
+| `MINIMAX_CHAT_MODEL` | No | MiniMax chat model | `m2.1` |
+| `MINIMAX_TTS_VOICE` | No | MiniMax TTS voice | `male-shaun-2` |
 | `PORT` | No | Server port (auto-set by Render) | `3002` |
 | `UPLOADS_DIR` | No | Path for uploaded files | `/var/data/uploads` |
 | `TWILIO_ACCOUNT_SID` | No | Twilio account SID | `AC...` |
@@ -330,6 +341,37 @@ module.exports = nextConfig
    - Verify key works: https://platform.openai.com/api-keys
    - Ensure you have credits available
 
+### MiniMax Features Not Working
+
+|**Symptoms:**
+|- Assistant using OpenAI instead of MiniMax
+|- "MiniMax API key not configured" messages
+|- Higher than expected API costs
+
+|**Solution:**
+
+1. **Verify MiniMax Environment Variables:**
+   ```bash
+   # In Render backend environment variables
+   MINIMAX_API_KEY=your-minimax-api-key  # Must be set
+   MINIMAX_API_BASE=https://api.minimax.io/v1
+   MINIMAX_CHAT_MODEL=m2.1
+   MINIMAX_TTS_VOICE=male-shaun-2
+   ```
+
+2. **Check Logs:**
+   - Look for "[assistant] Using MiniMax" in startup logs
+   - If shows "MiniMax not configured", the API key is missing or invalid
+
+3. **Get MiniMax Credentials:**
+   - Sign up at: https://api.minimax.io/
+   - Create API key in your MiniMax dashboard
+   - Add to Render environment variables
+
+4. **Fallback Behavior:**
+   - If MiniMax is not configured, Assistant automatically falls back to OpenAI
+   - Both keys can be set simultaneously for redundancy
+
 ### Database Connection Errors
 
 **Symptoms:**
@@ -399,7 +441,8 @@ module.exports = nextConfig
 - [ ] Frontend can connect to backend API
 - [ ] WebSocket connection working (check browser console)
 - [ ] Database connection successful
-- [ ] Assistant features working (if OpenAI key provided)
+- [ ] Assistant features working (if OpenAI or MiniMax key provided)
+- [ ] MiniMax API configured (optional - for cost savings)
 - [ ] File uploads working (if persistent disk configured)
 - [ ] Custom domain configured (optional)
 

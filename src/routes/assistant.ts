@@ -154,12 +154,26 @@ router.post('/process-text-stream', asyncHandler(async (req: Request, res: Respo
  * Get assistant service status and configuration
  */
 router.get('/status', asyncHandler(async (req: Request, res: Response) => {
+  // Determine which AI provider is being used
+  const usesMiniMax = Boolean(process.env.MINIMAX_API_KEY);
+  const usesOpenAI = Boolean(process.env.OPENAI_API_KEY);
+
+  let aiProvider = 'unknown';
+  if (usesMiniMax) {
+    aiProvider = 'minimax';
+  } else if (usesOpenAI) {
+    aiProvider = 'openai';
+  }
+
   const status = {
     service: 'online',
+    aiProvider,
+    usesMiniMax,
+    usesOpenAI,
     features: {
-      speechToText: process.env.OPENAI_API_KEY ? 'available' : 'unavailable',
-      textToSpeech: process.env.OPENAI_API_KEY || process.env.ELEVENLABS_API_KEY ? 'available' : 'unavailable',
-      llm: process.env.OPENAI_API_KEY ? 'available' : 'unavailable'
+      speechToText: usesOpenAI ? 'available' : 'unavailable',
+      textToSpeech: usesOpenAI || usesMiniMax ? 'available' : 'unavailable',
+      llm: usesOpenAI || usesMiniMax ? 'available' : 'unavailable'
     },
     capabilities: [
       'Order management',

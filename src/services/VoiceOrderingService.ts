@@ -1038,7 +1038,7 @@ export class VoiceOrderingService {
       }
     } else if (customerId && !customerName) {
       // Get customer info from database for recognized customer
-      const lookupResult = await this.lookupCustomerByPhone('', restaurantId);
+      await this.lookupCustomerByPhone('', restaurantId);
       // customerName will be filled from input or remains undefined
     }
 

@@ -1,6 +1,5 @@
 import { Router, Request, Response } from 'express';
 import { VapiService, VapiWebhookPayload } from '../services/VapiService';
-import { VoiceOrderingService } from '../services/VoiceOrderingService';
 import { logger } from '../utils/logger';
 import { DatabaseService } from '../services/DatabaseService';
 import { validateEnvironment } from '../utils/validateEnv';
@@ -9,7 +8,6 @@ import { requireVapiWebhookAuth } from '../middleware/vapiAuth';
 
 const router = Router();
 const vapiService = new VapiService();
-const voiceOrderingService = VoiceOrderingService.getInstance();
 
 // Webhook endpoint for Vapi
 router.post('/webhook', requireVapiWebhookAuth, async (req: Request, res: Response) => {
