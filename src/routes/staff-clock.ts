@@ -8,6 +8,12 @@ import { eventBus } from '../events/bus';
 const router = Router();
 
 /**
+ * Staff Clock-in PWA API
+ * Public PIN-based authentication for staff clock-in/out operations
+ * Updated: January 27, 2026
+ */
+
+/**
  * POST /api/staff/clock/pin-login
  * Authenticate staff by PIN for PWA clock-in (public - no auth required)
  */
