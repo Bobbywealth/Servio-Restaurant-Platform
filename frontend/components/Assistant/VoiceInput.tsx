@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Mic, MicOff, Lock, X, Waveform, Loader2 } from 'lucide-react'
+import { Mic, MicOff, Lock, X, Loader2 } from 'lucide-react'
 
 interface VoiceInputProps {
   onSendVoice: (audioBlob: Blob) => Promise<void>
