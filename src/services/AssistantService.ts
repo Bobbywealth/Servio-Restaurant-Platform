@@ -591,6 +591,53 @@ Use the available tools to perform actions. Always be helpful and professional.`
       {
         type: 'function',
         function: {
+          name: 'get_menu_categories',
+          description: 'Get all menu categories with item counts. Use this to understand the menu structure.',
+          parameters: {
+            type: 'object',
+            properties: {
+              includeUnavailable: {
+                type: 'boolean',
+                description: 'Include unavailable items in count',
+                default: false
+              }
+            }
+          }
+        }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'get_menu_items',
+          description: 'Get menu items, optionally filtered by category or search term',
+          parameters: {
+            type: 'object',
+            properties: {
+              categoryName: {
+                type: 'string',
+                description: 'Filter by category name (e.g., "Appetizers", "Main Entrees")'
+              },
+              search: {
+                type: 'string',
+                description: 'Search for items by name'
+              },
+              availableOnly: {
+                type: 'boolean',
+                description: 'Only show available items',
+                default: false
+              },
+              limit: {
+                type: 'number',
+                description: 'Maximum items to return',
+                default: 50
+              }
+            }
+          }
+        }
+      },
+      {
+        type: 'function',
+        function: {
           name: 'set_item_availability',
           description: '86 (make unavailable) or restore availability of menu items',
           parameters: {
@@ -598,7 +645,7 @@ Use the available tools to perform actions. Always be helpful and professional.`
             properties: {
               itemName: {
                 type: 'string',
-                description: 'Name of the menu item to update'
+                description: 'Name of the menu item to update (partial match supported)'
               },
               available: {
                 type: 'boolean',
@@ -736,6 +783,10 @@ Use the available tools to perform actions. Always be helpful and professional.`
           return await this.handleGetOrders(parsedArgs, userId);
         case 'update_order_status':
           return await this.handleUpdateOrderStatus(parsedArgs, userId);
+        case 'get_menu_categories':
+          return await this.handleGetMenuCategories(parsedArgs, userId);
+        case 'get_menu_items':
+          return await this.handleGetMenuItems(parsedArgs, userId);
         case 'set_item_availability':
           return await this.handleSetItemAvailability(parsedArgs, userId);
         case 'get_inventory':
@@ -897,6 +948,83 @@ Use the available tools to perform actions. Always be helpful and professional.`
       status: 'success',
       description: `${item.name} ${action} on ${channelText}`,
       details: { itemId: item.id, itemName: item.name, available, channels }
+    };
+  }
+
+  private async handleGetMenuCategories(args: any, userId: string): Promise<AssistantResponse['actions'][0]> {
+    const { includeUnavailable = false } = args;
+    const restaurantId = await this.resolveRestaurantId(userId);
+
+    const categories = await this.db.all(
+      `SELECT 
+        c.id, c.name, c.description, c.sort_order,
+        (SELECT COUNT(*) FROM menu_items WHERE category_id = c.id AND (is_available = 1 OR ?) as item_count,
+        (SELECT COUNT(*) FROM menu_items WHERE category_id = c.id AND is_available = 0) as unavailable_count
+      FROM menu_categories c
+      WHERE c.restaurant_id = ? AND c.is_active = TRUE
+      ORDER BY c.sort_order ASC, c.name ASC`,
+      [includeUnavailable ? 1 : 0, restaurantId]
+    );
+
+    await DatabaseService.getInstance().logAudit(
+      restaurantId, userId, 'get_menu_categories', 'menu_category', 'multiple', { count: categories.length }
+    );
+
+    return {
+      type: 'get_menu_categories',
+      status: 'success',
+      description: `Found ${categories.length} menu categories`,
+      details: { categories }
+    };
+  }
+
+  private async handleGetMenuItems(args: any, userId: string): Promise<AssistantResponse['actions'][0]> {
+    const { categoryName, search, availableOnly = false, limit = 50 } = args;
+    const restaurantId = await this.resolveRestaurantId(userId);
+
+    let query = `
+      SELECT m.id, m.name, m.description, m.price, m.is_available, m.sort_order,
+             c.name as category_name, c.id as category_id
+      FROM menu_items m
+      LEFT JOIN menu_categories c ON m.category_id = c.id
+      WHERE m.restaurant_id = ? AND c.is_active = TRUE
+    `;
+    const params: any[] = [restaurantId];
+
+    const conditions: string[] = [];
+
+    if (categoryName) {
+      conditions.push('c.name LIKE ?');
+      params.push(`%${categoryName}%`);
+    }
+
+    if (search) {
+      conditions.push('(m.name LIKE ? OR m.description LIKE ?)');
+      params.push(`%${search}%`, `%${search}%`);
+    }
+
+    if (availableOnly) {
+      conditions.push('m.is_available = TRUE');
+    }
+
+    if (conditions.length > 0) {
+      query += ' AND ' + conditions.join(' AND ');
+    }
+
+    query += ' ORDER BY c.sort_order ASC, m.sort_order ASC LIMIT ?';
+    params.push(limit);
+
+    const items = await this.db.all(query, params);
+
+    await DatabaseService.getInstance().logAudit(
+      restaurantId, userId, 'get_menu_items', 'menu_item', 'multiple', { categoryName, search, availableOnly, count: items.length }
+    );
+
+    return {
+      type: 'get_menu_items',
+      status: 'success',
+      description: `Found ${items.length} menu items${categoryName ? ` in "${categoryName}"` : ''}${search ? ` matching "${search}"` : ''}`,
+      details: { items }
     };
   }
 
