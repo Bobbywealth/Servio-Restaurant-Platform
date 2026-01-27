@@ -274,6 +274,224 @@ function AddStaffModal({ isOpen, onClose, onSuccess }: AddStaffModalProps) {
   )
 }
 
+// Edit Staff Modal
+interface EditStaffModalProps {
+  isOpen: boolean
+  staffMember: StaffUser | null
+  onClose: () => void
+  onSuccess: () => void
+}
+
+function EditStaffModal({ isOpen, staffMember, onClose, onSuccess }: EditStaffModalProps) {
+  const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+  const [role, setRole] = useState<'staff' | 'manager'>('staff')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+
+  // Initialize form when modal opens with staff member
+  useEffect(() => {
+    if (staffMember) {
+      setName(staffMember.name || '')
+      setEmail(staffMember.email || '')
+      setRole(staffMember.role as 'staff' | 'manager' || 'staff')
+      setError(null)
+    }
+  }, [staffMember, isOpen])
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!staffMember) return
+
+    setSaving(true)
+    setError(null)
+
+    try {
+      const response = await api.put(`/api/restaurant/staff/${staffMember.id}`, {
+        name,
+        email: email || undefined,
+        role
+      })
+
+      if (response.data.success) {
+        onSuccess()
+        onClose()
+      } else {
+        setError(response.data.error?.message || 'Failed to update staff member')
+      }
+    } catch (err: any) {
+      setError(err.response?.data?.error?.message || 'Failed to update staff member')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleClose = () => {
+    setError(null)
+    onClose()
+  }
+
+  const handleResetPin = async () => {
+    if (!staffMember) return
+
+    setLoading(true)
+    setError(null)
+
+    try {
+      const response = await api.post(`/api/restaurant/staff/${staffMember.id}/reset-pin`, {})
+
+      if (response.data.success) {
+        alert(`PIN reset to: ${response.data.data.pin}`)
+      } else {
+        setError(response.data.error?.message || 'Failed to reset PIN')
+      }
+    } catch (err: any) {
+      setError(err.response?.data?.error?.message || 'Failed to reset PIN')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (!isOpen || !staffMember) return null
+
+  return (
+    <AnimatePresence>
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+          onClick={handleClose}
+        />
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95, y: 20 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.95, y: 20 }}
+          className="relative bg-white dark:bg-surface-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-surface-700">
+            <h2 className="text-xl font-bold text-surface-900 dark:text-surface-100">
+              Edit Staff Member
+            </h2>
+            <button
+              onClick={handleClose}
+              className="p-2 text-surface-400 hover:text-surface-600 dark:hover:text-surface-200 rounded-lg hover:bg-gray-100 dark:hover:bg-surface-700 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Content */}
+          <div className="p-6">
+            {error && (
+              <div className="flex items-center gap-2 text-red-500 text-sm bg-red-50 dark:bg-red-900/20 px-4 py-3 rounded-xl mb-4">
+                <AlertCircle className="w-5 h-5 flex-shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-2">
+                  Full Name *
+                </label>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  required
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-surface-600 bg-white dark:bg-surface-700 text-surface-900 dark:text-surface-100 focus:ring-2 focus:ring-orange-500/30 focus:border-orange-500 transition-all outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-2">
+                  Email Address
+                </label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="john@restaurant.com"
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-surface-600 bg-white dark:bg-surface-700 text-surface-900 dark:text-surface-100 focus:ring-2 focus:ring-orange-500/30 focus:border-orange-500 transition-all outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-2">
+                  Role
+                </label>
+                <select
+                  value={role}
+                  onChange={(e) => setRole(e.target.value as 'staff' | 'manager')}
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-surface-600 bg-white dark:bg-surface-700 text-surface-900 dark:text-surface-100 focus:ring-2 focus:ring-orange-500/30 focus:border-orange-500 transition-all outline-none"
+                >
+                  <option value="staff">Staff</option>
+                  <option value="manager">Manager</option>
+                </select>
+              </div>
+
+              <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-xl p-4">
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 bg-orange-100 dark:bg-orange-900/50 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <RefreshCw className="w-4 h-4 text-orange-600 dark:text-orange-400" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-orange-800 dark:text-orange-200">
+                      Reset PIN
+                    </p>
+                    <p className="text-xs text-orange-600 dark:text-orange-300 mt-1 mb-2">
+                      Generate a new 4-digit PIN for this staff member.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleResetPin}
+                      disabled={loading}
+                      className="px-3 py-1.5 text-xs font-medium bg-orange-100 dark:bg-orange-900/50 text-orange-600 dark:text-orange-400 rounded-lg hover:bg-orange-200 dark:hover:bg-orange-900/70 transition-colors disabled:opacity-50"
+                    >
+                      {loading ? 'Resetting...' : 'Reset PIN'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={handleClose}
+                  className="flex-1 px-4 py-3 rounded-xl border border-gray-200 dark:border-surface-600 text-surface-700 dark:text-surface-300 font-medium hover:bg-gray-50 dark:hover:bg-surface-700 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving || !name.trim()}
+                  className="flex-1 px-4 py-3 rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 text-white font-medium hover:from-orange-600 hover:to-orange-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {saving ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="w-5 h-5" />
+                      Save Changes
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </motion.div>
+      </div>
+    </AnimatePresence>
+  )
+}
+
 export default function StaffPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedRole, setSelectedRole] = useState('all')
@@ -284,6 +502,8 @@ export default function StaffPage() {
   const [hoursByUserId, setHoursByUserId] = useState<Record<string, number>>({})
   const [todayHoursByUserId, setTodayHoursByUserId] = useState<Record<string, number>>({})
   const [showAddModal, setShowAddModal] = useState(false)
+  const [editingStaff, setEditingStaff] = useState<StaffUser | null>(null)
+  const [openMenu, setOpenMenu] = useState<string | null>(null)
 
   useEffect(() => {
     let isMounted = true
@@ -441,6 +661,13 @@ export default function StaffPage() {
         <AddStaffModal
           isOpen={showAddModal}
           onClose={() => setShowAddModal(false)}
+          onSuccess={handleStaffCreated}
+        />
+
+        <EditStaffModal
+          isOpen={!!editingStaff}
+          staffMember={editingStaff}
+          onClose={() => setEditingStaff(null)}
           onSuccess={handleStaffCreated}
         />
 
@@ -612,9 +839,48 @@ export default function StaffPage() {
                     <span className={`status-badge ${getStatusColor(status)}`}>
                       {getStatusText(status)}
                     </span>
-                    <button className="btn-icon min-w-[44px] min-h-[44px]" aria-label="More options">
-                      <MoreVertical className="w-4 h-4" />
-                    </button>
+                    <div className="relative">
+                      <button
+                        onClick={() => setOpenMenu(openMenu === member.id ? null : member.id)}
+                        className="btn-icon min-w-[44px] min-h-[44px]"
+                        aria-label="More options"
+                      >
+                        <MoreVertical className="w-4 h-4" />
+                      </button>
+                      {/* Dropdown Menu */}
+                      {openMenu === member.id && (
+                        <>
+                          <div
+                            className="fixed inset-0 z-10"
+                            onClick={() => setOpenMenu(null)}
+                          />
+                          <div className="absolute right-0 top-12 z-20 w-48 bg-white dark:bg-surface-800 rounded-xl shadow-lg border border-gray-200 dark:border-surface-700 py-1">
+                            <button
+                              onClick={() => {
+                                setEditingStaff(member)
+                                setOpenMenu(null)
+                              }}
+                              className="w-full px-4 py-3 text-left text-sm text-surface-700 dark:text-surface-200 hover:bg-gray-100 dark:hover:bg-surface-700 flex items-center gap-2"
+                            >
+                              <Edit3 className="w-4 h-4" />
+                              Edit Staff
+                            </button>
+                            <button
+                              className="w-full px-4 py-3 text-left text-sm text-surface-700 dark:text-surface-200 hover:bg-gray-100 dark:hover:bg-surface-700 flex items-center gap-2"
+                            >
+                              <RefreshCw className="w-4 h-4" />
+                              Reset PIN
+                            </button>
+                            <button
+                              className="w-full px-4 py-3 text-left text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2"
+                            >
+                              <X className="w-4 h-4" />
+                              Deactivate
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -696,13 +962,6 @@ export default function StaffPage() {
                       </a>
                     </div>
                   )}
-                </div>
-
-                <div className="mt-4 flex gap-2">
-                  <button className="btn-secondary flex-1 text-sm min-h-[44px] inline-flex items-center justify-center" disabled title="Coming soon">
-                    <Edit3 className="w-4 h-4 mr-1.5" />
-                    Edit
-                  </button>
                 </div>
               </motion.div>
             )})}
