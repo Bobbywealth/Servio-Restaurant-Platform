@@ -9,6 +9,7 @@ import ThemeToggle from '../ui/ThemeToggle';
 import NotificationCenter from '../ui/NotificationCenter';
 import AccountSwitcher from '../ui/AccountSwitcher';
 import {
+  Bell,
   Bot,
   Home,
   Mic,
@@ -192,12 +193,13 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const currentItem = navigation.find((item) => currentPath === normalizePath(item.href));
   const pageTitle = currentItem?.name || 'Dashboard';
 
-  // Mobile navigation - always show these 5 items at bottom
+  // Mobile navigation - always show these 6 items at bottom
   const mobileNav = [
     { name: 'Home', href: '/dashboard', icon: Home },
     { name: 'Orders', href: '/dashboard/orders', icon: ClipboardList },
     { name: 'Menu', href: '/dashboard/menu-management', icon: UtensilsCrossed },
     { name: 'Assistant', href: '/dashboard/assistant', icon: Mic },
+    { name: 'Notifications', href: '#', icon: Bell, isNotificationButton: true },
     { name: 'More', href: '#', icon: Menu, isMenuButton: true }
   ];
 
@@ -324,7 +326,6 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                 <div className="text-sm font-semibold text-gray-900 dark:text-white">{pageTitle}</div>
               </div>
               <div className="flex items-center space-x-3">
-                <NotificationCenter />
                 <ThemeToggle />
                 <AccountSwitcher />
               </div>
@@ -343,15 +344,28 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
       {/* Mobile bottom navigation */}
       <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-gray-900/95 border-t border-gray-200 dark:border-gray-700 backdrop-blur-md lg:hidden pb-safe-bottom">
-        <div className="grid grid-cols-5 px-2 py-2">
+        <div className="grid grid-cols-6 px-2 py-2">
           {mobileNav.map((item) => {
-            const isActive = !item.isMenuButton && currentPath === normalizePath(item.href);
+            const isActive = !item.isMenuButton && !item.isNotificationButton && currentPath === normalizePath(item.href);
+            if (item.isNotificationButton) {
+              return (
+                <div
+                  key={item.name}
+                  className="flex flex-col items-center justify-center py-2 rounded-lg text-xs font-medium text-gray-500 dark:text-surface-400"
+                >
+                  <NotificationCenter />
+                  <span className="mt-1">{item.name}</span>
+                </div>
+              );
+            }
             if (item.isMenuButton) {
               return (
                 <button
                   key={item.name}
                   onClick={() => setSidebarOpen(true)}
-                  className={`flex flex-col items-center justify-center py-2 rounded-lg text-xs font-medium text-gray-500 dark:text-surface-400 hover:text-primary-700 dark:hover:text-primary-300 transition-colors`}
+                  className={`flex flex-col items-center justify-center py-2 rounded-lg text-xs font-medium ${
+                    isActive ? 'text-primary-700 dark:text-primary-300' : 'text-gray-500 dark:text-surface-400'
+                  } hover:text-primary-700 dark:hover:text-primary-300 transition-colors`}
                 >
                   <item.icon className="w-5 h-5" />
                   <span className="mt-1">{item.name}</span>
