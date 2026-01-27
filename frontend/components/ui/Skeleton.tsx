@@ -81,7 +81,7 @@ export const Skeleton: React.FC<SkeletonProps> = ({
   )
 
   // Create animated content
-  const AnimatedContent = ({ children }: { children: React.ReactNode }) => {
+  const AnimatedContent = ({ children }: { children?: React.ReactNode }) => {
     if (!animate) {
       return (
         <div className={`bg-surface-200 dark:bg-surface-700 ${variantClasses[variant]} ${className}`} style={style}>
@@ -130,7 +130,7 @@ export const Skeleton: React.FC<SkeletonProps> = ({
     }
   }
 
-  return <AnimatedContent children={null} />
+  return <AnimatedContent />
 }
 
 // Specific skeleton components for common patterns

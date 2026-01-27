@@ -142,6 +142,7 @@ export default function PublicProfile() {
   const [isFilterMenuOpen, setIsFilterMenuOpen] = useState(false);
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
   const [showStickyNav, setShowStickyNav] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
   // Scroll listener for sticky navigation
   useEffect(() => {
@@ -794,16 +795,72 @@ export default function PublicProfile() {
         </div>
       </div>
 
-      {/* Sticky Category Navigation */}
+      {/* Category Selection Bar - Always Visible */}
+      <div className="sticky top-[140px] z-10 bg-white/95 backdrop-blur-md border-b border-slate-200/50 shadow-sm">
+        <div className="max-w-4xl mx-auto px-4 py-3">
+          <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1">
+            {/* All Categories Button */}
+            <button
+              onClick={() => scrollToCategory('all')}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all ${
+                !selectedCategory || selectedCategory === 'all'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              All
+            </button>
+
+            {/* Individual Category Buttons */}
+            {categories.map(cat => {
+              const catLower = cat.toLowerCase();
+              const isPopular = catLower.includes('popular') || catLower.includes('hot') || catLower.includes('best');
+              const itemsByCat = getItemsByCategory();
+              const categoryItems = itemsByCat[cat] || [];
+
+              return (
+                <button
+                  key={cat}
+                  onClick={() => scrollToCategory(cat)}
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all ${
+                    selectedCategory === cat
+                      ? 'bg-blue-600 text-white'
+                      : isPopular
+                        ? 'bg-orange-500 text-white'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  {cat}
+                  <span className={`text-xs ${
+                    selectedCategory === cat ? 'text-white/70' : 'text-slate-400'
+                  }`}>
+                    ({categoryItems.length})
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Sticky Category Navigation (shown only when scrolling past hero) */}
       {showStickyNav && (
         <motion.div
           initial={{ y: -100 }}
           animate={{ y: 0 }}
-          className="sticky top-[140px] z-10 bg-white/95 backdrop-blur-md border-b border-slate-200/50 shadow-sm"
+          className="sticky top-[68px] z-10 bg-white/95 backdrop-blur-md border-b border-slate-200/50 shadow-sm"
           style={{ maxHeight: 'calc(100vh - 140px)', overflowY: 'auto' }}
         >
           <div className="max-w-4xl mx-auto px-4 py-2">
             <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-2">
+              {/* All Categories Button for sticky nav */}
+              <button
+                onClick={() => scrollToCategory('all')}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all bg-blue-600 text-white"
+              >
+                All
+              </button>
+
               {categories.map(cat => {
                 const catLower = cat.toLowerCase();
                 const isPopular = catLower.includes('popular') || catLower.includes('hot') || catLower.includes('best');

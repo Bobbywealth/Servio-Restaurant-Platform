@@ -576,18 +576,33 @@ router.delete('/categories/:id', asyncHandler(async (req: Request, res: Response
   const restaurantId = req.user?.restaurantId;
   if (!restaurantId) throw new UnauthorizedError();
 
-  // Get category details before deleting for audit log
+  // Check if category exists
   const category = await db.get('SELECT name FROM menu_categories WHERE id = ? AND restaurant_id = ?', [id, restaurantId]);
-  
+  if (!category) {
+    return res.status(404).json({ success: false, error: { message: 'Category not found' } });
+  }
+
+  // Check if there are menu items referencing this category
+  const itemsCount = await db.get('SELECT COUNT(*) as count FROM menu_items WHERE category_id = ?', [id]);
+  if (itemsCount && itemsCount.count > 0) {
+    return res.status(400).json({
+      success: false,
+      error: { message: `Cannot delete category with ${itemsCount.count} menu items. Please move or delete the items first.` }
+    });
+  }
+
+  // Delete the category
   await db.run('DELETE FROM menu_categories WHERE id = ? AND restaurant_id = ?', [id, restaurantId]);
+
   await DatabaseService.getInstance().logAudit(
     restaurantId,
     req.user?.id || 'system',
     'delete_category',
     'menu_category',
     id,
-    { categoryName: category?.name || 'Unknown' }
+    { categoryName: category.name }
   );
+
   res.json({ success: true });
 }));
 
