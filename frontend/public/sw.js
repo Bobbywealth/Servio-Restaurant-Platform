@@ -218,26 +218,26 @@ async function getAuthToken() {
 }
 
 async function getTokenFromIndexedDB() {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     try {
       const request = indexedDB.open('servioAuth', 1)
-      
+
       request.onerror = () => resolve(null)
       request.onsuccess = () => {
         const db = request.result
         const tx = db.transaction('tokens', 'readonly')
         const store = tx.objectStore('tokens')
         const getRequest = store.get('accessToken')
-        
+
         getRequest.onsuccess = () => {
           const result = getRequest.result
           resolve(result?.value || null)
         }
         getRequest.onerror = () => resolve(null)
       }
-      
+
       request.onupgradeneeded = (event) => {
-        const db = (event.target as IDBOpenDBRequest).result
+        const db = event.target.result
         if (!db.objectStoreNames.contains('tokens')) {
           db.createObjectStore('tokens', { keyPath: 'id' })
         }
@@ -251,7 +251,7 @@ async function getTokenFromIndexedDB() {
 async function saveTokenToIndexedDB(token) {
   try {
     const request = indexedDB.open('servioAuth', 1)
-    
+
     request.onsuccess = () => {
       const db = request.result
       const tx = db.transaction('tokens', 'readwrite')
