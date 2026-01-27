@@ -27,36 +27,47 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
 }) => {
   return (
     <motion.div
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      className={`flex flex-col items-center justify-center p-8 text-center ${className}`}
+      initial={{ opacity: 0, scale: 0.95, y: 20 }}
+      animate={{ opacity: 1, scale: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
+      className={`flex flex-col items-center justify-center p-12 text-center ${className}`}
     >
-      <div className="w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mb-4">
-        <Icon className="w-8 h-8 text-gray-400 dark:text-gray-600" />
-      </div>
-      <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
+      <motion.div
+        className="w-20 h-20 bg-gradient-to-br from-surface-100 to-surface-200 dark:from-surface-700 dark:to-surface-800 rounded-3xl flex items-center justify-center mb-6 shadow-lg"
+        whileHover={{ scale: 1.05, rotate: 5 }}
+        transition={{ type: "spring", stiffness: 400 }}
+      >
+        <Icon className="w-10 h-10 text-surface-400 dark:text-surface-500" />
+      </motion.div>
+
+      <h3 className="text-xl font-bold text-surface-900 dark:text-surface-100 mb-3">
         {title}
       </h3>
-      <p className="text-sm text-gray-600 dark:text-gray-400 mb-6 max-w-md">
+      <p className="text-surface-600 dark:text-surface-400 mb-8 max-w-md leading-relaxed">
         {description}
       </p>
+
       {(action || secondaryAction) && (
-        <div className="flex gap-3">
+        <div className="flex gap-4">
           {action && (
-            <button
+            <motion.button
               onClick={action.onClick}
-              className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium rounded-lg transition-colors"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              className="btn-primary"
             >
               {action.label}
-            </button>
+            </motion.button>
           )}
           {secondaryAction && (
-            <button
+            <motion.button
               onClick={secondaryAction.onClick}
-              className="px-4 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 text-sm font-medium rounded-lg transition-colors"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              className="btn-secondary"
             >
               {secondaryAction.label}
-            </button>
+            </motion.button>
           )}
         </div>
       )}

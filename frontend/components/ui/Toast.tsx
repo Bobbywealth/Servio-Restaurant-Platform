@@ -20,13 +20,38 @@ const CustomToast = ({
     info: Info
   }
 
-  const colors = {
-    success: 'bg-servio-green-100 dark:bg-servio-green-900/30 text-servio-green-800 dark:text-servio-green-300 border-servio-green-200 dark:border-servio-green-800',
-    error: 'bg-servio-red-100 dark:bg-servio-red-900/30 text-servio-red-800 dark:text-servio-red-300 border-servio-red-200 dark:border-servio-red-800',
-    warning: 'bg-servio-orange-100 dark:bg-servio-orange-900/30 text-servio-orange-800 dark:text-servio-orange-300 border-servio-orange-200 dark:border-servio-orange-800',
-    info: 'bg-primary-100 dark:bg-primary-900/30 text-primary-800 dark:text-primary-300 border-primary-200 dark:border-primary-800'
+  const colorSchemes = {
+    success: {
+      bg: 'bg-gradient-to-r from-servio-green-100/90 to-servio-green-50/90 dark:from-servio-green-900/90 dark:to-servio-green-800/90',
+      border: 'border-servio-green-300/50 dark:border-servio-green-700/50',
+      text: 'text-servio-green-800 dark:text-servio-green-200',
+      icon: 'text-servio-green-500',
+      glow: 'shadow-servio-green-500/20'
+    },
+    error: {
+      bg: 'bg-gradient-to-r from-servio-red-100/90 to-servio-red-50/90 dark:from-servio-red-900/90 dark:to-servio-red-800/90',
+      border: 'border-servio-red-300/50 dark:border-servio-red-700/50',
+      text: 'text-servio-red-800 dark:text-servio-red-200',
+      icon: 'text-servio-red-500',
+      glow: 'shadow-servio-red-500/20'
+    },
+    warning: {
+      bg: 'bg-gradient-to-r from-servio-orange-100/90 to-servio-orange-50/90 dark:from-servio-orange-900/90 dark:to-servio-orange-800/90',
+      border: 'border-servio-orange-300/50 dark:border-servio-orange-700/50',
+      text: 'text-servio-orange-800 dark:text-servio-orange-200',
+      icon: 'text-servio-orange-500',
+      glow: 'shadow-servio-orange-500/20'
+    },
+    info: {
+      bg: 'bg-gradient-to-r from-primary-100/90 to-primary-50/90 dark:from-primary-900/90 dark:to-primary-800/90',
+      border: 'border-primary-300/50 dark:border-primary-700/50',
+      text: 'text-primary-800 dark:text-primary-200',
+      icon: 'text-primary-500',
+      glow: 'shadow-primary-500/20'
+    }
   }
 
+  const colors = colorSchemes[type]
   const Icon = icons[type]
 
   return (
@@ -34,16 +59,25 @@ const CustomToast = ({
       initial={{ opacity: 0, y: 50, scale: 0.3 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: 20, scale: 0.5 }}
-      className={`flex items-center p-4 rounded-xl border shadow-lg backdrop-blur-sm ${colors[type]}`}
+      className={`
+        flex items-center p-4 rounded-2xl border shadow-xl backdrop-blur-md
+        ${colors.bg} ${colors.border}
+      `}
     >
-      <Icon className="w-5 h-5 mr-3 flex-shrink-0" />
-      <span className="flex-1 text-sm font-medium">{message}</span>
-      <button
+      <div className={`
+        p-2 rounded-xl ${colors.icon} bg-white/50 dark:bg-black/20
+      `}>
+        <Icon className="w-5 h-5" />
+      </div>
+      <span className={`flex-1 text-sm font-semibold ${colors.text} ml-3`}>{message}</span>
+      <motion.button
+        whileHover={{ scale: 1.1 }}
+        whileTap={{ scale: 0.9 }}
         onClick={onClose}
-        className="ml-3 p-1 rounded-lg hover:bg-black/10 dark:hover:bg-white/10 transition-colors"
+        className={`ml-3 p-2 rounded-lg hover:bg-black/10 dark:hover:bg-white/10 transition-colors ${colors.text} opacity-60 hover:opacity-100`}
       >
         <X className="w-4 h-4" />
-      </button>
+      </motion.button>
     </motion.div>
   )
 }

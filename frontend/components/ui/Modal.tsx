@@ -68,7 +68,7 @@ export const Modal: React.FC<ModalProps> = ({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={closeOnOverlayClick ? onClose : undefined}
-            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[9998]"
+            className="fixed inset-0 bg-black/60 backdrop-blur-md z-[9998]"
           />
 
           {/* Modal */}
@@ -77,32 +77,40 @@ export const Modal: React.FC<ModalProps> = ({
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              transition={{ type: 'spring', duration: 0.3 }}
-              className={`bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full ${sizes[size]} max-h-[90vh] overflow-hidden flex flex-col`}
+              transition={{ type: 'spring', duration: 0.3, bounce: 0.2 }}
+              className={`
+                bg-white/90 dark:bg-surface-800/90 backdrop-blur-xl
+                rounded-3xl shadow-2xl shadow-black/20
+                border border-white/20 dark:border-surface-700/50
+                w-full ${sizes[size]} max-h-[90vh] overflow-hidden
+                flex flex-col
+              `}
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}
               {(title || showCloseButton) && (
-                <div className="flex items-start justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+                <div className="flex items-start justify-between p-6 border-b border-surface-200/50 dark:border-surface-700/50">
                   <div className="flex-1">
                     {title && (
-                      <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+                      <h2 className="text-2xl font-bold text-surface-900 dark:text-surface-100">
                         {title}
                       </h2>
                     )}
                     {description && (
-                      <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                      <p className="mt-2 text-sm text-surface-600 dark:text-surface-400">
                         {description}
                       </p>
                     )}
                   </div>
                   {showCloseButton && (
-                    <button
+                    <motion.button
                       onClick={onClose}
-                      className="ml-4 p-1 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                      whileHover={{ scale: 1.1 }}
+                      whileTap={{ scale: 0.9 }}
+                      className="ml-4 p-2 rounded-xl text-surface-400 hover:text-surface-600 dark:hover:text-surface-300 hover:bg-surface-100 dark:hover:bg-surface-700 transition-colors"
                     >
                       <X className="w-5 h-5" />
-                    </button>
+                    </motion.button>
                   )}
                 </div>
               )}

@@ -5,7 +5,7 @@ import { motion } from 'framer-motion'
 import { useUser } from '../../contexts/UserContext'
 import { api } from '../../lib/api'
 import { useSocket } from '../../lib/socket'
-import { MessageCircle, ShoppingCart, Package, TrendingUp, Sparkles, ArrowRight, Mic, Zap, Activity, Clock } from 'lucide-react'
+import { MessageCircle, ShoppingCart, Package, TrendingUp, Sparkles, ArrowRight, Mic, Zap, Activity, Clock, Star } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 import DashboardLayout from '../../components/Layout/DashboardLayout'
@@ -14,47 +14,45 @@ import LiveClock from '../../components/ui/LiveClock'
 // PREMIUM STAT CARD WITH GLASSMORPHISM
 const StatCard = memo(({ stat, index }: { stat: any; index: number }) => (
   <motion.div
-    className="relative group"
+    className="stat-card group"
     initial={{ opacity: 0, y: 20 }}
     animate={{ opacity: 1, y: 0 }}
     transition={{ delay: 0.1 * (index + 1), duration: 0.5 }}
     whileHover={{ y: -6, scale: 1.02 }}
   >
-    {/* Gradient background glow */}
-    <div className={`absolute inset-0 rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 blur-xl ${stat.glowColor || 'bg-primary-500/30'}`} />
+    {/* Premium gradient glow on hover */}
+    <div className={`absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 blur-xl bg-gradient-to-r ${stat.glowColor}`} />
 
-    <div className="relative bg-white/80 dark:bg-surface-800/80 backdrop-blur-xl rounded-3xl p-6 shadow-xl border border-white/50 dark:border-surface-700/50 overflow-hidden">
-      {/* Decorative gradient orb */}
-      <div className={`absolute -top-10 -right-10 w-32 h-32 rounded-full opacity-20 ${stat.color || 'bg-primary-500'} blur-2xl`} />
-
-      <div className="relative flex items-start justify-between">
-        <div>
-          <p className="text-sm font-semibold text-surface-500 dark:text-surface-400 uppercase tracking-wider mb-1">
-            {stat.name}
-          </p>
-          <motion.p
-            className="text-4xl font-black text-surface-900 dark:text-white tracking-tight"
-            initial={{ scale: 0.5, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ delay: 0.2 * (index + 1), type: "spring", bounce: 0.4 }}
-          >
-            {stat.value}
-          </motion.p>
-        </div>
-        <motion.div
-          className={`p-4 rounded-2xl shadow-lg ${stat.color || 'bg-primary-500'}`}
-          whileHover={{ scale: 1.1, rotate: 10 }}
-          transition={{ type: "spring", stiffness: 400, damping: 10 }}
+    <div className="relative flex items-start justify-between">
+      <div>
+        <p className="text-sm font-semibold text-surface-500 dark:text-surface-400 uppercase tracking-wider mb-2">
+          {stat.name}
+        </p>
+        <motion.p
+          className="text-4xl font-black text-surface-900 dark:text-white tracking-tight"
+          initial={{ scale: 0.5, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ delay: 0.2 * (index + 1), type: "spring", bounce: 0.4 }}
         >
-          <stat.icon className="h-7 w-7 text-white" />
-        </motion.div>
+          {stat.value}
+        </motion.p>
       </div>
+      <motion.div
+        className={`p-4 rounded-2xl shadow-lg ${stat.color}`}
+        whileHover={{ scale: 1.1, rotate: 5 }}
+        transition={{ type: "spring", stiffness: 400, damping: 10 }}
+      >
+        <stat.icon className="h-7 w-7 text-white" />
+      </motion.div>
+    </div>
 
-      <div className="mt-5 pt-4 border-t border-surface-200/50 dark:border-surface-700/50">
-        <span className="text-sm font-medium text-surface-600 dark:text-surface-400">
-          {stat.change}
-        </span>
-      </div>
+    <div className="mt-4 pt-4 border-t border-surface-200/50 dark:border-surface-700/50">
+      <span className="text-sm font-medium text-surface-600 dark:text-surface-400 flex items-center gap-1">
+        {stat.change.startsWith('+') && (
+          <TrendingUp className="w-4 h-4 text-servio-green-500" />
+        )}
+        {stat.change}
+      </span>
     </div>
   </motion.div>
 ))
@@ -64,23 +62,23 @@ StatCard.displayName = 'StatCard'
 // PREMIUM SKELETON LOADER
 const SkeletonCard = memo(({ index = 0 }: { index?: number }) => (
   <motion.div
-    className="relative bg-white/60 dark:bg-surface-800/60 backdrop-blur-xl rounded-3xl p-6 shadow-xl border border-white/30 dark:border-surface-700/30 overflow-hidden"
+    className="stat-card relative overflow-hidden"
     initial={{ opacity: 0, y: 20 }}
     animate={{ opacity: 1, y: 0 }}
     transition={{ delay: index * 0.1, duration: 0.5 }}
   >
     {/* Shimmer effect */}
-    <div className="absolute inset-0 -translate-x-full animate-[shimmer_2s_infinite] bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+    <div className="absolute inset-0 -translate-x-full animate-shimmer bg-gradient-to-r from-transparent via-white/20 to-transparent" />
 
     <div className="flex items-start justify-between mb-4">
       <div className="space-y-3">
-        <div className="h-4 w-24 rounded-lg bg-surface-200/80 dark:bg-surface-700/80" />
-        <div className="h-10 w-20 rounded-lg bg-surface-200/80 dark:bg-surface-700/80" />
+        <div className="h-4 w-24 rounded-lg skeleton" />
+        <div className="h-10 w-20 rounded-lg skeleton" />
       </div>
-      <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-surface-200 to-surface-300 dark:from-surface-700 dark:to-surface-600" />
+      <div className="h-14 w-14 rounded-2xl skeleton" />
     </div>
     <div className="pt-4 border-t border-surface-200/30 dark:border-surface-700/30">
-      <div className="h-6 w-32 rounded-full bg-surface-200/80 dark:bg-surface-700/80" />
+      <div className="h-6 w-32 rounded-full skeleton" />
     </div>
   </motion.div>
 ))
@@ -150,7 +148,7 @@ const DashboardIndex = memo(() => {
       change: pendingOrders > 0 ? `${pendingOrders} waiting` : 'All clear',
       icon: Clock,
       color: 'bg-gradient-to-br from-blue-500 to-indigo-600',
-      glowColor: 'bg-blue-500/40'
+      glowColor: 'from-blue-500/40 to-indigo-600/40'
     },
     {
       name: 'Orders Today',
@@ -158,7 +156,7 @@ const DashboardIndex = memo(() => {
       change: `$${todaySales.toFixed(2)} revenue`,
       icon: Package,
       color: 'bg-gradient-to-br from-violet-500 to-purple-600',
-      glowColor: 'bg-violet-500/40'
+      glowColor: 'from-violet-500/40 to-purple-600/40'
     },
     {
       name: 'Active Orders',
@@ -166,7 +164,7 @@ const DashboardIndex = memo(() => {
       change: activeOrders > 0 ? 'In progress' : 'No active',
       icon: Activity,
       color: 'bg-gradient-to-br from-orange-500 to-amber-600',
-      glowColor: 'bg-orange-500/40'
+      glowColor: 'from-orange-500/40 to-amber-600/40'
     },
     {
       name: 'Today\'s Sales',
@@ -174,7 +172,7 @@ const DashboardIndex = memo(() => {
       change: `${todayOrderCount} orders`,
       icon: TrendingUp,
       color: 'bg-gradient-to-br from-emerald-500 to-teal-600',
-      glowColor: 'bg-emerald-500/40'
+      glowColor: 'from-emerald-500/40 to-teal-600/40'
     }
   ], [activeOrders, totalOrders, todaySales, pendingOrders, todayOrderCount])
 
@@ -212,10 +210,10 @@ const DashboardIndex = memo(() => {
       </Head>
 
       <DashboardLayout>
-        <div className="space-y-6">
+        <div className="space-y-8">
           {/* Welcome Section */}
           <motion.div
-            className="mb-4"
+            className="mb-2"
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
@@ -223,7 +221,7 @@ const DashboardIndex = memo(() => {
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
               <div>
                 <motion.div
-                  className="flex items-center gap-2 mb-2"
+                  className="flex items-center gap-3 mb-3"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ delay: 0.1 }}
@@ -242,7 +240,7 @@ const DashboardIndex = memo(() => {
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: 0.2 }}
                 >
-                  Welcome back, {user?.name?.split(' ')[0] || 'Team'}
+                  Welcome back, <span className="text-gradient">{user?.name?.split(' ')[0] || 'Team'}</span>
                 </motion.h1>
               </div>
 
@@ -254,18 +252,18 @@ const DashboardIndex = memo(() => {
               >
                 <div className={`flex items-center gap-2 px-4 py-2.5 rounded-full border ${
                   isOpen
-                    ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800'
-                    : 'bg-gray-50 dark:bg-gray-900/20 border-gray-200 dark:border-gray-800'
+                    ? 'bg-gradient-to-r from-servio-green-100 to-servio-green-50 dark:from-servio-green-900/30 dark:to-servio-green-800/20 border-servio-green-200 dark:border-servio-green-800'
+                    : 'bg-surface-100 dark:bg-surface-800 border-surface-200 dark:border-surface-700'
                 }`}>
                   <motion.div
-                    className={`w-2.5 h-2.5 rounded-full ${isOpen ? 'bg-emerald-500' : 'bg-gray-500'}`}
+                    className={`w-2.5 h-2.5 rounded-full ${isOpen ? 'bg-servio-green-500 shadow-glow' : 'bg-surface-500'}`}
                     animate={isOpen ? { scale: [1, 1.3, 1], opacity: [1, 0.7, 1] } : {}}
                     transition={{ duration: 2, repeat: Infinity }}
                   />
                   <span className={`text-sm font-semibold ${
                     isOpen
-                      ? 'text-emerald-700 dark:text-emerald-300'
-                      : 'text-gray-700 dark:text-gray-300'
+                      ? 'text-servio-green-700 dark:text-servio-green-300'
+                      : 'text-surface-700 dark:text-surface-300'
                   }`}>
                     {isOpen ? 'Open' : 'Closed'}
                   </span>
@@ -276,19 +274,19 @@ const DashboardIndex = memo(() => {
 
           {/* PREMIUM AI ASSISTANT HERO */}
           <motion.div
-            className="relative rounded-[2rem] overflow-hidden"
+            className="relative rounded-[2.5rem] overflow-hidden"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1, duration: 0.6 }}
           >
             {/* Multi-layer gradient background */}
             <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900" />
-            <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/20 via-transparent to-orange-500/20" />
+            <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/10 via-transparent to-orange-500/10" />
 
             {/* Animated mesh gradient */}
             <div className="absolute inset-0 overflow-hidden">
               <motion.div
-                className="absolute -top-1/2 -left-1/2 w-full h-full bg-gradient-to-br from-emerald-400/30 to-transparent rounded-full blur-3xl"
+                className="absolute -top-1/2 -left-1/2 w-full h-full bg-gradient-to-br from-emerald-500/20 to-transparent rounded-full blur-3xl"
                 animate={{
                   x: [0, 100, 0],
                   y: [0, 50, 0],
@@ -297,13 +295,21 @@ const DashboardIndex = memo(() => {
                 transition={{ duration: 15, repeat: Infinity, ease: "easeInOut" }}
               />
               <motion.div
-                className="absolute -bottom-1/2 -right-1/2 w-full h-full bg-gradient-to-tl from-orange-400/30 to-transparent rounded-full blur-3xl"
+                className="absolute -bottom-1/2 -right-1/2 w-full h-full bg-gradient-to-tl from-orange-500/20 to-transparent rounded-full blur-3xl"
                 animate={{
                   x: [0, -100, 0],
                   y: [0, -50, 0],
                   scale: [1.2, 1, 1.2]
                 }}
                 transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
+              />
+              <motion.div
+                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-gradient-to-r from-primary-500/10 to-servio-purple-500/10 rounded-full blur-3xl"
+                animate={{
+                  scale: [1, 1.3, 1],
+                  opacity: [0.5, 0.8, 0.5]
+                }}
+                transition={{ duration: 10, repeat: Infinity }}
               />
             </div>
 
@@ -324,7 +330,7 @@ const DashboardIndex = memo(() => {
                     transition={{ delay: 0.2 }}
                   >
                     <motion.div
-                      className="w-2 h-2 rounded-full bg-emerald-400"
+                      className="w-2 h-2 rounded-full bg-emerald-400 shadow-glow"
                       animate={{ scale: [1, 1.3, 1], opacity: [1, 0.7, 1] }}
                       transition={{ duration: 2, repeat: Infinity }}
                     />
@@ -338,7 +344,7 @@ const DashboardIndex = memo(() => {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.3 }}
                   >
-                    Your AI Command Center
+                    Your AI <span className="text-gradient-orange">Command Center</span>
                   </motion.h2>
 
                   <motion.p
@@ -358,13 +364,13 @@ const DashboardIndex = memo(() => {
                   >
                     <Link
                       href="/dashboard/assistant"
-                      className="group relative inline-flex items-center gap-3 bg-white text-slate-900 px-8 py-4 rounded-2xl font-bold text-lg hover:bg-white/90 transition-all duration-300 shadow-2xl shadow-white/20 hover:shadow-white/30 hover:scale-105"
+                      className="group relative inline-flex items-center gap-3 bg-gradient-to-r from-white to-surface-100 text-slate-900 px-8 py-4 rounded-2xl font-bold text-lg hover:from-surface-50 hover:to-white transition-all duration-300 shadow-2xl shadow-white/20 hover:shadow-white/40 hover:scale-105"
                     >
                       <motion.div
                         animate={{ scale: [1, 1.2, 1] }}
                         transition={{ duration: 1.5, repeat: Infinity }}
                       >
-                        <Mic className="h-6 w-6 text-teal-600" />
+                        <Mic className="h-6 w-6 text-primary-600" />
                       </motion.div>
                       <span>Start Talking</span>
                       <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
@@ -396,12 +402,20 @@ const DashboardIndex = memo(() => {
                       className="absolute inset-0 rounded-full border-2 border-white/10"
                       animate={{ rotate: 360 }}
                       transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
-                      style={{ width: 180, height: 180, margin: -20 }}
+                      style={{ width: 200, height: 200, margin: -30 }}
+                    />
+
+                    {/* Middle ring */}
+                    <motion.div
+                      className="absolute inset-0 rounded-full border border-white/5"
+                      animate={{ rotate: -360 }}
+                      transition={{ duration: 25, repeat: Infinity, ease: "linear" }}
+                      style={{ width: 170, height: 170, margin: -15 }}
                     />
 
                     {/* Inner glowing orb */}
-                      <motion.div
-                      className="w-36 h-36 rounded-full bg-gradient-to-br from-emerald-400 via-emerald-500 to-orange-500 flex items-center justify-center shadow-2xl shadow-emerald-500/30"
+                    <motion.div
+                      className="w-40 h-40 rounded-full bg-gradient-to-br from-emerald-400 via-emerald-500 to-orange-500 flex items-center justify-center shadow-2xl shadow-emerald-500/30 relative z-10"
                       animate={{
                         boxShadow: [
                           "0 0 60px rgba(20,184,166,0.4)",
@@ -415,20 +429,30 @@ const DashboardIndex = memo(() => {
                         animate={{ scale: [1, 1.1, 1] }}
                         transition={{ duration: 2, repeat: Infinity }}
                       >
-                        <MessageCircle className="w-16 h-16 text-white" />
+                        <MessageCircle className="w-18 h-18 text-white" />
                       </motion.div>
                     </motion.div>
 
                     {/* Floating particles */}
                     <motion.div
-                      className="absolute -top-2 -right-2 w-4 h-4 rounded-full bg-amber-400"
-                      animate={{ y: [-5, 5, -5], x: [-3, 3, -3] }}
+                      className="absolute -top-3 -right-3 w-5 h-5 rounded-full bg-amber-400 shadow-glow-orange"
+                      animate={{ y: [-8, 8, -8], x: [-4, 4, -4] }}
                       transition={{ duration: 4, repeat: Infinity }}
                     />
                     <motion.div
-                      className="absolute -bottom-1 -left-3 w-3 h-3 rounded-full bg-teal-300"
-                      animate={{ y: [5, -5, 5], x: [3, -3, 3] }}
+                      className="absolute -bottom-2 -left-4 w-4 h-4 rounded-full bg-teal-300 shadow-glow"
+                      animate={{ y: [8, -8, 8], x: [4, -4, 4] }}
                       transition={{ duration: 3, repeat: Infinity }}
+                    />
+                    <motion.div
+                      className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-2 w-3 h-3 rounded-full bg-primary-300 shadow-glow"
+                      animate={{ y: [-6, 6, -6] }}
+                      transition={{ duration: 2.5, repeat: Infinity }}
+                    />
+                    <motion.div
+                      className="absolute bottom-0 right-1/2 translate-x-2 translate-y-1 w-2 h-2 rounded-full bg-servio-purple-400"
+                      animate={{ y: [-4, 4, -4], x: [2, -2, 2] }}
+                      transition={{ duration: 3.5, repeat: Infinity }}
                     />
                   </div>
                 </motion.div>
@@ -437,7 +461,7 @@ const DashboardIndex = memo(() => {
           </motion.div>
 
           {/* Stats Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {isFetching
               ? Array.from({ length: 4 }).map((_, idx) => <SkeletonCard key={`skeleton-${idx}`} index={idx} />)
               : stats.map((stat, index) => (
@@ -445,32 +469,33 @@ const DashboardIndex = memo(() => {
                 ))}
           </div>
 
-          {/* Recent Activity */}
+          {/* Recent Activity & Quick Actions */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Recent Orders */}
             <motion.div
-              className="bg-white dark:bg-surface-800 rounded-2xl p-6 shadow-lg border border-surface-100 dark:border-surface-700"
+              className="glass-card-premium"
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.6 }}
             >
               <div className="flex items-center justify-between mb-6">
                 <h3 className="text-xl font-bold text-surface-900 dark:text-surface-100 flex items-center">
-                  <div className="p-2 rounded-xl bg-gradient-to-r from-primary-500 to-primary-600 mr-3">
-                    <ShoppingCart className="w-5 h-5 text-white" />
+                  <div className="p-3 rounded-2xl bg-gradient-to-br from-primary-500 to-primary-600 mr-4 shadow-lg shadow-primary-200 dark:shadow-primary-900/30">
+                    <ShoppingCart className="w-6 h-6 text-white" />
                   </div>
                   Recent Orders
                 </h3>
                 <motion.div
-                  className="flex items-center space-x-2 text-xs font-medium text-surface-500 dark:text-surface-400"
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary-100 dark:bg-primary-900/30"
                   animate={{ opacity: [0.6, 1, 0.6] }}
                   transition={{ duration: 3, repeat: Infinity }}
                 >
-                  <div className="w-2 h-2 bg-primary-400 rounded-full"></div>
-                  <span>Live Updates</span>
+                  <div className="w-2 h-2 bg-primary-500 rounded-full animate-pulse" />
+                  <span className="text-xs font-semibold text-primary-700 dark:text-primary-300">Live</span>
                 </motion.div>
               </div>
 
-              <div className="space-y-3">
+              <div className="space-y-4">
                 {recentOrders.length === 0 ? (
                   <motion.div
                     className="text-center py-12"
@@ -478,25 +503,25 @@ const DashboardIndex = memo(() => {
                     animate={{ opacity: 1, scale: 1 }}
                     transition={{ delay: 0.7 }}
                   >
-                    <div className="w-16 h-16 bg-gradient-to-br from-surface-100 to-surface-200 dark:from-surface-700 dark:to-surface-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                      <ShoppingCart className="w-8 h-8 text-surface-400 dark:text-surface-500" />
+                    <div className="w-20 h-20 bg-gradient-to-br from-surface-100 to-surface-200 dark:from-surface-700 dark:to-surface-600 rounded-3xl flex items-center justify-center mx-auto mb-4 shadow-inner">
+                      <ShoppingCart className="w-10 h-10 text-surface-400 dark:text-surface-500" />
                     </div>
-                    <p className="text-surface-500 dark:text-surface-400 font-medium">No recent orders</p>
-                    <p className="text-sm text-surface-400 dark:text-surface-500 mt-1">Orders will appear here as they come in</p>
+                    <p className="text-surface-600 dark:text-surface-400 font-semibold">No recent orders</p>
+                    <p className="text-sm text-surface-500 dark:text-surface-500 mt-2">Orders will appear here as they come in</p>
                   </motion.div>
                 ) : (
                   recentOrders.map((order, index) => (
                     <motion.div
                       key={order.id}
-                      className="group flex items-center justify-between p-4 rounded-2xl bg-gradient-to-r from-surface-50 to-surface-100/50 dark:from-surface-700/50 dark:to-surface-600/50 hover:from-primary-50 hover:to-primary-100/50 dark:hover:from-primary-900/20 dark:hover:to-primary-800/20 transition-all duration-300 cursor-pointer border border-surface-200/50 dark:border-surface-600/50 hover:border-primary-200 dark:hover:border-primary-800 hover:shadow-lg"
+                      className="group flex items-center justify-between p-5 rounded-2xl bg-gradient-to-r from-surface-50 to-surface-100/50 dark:from-surface-800/50 dark:to-surface-700/50 hover:from-primary-50 hover:to-primary-100/50 dark:hover:from-primary-900/20 dark:hover:to-primary-800/20 transition-all duration-300 cursor-pointer border border-surface-200/50 dark:border-surface-700/50 hover:border-primary-200 dark:hover:border-primary-800 hover:shadow-lg hover:shadow-primary-200/20 dark:hover:shadow-primary-900/20"
                       initial={{ opacity: 0, x: -20 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: 0.7 + index * 0.1 }}
                       whileHover={{ x: 6, scale: 1.01 }}
                     >
                       <div className="flex items-center space-x-4">
-                        <div className="w-12 h-12 bg-gradient-to-br from-primary-500 to-primary-600 rounded-2xl flex items-center justify-center shadow-lg group-hover:shadow-primary-200 dark:group-hover:shadow-primary-900/50 transition-shadow">
-                          <span className="text-white font-bold text-sm">#{order.external_id?.slice(-2) || order.id.substring(0, 2).toUpperCase()}</span>
+                        <div className="w-14 h-14 bg-gradient-to-br from-primary-500 to-primary-600 rounded-2xl flex items-center justify-center shadow-lg group-hover:shadow-xl group-hover:shadow-primary-300 dark:group-hover:shadow-primary-900/50 transition-all">
+                          <span className="text-white font-bold text-lg">#{order.external_id?.slice(-2) || order.id.substring(0, 2).toUpperCase()}</span>
                         </div>
                         <div>
                           <p className="font-semibold text-surface-900 dark:text-surface-100 group-hover:text-primary-700 dark:group-hover:text-primary-300 transition-colors">
@@ -509,12 +534,12 @@ const DashboardIndex = memo(() => {
                       </div>
 
                       <div className="flex items-center space-x-3">
-                        <span className={`px-3 py-1 rounded-full text-xs font-semibold shadow-sm ${
+                        <span className={`status-badge ${
                           order.status === 'ready'
-                            ? 'bg-servio-green-100 dark:bg-servio-green-900/30 text-servio-green-700 dark:text-servio-green-300 ring-1 ring-servio-green-200 dark:ring-servio-green-800'
+                            ? 'status-success'
                             : order.status === 'preparing'
-                            ? 'bg-servio-orange-100 dark:bg-servio-orange-900/30 text-servio-orange-700 dark:text-servio-orange-300 ring-1 ring-servio-orange-200 dark:ring-servio-orange-800'
-                            : 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 ring-1 ring-primary-200 dark:ring-primary-800'
+                            ? 'status-warning'
+                            : 'status-info'
                         }`}>
                           {order.status}
                         </span>
@@ -523,7 +548,7 @@ const DashboardIndex = memo(() => {
                           whileHover={{ x: 4 }}
                           transition={{ type: "spring", stiffness: 400, damping: 10 }}
                         >
-                          <ArrowRight className="w-4 h-4" />
+                          <ArrowRight className="w-5 h-5" />
                         </motion.div>
                       </div>
                     </motion.div>
@@ -532,25 +557,39 @@ const DashboardIndex = memo(() => {
               </div>
             </motion.div>
 
+            {/* Quick Actions */}
             <motion.div
-              className="bg-white dark:bg-surface-800 rounded-2xl p-6 shadow-lg border border-surface-100 dark:border-surface-700"
+              className="glass-card-premium"
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.6 }}
             >
               <div className="flex items-center justify-between mb-6">
                 <h3 className="text-xl font-bold text-surface-900 dark:text-surface-100 flex items-center">
-                  <div className="p-2 rounded-xl bg-gradient-to-r from-servio-orange-500 to-servio-orange-600 mr-3">
-                    <Sparkles className="w-5 h-5 text-white" />
+                  <div className="p-3 rounded-2xl bg-gradient-to-br from-servio-orange-500 to-servio-orange-600 mr-4 shadow-lg shadow-servio-orange-200 dark:shadow-servio-orange-900/30">
+                    <Sparkles className="w-6 h-6 text-white" />
                   </div>
                   Quick Actions
                 </h3>
-                <div className="flex space-x-1">
-                  <div className="w-2 h-2 bg-servio-orange-400 rounded-full animate-pulse"></div>
-                  <div className="w-2 h-2 bg-primary-400 rounded-full animate-pulse" style={{ animationDelay: '0.5s' }}></div>
-                  <div className="w-2 h-2 bg-servio-green-400 rounded-full animate-pulse" style={{ animationDelay: '1s' }}></div>
+                <div className="flex space-x-1.5">
+                  <motion.div
+                    className="w-2 h-2 bg-servio-orange-400 rounded-full"
+                    animate={{ scale: [1, 1.2, 1], opacity: [1, 0.6, 1] }}
+                    transition={{ duration: 1.5, repeat: Infinity }}
+                  />
+                  <motion.div
+                    className="w-2 h-2 bg-primary-400 rounded-full"
+                    animate={{ scale: [1, 1.2, 1], opacity: [1, 0.6, 1] }}
+                    transition={{ duration: 1.5, repeat: Infinity, delay: 0.3 }}
+                  />
+                  <motion.div
+                    className="w-2 h-2 bg-servio-green-400 rounded-full"
+                    animate={{ scale: [1, 1.2, 1], opacity: [1, 0.6, 1] }}
+                    transition={{ duration: 1.5, repeat: Infinity, delay: 0.6 }}
+                  />
                 </div>
               </div>
+
               <div className="space-y-4">
                 {quickActions.map((action, index) => (
                   <motion.div
@@ -561,24 +600,33 @@ const DashboardIndex = memo(() => {
                   >
                     <Link
                       href={action.href}
-                      className={`group block w-full text-left p-5 rounded-2xl border-2 transition-all duration-300 hover:scale-[1.02] hover:shadow-lg active:scale-[0.98] relative overflow-hidden ${
+                      className={`group block w-full text-left p-5 rounded-2xl border-2 transition-all duration-300 hover:scale-[1.02] hover:shadow-xl active:scale-[0.98] relative overflow-hidden ${
                         action.highlight
                           ? 'border-servio-orange-200 dark:border-servio-orange-800 bg-gradient-to-r from-servio-orange-50 to-orange-50 dark:from-servio-orange-900/20 dark:to-servio-orange-800/20 hover:from-servio-orange-100 hover:to-orange-100 dark:hover:from-servio-orange-900/30 dark:hover:to-servio-orange-800/30'
                           : 'border-surface-200 dark:border-surface-600 bg-surface-50 dark:bg-surface-700/50 hover:bg-surface-100 dark:hover:bg-surface-700'
                       }`}
                     >
                       {action.highlight && (
-                        <div className="absolute inset-0 bg-gradient-to-r from-servio-orange-500/5 to-primary-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        <>
+                          <div className="absolute inset-0 bg-gradient-to-r from-servio-orange-500/5 to-primary-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                          <motion.div
+                            className="absolute top-2 right-2"
+                            animate={{ rotate: 360 }}
+                            transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
+                          >
+                            <Star className="w-4 h-4 text-servio-orange-400 opacity-50" />
+                          </motion.div>
+                        </>
                       )}
 
                       <div className="relative flex items-center space-x-4">
                         <motion.div
-                          className={`flex-shrink-0 p-3 rounded-2xl shadow-lg ${
+                          className={`flex-shrink-0 p-4 rounded-2xl shadow-lg ${
                             action.highlight
-                              ? 'bg-gradient-to-br from-servio-orange-500 to-servio-orange-600 group-hover:shadow-servio-orange-200 dark:group-hover:shadow-servio-orange-900/50'
+                              ? 'bg-gradient-to-br from-servio-orange-500 to-servio-orange-600 group-hover:shadow-servio-orange-300 dark:group-hover:shadow-servio-orange-900/50'
                               : action.href.includes('orders')
-                              ? 'bg-gradient-to-br from-primary-500 to-primary-600 group-hover:shadow-primary-200 dark:group-hover:shadow-primary-900/50'
-                              : 'bg-gradient-to-br from-servio-green-500 to-servio-green-600 group-hover:shadow-servio-green-200 dark:group-hover:shadow-servio-green-900/50'
+                              ? 'bg-gradient-to-br from-primary-500 to-primary-600 group-hover:shadow-primary-300 dark:group-hover:shadow-primary-900/50'
+                              : 'bg-gradient-to-br from-servio-green-500 to-servio-green-600 group-hover:shadow-servio-green-300 dark:group-hover:shadow-servio-green-900/50'
                           } group-hover:shadow-xl transition-all duration-300`}
                           whileHover={{ rotate: 5, scale: 1.1 }}
                           transition={{ type: "spring", stiffness: 400, damping: 10 }}
@@ -588,26 +636,16 @@ const DashboardIndex = memo(() => {
 
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between">
-                            <h4 className="font-semibold text-surface-900 dark:text-surface-100 group-hover:text-surface-700 dark:group-hover:text-surface-200 transition-colors">
+                            <h4 className="font-bold text-surface-900 dark:text-surface-100 group-hover:text-surface-700 dark:group-hover:text-surface-200 transition-colors">
                               {action.title}
                             </h4>
-                            <div className="flex items-center space-x-2">
-                              {action.highlight && (
-                                <motion.div
-                                  animate={{ rotate: 360 }}
-                                  transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
-                                >
-                                  <Sparkles className="w-4 h-4 text-servio-orange-500" />
-                                </motion.div>
-                              )}
-                              <motion.div
-                                className="text-surface-400 group-hover:text-surface-600 dark:group-hover:text-surface-300"
-                                whileHover={{ x: 4 }}
-                                transition={{ type: "spring", stiffness: 400, damping: 10 }}
-                              >
-                                <ArrowRight className="w-5 w-5" />
-                              </motion.div>
-                            </div>
+                            <motion.div
+                              className="text-surface-400 group-hover:text-surface-600 dark:group-hover:text-surface-300"
+                              whileHover={{ x: 4 }}
+                              transition={{ type: "spring", stiffness: 400, damping: 10 }}
+                            >
+                              <ArrowRight className="w-5 h-5" />
+                            </motion.div>
                           </div>
                           <p className="text-sm text-surface-600 dark:text-surface-400 mt-1 group-hover:text-surface-500 dark:group-hover:text-surface-300 transition-colors">
                             {action.description}

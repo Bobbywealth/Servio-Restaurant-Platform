@@ -3,12 +3,13 @@ import { LucideIcon } from 'lucide-react'
 import { motion, type HTMLMotionProps } from 'framer-motion'
 
 export interface ButtonProps extends Omit<HTMLMotionProps<'button'>, 'ref' | 'children'> {
-  variant?: 'primary' | 'secondary' | 'destructive' | 'ghost' | 'outline'
-  size?: 'sm' | 'md' | 'lg'
+  variant?: 'primary' | 'secondary' | 'destructive' | 'ghost' | 'outline' | 'success' | 'orange'
+  size?: 'sm' | 'md' | 'lg' | 'xl'
   icon?: LucideIcon
   iconPosition?: 'left' | 'right'
   fullWidth?: boolean
   children?: React.ReactNode
+  glow?: boolean
 }
 
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
@@ -22,38 +23,51 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       children,
       disabled,
       className = '',
+      glow = false,
       type = 'button',
       ...props
     },
     ref
   ) => {
-    const baseClasses = 'inline-flex items-center justify-center font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-offset-2'
+    const baseClasses = 'inline-flex items-center justify-center font-semibold rounded-2xl transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-transparent'
 
     const variants = {
-      primary: 'bg-primary-600 hover:bg-primary-700 text-white shadow-sm hover:shadow focus:ring-primary-500 disabled:hover:bg-primary-600',
-      secondary: 'bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-900 dark:text-gray-100 focus:ring-gray-500',
-      destructive: 'bg-red-600 hover:bg-red-700 text-white shadow-sm hover:shadow focus:ring-red-500 disabled:hover:bg-red-600',
-      ghost: 'bg-transparent hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 focus:ring-gray-500',
-      outline: 'border-2 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 focus:ring-gray-500'
+      primary: 'bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700 text-white shadow-lg hover:shadow-xl focus:ring-primary-500 disabled:hover:from-primary-500 disabled:hover:to-primary-600',
+      secondary: 'bg-gradient-to-r from-surface-100 to-surface-200 hover:from-surface-200 hover:to-surface-300 dark:from-surface-700 dark:to-surface-800 dark:hover:from-surface-600 dark:hover:to-surface-700 text-surface-900 dark:text-surface-100 shadow-sm hover:shadow-md focus:ring-surface-500',
+      destructive: 'bg-gradient-to-r from-servio-red-500 to-servio-red-600 hover:from-servio-red-600 hover:to-servio-red-700 text-white shadow-lg hover:shadow-xl focus:ring-servio-red-500 disabled:hover:from-servio-red-500 disabled:hover:to-servio-red-600',
+      ghost: 'bg-transparent hover:bg-surface-100 dark:hover:bg-surface-800 text-surface-700 dark:text-surface-300 focus:ring-surface-500',
+      outline: 'border-2 border-surface-300 dark:border-surface-600 hover:bg-surface-50 dark:hover:bg-surface-800 text-surface-700 dark:text-surface-300 focus:ring-surface-500',
+      success: 'bg-gradient-to-r from-servio-green-500 to-servio-green-600 hover:from-servio-green-600 hover:to-servio-green-700 text-white shadow-lg hover:shadow-xl focus:ring-servio-green-500 disabled:hover:from-servio-green-500 disabled:hover:to-servio-green-600',
+      orange: 'bg-gradient-to-r from-servio-orange-500 to-servio-orange-600 hover:from-servio-orange-400 hover:to-servio-orange-500 text-white shadow-lg hover:shadow-xl focus:ring-servio-orange-500 disabled:hover:from-servio-orange-500 disabled:hover:to-servio-orange-600',
     }
 
     const sizes = {
-      sm: 'px-3 py-1.5 text-xs gap-1.5',
-      md: 'px-4 py-2 text-sm gap-2',
-      lg: 'px-6 py-3 text-base gap-2.5'
+      sm: 'px-4 py-2 text-sm gap-2',
+      md: 'px-5 py-2.5 text-sm gap-2.5',
+      lg: 'px-6 py-3 text-base gap-3',
+      xl: 'px-8 py-4 text-lg gap-3'
     }
 
     const iconSizes = {
-      sm: 'w-3.5 h-3.5',
-      md: 'w-4 h-4',
-      lg: 'w-5 h-5'
+      sm: 'w-4 h-4',
+      md: 'w-5 h-5',
+      lg: 'w-5 h-5',
+      xl: 'w-6 h-6'
     }
 
     return (
       <motion.button
         ref={ref}
+        whileHover={{ scale: disabled ? 1 : 1.02 }}
         whileTap={{ scale: disabled ? 1 : 0.98 }}
-        className={`${baseClasses} ${variants[variant]} ${sizes[size]} ${fullWidth ? 'w-full' : ''} ${className}`}
+        className={`
+          ${baseClasses}
+          ${variants[variant]}
+          ${sizes[size]}
+          ${fullWidth ? 'w-full' : ''}
+          ${glow ? 'shadow-glow' : ''}
+          ${className}
+        `}
         disabled={disabled}
         type={type}
         {...props}
