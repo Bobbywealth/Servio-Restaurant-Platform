@@ -103,10 +103,9 @@ const DashboardIndex = memo(() => {
   const fetchStats = async () => {
     setIsFetching(true)
     try {
-      const [ordersRes, summaryRes, settingsRes] = await Promise.all([
+      const [ordersRes, summaryRes] = await Promise.all([
         api.get('/api/orders', { params: { limit: 5 } }),
         api.get('/api/orders/stats/summary'),
-        api.get('/api/settings').catch(() => ({ data: { data: { timezone: 'America/New_York' } } }))
       ])
 
       setRecentOrders(ordersRes.data.data.orders)
@@ -116,10 +115,7 @@ const DashboardIndex = memo(() => {
       setPendingOrders(summaryRes.data.data.pendingOrders || 0)
       setTodayOrderCount(summaryRes.data.data.todayOrders || summaryRes.data.data.totalOrders || 0)
 
-      // Set restaurant timezone
-      if (settingsRes.data?.data?.timezone) {
-        setRestaurantTimezone(settingsRes.data.data.timezone)
-      }
+      // Restaurant timezone uses default (America/New_York) - settings endpoint not available
 
       // Determine if restaurant is open (simplified - can be enhanced)
       const hours = new Date().getHours()
