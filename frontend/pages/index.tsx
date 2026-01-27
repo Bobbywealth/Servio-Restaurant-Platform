@@ -33,10 +33,11 @@ export default function HomePage() {
               <div className="flex justify-between items-center h-16" id="top">
                 <div className="flex items-center">
                   <img
-                    src="/images/servio_logo_transparent_tight.png"
+                    src="/images/servio_icon_tight.png"
                     alt="Servio Logo"
-                    className="h-8 w-auto brightness-0 invert"
+                    className="h-8 w-auto"
                   />
+                  <span className="ml-2 text-xl font-bold text-white">Servio</span>
                 </div>
 
               {/* Desktop Navigation */}
@@ -782,7 +783,7 @@ export default function HomePage() {
             <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
               <div>
                 <div className="flex items-center mb-4">
-                  <img src="/images/servio_logo_transparent_tight.png" alt="Servio Logo" className="h-8 w-auto brightness-0 invert" />
+                  <img src="/images/servio_icon_tight.png" alt="Servio Logo" className="h-8 w-auto" />
                   <span className="ml-2 text-xl font-bold text-white">Servio</span>
                 </div>
                 <p className="text-gray-400 mb-4">
