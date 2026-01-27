@@ -786,6 +786,35 @@ export default function StaffClockPage() {
     setError(null);
 
     try {
+      // Verify current status from server
+      const statusResponse = await fetch('/api/staff/clock/pin-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin: user.pin })
+      });
+
+      const statusData = await statusResponse.json();
+
+      if (!statusData.success) {
+        setError('Could not verify status. Please try again.');
+        setLoading(false);
+        return;
+      }
+
+      if (statusData.data.currentShift?.isOnBreak) {
+        setError('You are already on a break!');
+        setCurrentShift(statusData.data.currentShift);
+        setLoading(false);
+        return;
+      }
+
+      if (!statusData.data.currentShift) {
+        setError('You are not currently clocked in. Please clock in first.');
+        setLoading(false);
+        return;
+      }
+
+      // Now try to start the break
       const response = await fetch('/api/staff/clock/start-break', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -795,12 +824,6 @@ export default function StaffClockPage() {
       const data = await response.json();
 
       if (data.success) {
-        setCurrentShift((prev: any) => ({
-          ...prev,
-          isOnBreak: true,
-          currentBreakStart: data.data.breakStart,
-          breakMinutes: prev?.breakMinutes || 0
-        }));
         // Show confirmation and auto-logout
         setConfirmDialog({
           isOpen: true,
@@ -815,6 +838,7 @@ export default function StaffClockPage() {
         });
       } else {
         setError(data.error?.message || 'Failed to start break');
+        // Refresh to sync with server state
         await fetchUserStatus(userRef.current?.pin);
       }
     } catch (err) {
@@ -826,10 +850,36 @@ export default function StaffClockPage() {
 
   const doEndBreak = async () => {
     if (!user) return;
+
+    // First, verify with server that we're actually on a break
     setLoading(true);
     setError(null);
 
     try {
+      // Verify current status from server
+      const statusResponse = await fetch('/api/staff/clock/pin-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin: user.pin })
+      });
+
+      const statusData = await statusResponse.json();
+
+      if (!statusData.success) {
+        setError('Could not verify break status. Please try again.');
+        setLoading(false);
+        return;
+      }
+
+      if (!statusData.data.currentShift?.isOnBreak) {
+        setError('You are not currently on a break. Your break may have already ended.');
+        // Update UI to reflect actual server state
+        setCurrentShift(statusData.data.currentShift);
+        setLoading(false);
+        return;
+      }
+
+      // Now try to end the break
       const response = await fetch('/api/staff/clock/end-break', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -839,12 +889,6 @@ export default function StaffClockPage() {
       const data = await response.json();
 
       if (data.success) {
-        setCurrentShift((prev: any) => ({
-          ...prev,
-          isOnBreak: false,
-          breakMinutes: data.data.totalBreakMinutes,
-          currentBreakStart: null
-        }));
         // Show confirmation and auto-logout
         setConfirmDialog({
           isOpen: true,
@@ -859,6 +903,7 @@ export default function StaffClockPage() {
         });
       } else {
         setError(data.error?.message || 'Failed to end break');
+        // Refresh to sync with server state
         await fetchUserStatus(userRef.current?.pin);
       }
     } catch (err) {
