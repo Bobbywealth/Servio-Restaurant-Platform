@@ -536,7 +536,7 @@ export default function StaffClockPage() {
   const [error, setError] = useState<string | null>(null);
   const [currentShift, setCurrentShift] = useState<any>(null);
   const [weeklyHours, setWeeklyHours] = useState(0);
-  const [weeklyBreakMinutes, setWeeklyBreakMinutes] = useState(0);
+  const userRef = useRef<any>(null);
 
   // Check for existing session and set up periodic refresh
   useEffect(() => {
@@ -545,18 +545,19 @@ export default function StaffClockPage() {
       try {
         const userData = JSON.parse(savedUser);
         setUser(userData);
+        userRef.current = userData;
         fetchUserStatus(userData.pin);
       } catch {
         localStorage.removeItem('staffUser');
       }
     }
 
-    // Refresh status every minute for live updates
+    // Refresh status every 30 seconds for live updates
     const refreshInterval = setInterval(() => {
-      if (user) {
-        fetchUserStatus(user.pin);
+      if (userRef.current) {
+        fetchUserStatus(userRef.current.pin);
       }
-    }, 60000);
+    }, 30000);
 
     return () => clearInterval(refreshInterval);
   }, []);
@@ -593,13 +594,15 @@ export default function StaffClockPage() {
       const data = await response.json();
 
       if (data.success) {
-        setUser(data.data.user);
-        setCurrentShift(data.data.currentShift);
-        setWeeklyHours(data.data.weeklyHours);
-        localStorage.setItem('staffUser', JSON.stringify({
+        const userData = {
           ...data.data.user,
           pin
-        }));
+        };
+        setUser(userData);
+        userRef.current = userData;
+        setCurrentShift(data.data.currentShift);
+        setWeeklyHours(data.data.weeklyHours);
+        localStorage.setItem('staffUser', JSON.stringify(userData));
       } else {
         setError(data.error?.message || 'Invalid PIN');
       }
@@ -695,10 +698,13 @@ export default function StaffClockPage() {
           currentBreakStart: data.data.breakStart,
           breakMinutes: prev?.breakMinutes || 0
         }));
-        // Refresh from server to get accurate status
-        await fetchUserStatus(user.pin);
+        // Clear any previous error and refresh from server
+        setError(null);
+        await fetchUserStatus(userRef.current?.pin);
       } else {
         setError(data.error?.message || 'Failed to start break');
+        // Auto-refresh on error to sync with server state
+        await fetchUserStatus(userRef.current?.pin);
       }
     } catch (err) {
       setError('Connection error. Please try again.');
@@ -728,10 +734,13 @@ export default function StaffClockPage() {
           breakMinutes: data.data.totalBreakMinutes,
           currentBreakStart: null
         }));
-        // Refresh from server to get accurate status
-        await fetchUserStatus(user.pin);
+        // Clear any previous error and refresh from server
+        setError(null);
+        await fetchUserStatus(userRef.current?.pin);
       } else {
         setError(data.error?.message || 'Failed to end break');
+        // Auto-refresh on error to sync with server state
+        await fetchUserStatus(userRef.current?.pin);
       }
     } catch (err) {
       setError('Connection error. Please try again.');
