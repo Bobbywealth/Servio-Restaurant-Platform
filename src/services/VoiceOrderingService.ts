@@ -206,9 +206,12 @@ export class VoiceOrderingService {
 
       // Handle both array format (from Vapi AI) and object format
       if (Array.isArray(modifiers)) {
-        // Vapi format: [{group_id: "...", option_id: "..."}, ...]
-        const found = modifiers.find((m: any) => m.group_id === group.id);
-        selection = found?.option_id;
+        // Vapi format: [{id: "...", optionIds: ["..."]}, ...]
+        // OR legacy: [{group_id: "...", option_id: "..."}, ...]
+        const found = modifiers.find((m: any) => m.id === group.id || m.group_id === group.id);
+        // Support both single option_id and array of optionIds
+        const optionId = found?.option_id ?? found?.optionIds?.[0];
+        selection = optionId;
         // #region agent log
         fetch('http://127.0.0.1:7245/ingest/736b35ed-f7bd-4b4f-b5c9-370964b02fb5', {
           method: 'POST',
