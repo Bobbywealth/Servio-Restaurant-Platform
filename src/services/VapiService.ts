@@ -55,6 +55,7 @@ export class VapiService {
       searchmenu: 'searchMenu',
       getmenuitem: 'getMenuItem',
       getmenuitembyname: 'getMenuItemByName',
+      getitemmodifiers: 'getItemModifiers',
       quoteorder: 'quoteOrder',
       createorder: 'createOrder',
       checkorderstatus: 'checkOrderStatus'
@@ -72,6 +73,9 @@ export class VapiService {
     }
     if (lower.includes('menu') && lower.includes('item')) {
       return 'getMenuItem';
+    }
+    if (lower.includes('item') && lower.includes('modifier')) {
+      return 'getItemModifiers';
     }
     if (lower.includes('order') && lower.includes('quote')) {
       return 'quoteOrder';
@@ -533,6 +537,35 @@ export class VapiService {
           result = item
             ? { ok: true, found: true, item }
             : { ok: true, found: false, message: 'Menu item not found', idOrName: String(idOrName || '') };
+          break;
+        }
+        case 'getItemModifiers': {
+          const itemId =
+            normalizedParameters?.itemId ??
+            normalizedParameters?.id ??
+            normalizedParameters?.menuItemId ??
+            normalizedParameters?.input?.itemId ??
+            normalizedParameters?.input?.id ??
+            '';
+
+          if (!itemId) {
+            result = { ok: false, error: 'itemId is required' };
+            break;
+          }
+
+          if (!restaurantId) {
+            result = { ok: false, error: 'restaurantId is required' };
+            break;
+          }
+
+          const modifiers = await VoiceOrderingService.getInstance().getItemModifiersForVapi(String(itemId), restaurantId);
+          result = {
+            ok: true,
+            itemId: String(itemId),
+            hasModifiers: modifiers.length > 0,
+            modifierCount: modifiers.length,
+            modifiers
+          };
           break;
         }
         case 'quoteOrder':

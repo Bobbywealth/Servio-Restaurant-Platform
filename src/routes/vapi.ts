@@ -300,6 +300,18 @@ router.get('/assistant-config', async (req: Request, res: Response) => {
           }
         },
         {
+          name: 'getItemModifiers',
+          description: 'Get all modifier questions for a menu item. Call this IMMEDIATELY after customer selects an item to get the list of modifier questions to ask IN ORDER. Each modifier includes a question prompt, whether it is required, and the available options.',
+          parameters: {
+            type: 'object',
+            properties: {
+              itemId: { type: 'string', description: 'The menu item ID from searchMenu results' },
+              restaurantId: { type: 'string', description: 'Restaurant ID - always use sasheys-kitchen-union' }
+            },
+            required: ['itemId', 'restaurantId']
+          }
+        },
+        {
           name: 'quoteOrder',
           description: 'Validate an order and get the subtotal, tax, and total before placing it',
           parameters: {
