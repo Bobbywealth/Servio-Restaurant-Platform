@@ -77,13 +77,31 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         >
           <img src="/images/servio_logo_transparent_tight.png" alt="Servio Logo" className="h-16 w-auto" />
         </motion.div>
-        <motion.p 
-          className="mt-4 text-surface-500 font-medium"
+        <motion.p
+          className="mt-4 text-surface-500 font-medium flex items-center justify-center space-x-1"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.5 }}
         >
-          Initializing your AI Command Center...
+          <span>Loading</span>
+          <motion.span
+            animate={{ opacity: [0, 1, 0] }}
+            transition={{ duration: 1, repeat: Infinity, delay: 0 }}
+          >
+            .
+          </motion.span>
+          <motion.span
+            animate={{ opacity: [0, 1, 0] }}
+            transition={{ duration: 1, repeat: Infinity, delay: 0.2 }}
+          >
+            .
+          </motion.span>
+          <motion.span
+            animate={{ opacity: [0, 1, 0] }}
+            transition={{ duration: 1, repeat: Infinity, delay: 0.4 }}
+          >
+            .
+          </motion.span>
         </motion.p>
       </div>
     );
