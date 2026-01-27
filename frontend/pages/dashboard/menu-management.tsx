@@ -149,6 +149,13 @@ const MenuManagement: React.FC = () => {
   const [modifierGroups, setModifierGroups] = useState<ModifierGroup[]>([]);
   const [modifierOptions, setModifierOptions] = useState<Record<string, ModifierOption[]>>({});
   const [expandedModifierGroups, setExpandedModifierGroups] = useState<Set<string>>(new Set());
+  const [isCreatingItemModifier, setIsCreatingItemModifier] = useState(false);
+  const [itemNewModifierGroup, setItemNewModifierGroup] = useState({
+    name: '',
+    description: '',
+    selectionType: 'single' as 'single' | 'multiple',
+    options: [{ name: '', priceDelta: 0 }]
+  });
   const [newCategory, setNewCategory] = useState({
     name: '',
     description: '',
@@ -741,6 +748,86 @@ const MenuManagement: React.FC = () => {
       toast.error('Failed to create modifier group');
     } finally {
       setIsSavingModifier(false);
+    }
+  };
+
+  // Create item-specific modifier from item editor
+  const handleCreateItemSpecificModifier = async () => {
+    if (!itemNewModifierGroup.name.trim()) {
+      toast.error('Modifier name is required');
+      return;
+    }
+    const validOptions = itemNewModifierGroup.options.filter(o => o.name.trim());
+    if (validOptions.length === 0) {
+      toast.error('At least one option is required');
+      return;
+    }
+    if (!editItem?.id) {
+      toast.error('No item selected');
+      return;
+    }
+
+    setIsCreatingItemModifier(true);
+    try {
+      const restaurantId = user?.restaurantId;
+      if (!restaurantId) throw new Error('Missing restaurant id');
+
+      // Create the modifier group
+      const resp = await api.post(`/api/restaurants/${restaurantId}/modifier-groups`, {
+        name: itemNewModifierGroup.name.trim(),
+        description: `Item-specific: ${editItem.name}`,
+        selectionType: itemNewModifierGroup.selectionType,
+        minSelections: 0,
+        maxSelections: itemNewModifierGroup.selectionType === 'single' ? 1 : null,
+        isRequired: false,
+        options: validOptions.map((opt, idx) => ({
+          name: opt.name.trim(),
+          priceDelta: opt.priceDelta || 0,
+          displayOrder: idx
+        }))
+      });
+
+      const newGroupId = resp.data?.data?.group?.id;
+      if (!newGroupId) throw new Error('Failed to get group ID');
+
+      // Attach to current item
+      await api.post(`/api/menu-items/${editItem.id}/modifier-groups`, {
+        groupId: newGroupId,
+        displayOrder: editItemAttachedGroups.length
+      });
+
+      toast.success('Modifier created and attached!');
+
+      // Reset form
+      setItemNewModifierGroup({
+        name: '',
+        description: '',
+        selectionType: 'single',
+        options: [{ name: '', priceDelta: 0 }]
+      });
+
+      // Reload data
+      await loadModifierGroups();
+      await loadMenuData();
+      // Refresh attached groups
+      const groups = Array.isArray((editItem as any).modifierGroups) ? (editItem as any).modifierGroups : [];
+      const attached = groups
+        .filter((g: any) => (g.assignmentLevel || g.assignment_level) !== 'category')
+        .map((g: any, idx: number) => ({
+          groupId: g.id,
+          name: g.name,
+          overrideMin: g.overrides?.overrideMin ?? null,
+          overrideMax: g.overrides?.overrideMax ?? null,
+          overrideRequired: g.overrides?.overrideRequired ?? null,
+          displayOrder: g.overrides?.displayOrder ?? g.displayOrder ?? idx
+        }));
+      setEditItemAttachedGroups(attached);
+      setEditItemExistingAttachedGroups(attached);
+    } catch (error) {
+      console.error('Failed to create item-specific modifier:', error);
+      toast.error('Failed to create modifier');
+    } finally {
+      setIsCreatingItemModifier(false);
     }
   };
 
@@ -1853,7 +1940,109 @@ const MenuManagement: React.FC = () => {
                           </div>
                         </div>
                       ) : editorTab === 'modifiers' ? (
-                        <div className="space-y-4">
+                        <div className="space-y-6">
+                          {/* Create Item-Specific Modifier Section */}
+                          <div className="card border-l-4 border-l-primary-500">
+                            <div className="flex items-center justify-between mb-4">
+                              <div>
+                                <h3 className="font-semibold text-gray-900 dark:text-white">Add Item-Specific Modifier</h3>
+                                <p className="text-sm text-gray-500 dark:text-gray-400">Create a modifier just for this item</p>
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                  Modifier Name *
+                                </label>
+                                <input
+                                  type="text"
+                                  placeholder="e.g., Spice Level, Add Cheese"
+                                  className="input-field w-full"
+                                  value={itemNewModifierGroup.name}
+                                  onChange={(e) => setItemNewModifierGroup((prev) => ({ ...prev, name: e.target.value }))}
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                  Selection Type
+                                </label>
+                                <select
+                                  className="input-field w-full"
+                                  value={itemNewModifierGroup.selectionType}
+                                  onChange={(e) => setItemNewModifierGroup((prev) => ({ ...prev, selectionType: e.target.value as 'single' | 'multiple' }))}
+                                >
+                                  <option value="single">Single Choice (radio)</option>
+                                  <option value="multiple">Multiple Choice (checkboxes)</option>
+                                </select>
+                              </div>
+                            </div>
+
+                            <div className="mb-4">
+                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                Options
+                              </label>
+                              {itemNewModifierGroup.options.map((opt, idx) => (
+                                <div key={idx} className="flex items-center gap-2 mb-2">
+                                  <input
+                                    type="text"
+                                    placeholder="Option name"
+                                    className="input-field flex-1"
+                                    value={opt.name}
+                                    onChange={(e) => {
+                                      const newOpts = [...itemNewModifierGroup.options];
+                                      newOpts[idx] = { ...newOpts[idx], name: e.target.value };
+                                      setItemNewModifierGroup((prev) => ({ ...prev, options: newOpts }));
+                                    }}
+                                  />
+                                  <input
+                                    type="number"
+                                    placeholder="+$0.00"
+                                    className="input-field w-28"
+                                    value={opt.priceDelta || ''}
+                                    onChange={(e) => {
+                                      const newOpts = [...itemNewModifierGroup.options];
+                                      newOpts[idx] = { ...newOpts[idx], priceDelta: parseFloat(e.target.value) || 0 };
+                                      setItemNewModifierGroup((prev) => ({ ...prev, options: newOpts }));
+                                    }}
+                                  />
+                                  <button
+                                    type="button"
+                                    className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
+                                    onClick={() => {
+                                      const newOpts = itemNewModifierGroup.options.filter((_, i) => i !== idx);
+                                      setItemNewModifierGroup((prev) => ({ ...prev, options: newOpts }));
+                                    }}
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              ))}
+                              <button
+                                type="button"
+                                className="text-sm text-primary-600 hover:text-primary-700 font-medium"
+                                onClick={() => setItemNewModifierGroup((prev) => ({
+                                  ...prev,
+                                  options: [...prev.options, { name: '', priceDelta: 0 }]
+                                }))}
+                              >
+                                + Add Option
+                              </button>
+                            </div>
+
+                            <button
+                              type="button"
+                              className="btn-primary w-full"
+                              disabled={isCreatingItemModifier || !itemNewModifierGroup.name.trim() || itemNewModifierGroup.options.length === 0}
+                              onClick={handleCreateItemSpecificModifier}
+                            >
+                              {isCreatingItemModifier ? 'Creating...' : 'Create & Attach Modifier'}
+                            </button>
+                          </div>
+
+                          <hr className="border-gray-200 dark:border-gray-700" />
+
+                          {/* Existing Modifier Groups */}
                           <ChoiceGroupAssignment
                             availableGroups={modifierGroups.map((g: any) => toChoiceGroup(g))}
                             inheritedGroups={editItemInheritedGroups}
