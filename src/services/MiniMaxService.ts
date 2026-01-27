@@ -216,9 +216,19 @@ export class MiniMaxService {
 
       if (!response.ok) {
         const errorText = await response.text();
-        logger.error('MiniMax streaming error:', { status: response.status, error: errorText });
-        yield { type: 'error', error: `API error: ${response.status}` };
-        return;
+        let errorData;
+        try {
+          errorData = JSON.parse(errorText);
+        } catch {
+          errorData = { raw: errorText };
+        }
+        logger.error('MiniMax API error:', {
+          status: response.status,
+          model: this.config.chatModel,
+          messagesCount: messages.length,
+          error: errorData
+        });
+        throw new Error(`MiniMax API error: ${response.status} - ${JSON.stringify(errorData)}`);
       }
 
       const reader = response.body?.getReader();
