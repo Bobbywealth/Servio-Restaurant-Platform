@@ -965,4 +965,73 @@ router.get('/staff-hours', asyncHandler(async (req: Request, res: Response) => {
   });
 }));
 
+/**
+ * GET /api/timeclock/user-daily-hours
+ * Get daily hours breakdown for all staff for the current week
+ */
+router.get('/user-daily-hours', asyncHandler(async (req: Request, res: Response) => {
+  const db = DatabaseService.getInstance().getDatabase();
+
+  // Get start of current week (Monday)
+  const now = new Date();
+  const dayOfWeek = now.getDay();
+  const startOfWeek = new Date(now);
+  startOfWeek.setDate(now.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1));
+  startOfWeek.setHours(0, 0, 0, 0);
+
+  // Get daily hours for each user this week
+  const dailyHours = await db.all(`
+    SELECT
+      u.id as user_id,
+      u.name,
+      te.clock_in_time::date as work_date,
+      COALESCE(SUM(te.total_hours), 0) as hours
+    FROM users u
+    LEFT JOIN time_entries te ON u.id = te.user_id
+      AND te.clock_in_time >= ?
+      AND te.clock_out_time IS NOT NULL
+    WHERE u.is_active = TRUE
+    GROUP BY u.id, u.name, te.clock_in_time::date
+    ORDER BY u.name, te.clock_in_time::date
+  `, [startOfWeek.toISOString()]);
+
+  // Also get currently clocked-in hours for today
+  const currentHours = await db.all(`
+    SELECT
+      u.id as user_id,
+      ROUND((EXTRACT(EPOCH FROM (NOW() - te.clock_in_time)) / 3600)::numeric, 2) as current_hours
+    FROM users u
+    JOIN time_entries te ON u.id = te.user_id
+    WHERE u.is_active = TRUE
+      AND te.clock_out_time IS NULL
+      AND te.clock_in_time::date = CURRENT_DATE
+  `);
+
+  // Build a map of user_id -> { date -> hours }
+  const userDailyHours: Record<string, Record<string, number>> = {};
+  const userCurrentHours: Record<string, number> = {};
+
+  for (const row of dailyHours) {
+    if (!userDailyHours[row.user_id]) {
+      userDailyHours[row.user_id] = {};
+    }
+    if (row.work_date) {
+      userDailyHours[row.user_id][row.work_date] = Number(row.hours || 0);
+    }
+  }
+
+  for (const row of currentHours) {
+    userCurrentHours[row.user_id] = Number(row.current_hours || 0);
+  }
+
+  res.json({
+    success: true,
+    data: {
+      userDailyHours,
+      userCurrentHours,
+      weekStartDate: startOfWeek.toISOString().split('T')[0]
+    }
+  });
+}));
+
 export default router;

@@ -53,6 +53,13 @@ interface CurrentStaff {
   hours_worked: number
 }
 
+// Daily hours breakdown type
+interface DailyHours {
+  userDailyHours: Record<string, Record<string, number>>
+  userCurrentHours: Record<string, number>
+  weekStartDate: string
+}
+
 // Add today's hours tracking
 
 // Add Staff Modal
@@ -502,6 +509,7 @@ export default function StaffPage() {
   const [currentStaff, setCurrentStaff] = useState<CurrentStaff[]>([])
   const [hoursByUserId, setHoursByUserId] = useState<Record<string, number>>({})
   const [todayHoursByUserId, setTodayHoursByUserId] = useState<Record<string, number>>({})
+  const [dailyHours, setDailyHours] = useState<DailyHours | null>(null)
   const [showAddModal, setShowAddModal] = useState(false)
   const [editingStaff, setEditingStaff] = useState<StaffUser | null>(null)
   const [openMenu, setOpenMenu] = useState<string | null>(null)
@@ -552,6 +560,14 @@ export default function StaffPage() {
           if (isMounted) setTodayHoursByUserId(todayHoursMap)
         } catch (todayError) {
           console.warn('Failed to load today hours:', todayError)
+        }
+
+        // Fetch daily hours breakdown for the week
+        try {
+          const dailyResp = await api.get('/api/timeclock/user-daily-hours')
+          if (isMounted) setDailyHours(dailyResp.data?.data || null)
+        } catch (dailyError) {
+          console.warn('Failed to load daily hours:', dailyError)
         }
       } catch (e: any) {
         if (!isMounted) return
@@ -650,6 +666,30 @@ export default function StaffPage() {
         return 'Unknown'
     }
   }
+
+  // Get day abbreviation for the current week
+  const getDayAbbrev = (dateStr: string) => {
+    const date = new Date(dateStr)
+    return date.toLocaleDateString('en-US', { weekday: 'short' }).charAt(0).toUpperCase()
+  }
+
+  // Get all dates for the current week (Mon-Sun)
+  const getWeekDates = () => {
+    const now = new Date()
+    const dayOfWeek = now.getDay()
+    const monday = new Date(now)
+    monday.setDate(now.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1))
+
+    const dates: string[] = []
+    for (let i = 0; i < 7; i++) {
+      const date = new Date(monday)
+      date.setDate(monday.getDate() + i)
+      dates.push(date.toISOString().split('T')[0])
+    }
+    return dates
+  }
+
+  const weekDates = getWeekDates()
 
   return (
     <>
