@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { DatabaseService } from './DatabaseService';
+import { MiniMaxService } from './MiniMaxService';
 import { logger } from '../utils/logger';
 import { ensureUploadsDir } from '../utils/uploads';
 import { v4 as uuidv4 } from 'uuid';
@@ -35,12 +36,14 @@ interface StreamChunk {
 
 export class AssistantService {
   private openai: OpenAI;
+  private miniMax: MiniMaxService;
   private _db: any = null;
 
   constructor() {
     this.openai = new OpenAI({
       apiKey: process.env.OPENAI_API_KEY || ''
     });
+    this.miniMax = new MiniMaxService();
   }
 
   private get db() {
@@ -98,31 +101,73 @@ export class AssistantService {
       // Get system prompt with current context
       const systemPrompt = await this.getSystemPrompt(userId);
 
-      const completion = await this.openai.chat.completions.create({
-        model: 'gpt-4',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: text }
-        ],
-        tools: this.getTools(),
-        tool_choice: 'auto',
-        temperature: 0.3
-      });
-
-      const message = completion.choices[0]?.message;
-      if (!message) {
-        throw new Error('No response from OpenAI');
-      }
-
-      let response = message.content || "I understand, let me help with that.";
+      let response: string;
+      let toolCalls: any[] = [];
       const actions: AssistantResponse['actions'] = [];
 
-      // Process tool calls
-      if (message.tool_calls) {
-        logger.info('[assistant] tool_calls received', { userId, count: message.tool_calls.length });
-        for (const toolCall of message.tool_calls) {
-          const action = await this.executeTool(toolCall, userId);
-          actions.push(action);
+      // Use MiniMax if configured, otherwise fall back to OpenAI
+      if (this.miniMax.isConfigured()) {
+        logger.info('[assistant] Using MiniMax for chat completion');
+
+        const messages: Array<{ role: 'system' | 'user'; content: string }> = [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: text }
+        ];
+
+        const tools = this.miniMax.convertToolsToMiniMax(this.getTools());
+        const completion = await this.miniMax.chat(messages, tools, 0.3);
+
+        const message = completion.choices[0]?.message;
+        if (!message) {
+          throw new Error('No response from MiniMax');
+        }
+
+        response = message.content || "I understand, let me help with that.";
+
+        // Process tool calls
+        if (message.tool_calls) {
+          logger.info('[assistant] MiniMax tool_calls received', { userId, count: message.tool_calls.length });
+          for (const toolCall of message.tool_calls) {
+            const action = await this.executeTool({
+              id: toolCall.id || `tc_${Date.now()}`,
+              type: 'function',
+              function: {
+                name: toolCall.function.name,
+                arguments: typeof toolCall.function.arguments === 'string'
+                  ? toolCall.function.arguments
+                  : JSON.stringify(toolCall.function.arguments)
+              }
+            }, userId);
+            actions.push(action);
+          }
+        }
+      } else {
+        // Fallback to OpenAI
+        const completion = await this.openai.chat.completions.create({
+          model: 'gpt-4',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: text }
+          ],
+          tools: this.getTools(),
+          tool_choice: 'auto',
+          temperature: 0.3
+        });
+
+        const message = completion.choices[0]?.message;
+        if (!message) {
+          throw new Error('No response from OpenAI');
+        }
+
+        response = message.content || "I understand, let me help with that.";
+
+        // Process tool calls
+        if (message.tool_calls) {
+          logger.info('[assistant] tool_calls received', { userId, count: message.tool_calls.length });
+          for (const toolCall of message.tool_calls) {
+            const action = await this.executeTool(toolCall, userId);
+            actions.push(action);
+          }
         }
       }
 
@@ -160,91 +205,186 @@ export class AssistantService {
       // Get system prompt with current context
       const systemPrompt = await this.getSystemPrompt(userId);
 
-      const completion = await this.openai.chat.completions.create({
-        model: 'gpt-4-turbo',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: text }
-        ],
-        tools: this.getTools(),
-        tool_choice: 'auto',
-        temperature: 0.3,
-        stream: true
-      });
-
       let fullResponse = '';
       let toolCalls: any[] = [];
 
-      // Stream the response
-      for await (const chunk of completion) {
-        const delta = chunk.choices[0]?.delta;
+      // Use MiniMax if configured, otherwise fall back to OpenAI
+      if (this.miniMax.isConfigured()) {
+        logger.info('[assistant] Using MiniMax for streaming');
 
-        if (!delta) continue;
+        const messages: Array<{ role: 'system' | 'user'; content: string }> = [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: text }
+        ];
 
-        // Handle content streaming
-        if (delta.content) {
-          fullResponse += delta.content;
-          yield {
-            type: 'content',
-            content: delta.content
-          };
-        }
+        const tools = this.miniMax.convertToolsToMiniMax(this.getTools());
 
-        // Handle tool calls
-        if (delta.tool_calls) {
-          for (const toolCallDelta of delta.tool_calls) {
-            const index = toolCallDelta.index;
+        for await (const chunk of this.miniMax.streamChat(messages, tools, 0.3)) {
+          switch (chunk.type) {
+            case 'content':
+              if (chunk.content) {
+                fullResponse += chunk.content;
+                yield {
+                  type: 'content',
+                  content: chunk.content
+                };
+              }
+              break;
 
-            // Find or create tool call
-            let toolCall = toolCalls.find(tc => tc.index === index);
-            if (!toolCall) {
-              toolCall = {
-                index,
-                id: toolCallDelta.id || '',
-                type: 'function',
-                function: {
-                  name: '',
-                  arguments: ''
+            case 'tool_call':
+              if (chunk.tool_call) {
+                for (const toolCallDelta of chunk.tool_call) {
+                  const index = toolCallDelta.index;
+
+                  // Find or create tool call
+                  let toolCall = toolCalls.find(tc => tc.index === index);
+                  if (!toolCall) {
+                    toolCall = {
+                      index,
+                      id: toolCallDelta.id || '',
+                      type: 'function',
+                      function: {
+                        name: '',
+                        arguments: ''
+                      }
+                    };
+                    toolCalls.push(toolCall);
+                  }
+
+                  // Update tool call
+                  if (toolCallDelta.function?.name) {
+                    toolCall.function.name += toolCallDelta.function.name;
+                  }
+                  if (toolCallDelta.function?.arguments) {
+                    toolCall.function.arguments += toolCallDelta.function.arguments;
+                  }
                 }
-              };
-              toolCalls.push(toolCall);
-            }
+              }
+              break;
 
-            // Update tool call
-            if (toolCallDelta.function?.name) {
-              toolCall.function.name += toolCallDelta.function.name;
-            }
-            if (toolCallDelta.function?.arguments) {
-              toolCall.function.arguments += toolCallDelta.function.arguments;
+            case 'done':
+              // Process tool calls after streaming is complete
+              const actions: AssistantResponse['actions'] = [];
+              if (toolCalls.length > 0) {
+                logger.info('[assistant] MiniMax processing tool calls', { userId, count: toolCalls.length });
+
+                for (const toolCall of toolCalls) {
+                  if (!toolCall.id) continue;
+
+                  const action = await this.executeTool({
+                    id: toolCall.id,
+                    type: 'function',
+                    function: {
+                      name: toolCall.function.name,
+                      arguments: toolCall.function.arguments
+                    }
+                  }, userId);
+                  actions.push(action);
+                  yield {
+                    type: 'action',
+                    action
+                  };
+                }
+              }
+
+              // Generate TTS audio
+              await this.generateSpeech(fullResponse);
+
+              yield {
+                type: 'done',
+                processingTime: Date.now() - startTime
+              };
+              return;
+
+            case 'error':
+              throw new Error(chunk.error);
+          }
+        }
+      } else {
+        // Fallback to OpenAI
+        const completion = await this.openai.chat.completions.create({
+          model: 'gpt-4-turbo',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: text }
+          ],
+          tools: this.getTools(),
+          tool_choice: 'auto',
+          temperature: 0.3,
+          stream: true
+        });
+
+        // Stream the response
+        for await (const chunk of completion) {
+          const delta = chunk.choices[0]?.delta;
+
+          if (!delta) continue;
+
+          // Handle content streaming
+          if (delta.content) {
+            fullResponse += delta.content;
+            yield {
+              type: 'content',
+              content: delta.content
+            };
+          }
+
+          // Handle tool calls
+          if (delta.tool_calls) {
+            for (const toolCallDelta of delta.tool_calls) {
+              const index = toolCallDelta.index;
+
+              // Find or create tool call
+              let toolCall = toolCalls.find(tc => tc.index === index);
+              if (!toolCall) {
+                toolCall = {
+                  index,
+                  id: toolCallDelta.id || '',
+                  type: 'function',
+                  function: {
+                    name: '',
+                    arguments: ''
+                  }
+                };
+                toolCalls.push(toolCall);
+              }
+
+              // Update tool call
+              if (toolCallDelta.function?.name) {
+                toolCall.function.name += toolCallDelta.function.name;
+              }
+              if (toolCallDelta.function?.arguments) {
+                toolCall.function.arguments += toolCallDelta.function.arguments;
+              }
             }
           }
         }
-      }
 
-      // Process tool calls after streaming is complete
-      const actions: AssistantResponse['actions'] = [];
-      if (toolCalls.length > 0) {
-        logger.info('[assistant] processing tool calls', { userId, count: toolCalls.length });
+        // Process tool calls after streaming is complete
+        const actions: AssistantResponse['actions'] = [];
+        if (toolCalls.length > 0) {
+          logger.info('[assistant] processing tool calls', { userId, count: toolCalls.length });
 
-        for (const toolCall of toolCalls) {
-          if (!toolCall.id) continue;
+          for (const toolCall of toolCalls) {
+            if (!toolCall.id) continue;
 
-          const action = await this.executeTool(toolCall, userId);
-          actions.push(action);
-          yield {
-            type: 'action',
-            action
-          };
+            const action = await this.executeTool(toolCall, userId);
+            actions.push(action);
+            yield {
+              type: 'action',
+              action
+            };
+          }
         }
+
+        // Generate TTS audio
+        await this.generateSpeech(fullResponse);
+
+        yield {
+          type: 'done',
+          processingTime: Date.now() - startTime
+        };
       }
-
-      // Generate TTS audio
-      await this.generateSpeech(fullResponse);
-
-      yield {
-        type: 'done',
-        processingTime: Date.now() - startTime
-      };
 
     } catch (error) {
       logger.error('Failed to process text stream:', error);
@@ -292,12 +432,26 @@ export class AssistantService {
 
   private async generateSpeech(text: string): Promise<string> {
     try {
-      if (!process.env.OPENAI_API_KEY) {
+      // Check if we have any TTS provider configured
+      const hasOpenAI = Boolean(process.env.OPENAI_API_KEY);
+      const hasMiniMax = this.miniMax.isConfigured();
+
+      if (!hasOpenAI && !hasMiniMax) {
         return '';
       }
 
       // Keep responses bounded for latency/cost.
       const input = text.length > 2000 ? text.slice(0, 2000) : text;
+
+      // Use MiniMax TTS if configured, otherwise fall back to OpenAI
+      if (hasMiniMax) {
+        logger.info('[assistant] Using MiniMax for TTS');
+        const result = await this.miniMax.textToSpeech(input);
+        return result.audioUrl;
+      }
+
+      // Fallback to OpenAI TTS
+      logger.info('[assistant] Using OpenAI for TTS');
       const model = process.env.OPENAI_TTS_MODEL || 'tts-1';
       const voice = (process.env.OPENAI_TTS_VOICE || 'alloy') as any;
 

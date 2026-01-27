@@ -670,7 +670,7 @@ const MenuManagement: React.FC = () => {
         if (remaining.length > 0) {
           requestSelectCategory(remaining[0].id);
         } else {
-          setActiveCategoryId(null);
+          requestSelectCategory('all');
         }
       }
       
