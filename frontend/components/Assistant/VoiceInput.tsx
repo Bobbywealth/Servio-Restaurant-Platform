@@ -1,34 +1,50 @@
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Mic, MicOff, Send, Lock, X } from 'lucide-react'
+import { Mic, MicOff, Lock, X, Waveform, Loader2 } from 'lucide-react'
 
 interface VoiceInputProps {
   onSendVoice: (audioBlob: Blob) => Promise<void>
-  onCancelRecording?: () => void
   disabled?: boolean
   className?: string
 }
 
 export default function VoiceInput({
   onSendVoice,
-  onCancelRecording,
   disabled = false,
   className = ''
 }: VoiceInputProps) {
   const [isRecording, setIsRecording] = useState(false)
   const [recordingDuration, setRecordingDuration] = useState(0)
   const [audioLevel, setAudioLevel] = useState(0)
+  const [showLockMessage, setShowLockMessage] = useState(false)
+  const [isSending, setIsSending] = useState(false)
+  const [permissionGranted, setPermissionGranted] = useState(false)
+  
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const audioChunksRef = useRef<Blob[]>([])
+  const streamRef = useRef<MediaStream | null>(null)
   const timerRef = useRef<NodeJS.Timeout | null>(null)
-  const animationRef = useRef<number | null>(null)
   const analyserRef = useRef<AnalyserNode | null>(null)
+  const animationRef = useRef<number | null>(null)
   const startTimeRef = useRef<number>(0)
 
-  // Start recording
-  const startRecording = async () => {
-    if (disabled || isRecording) return
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop())
+      }
+      if (timerRef.current) {
+        clearInterval(timerRef.current)
+      }
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current)
+      }
+    }
+  }, [])
 
+  // Get microphone permission and initialize recorder
+  const initializeRecorder = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ 
         audio: {
@@ -37,78 +53,99 @@ export default function VoiceInput({
           sampleRate: 44100
         }
       })
+      
+      streamRef.current = stream
+      setPermissionGranted(true)
 
-      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') 
-        ? 'audio/webm;codecs=opus' 
-        : 'audio/mp4'
-
-      const mediaRecorder = new MediaRecorder(stream, { mimeType })
-      mediaRecorderRef.current = mediaRecorder
-      audioChunksRef.current = []
-
-      // Set up audio visualization
+      // Set up audio analyzer for visualization
       const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)()
+      const source = audioContext.createMediaStreamSource(stream)
       const analyser = audioContext.createAnalyser()
       analyser.fftSize = 256
-      const source = audioContext.createMediaStreamSource(stream)
       source.connect(analyser)
       analyserRef.current = analyser
 
-      mediaRecorder.ondataavailable = (event) => {
+      // Determine the best mime type
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : MediaRecorder.isTypeSupported('audio/webm')
+          ? 'audio/webm'
+          : 'audio/mp4'
+
+      const recorder = new MediaRecorder(stream, { mimeType })
+      
+      recorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
           audioChunksRef.current.push(event.data)
         }
       }
 
-      mediaRecorder.onstop = async () => {
-        // Stop all tracks
-        stream.getTracks().forEach(track => track.stop())
-        
-        // Clean up visualization
-        if (animationRef.current) {
-          cancelAnimationFrame(animationRef.current)
-          animationRef.current = null
-        }
-
-        // Send the recording
+      recorder.onstop = async () => {
         const audioBlob = new Blob(audioChunksRef.current, { type: mimeType })
+        
         if (audioBlob.size > 0) {
-          await onSendVoice(audioBlob)
+          setIsSending(true)
+          try {
+            await onSendVoice(audioBlob)
+          } finally {
+            setIsSending(false)
+          }
         }
-
-        setIsRecording(false)
+        
+        audioChunksRef.current = []
         setRecordingDuration(0)
         setAudioLevel(0)
       }
 
-      mediaRecorder.start(100)
-      setIsRecording(true)
-      startTimeRef.current = Date.now()
+      mediaRecorderRef.current = recorder
+      return true
+    } catch (error) {
+      console.error('Failed to get microphone permission:', error)
+      return false
+    }
+  }, [onSendVoice])
 
-      // Timer for duration display
+  // Start recording
+  const startRecording = useCallback(async () => {
+    if (disabled || isRecording || isSending) return
+
+    const initialized = mediaRecorderRef.current || await initializeRecorder()
+    if (!initialized || !mediaRecorderRef.current) return
+
+    audioChunksRef.current = []
+    startTimeRef.current = Date.now()
+    
+    try {
+      mediaRecorderRef.current.start(100) // Collect data every 100ms
+      setIsRecording(true)
+
+      // Start duration timer
       timerRef.current = setInterval(() => {
         setRecordingDuration(Math.floor((Date.now() - startTimeRef.current) / 1000))
-      }, 1000)
+      }, 100)
 
-      // Audio level animation
-      const updateLevel = () => {
-        if (!analyserRef.current) return
-        const data = new Uint8Array(analyserRef.current.frequencyBinCount)
-        analyserRef.current.getByteFrequencyData(data)
-        const average = data.reduce((a, b) => a + b, 0) / data.length
+      // Start audio visualization
+      const updateAudioLevel = () => {
+        if (!analyserRef.current || !isRecording) return
+        
+        const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount)
+        analyserRef.current.getByteFrequencyData(dataArray)
+        
+        // Calculate average level
+        const average = dataArray.reduce((a, b) => a + b) / dataArray.length
         setAudioLevel(average / 255)
-        animationRef.current = requestAnimationFrame(updateLevel)
+        
+        animationRef.current = requestAnimationFrame(updateAudioLevel)
       }
-      updateLevel()
-
+      
+      updateAudioLevel()
     } catch (error) {
       console.error('Failed to start recording:', error)
-      setIsRecording(false)
     }
-  }
+  }, [disabled, isRecording, isSending, initializeRecorder])
 
-  // Stop recording and send
-  const stopRecording = async () => {
+  // Stop recording
+  const stopRecording = useCallback(() => {
     if (!isRecording || !mediaRecorderRef.current) return
 
     if (timerRef.current) {
@@ -121,40 +158,40 @@ export default function VoiceInput({
       animationRef.current = null
     }
 
-    mediaRecorderRef.current.stop()
-  }
-
-  // Cancel recording (for future swipe-to-cancel feature)
-  const cancelRecording = () => {
-    if (!isRecording || !mediaRecorderRef.current) return
-
-    if (timerRef.current) {
-      clearInterval(timerRef.current)
-      timerRef.current = null
+    try {
+      mediaRecorderRef.current.stop()
+    } catch (error) {
+      console.error('Error stopping recorder:', error)
     }
 
-    if (animationRef.current) {
-      cancelAnimationFrame(animationRef.current)
-      animationRef.current = null
-    }
-
-    mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop())
     setIsRecording(false)
-    setRecordingDuration(0)
-    setAudioLevel(0)
-    onCancelRecording?.()
+    setShowLockMessage(false)
+  }, [isRecording])
+
+  // Handle mouse/touch events
+  const handleMouseDown = () => {
+    if (!permissionGranted) {
+      initializeRecorder().then((success) => {
+        if (success) {
+          startRecording()
+        }
+      })
+    } else {
+      startRecording()
+    }
   }
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current)
-      if (animationRef.current) cancelAnimationFrame(animationRef.current)
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-        mediaRecorderRef.current.stop()
-      }
+  const handleMouseUp = () => {
+    if (isRecording) {
+      stopRecording()
     }
-  }, [])
+  }
+
+  const handleMouseLeave = () => {
+    if (isRecording) {
+      stopRecording()
+    }
+  }
 
   // Format duration as MM:SS
   const formatDuration = (seconds: number) => {
@@ -164,83 +201,113 @@ export default function VoiceInput({
   }
 
   return (
-    <div className={`flex items-center gap-2 ${className}`}>
-      <AnimatePresence mode="wait">
+    <div className={`relative ${className}`}>
+      <AnimatePresence>
         {isRecording ? (
+          // Recording mode - show stop button with waveform
           <motion.div
-            key="recording"
             initial={{ scale: 0.8, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.8, opacity: 0 }}
-            className="flex items-center gap-3"
+            className="flex items-center gap-2"
           >
-            {/* Cancel button (X) */}
-            <motion.button
-              onClick={cancelRecording}
-              whileTap={{ scale: 0.9 }}
-              className="w-10 h-10 flex items-center justify-center rounded-full bg-red-100 dark:bg-red-900/30 text-red-500"
-            >
-              <X className="w-5 h-5" />
-            </motion.button>
+            {/* Recording indicator */}
+            <div className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-red-500 to-red-600 rounded-full shadow-lg">
+              {/* Stop button */}
+              <motion.button
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseLeave}
+                onTouchEnd={handleMouseUp}
+                className="w-10 h-10 flex items-center justify-center bg-white/20 rounded-full hover:bg-white/30 transition-colors"
+                whileTap={{ scale: 0.9 }}
+              >
+                <div className="w-4 h-4 bg-white rounded-sm" />
+              </motion.button>
 
-            {/* Lock indicator (for future swipe feature) */}
-            <div className="flex items-center gap-1 px-3 py-2 bg-red-100 dark:bg-red-900/30 rounded-full">
-              <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-              <span className="text-sm font-medium text-red-600 dark:text-red-400 min-w-[45px]">
+              {/* Duration */}
+              <span className="text-white font-mono text-sm font-medium min-w-[50px]">
                 {formatDuration(recordingDuration)}
               </span>
-            </div>
 
-            {/* Send button */}
-            <motion.button
-              onClick={stopRecording}
-              whileTap={{ scale: 0.9 }}
-              className="w-10 h-10 flex items-center justify-center rounded-full bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg"
-            >
-              <Send className="w-5 h-5" />
-            </motion.button>
+              {/* Waveform visualization */}
+              <div className="flex items-center gap-0.5 h-6">
+                {[...Array(8)].map((_, i) => (
+                  <motion.div
+                    key={i}
+                    className="w-1 bg-white rounded-full"
+                    animate={{
+                      height: isRecording 
+                        ? Math.max(4, Math.sin(audioLevel * Math.PI * 2 + i * 0.5) * 16 + 8)
+                        : 4
+                    }}
+                    transition={{
+                      duration: 0.1,
+                      repeat: Infinity,
+                      repeatType: 'reverse'
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
           </motion.div>
         ) : (
+          // Idle mode - show microphone button
           <motion.button
-            key="mic"
-            initial={{ scale: 0.8, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.8, opacity: 0 }}
-            onClick={startRecording}
-            disabled={disabled}
+            onMouseDown={handleMouseDown}
+            onTouchStart={(e) => {
+              e.preventDefault() // Prevent text selection
+              handleMouseDown()
+            }}
+            onTouchEnd={(e) => {
+              e.preventDefault()
+              handleMouseUp()
+            }}
+            disabled={disabled || isSending}
             className={`
-              w-12 h-12 flex items-center justify-center rounded-full transition-all
-              ${disabled 
+              w-12 h-12 flex items-center justify-center rounded-full
+              transition-all duration-200
+              ${disabled || isSending
                 ? 'bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
-                : 'bg-gradient-to-br from-teal-500 to-emerald-500 hover:from-teal-600 hover:to-emerald-600 text-white shadow-lg hover:shadow-xl'
+                : 'bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-lg shadow-emerald-500/30 hover:shadow-emerald-500/50 hover:scale-105 active:scale-95'
               }
             `}
-            whileTap={!disabled ? { scale: 0.95 } : {}}
+            whileHover={!disabled && !isSending ? { scale: 1.05 } : {}}
+            whileTap={!disabled && !isSending ? { scale: 0.95 } : {}}
           >
-            <Mic className="w-6 h-6" />
+            {isSending ? (
+              <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+              >
+                <Loader2 className="w-5 h-5" />
+              </motion.div>
+            ) : (
+              <Mic className="w-5 h-5" />
+            )}
           </motion.button>
         )}
       </AnimatePresence>
 
-      {/* Audio level indicator (only when recording) */}
+      {/* Lock message tooltip */}
       <AnimatePresence>
-        {isRecording && (
+        {showLockMessage && (
           <motion.div
-            initial={{ width: 0, opacity: 0 }}
-            animate={{ width: 60, opacity: 1 }}
-            exit={{ width: 0, opacity: 0 }}
-            className="flex items-center gap-0.5 h-8 overflow-hidden"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 10 }}
+            className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg shadow-lg whitespace-nowrap flex items-center gap-2"
           >
-            {[...Array(5)].map((_, i) => (
-              <motion.div
-                key={i}
-                className="w-1 bg-red-500 rounded-full"
-                animate={{
-                  height: audioLevel > i * 0.2 ? Math.random() * 16 + 8 : 4
-                }}
-                transition={{ duration: 0.1 }}
-              />
-            ))}
+            <Lock className="w-3 h-3" />
+            Slide up to lock
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                setShowLockMessage(false)
+              }}
+              className="ml-1 p-0.5 hover:bg-gray-700 rounded"
+            >
+              <X className="w-3 h-3" />
+            </button>
           </motion.div>
         )}
       </AnimatePresence>

@@ -816,7 +816,7 @@ export default function HomePage() {
                 { q: 'Is Servio app-ready?', a: 'Yes. Servio is PWA-installable and optimized for mobile, tablet, and desktop.' },
                 { q: 'Does Servio support delivery platforms?', a: 'Servio supports integrations via the dashboard\'s Integrations area. Availability depends on your stack—tell us what you run and we\'ll map the path.' },
                 { q: 'Can staff clock in and out from mobile?', a: 'Yes—Servio is built to run from mobile, tablet, and desktop so the team can work where the work happens.' },
-                { q: 'What integrations are available?', a: 'Start with what matters most (POS, ordering channels, accounting, etc.). We'll confirm what\'s supported and set up a clean data sync.' },
+                { q: 'What integrations are available?', a: 'Start with what matters most (POS, ordering channels, accounting, etc.). We\'ll confirm what\'s supported and set up a clean data sync.' },
                 { q: 'How does voice ordering work?', a: 'The Assistant understands natural language commands for orders, inventory, and operations. You tell it what to do—Servio handles the clicks.' },
               ].map((faq, idx) => (
                 <motion.div
