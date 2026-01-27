@@ -200,7 +200,18 @@ export class VoiceOrderingService {
     // #endregion
 
     for (const group of groups) {
-      const selection = modifiers[group.id];
+      let selection: any;
+
+      // Handle both array format (from Vapi AI) and object format
+      if (Array.isArray(modifiers)) {
+        // Vapi format: [{group_id: "...", option_id: "..."}, ...]
+        const found = modifiers.find((m: any) => m.group_id === group.id);
+        selection = found?.option_id;
+      } else {
+        // Object format: {"<group-id>": "<option-id>"}
+        selection = modifiers[group.id];
+      }
+
       const hasSelection = selection !== undefined && selection !== null && selection !== '' &&
         !(Array.isArray(selection) && selection.length === 0);
 
