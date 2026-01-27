@@ -4,7 +4,6 @@ import { asyncHandler } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
 import { ensureUploadsDir, getUploadsPath } from '../utils/uploads';
 import { v4 as uuidv4 } from 'uuid';
-import multer from 'multer';
 import sharp from 'sharp';
 import path from 'path';
 import fs from 'fs/promises';
@@ -956,3 +955,257 @@ router.post('/links/:id/click', asyncHandler(async (req: Request, res: Response)
 }));
 
 export default router;
+
+// ============================================================================
+// STAFF MANAGEMENT
+// ============================================================================
+
+/**
+ * GET /api/restaurant/staff
+ * Get all staff members for the restaurant
+ */
+router.get('/staff', asyncHandler(async (req: Request, res: Response) => {
+  const db = DatabaseService.getInstance().getDatabase();
+  const restaurantId = req.user?.restaurantId;
+
+  if (!restaurantId) {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'Restaurant ID is required' }
+    });
+  }
+
+  const staff = await db.all(`
+    SELECT
+      id,
+      name,
+      email,
+      role,
+      pin,
+      is_active,
+      created_at,
+      updated_at
+    FROM users
+    WHERE restaurant_id = ? AND is_active = TRUE
+    ORDER BY name ASC
+  `, [restaurantId]);
+
+  res.json({
+    success: true,
+    data: { staff }
+  });
+}));
+
+/**
+ * POST /api/restaurant/staff
+ * Create a new staff member with auto-generated PIN
+ */
+router.post('/staff', asyncHandler(async (req: Request, res: Response) => {
+  const db = DatabaseService.getInstance().getDatabase();
+  const restaurantId = req.user?.restaurantId;
+
+  if (!restaurantId) {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'Restaurant ID is required' }
+    });
+  }
+
+  const { name, email, role = 'staff', position } = req.body;
+
+  if (!name) {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'Name is required' }
+    });
+  }
+
+  // Generate unique 4-digit PIN
+  let pin: string;
+  let isUnique = false;
+  while (!isUnique) {
+    pin = Math.floor(1000 + Math.random() * 9000).toString();
+    const existing = await db.get('SELECT id FROM users WHERE pin = ? AND restaurant_id = ?', [pin, restaurantId]);
+    if (!existing) isUnique = true;
+  }
+
+  const userId = uuidv4();
+
+  await db.run(`
+    INSERT INTO users (
+      id,
+      restaurant_id,
+      name,
+      email,
+      pin,
+      role,
+      permissions,
+      is_active
+    ) VALUES (?, ?, ?, ?, ?, ?, '[]', TRUE)
+  `, [
+    userId,
+    restaurantId,
+    name,
+    email || null,
+    pin,
+    role
+  ]);
+
+  await DatabaseService.getInstance().logAudit(
+    restaurantId,
+    req.user?.id || 'system',
+    'create_staff',
+    'user',
+    userId,
+    { name, email, role, pin }
+  );
+
+  logger.info(`Staff member created: ${name} with PIN ${pin}`);
+
+  res.status(201).json({
+    success: true,
+    data: {
+      id: userId,
+      name,
+      email,
+      pin, // Return PIN only on creation
+      role,
+      is_active: true
+    }
+  });
+}));
+
+/**
+ * PUT /api/restaurant/staff/:id
+ * Update a staff member
+ */
+router.put('/staff/:id', asyncHandler(async (req: Request, res: Response) => {
+  const db = DatabaseService.getInstance().getDatabase();
+  const restaurantId = req.user?.restaurantId;
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+
+  if (!restaurantId) {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'Restaurant ID is required' }
+    });
+  }
+
+  const { name, email, role, is_active, pin } = req.body;
+
+  // Check if staff exists and belongs to restaurant
+  const existingStaff = await db.get(
+    'SELECT * FROM users WHERE id = ? AND restaurant_id = ?',
+    [id, restaurantId]
+  );
+
+  if (!existingStaff) {
+    return res.status(404).json({
+      success: false,
+      error: { message: 'Staff member not found' }
+    });
+  }
+
+  const updateFields: string[] = [];
+  const updateValues: any[] = [];
+
+  if (name !== undefined) {
+    updateFields.push('name = ?');
+    updateValues.push(name);
+  }
+  if (email !== undefined) {
+    updateFields.push('email = ?');
+    updateValues.push(email);
+  }
+  if (role !== undefined) {
+    updateFields.push('role = ?');
+    updateValues.push(role);
+  }
+  if (is_active !== undefined) {
+    updateFields.push('is_active = ?');
+    updateValues.push(is_active ? 1 : 0);
+  }
+  if (pin !== undefined) {
+    updateFields.push('pin = ?');
+    updateValues.push(pin);
+  }
+
+  if (updateFields.length > 0) {
+    updateFields.push('updated_at = CURRENT_TIMESTAMP');
+    updateValues.push(id);
+
+    await db.run(`
+      UPDATE users
+      SET ${updateFields.join(', ')}
+      WHERE id = ?
+    `, updateValues);
+  }
+
+  await DatabaseService.getInstance().logAudit(
+    restaurantId,
+    req.user?.id || 'system',
+    'update_staff',
+    'user',
+    id,
+    { name, email, role, is_active, pin }
+  );
+
+  const updatedStaff = await db.get(`
+    SELECT id, name, email, role, pin, is_active, created_at, updated_at
+    FROM users WHERE id = ?
+  `, [id]);
+
+  res.json({
+    success: true,
+    data: updatedStaff
+  });
+}));
+
+/**
+ * DELETE /api/restaurant/staff/:id
+ * Delete (deactivate) a staff member
+ */
+router.delete('/staff/:id', asyncHandler(async (req: Request, res: Response) => {
+  const db = DatabaseService.getInstance().getDatabase();
+  const restaurantId = req.user?.restaurantId;
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+
+  if (!restaurantId) {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'Restaurant ID is required' }
+    });
+  }
+
+  const existingStaff = await db.get(
+    'SELECT * FROM users WHERE id = ? AND restaurant_id = ?',
+    [id, restaurantId]
+  );
+
+  if (!existingStaff) {
+    return res.status(404).json({
+      success: false,
+      error: { message: 'Staff member not found' }
+    });
+  }
+
+  // Soft delete - just mark as inactive
+  await db.run(
+    'UPDATE users SET is_active = FALSE, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+    [id]
+  );
+
+  await DatabaseService.getInstance().logAudit(
+    restaurantId,
+    req.user?.id || 'system',
+    'delete_staff',
+    'user',
+    id,
+    { staffName: existingStaff.name }
+  );
+
+  res.json({
+    success: true,
+    message: 'Staff member deactivated successfully'
+  });
+}));

@@ -124,6 +124,7 @@ async function initializeServer() {
     const { default: notificationsRoutes } = await import('./routes/notifications');
     const { default: deliveryPlatformsRoutes } = await import('./routes/delivery-platforms');
     const { default: deliveryPlatformsSessionsRoutes } = await import('./routes/delivery-platforms-sessions');
+    const { default: staffClockRoutes } = await import('./routes/staff-clock');
 
     // API Routes
     app.use('/api/auth', authRoutes);
@@ -178,6 +179,9 @@ async function initializeServer() {
     app.use('/api/notifications', requireAuth, notificationsRoutes);
     app.use('/api/delivery-platforms', requireAuth, deliveryPlatformsRoutes);
     app.use('/api/delivery-platforms-sessions', requireAuth, deliveryPlatformsSessionsRoutes);
+
+    // Staff clock-in PWA routes (public - PIN authenticated)
+    app.use('/api/staff/clock', staffClockRoutes);
 
     // Modifiers routes - MUST be last since it uses /api catch-all
     app.use('/api', requireAuth, modifiersRoutes);

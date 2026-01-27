@@ -216,16 +216,33 @@ router.post('/clock-out', asyncHandler(async (req: Request, res: Response) => {
  * Start a break for a user
  */
 router.post('/start-break', asyncHandler(async (req: Request, res: Response) => {
-  const { userId } = req.body;
+  const { userId, pin } = req.body;
 
-  if (!userId) {
+  if (!userId && !pin) {
     return res.status(400).json({
       success: false,
-      error: { message: 'userId is required' }
+      error: { message: 'Either userId or PIN is required' }
     });
   }
 
   const db = DatabaseService.getInstance().getDatabase();
+
+  // If PIN provided, look up user
+  let user;
+  if (pin) {
+    user = await db.get('SELECT * FROM users WHERE pin = ? AND is_active = TRUE', [pin]);
+  } else {
+    user = await db.get('SELECT * FROM users WHERE id = ? AND is_active = TRUE', [userId]);
+  }
+
+  if (!user) {
+    return res.status(404).json({
+      success: false,
+      error: { message: 'User not found or inactive' }
+    });
+  }
+
+  const actualUserId = user.id;
 
   // Find active time entry
   const timeEntry = await db.get(`
@@ -233,7 +250,7 @@ router.post('/start-break', asyncHandler(async (req: Request, res: Response) => 
     WHERE user_id = ? AND clock_out_time IS NULL
     ORDER BY clock_in_time DESC
     LIMIT 1
-  `, [userId]);
+  `, [actualUserId]);
 
   if (!timeEntry) {
     return res.status(400).json({
@@ -272,20 +289,20 @@ router.post('/start-break', asyncHandler(async (req: Request, res: Response) => 
   // Log the action
   await DatabaseService.getInstance().logAudit(
     timeEntry.restaurant_id,
-    userId,
+    actualUserId,
     'start_break',
     'time_entry_break',
     breakId,
     { timeEntryId: timeEntry.id, breakStart }
   );
 
-  const staff = await db.get('SELECT name FROM users WHERE id = ?', [userId]);
+  const staff = await db.get('SELECT name FROM users WHERE id = ?', [actualUserId]);
   await eventBus.emit('staff.break_start', {
     restaurantId: timeEntry.restaurant_id,
     type: 'staff.break_start',
-    actor: { actorType: 'user', actorId: userId },
+    actor: { actorType: 'user', actorId: actualUserId },
     payload: {
-      staffId: userId,
+      staffId: actualUserId,
       staffName: staff?.name,
       timeEntryId: timeEntry.id,
       breakId
@@ -308,16 +325,33 @@ router.post('/start-break', asyncHandler(async (req: Request, res: Response) => 
  * End a break for a user
  */
 router.post('/end-break', asyncHandler(async (req: Request, res: Response) => {
-  const { userId } = req.body;
+  const { userId, pin } = req.body;
 
-  if (!userId) {
+  if (!userId && !pin) {
     return res.status(400).json({
       success: false,
-      error: { message: 'userId is required' }
+      error: { message: 'Either userId or PIN is required' }
     });
   }
 
   const db = DatabaseService.getInstance().getDatabase();
+
+  // If PIN provided, look up user
+  let user;
+  if (pin) {
+    user = await db.get('SELECT * FROM users WHERE pin = ? AND is_active = TRUE', [pin]);
+  } else {
+    user = await db.get('SELECT * FROM users WHERE id = ? AND is_active = TRUE', [userId]);
+  }
+
+  if (!user) {
+    return res.status(404).json({
+      success: false,
+      error: { message: 'User not found or inactive' }
+    });
+  }
+
+  const actualUserId = user.id;
 
   // Find active time entry
   const timeEntry = await db.get(`
@@ -325,7 +359,7 @@ router.post('/end-break', asyncHandler(async (req: Request, res: Response) => {
     WHERE user_id = ? AND clock_out_time IS NULL
     ORDER BY clock_in_time DESC
     LIMIT 1
-  `, [userId]);
+  `, [actualUserId]);
 
   if (!timeEntry) {
     return res.status(400).json({
@@ -377,7 +411,7 @@ router.post('/end-break', asyncHandler(async (req: Request, res: Response) => {
   // Log the action
   await DatabaseService.getInstance().logAudit(
     timeEntry.restaurant_id,
-    userId,
+    actualUserId,
     'end_break',
     'time_entry_break',
     activeBreak.id,
@@ -389,13 +423,13 @@ router.post('/end-break', asyncHandler(async (req: Request, res: Response) => {
     }
   );
 
-  const staff = await db.get('SELECT name FROM users WHERE id = ?', [userId]);
+  const staff = await db.get('SELECT name FROM users WHERE id = ?', [actualUserId]);
   await eventBus.emit('staff.break_end', {
     restaurantId: timeEntry.restaurant_id,
     type: 'staff.break_end',
-    actor: { actorType: 'user', actorId: userId },
+    actor: { actorType: 'user', actorId: actualUserId },
     payload: {
-      staffId: userId,
+      staffId: actualUserId,
       staffName: staff?.name,
       timeEntryId: timeEntry.id,
       breakId: activeBreak.id,
@@ -715,6 +749,177 @@ router.get('/stats', asyncHandler(async (req: Request, res: Response) => {
       totalStats,
       dailyStats,
       userStats: userStats || []
+    }
+  });
+}));
+
+/**
+ * POST /api/timeclock/pin-login
+ * Authenticate staff by PIN for PWA clock-in
+ */
+router.post('/pin-login', asyncHandler(async (req: Request, res: Response) => {
+  const { pin } = req.body;
+
+  if (!pin || pin.length !== 4) {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'PIN is required and must be 4 digits' }
+    });
+  }
+
+  const db = DatabaseService.getInstance().getDatabase();
+
+  const user = await db.get(`
+    SELECT
+      u.id,
+      u.name,
+      u.email,
+      u.role,
+      u.restaurant_id,
+      r.name as restaurant_name
+    FROM users u
+    JOIN restaurants r ON u.restaurant_id = r.id
+    WHERE u.pin = ? AND u.is_active = TRUE AND r.is_active = TRUE
+  `, [pin]);
+
+  if (!user) {
+    return res.status(401).json({
+      success: false,
+      error: { message: 'Invalid PIN or user inactive' }
+    });
+  }
+
+  // Get current shift status
+  const currentShift = await db.get(`
+    SELECT
+      te.id as time_entry_id,
+      te.clock_in_time,
+      te.break_minutes,
+      te.position,
+      CASE
+        WHEN teb.break_end IS NULL THEN 1
+        ELSE 0
+      END as is_on_break,
+      teb.break_start as current_break_start
+    FROM time_entries te
+    LEFT JOIN time_entry_breaks teb ON te.id = teb.time_entry_id AND teb.break_end IS NULL
+    WHERE te.user_id = ? AND te.clock_out_time IS NULL
+    ORDER BY te.clock_in_time DESC
+    LIMIT 1
+  `, [user.id]);
+
+  // Get weekly hours
+  const startOfWeek = new Date();
+  startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
+  startOfWeek.setHours(0, 0, 0, 0);
+
+  const weeklyHours = await db.get(`
+    SELECT COALESCE(SUM(total_hours), 0) as total_hours
+    FROM time_entries
+    WHERE user_id = ? AND clock_out_time IS NOT NULL AND clock_in_time >= ?
+  `, [user.id, startOfWeek.toISOString()]);
+
+  res.json({
+    success: true,
+    data: {
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        restaurantId: user.restaurant_id,
+        restaurantName: user.restaurant_name
+      },
+      currentShift: currentShift ? {
+        timeEntryId: currentShift.time_entry_id,
+        clockInTime: currentShift.clock_in_time,
+        breakMinutes: currentShift.break_minutes,
+        position: currentShift.position,
+        isOnBreak: Boolean(currentShift.is_on_break),
+        currentBreakStart: currentShift.current_break_start
+      } : null,
+      weeklyHours: Number(weeklyHours.total_hours || 0)
+    }
+  });
+}));
+
+/**
+ * GET /api/timeclock/my-stats
+ * Get current user's time tracking stats for PWA
+ */
+router.get('/my-stats', asyncHandler(async (req: Request, res: Response) => {
+  const { userId, pin } = req.query;
+
+  if (!userId && !pin) {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'Either userId or PIN is required' }
+    });
+  }
+
+  const db = DatabaseService.getInstance().getDatabase();
+
+  // If PIN provided, look up user
+  let user;
+  if (pin) {
+    user = await db.get('SELECT id, name FROM users WHERE pin = ? AND is_active = TRUE', [pin]);
+  } else {
+    user = await db.get('SELECT id, name FROM users WHERE id = ? AND is_active = TRUE', [userId]);
+  }
+
+  if (!user) {
+    return res.status(404).json({
+      success: false,
+      error: { message: 'User not found' }
+    });
+  }
+
+  const actualUserId = user.id;
+
+  // Get weekly hours (current week starting Monday)
+  const startOfWeek = new Date();
+  startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
+  startOfWeek.setHours(0, 0, 0, 0);
+
+  const [weeklyHours, recentEntries] = await Promise.all([
+    db.get(`
+      SELECT
+        COALESCE(SUM(total_hours), 0) as total_hours,
+        COUNT(*) as total_shifts,
+        COALESCE(SUM(break_minutes), 0) as total_break_minutes
+      FROM time_entries
+      WHERE user_id = ? AND clock_out_time IS NOT NULL AND clock_in_time >= ?
+    `, [actualUserId, startOfWeek.toISOString()]),
+
+    db.all(`
+      SELECT
+        id,
+        clock_in_time,
+        clock_out_time,
+        total_hours,
+        break_minutes,
+        position
+      FROM time_entries
+      WHERE user_id = ?
+      ORDER BY clock_in_time DESC
+      LIMIT 10
+    `, [actualUserId])
+  ]);
+
+  res.json({
+    success: true,
+    data: {
+      userId: actualUserId,
+      userName: user.name,
+      weeklyStats: {
+        totalHours: Number(weeklyHours.total_hours || 0),
+        totalShifts: Number(weeklyHours.total_shifts || 0),
+        totalBreakMinutes: Number(weeklyHours.total_break_minutes || 0)
+      },
+      recentEntries: recentEntries.map(e => ({
+        ...e,
+        total_hours: Number(e.total_hours || 0)
+      }))
     }
   });
 }));

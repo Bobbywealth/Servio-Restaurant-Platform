@@ -2,16 +2,18 @@ import React, { useEffect, useMemo, useState } from 'react'
 import Head from 'next/head'
 import { motion } from 'framer-motion'
 import dynamic from 'next/dynamic'
-import { 
-  Users, 
-  Clock, 
+import {
+  Users,
+  Clock,
   UserPlus,
   Search,
   Filter,
   MoreVertical,
   Edit3,
   Mail,
-  DollarSign
+  DollarSign,
+  LogIn,
+  Smartphone
 } from 'lucide-react'
 import { api } from '../../lib/api'
 
@@ -193,16 +195,27 @@ export default function StaffPage() {
                 Manage team members, schedules, and shifts
               </p>
             </div>
-            <motion.button
-              className="btn-primary inline-flex items-center space-x-2"
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              disabled
-              title="Coming soon"
-            >
-              <UserPlus className="w-4 h-4" />
-              <span>Add Staff Member</span>
-            </motion.button>
+            <div className="flex items-center gap-3">
+              <a
+                href="/staff/clock"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn-secondary inline-flex items-center space-x-2"
+              >
+                <Smartphone className="w-4 h-4" />
+                <span>Staff Clock-In PWA</span>
+              </a>
+              <motion.button
+                className="btn-primary inline-flex items-center space-x-2"
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                disabled
+                title="Coming soon"
+              >
+                <UserPlus className="w-4 h-4" />
+                <span>Add Staff Member</span>
+              </motion.button>
+            </div>
           </div>
 
           {error && (
@@ -366,6 +379,26 @@ export default function StaffPage() {
                       </span>
                     </div>
                   </div>
+                  {/* PIN display for staff */}
+                  {member.pin && (
+                    <div className="flex items-center justify-between pt-2 border-t border-surface-200 dark:border-surface-700">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-surface-600 dark:text-surface-400">PIN:</span>
+                        <span className="font-mono font-bold text-surface-900 dark:text-surface-100">
+                          {member.pin}
+                        </span>
+                      </div>
+                      <a
+                        href={`/staff/clock`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 font-medium"
+                      >
+                        <LogIn className="w-4 h-4" />
+                        Clock In
+                      </a>
+                    </div>
+                  )}
                 </div>
 
                 <div className="mt-4 flex gap-2">
