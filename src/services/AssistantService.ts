@@ -104,44 +104,57 @@ export class AssistantService {
       let response: string;
       const actions: AssistantResponse['actions'] = [];
 
-      // Use MiniMax if configured, otherwise fall back to OpenAI
-      if (this.miniMax.isConfigured()) {
-        logger.info('[assistant] Using MiniMax for chat completion');
+      // Use MiniMax if configured, otherwise use OpenAI
+      let useMiniMax = this.miniMax.isConfigured();
 
-        const messages: Array<{ role: 'system' | 'user'; content: string }> = [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: text }
-        ];
+      if (useMiniMax) {
+        try {
+          logger.info('[assistant] Using MiniMax for chat completion');
 
-        const tools = this.miniMax.convertToolsToMiniMax(this.getTools());
-        const completion = await this.miniMax.chat(messages, tools, 0.3);
+          const messages: Array<{ role: 'system' | 'user'; content: string }> = [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: text }
+          ];
 
-        const message = completion.choices[0]?.message;
-        if (!message) {
-          throw new Error('No response from MiniMax');
-        }
+          const tools = this.miniMax.convertToolsToMiniMax(this.getTools());
+          const completion = await this.miniMax.chat(messages, tools, 0.3);
 
-        response = message.content || "I understand, let me help with that.";
-
-        // Process tool calls
-        if (message.tool_calls) {
-          logger.info('[assistant] MiniMax tool_calls received', { userId, count: message.tool_calls.length });
-          for (const toolCall of message.tool_calls) {
-            const action = await this.executeTool({
-              id: toolCall.id || `tc_${Date.now()}`,
-              type: 'function',
-              function: {
-                name: toolCall.function.name,
-                arguments: typeof toolCall.function.arguments === 'string'
-                  ? toolCall.function.arguments
-                  : JSON.stringify(toolCall.function.arguments)
-              }
-            }, userId);
-            actions.push(action);
+          const message = completion.choices[0]?.message;
+          if (!message) {
+            throw new Error('No response from MiniMax');
           }
+
+          response = message.content || "I understand, let me help with that.";
+
+          // Process tool calls
+          if (message.tool_calls) {
+            logger.info('[assistant] MiniMax tool_calls received', { userId, count: message.tool_calls.length });
+            for (const toolCall of message.tool_calls) {
+              const action = await this.executeTool({
+                id: toolCall.id || `tc_${Date.now()}`,
+                type: 'function',
+                function: {
+                  name: toolCall.function.name,
+                  arguments: typeof toolCall.function.arguments === 'string'
+                    ? toolCall.function.arguments
+                    : JSON.stringify(toolCall.function.arguments)
+                }
+              }, userId);
+              actions.push(action);
+            }
+          }
+        } catch (miniMaxError) {
+          logger.warn('[assistant] MiniMax failed, falling back to OpenAI', {
+            error: miniMaxError instanceof Error ? miniMaxError.message : String(miniMaxError)
+          });
+          useMiniMax = false;
         }
-      } else {
+      }
+
+      if (!useMiniMax) {
         // Fallback to OpenAI
+        logger.info('[assistant] Using OpenAI for chat completion');
+
         const completion = await this.openai.chat.completions.create({
           model: 'gpt-4',
           messages: [
@@ -162,7 +175,7 @@ export class AssistantService {
 
         // Process tool calls
         if (message.tool_calls) {
-          logger.info('[assistant] tool_calls received', { userId, count: message.tool_calls.length });
+          logger.info('[assistant] OpenAI tool_calls received', { userId, count: message.tool_calls.length });
           for (const toolCall of message.tool_calls) {
             const action = await this.executeTool(toolCall, userId);
             actions.push(action);

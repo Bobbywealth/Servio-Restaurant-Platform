@@ -149,7 +149,20 @@ export class MiniMaxService {
 
       if (!response.ok) {
         const errorText = await response.text();
-        logger.error('MiniMax API error:', { status: response.status, error: errorText });
+        let errorData;
+        try {
+          errorData = JSON.parse(errorText);
+        } catch {
+          errorData = { raw: errorText };
+        }
+        logger.error('MiniMax API error:', {
+          status: response.status,
+          model: this.config.chatModel,
+          baseUrl: this.config.baseUrl,
+          messagesCount: messages.length,
+          toolsCount: tools?.length || 0,
+          error: errorData
+        });
         throw new Error(`MiniMax API error: ${response.status}`);
       }
 
@@ -225,8 +238,16 @@ export class MiniMaxService {
         logger.error('MiniMax API error:', {
           status: response.status,
           model: this.config.chatModel,
+          baseUrl: this.config.baseUrl,
           messagesCount: messages.length,
-          error: errorData
+          toolsCount: tools?.length || 0,
+          error: errorData,
+          requestBody: {
+            model: this.config.chatModel,
+            messages: messages.map(m => ({ role: m.role, content: m.content?.substring?.(0, 100) || m.content })),
+            tools: tools?.map(t => ({ name: t.function.name, hasParams: !!t.function.parameters })),
+            temperature
+          }
         });
         throw new Error(`MiniMax API error: ${response.status} - ${JSON.stringify(errorData)}`);
       }
