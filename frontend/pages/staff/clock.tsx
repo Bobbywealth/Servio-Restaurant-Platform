@@ -28,23 +28,6 @@ function PINEntry({ onLogin, error }: PINEntryProps) {
   const [isFocused, setIsFocused] = useState<number | null>(0);
   const inputRefs = [React.useRef<HTMLInputElement>(null), React.useRef<HTMLInputElement>(null), React.useRef<HTMLInputElement>(null), React.useRef<HTMLInputElement>(null)];
 
-  const handleKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Backspace' && !pin[index] && index > 0) {
-      inputRefs[index - 1].current?.focus();
-      setIsFocused(index - 1);
-    } else if (e.key >= '0' && e.key <= '9') {
-      const newPin = [...pin];
-      newPin[index] = e.key;
-      setPin(newPin);
-      if (index < 3) {
-        inputRefs[index + 1].current?.focus();
-        setIsFocused(index + 1);
-      } else {
-        onLogin(newPin.join(''));
-      }
-    }
-  };
-
   const handleChange = (index: number, value: string) => {
     if (value.length <= 1 && /^\d*$/.test(value)) {
       const newPin = [...pin];
@@ -121,7 +104,6 @@ function PINEntry({ onLogin, error }: PINEntryProps) {
                   maxLength={1}
                   value={digit}
                   onChange={(e) => handleChange(index, e.target.value)}
-                  onKeyDown={(e) => handleKeyDown(index, e)}
                   onPaste={handlePaste}
                   onFocus={() => setIsFocused(index)}
                   onBlur={() => setIsFocused(null)}
