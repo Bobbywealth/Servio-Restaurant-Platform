@@ -1,8 +1,24 @@
 import Head from 'next/head';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import clsx from 'clsx';
-import { CheckCircle2, RefreshCcw, ChevronDown, Printer, Clock } from 'lucide-react';
+import {
+  CheckCircle2,
+  RefreshCcw,
+  ChevronDown,
+  Printer,
+  Clock,
+  Search,
+  Filter,
+  X,
+  AlertTriangle,
+  CheckCircle,
+  ChefHat,
+  Eye,
+  Calendar,
+  ArrowUpDown,
+  Zap
+} from 'lucide-react';
 import { useSocket } from '../../lib/socket';
 import { PrintReceipt } from '../../components/PrintReceipt';
 import { TabletSidebar } from '../../components/tablet/TabletSidebar';
@@ -34,6 +50,8 @@ type Order = {
   subtotal?: number | null;
   created_at?: string | null;
   items?: OrderItem[];
+  prep_time?: string | null;
+  prep_minutes?: number | null;
 };
 
 type OrdersResponse = {
@@ -43,6 +61,14 @@ type OrdersResponse = {
     pagination?: { total?: number; limit?: number; offset?: number; hasMore?: boolean };
   };
   error?: { message?: string };
+};
+
+type OrderFilter = {
+  status: 'all' | 'received' | 'preparing' | 'ready';
+  channel: string;
+  orderType: string;
+  sortBy: 'newest' | 'oldest' | 'prep-time';
+  searchQuery: string;
 };
 
 type PendingAction =
@@ -89,6 +115,77 @@ function normalizeStatus(s: string | null | undefined) {
   const lower = v.toLowerCase();
   if (lower === 'new') return 'received';
   return lower;
+}
+
+// Prep time countdown function
+function formatPrepTimeRemaining(prepMinutes: number | null | undefined, createdAt: string | null | undefined, now: number | null): { text: string; isOverdue: boolean; percentRemaining: number } | null {
+  if (!prepMinutes || !createdAt || now === null) return null;
+
+  const created = new Date(createdAt).getTime();
+  if (Number.isNaN(created)) return null;
+
+  const totalMs = prepMinutes * 60 * 1000;
+  const elapsedMs = now - created;
+  const remainingMs = totalMs - elapsedMs;
+  const percentRemaining = Math.max(0, Math.min(100, (remainingMs / totalMs) * 100));
+
+  if (remainingMs <= 0) {
+    return { text: 'Overdue', isOverdue: true, percentRemaining: 0 };
+  }
+
+  const minsRemaining = Math.ceil(remainingMs / 60000);
+  return {
+    text: `${minsRemaining}m`,
+    isOverdue: false,
+    percentRemaining
+  };
+}
+
+function getPrepTimeWarningLevel(percentRemaining: number): 'normal' | 'warning' | 'critical' {
+  if (percentRemaining <= 25) return 'critical';
+  if (percentRemaining <= 50) return 'warning';
+  return 'normal';
+}
+
+function getPrepTimeColorClass(level: 'normal' | 'warning' | 'critical'): string {
+  switch (level) {
+    case 'critical':
+      return 'bg-[var(--tablet-danger)] text-white';
+    case 'warning':
+      return 'bg-[var(--tablet-warning)] text-[var(--tablet-text)]';
+    default:
+      return 'bg-[var(--tablet-success)] text-white';
+  }
+}
+
+// Search/filter utilities
+function matchesSearchQuery(order: Order, query: string): boolean {
+  if (!query.trim()) return true;
+  const searchTerms = query.toLowerCase().split(' ').filter(Boolean);
+
+  const searchableText = [
+    order.customer_name || '',
+    order.customer_phone || '',
+    order.external_id || order.id || '',
+    order.channel || '',
+    order.order_type || '',
+    (order.items || []).map(i => i.name || '').join(' ')
+  ].join(' ').toLowerCase();
+
+  return searchTerms.every(term => searchableText.includes(term));
+}
+
+function getChannelIcon(channel: string | null | undefined): string {
+  const c = (channel || '').toLowerCase();
+  if (c.includes('doordash')) return '🚗';
+  if (c.includes('ubereats') || c.includes('uber')) return '🛵';
+  if (c.includes('grubhub')) return '🍔';
+  if (c.includes('toast')) return '🍞';
+  if (c.includes('pos') || c === 'in-store') return '🏪';
+  if (c.includes('online') || c.includes('web')) return '💻';
+  if (c.includes('phone') || c.includes('call')) return '📞';
+  if (c.includes('vapi') || c.includes('voice')) return '🎙️';
+  return '📋';
 }
 
 function statusBadgeClassesForStatus(status: string) {
@@ -251,6 +348,23 @@ export default function TabletOrdersPage() {
   const [isOnline, setIsOnline] = useState<boolean>(true);
   const [socketConnected, setSocketConnected] = useState<boolean>(false);
   const [showUpdateBanner, setShowUpdateBanner] = useState(false);
+
+  // Search and filter state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<OrderFilter['status']>('all');
+  const [channelFilter, setChannelFilter] = useState('all');
+  const [sortBy, setSortBy] = useState<OrderFilter['sortBy']>('newest');
+  const [showFilters, setShowFilters] = useState(false);
+  const [orderDetailsOrder, setOrderDetailsOrder] = useState<Order | null>(null);
+
+  // Get unique channels for filter dropdown
+  const channels = useMemo(() => {
+    const channelSet = new Set<string>();
+    orders.forEach(o => {
+      if (o.channel) channelSet.add(o.channel);
+    });
+    return Array.from(channelSet).sort();
+  }, [orders]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -921,32 +1035,75 @@ export default function TabletOrdersPage() {
     return orders.filter((o) => activeStatuses.has(normalizeStatus(o.status)));
   }, [orders]);
 
-  const sortedOrders = useMemo(() => {
-    const withTimestamp = (order: Order) => {
-      if (!order.created_at) return 0;
-      const ts = new Date(order.created_at).getTime();
-      return Number.isNaN(ts) ? 0 : ts;
-    };
-    return [...activeOrders].sort((a, b) => withTimestamp(b) - withTimestamp(a));
-  }, [activeOrders]);
+  const filteredOrders = useMemo(() => {
+    let result = [...activeOrders];
+
+    // Apply status filter
+    if (statusFilter !== 'all') {
+      result = result.filter(o => normalizeStatus(o.status) === statusFilter);
+    }
+
+    // Apply channel filter
+    if (channelFilter !== 'all') {
+      result = result.filter(o => o.channel === channelFilter);
+    }
+
+    // Apply search query
+    if (searchQuery.trim()) {
+      result = result.filter(o => matchesSearchQuery(o, searchQuery));
+    }
+
+    // Apply sorting
+    switch (sortBy) {
+      case 'oldest':
+        result.sort((a, b) => {
+          const ta = a.created_at ? new Date(a.created_at).getTime() : 0;
+          const tb = b.created_at ? new Date(b.created_at).getTime() : 0;
+          return ta - tb;
+        });
+        break;
+      case 'prep-time':
+        result.sort((a, b) => {
+          // Put orders with prep time at top, sorted by remaining time
+          const pa = a.prep_minutes || 15;
+          const pb = b.prep_minutes || 15;
+          const hasA = a.created_at ? Date.now() - new Date(a.created_at).getTime() : 0;
+          const hasB = b.created_at ? Date.now() - new Date(b.created_at).getTime() : 0;
+          const ra = pa * 60000 - hasA;
+          const rb = pb * 60000 - hasB;
+          return ra - rb; // Orders closer to deadline first
+        });
+        break;
+      case 'newest':
+      default:
+        result.sort((a, b) => {
+          const ta = a.created_at ? new Date(a.created_at).getTime() : 0;
+          const tb = b.created_at ? new Date(b.created_at).getTime() : 0;
+          return tb - ta;
+        });
+        break;
+    }
+
+    return result;
+  }, [activeOrders, statusFilter, channelFilter, searchQuery, sortBy]);
 
   useEffect(() => {
-    if (sortedOrders.length === 0) {
+    if (filteredOrders.length === 0) {
       if (selectedOrder) setSelectedOrder(null);
       return;
     }
     // Only auto-select if no order is currently selected
     if (!selectedOrder) {
-      const latest = sortedOrders[0];
+      const latest = filteredOrders[0];
       setSelectedOrder(latest);
     }
-  }, [sortedOrders, selectedOrder]);
+  }, [filteredOrders, selectedOrder]);
 
   const receivedOrders = useMemo(() => {
     return activeOrders.filter((o) => normalizeStatus(o.status) === 'received');
   }, [activeOrders]);
 
-  const filtered = sortedOrders;
+  const filtered = filteredOrders;
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -1023,33 +1180,169 @@ export default function TabletOrdersPage() {
 
         <main className="flex-1 bg-[var(--tablet-bg)] text-[var(--tablet-text)] px-4 py-4 sm:px-6 sm:py-6">
           <div className="flex flex-col gap-6">
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-              <div>
-                <div className="text-xs uppercase tracking-[0.2em] text-[var(--tablet-muted)]">Order Management</div>
-                <div className="text-3xl font-semibold">All Orders</div>
+            {/* Header with search and filters */}
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <div className="text-xs uppercase tracking-[0.2em] text-[var(--tablet-muted)]">Order Management</div>
+                  <div className="text-3xl font-semibold">All Orders</div>
+                </div>
+                <div className="flex flex-wrap items-center gap-3 md:justify-end">
+                  <div className={`px-3 py-1 text-xs font-semibold uppercase border rounded-full ${connectionClasses}`}>
+                    {connectionLabel}
+                  </div>
+                  {cachedAt && (
+                    <div className="text-xs text-[var(--tablet-muted)] font-medium">
+                      Cached: {new Date(cachedAt).toLocaleTimeString()}
+                    </div>
+                  )}
+                  <div className="text-right">
+                    <div className="text-2xl font-semibold tabular-nums">
+                      {now ? new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}
+                    </div>
+                  </div>
+                  <button
+                    onClick={refresh}
+                    className="bg-[var(--tablet-surface-alt)] hover:brightness-110 p-3 rounded-full transition shadow-[0_2px_8px_rgba(0,0,0,0.3)]"
+                    aria-label="Refresh"
+                  >
+                    <RefreshCcw className={clsx('h-5 w-5', loading && 'animate-spin')} />
+                  </button>
+                </div>
               </div>
-              <div className="flex flex-wrap items-center gap-3 md:justify-end">
-                <div className={`px-3 py-1 text-xs font-semibold uppercase border rounded-full ${connectionClasses}`}>
-                  {connectionLabel}
+
+              {/* Search and Filter Bar */}
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                {/* Search Input */}
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-[var(--tablet-muted)]" />
+                  <input
+                    type="text"
+                    placeholder="Search orders..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-10 pr-10 py-3 rounded-xl border border-[var(--tablet-border)] bg-[var(--tablet-surface)] text-[var(--tablet-text)] placeholder-[var(--tablet-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--tablet-accent)] focus:border-transparent transition-all"
+                  />
+                  {searchQuery && (
+                    <button
+                      onClick={() => setSearchQuery('')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-[var(--tablet-border)] transition"
+                    >
+                      <X className="h-4 w-4 text-[var(--tablet-muted)]" />
+                    </button>
+                  )}
                 </div>
-                {cachedAt && (
-                  <div className="text-xs text-[var(--tablet-muted)] font-medium">
-                    Cached: {new Date(cachedAt).toLocaleTimeString()}
-                  </div>
-                )}
-                <div className="text-right">
-                  <div className="text-2xl font-semibold tabular-nums">
-                    {now ? new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}
-                  </div>
-                </div>
+
+                {/* Filter Toggle */}
                 <button
-                  onClick={refresh}
-                  className="bg-[var(--tablet-surface-alt)] hover:brightness-110 p-3 rounded-full transition shadow-[0_2px_8px_rgba(0,0,0,0.3)]"
-                  aria-label="Refresh"
+                  onClick={() => setShowFilters(!showFilters)}
+                  className={clsx(
+                    'flex items-center gap-2 px-4 py-3 rounded-xl border transition-all',
+                    showFilters || statusFilter !== 'all' || channelFilter !== 'all'
+                      ? 'bg-[var(--tablet-accent)] border-[var(--tablet-accent)] text-[var(--tablet-accent-contrast)]'
+                      : 'bg-[var(--tablet-surface)] border-[var(--tablet-border)] text-[var(--tablet-text)]'
+                  )}
                 >
-                  <RefreshCcw className={clsx('h-5 w-5', loading && 'animate-spin')} />
+                  <Filter className="h-5 w-5" />
+                  <span className="font-semibold">Filters</span>
+                  {(statusFilter !== 'all' || channelFilter !== 'all') && (
+                    <span className="ml-1 px-2 py-0.5 rounded-full text-xs bg-[var(--tablet-accent-contrast)] text-[var(--tablet-accent)]">
+                      {[statusFilter !== 'all' && statusFilter, channelFilter !== 'all' && channelFilter].filter(Boolean).length}
+                    </span>
+                  )}
                 </button>
+
+                {/* Sort Dropdown */}
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as OrderFilter['sortBy'])}
+                  className="px-4 py-3 rounded-xl border border-[var(--tablet-border)] bg-[var(--tablet-surface)] text-[var(--tablet-text)] focus:outline-none focus:ring-2 focus:ring-[var(--tablet-accent)] cursor-pointer"
+                >
+                  <option value="newest">Newest First</option>
+                  <option value="oldest">Oldest First</option>
+                  <option value="prep-time">Prep Time Priority</option>
+                </select>
               </div>
+
+              {/* Expanded Filters Panel */}
+              {showFilters && (
+                <div className="flex flex-wrap gap-4 p-4 rounded-xl bg-[var(--tablet-surface)] border border-[var(--tablet-border)] animate-fade-in">
+                  <div className="flex-1 min-w-[200px]">
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--tablet-muted)] mb-2">
+                      Status
+                    </label>
+                    <select
+                      value={statusFilter}
+                      onChange={(e) => setStatusFilter(e.target.value as OrderFilter['status'])}
+                      className="w-full px-3 py-2 rounded-lg border border-[var(--tablet-border)] bg-[var(--tablet-bg)] text-[var(--tablet-text)] focus:outline-none focus:ring-2 focus:ring-[var(--tablet-accent)]"
+                    >
+                      <option value="all">All Statuses</option>
+                      <option value="received">New Orders</option>
+                      <option value="preparing">In Progress</option>
+                      <option value="ready">Ready</option>
+                    </select>
+                  </div>
+                  <div className="flex-1 min-w-[200px]">
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--tablet-muted)] mb-2">
+                      Channel
+                    </label>
+                    <select
+                      value={channelFilter}
+                      onChange={(e) => setChannelFilter(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg border border-[var(--tablet-border)] bg-[var(--tablet-bg)] text-[var(--tablet-text)] focus:outline-none focus:ring-2 focus:ring-[var(--tablet-accent)]"
+                    >
+                      <option value="all">All Channels</option>
+                      {channels.map(channel => (
+                        <option key={channel} value={channel}>{channel}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex items-end">
+                    <button
+                      onClick={() => {
+                        setStatusFilter('all');
+                        setChannelFilter('all');
+                        setSearchQuery('');
+                        setSortBy('newest');
+                      }}
+                      className="px-4 py-2 rounded-lg border border-[var(--tablet-border)] text-[var(--tablet-muted)] hover:text-[var(--tablet-text)] hover:bg-[var(--tablet-surface-alt)] transition"
+                    >
+                      Clear All
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Active Filters Display */}
+              {(searchQuery || statusFilter !== 'all' || channelFilter !== 'all') && (
+                <div className="flex flex-wrap gap-2 items-center">
+                  <span className="text-xs text-[var(--tablet-muted)]">Showing:</span>
+                  {searchQuery && (
+                    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-[var(--tablet-info)] text-white">
+                      Search: "{searchQuery}"
+                      <button onClick={() => setSearchQuery('')} className="ml-1">
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  )}
+                  {statusFilter !== 'all' && (
+                    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-[var(--tablet-accent)] text-[var(--tablet-accent-contrast)]">
+                      {statusFilter}
+                      <button onClick={() => setStatusFilter('all')} className="ml-1">
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  )}
+                  {channelFilter !== 'all' && (
+                    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-[var(--tablet-surface-alt)] border border-[var(--tablet-border)]">
+                      {channelFilter}
+                      <button onClick={() => setChannelFilter('all')} className="ml-1">
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
 
             {showUpdateBanner && (
@@ -1104,6 +1397,18 @@ export default function TabletOrdersPage() {
                             ? 'bg-[var(--tablet-success)] text-white'
                             : 'bg-[var(--tablet-border)] text-[var(--tablet-muted-strong)]';
 
+                      // Prep time countdown
+                      const prepTimeData = isPreparing
+                        ? formatPrepTimeRemaining(o.prep_minutes || 15, o.created_at, now)
+                        : null;
+                      const prepWarningLevel = prepTimeData
+                        ? getPrepTimeWarningLevel(prepTimeData.percentRemaining)
+                        : 'normal';
+                      const prepTimeColorClass = getPrepTimeColorClass(prepWarningLevel);
+
+                      // Check if overdue for styling
+                      const isOverdue = prepTimeData?.isOverdue;
+
                       return (
                         <button
                           key={o.id}
@@ -1112,17 +1417,35 @@ export default function TabletOrdersPage() {
                           className={clsx(
                             'w-full text-left rounded-lg border border-[var(--tablet-border)] p-4 shadow-[0_2px_8px_rgba(0,0,0,0.3)] transition transform hover:brightness-110 hover:scale-[1.01]',
                             isSelected && 'bg-[var(--tablet-info)] border-[var(--tablet-info)] shadow-[0_4px_12px_rgba(93,112,153,0.45)]',
-                            !isSelected && 'bg-[var(--tablet-card)]'
+                            !isSelected && 'bg-[var(--tablet-card)]',
+                            isOverdue && 'order-overdue'
                           )}
                         >
                           <div className="flex items-center justify-between">
-                            <span className={clsx('text-[11px] font-semibold tracking-widest px-2 py-1 rounded-full', statusBadgeClasses)}>
-                              {statusLabel}
-                            </span>
-                            {isLatest && (
-                              <span className="text-[11px] font-semibold uppercase text-[var(--tablet-accent)]">Newest</span>
-                            )}
+                            <div className="flex items-center gap-2">
+                              <span className={clsx('text-[11px] font-semibold tracking-widest px-2 py-1 rounded-full', statusBadgeClasses)}>
+                                {statusLabel}
+                              </span>
+                              <span className="text-lg" title={o.channel || 'Unknown'}>
+                                {getChannelIcon(o.channel)}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {isLatest && (
+                                <span className="text-[11px] font-semibold uppercase text-[var(--tablet-accent)]">Newest</span>
+                              )}
+                              {isPreparing && prepTimeData && (
+                                <span className={clsx(
+                                  'text-[11px] font-semibold px-2 py-1 rounded-full',
+                                  prepTimeColorClass,
+                                  prepWarningLevel === 'critical' && 'prep-time-critical'
+                                )}>
+                                  {prepTimeData.text}
+                                </span>
+                              )}
+                            </div>
                           </div>
+
                           <div className="mt-2 flex items-center justify-between">
                             <div className={clsx('text-lg font-semibold truncate', 'text-[var(--tablet-text)]')}>
                               {o.customer_name || 'Guest'}
@@ -1132,15 +1455,55 @@ export default function TabletOrdersPage() {
                               <span className="tabular-nums">{timeStr}</span>
                             </div>
                           </div>
+
+                          {/* Prep Time Progress Bar (for preparing orders) */}
+                          {isPreparing && prepTimeData && !prepTimeData.isOverdue && (
+                            <div className="mt-2">
+                              <div className="h-1.5 rounded-full bg-[var(--tablet-border)] overflow-hidden">
+                                <div
+                                  className={clsx(
+                                    'h-full rounded-full prep-time-progress-bar',
+                                    prepWarningLevel === 'critical' ? 'bg-[var(--tablet-danger)]' :
+                                    prepWarningLevel === 'warning' ? 'bg-[var(--tablet-warning)]' :
+                                    'bg-[var(--tablet-success)]'
+                                  )}
+                                  style={{ width: `${prepTimeData.percentRemaining}%` }}
+                                />
+                              </div>
+                            </div>
+                          )}
+
                           <div className="mt-2 flex items-center justify-between text-sm text-[var(--tablet-muted)]">
-                            <span>{itemCount} item{itemCount !== 1 ? 's' : ''}</span>
+                            <div className="flex items-center gap-2">
+                              <span>{itemCount} item{itemCount !== 1 ? 's' : ''}</span>
+                              {o.order_type && (
+                                <span className="px-2 py-0.5 rounded text-[10px] bg-[var(--tablet-border)] uppercase tracking-wide">
+                                  {o.order_type}
+                                </span>
+                              )}
+                            </div>
                             <span className="text-[var(--tablet-text)] font-semibold">{formatMoney(o.total_amount)}</span>
                           </div>
+
                           {hasPendingAction && (
                             <div className="mt-2 text-[11px] font-semibold uppercase text-[var(--tablet-accent)]">
                               Pending Sync
                             </div>
                           )}
+
+                          {/* View Details Button */}
+                          <div className="mt-3 flex items-center gap-2">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setOrderDetailsOrder(o);
+                              }}
+                              className="flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-semibold uppercase bg-[var(--tablet-surface-alt)] border border-[var(--tablet-border)] hover:bg-[var(--tablet-border)] transition"
+                            >
+                              <Eye className="h-4 w-4" />
+                              View Details
+                            </button>
+                          </div>
                         </button>
                       );
                     })}
@@ -1324,6 +1687,132 @@ export default function TabletOrdersPage() {
           </div>
         </main>
       </div>
+
+      {/* Order Details Modal */}
+      {orderDetailsOrder && (
+        <div className="no-print fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="bg-[var(--tablet-surface)] rounded-3xl shadow-[0_12px_30px_rgba(0,0,0,0.5)] w-full max-w-2xl max-h-[90vh] overflow-hidden border border-[var(--tablet-border)] flex flex-col">
+            {/* Modal Header */}
+            <div className="px-6 py-4 border-b border-[var(--tablet-border)] flex items-center justify-between">
+              <div>
+                <h3 className="text-xl font-semibold">
+                  Order #{orderDetailsOrder.external_id ? orderDetailsOrder.external_id.slice(-4).toUpperCase() : orderDetailsOrder.id.slice(-4).toUpperCase()}
+                </h3>
+                <p className="text-sm text-[var(--tablet-muted)]">
+                  {orderDetailsOrder.customer_name || 'Guest'} • {getChannelIcon(orderDetailsOrder.channel)} {orderDetailsOrder.channel || 'POS'}
+                </p>
+              </div>
+              <button
+                onClick={() => setOrderDetailsOrder(null)}
+                className="p-2 rounded-full hover:bg-[var(--tablet-border)] transition"
+              >
+                <X className="h-6 w-6 text-[var(--tablet-muted)]" />
+              </button>
+            </div>
+
+            {/* Modal Content - Scrollable */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              {/* Order Info */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div className="bg-[var(--tablet-bg)] rounded-xl p-3">
+                  <div className="text-xs text-[var(--tablet-muted)] uppercase tracking-wide">Status</div>
+                  <div className="mt-1">
+                    <span className={clsx('px-2 py-1 rounded-full text-xs font-semibold', statusBadgeClassesForStatus(normalizeStatus(orderDetailsOrder.status)))}>
+                      {normalizeStatus(orderDetailsOrder.status)}
+                    </span>
+                  </div>
+                </div>
+                <div className="bg-[var(--tablet-bg)] rounded-xl p-3">
+                  <div className="text-xs text-[var(--tablet-muted)] uppercase tracking-wide">Type</div>
+                  <div className="mt-1 font-semibold">{orderDetailsOrder.order_type || 'Pickup'}</div>
+                </div>
+                <div className="bg-[var(--tablet-bg)] rounded-xl p-3">
+                  <div className="text-xs text-[var(--tablet-muted)] uppercase tracking-wide">Time</div>
+                  <div className="mt-1 font-semibold">
+                    {orderDetailsOrder.pickup_time
+                      ? new Date(orderDetailsOrder.pickup_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                      : 'ASAP'}
+                  </div>
+                </div>
+                <div className="bg-[var(--tablet-bg)] rounded-xl p-3">
+                  <div className="text-xs text-[var(--tablet-muted)] uppercase tracking-wide">Total</div>
+                  <div className="mt-1 text-lg font-semibold">{formatMoney(orderDetailsOrder.total_amount)}</div>
+                </div>
+              </div>
+
+              {/* Customer Info */}
+              <div className="bg-[var(--tablet-bg)] rounded-xl p-4">
+                <h4 className="text-sm font-semibold uppercase tracking-wide text-[var(--tablet-muted)] mb-3">Customer</h4>
+                <div className="flex items-center gap-4">
+                  <div className="h-12 w-12 rounded-full bg-[var(--tablet-border-strong)] flex items-center justify-center text-lg font-semibold">
+                    {(orderDetailsOrder.customer_name || 'G')[0]}
+                  </div>
+                  <div>
+                    <div className="font-semibold">{orderDetailsOrder.customer_name || 'Guest'}</div>
+                    <div className="text-sm text-[var(--tablet-muted)]">{orderDetailsOrder.customer_phone || 'No contact provided'}</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Items */}
+              <div>
+                <h4 className="text-sm font-semibold uppercase tracking-wide text-[var(--tablet-muted)] mb-3">Items ({orderDetailsOrder.items?.length || 0})</h4>
+                <div className="space-y-3">
+                  {(orderDetailsOrder.items || []).map((item, idx) => (
+                    <div key={idx} className="flex items-center gap-4 p-3 bg-[var(--tablet-bg)] rounded-xl">
+                      <div className="h-10 w-10 rounded-lg bg-[var(--tablet-border-strong)] flex items-center justify-center font-semibold text-sm">
+                        {item.quantity || 1}
+                      </div>
+                      <div className="flex-1">
+                        <div className="font-semibold">{item.name}</div>
+                        <div className="text-sm text-[var(--tablet-muted)]">
+                          {formatMoney(item.unit_price || item.price || 0)} each
+                        </div>
+                      </div>
+                      <div className="font-semibold">
+                        {formatMoney((item.unit_price || item.price || 0) * (item.quantity || 1))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Special Instructions */}
+              {orderDetailsOrder.special_instructions && (
+                <div className="bg-[var(--tablet-warning)]/10 border border-[var(--tablet-warning)]/30 rounded-xl p-4">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="h-5 w-5 text-[var(--tablet-warning)] flex-shrink-0 mt-0.5" />
+                    <div>
+                      <div className="font-semibold text-[var(--tablet-warning)] mb-1">Special Instructions</div>
+                      <div className="text-sm">{orderDetailsOrder.special_instructions}</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-4 border-t border-[var(--tablet-border)] flex gap-3">
+              <button
+                onClick={() => {
+                  printOrder(orderDetailsOrder.id);
+                  setOrderDetailsOrder(null);
+                }}
+                className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-[var(--tablet-border-strong)] font-semibold uppercase transition hover:brightness-110"
+              >
+                <Printer className="h-5 w-5" />
+                Print
+              </button>
+              <button
+                onClick={() => setOrderDetailsOrder(null)}
+                className="flex-1 py-3 rounded-xl bg-[var(--tablet-accent)] text-[var(--tablet-accent-contrast)] font-semibold uppercase transition hover:opacity-90"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Print Prompt Modal (when auto-print is OFF) */}
       {showPrintPrompt && (

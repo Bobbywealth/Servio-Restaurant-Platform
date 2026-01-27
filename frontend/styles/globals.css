@@ -80,6 +80,8 @@ img, video {
     --tablet-accent: #c4a661;
     --tablet-accent-contrast: #1a1a1a;
     --tablet-success: #4a7c59;
+    --tablet-warning: #b8860b;
+    --tablet-danger: #c44536;
     --tablet-info: #4a5f8c;
   }
 
@@ -98,6 +100,8 @@ img, video {
     --tablet-accent: #b08a3a;
     --tablet-accent-contrast: #111827;
     --tablet-success: #2e7d32;
+    --tablet-warning: #d97706;
+    --tablet-danger: #dc2626;
     --tablet-info: #3651a3;
   }
 
@@ -422,6 +426,98 @@ img, video {
 
 .mic-recording {
   animation: mic-pulse 1.5s infinite;
+}
+
+/* Prep time countdown animations */
+@keyframes prep-time-critical {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.02);
+  }
+}
+
+@keyframes prep-time-progress {
+  0% {
+    width: 100%;
+  }
+  100% {
+    width: 0%;
+  }
+}
+
+.prep-time-critical {
+  animation: prep-time-critical 1s ease-in-out infinite;
+}
+
+.prep-time-progress-bar {
+  transition: width 1s linear;
+}
+
+/* Pulse animation for overdue orders */
+@keyframes overdue-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(196, 69, 54, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(196, 69, 54, 0);
+  }
+}
+
+.order-overdue {
+  animation: overdue-pulse 2s ease-in-out infinite;
+}
+
+/* Search input focus animation */
+@keyframes search-focus {
+  0% {
+    box-shadow: 0 0 0 0 var(--tablet-accent);
+  }
+  70% {
+    box-shadow: 0 0 0 6px rgba(0, 0, 0, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(0, 0, 0, 0);
+  }
+}
+
+.search-input-focus {
+  animation: search-focus 0.5s ease-out;
+}
+
+/* Order card entrance animation */
+@keyframes order-card-enter {
+  0% {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.98);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.order-card-enter {
+  animation: order-card-enter 0.3s ease-out;
+}
+
+/* Fade in animation */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.2s ease-out;
 }
 
 @keyframes route-progress {
