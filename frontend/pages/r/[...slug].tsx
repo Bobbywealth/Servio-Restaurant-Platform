@@ -226,6 +226,7 @@ export default function PublicProfile() {
 
   // Scroll to category
   const scrollToCategory = (cat: string) => {
+    setSelectedCategory(cat === 'all' ? null : cat);
     const element = document.getElementById(`category-${cat.replace(/\s+/g, '-').toLowerCase()}`);
     if (element) {
       // Account for sticky nav height (about 120px)
