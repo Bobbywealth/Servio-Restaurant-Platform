@@ -523,7 +523,7 @@ function CurrentShiftCard({ shift, onStartBreak, onEndBreak, onClockOut, loading
               icon={Coffee}
               variant="warning"
               onClick={onStartBreak}
-              disabled={loading || hours < 0.5}
+              disabled={loading}
               loading={loading}
             />
             <ActionButton

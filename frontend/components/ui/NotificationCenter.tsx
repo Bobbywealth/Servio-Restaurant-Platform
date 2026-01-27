@@ -70,7 +70,12 @@ export default function NotificationCenter({ className = '' }: NotificationCente
         setNotifications(normalized)
         setUnreadCount(response.data.data.unreadCount)
       }
-    } catch (error) {
+    } catch (error: any) {
+      // Silently handle auth errors - user is not logged in
+      if (error?.response?.status === 401) {
+        // User is not authenticated, silently skip notifications
+        return
+      }
       console.error('Failed to fetch notifications:', error)
     } finally {
       setIsLoading(false)
