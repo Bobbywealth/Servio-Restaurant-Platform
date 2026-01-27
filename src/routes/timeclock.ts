@@ -1034,4 +1034,339 @@ router.get('/user-daily-hours', asyncHandler(async (req: Request, res: Response)
   });
 }));
 
+/**
+ * POST /api/timeclock/manager/clock-in
+ * Manager can clock in any employee (bypasses PIN requirement)
+ * Requires manager authentication
+ */
+router.post('/manager/clock-in', asyncHandler(async (req: Request, res: Response) => {
+  const { userId, position, clockInTime, managerId } = req.body;
+
+  if (!userId) {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'User ID is required' }
+    });
+  }
+
+  const db = DatabaseService.getInstance().getDatabase();
+
+  // Get the target user
+  const user = await db.get('SELECT * FROM users WHERE id = ? AND is_active = TRUE', [userId]);
+
+  if (!user) {
+    return res.status(404).json({
+      success: false,
+      error: { message: 'User not found or inactive' }
+    });
+  }
+
+  // Check if user is already clocked in
+  const existingEntry = await db.get(`
+    SELECT * FROM time_entries
+    WHERE user_id = ? AND clock_out_time IS NULL
+    ORDER BY clock_in_time DESC
+    LIMIT 1
+  `, [user.id]);
+
+  if (existingEntry) {
+    return res.status(400).json({
+      success: false,
+      error: {
+        message: 'User is already clocked in',
+        clockInTime: existingEntry.clock_in_time
+      }
+    });
+  }
+
+  // Create new time entry
+  const entryId = uuidv4();
+  const actualClockInTime = clockInTime ? new Date(clockInTime).toISOString() : new Date().toISOString();
+
+  await db.run(`
+    INSERT INTO time_entries (
+      id, restaurant_id, user_id, clock_in_time, position, break_minutes
+    ) VALUES (?, ?, ?, ?, ?, ?)
+  `, [entryId, user.restaurant_id, user.id, actualClockInTime, position || null, 0]);
+
+  // Log the action
+  await DatabaseService.getInstance().logAudit(
+    user.restaurant_id,
+    managerId || 'manager',
+    'manager_clock_in',
+    'time_entry',
+    entryId,
+    { position, clockInTime: actualClockInTime, managerId }
+  );
+
+  await eventBus.emit('staff.clock_in', {
+    restaurantId: user.restaurant_id,
+    type: 'staff.clock_in',
+    actor: { actorType: 'user', actorId: managerId || 'manager' },
+    payload: {
+      staffId: user.id,
+      staffName: user.name,
+      timeEntryId: entryId,
+      position,
+      managerAction: true
+    },
+    occurredAt: actualClockInTime
+  });
+
+  logger.info(`Manager clocked in user ${user.name} at ${actualClockInTime}`);
+
+  res.json({
+    success: true,
+    data: {
+      entryId,
+      userId: user.id,
+      userName: user.name,
+      clockInTime: actualClockInTime,
+      position
+    }
+  });
+}));
+
+/**
+ * POST /api/timeclock/manager/clock-out
+ * Manager can clock out any employee (bypasses PIN requirement)
+ * Requires manager authentication
+ */
+router.post('/manager/clock-out', asyncHandler(async (req: Request, res: Response) => {
+  const { userId, notes, clockOutTime, managerId } = req.body;
+
+  if (!userId) {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'User ID is required' }
+    });
+  }
+
+  const db = DatabaseService.getInstance().getDatabase();
+
+  // Get the target user
+  const user = await db.get('SELECT * FROM users WHERE id = ? AND is_active = TRUE', [userId]);
+
+  if (!user) {
+    return res.status(404).json({
+      success: false,
+      error: { message: 'User not found or inactive' }
+    });
+  }
+
+  // Find active time entry
+  const timeEntry = await db.get(`
+    SELECT * FROM time_entries
+    WHERE user_id = ? AND clock_out_time IS NULL
+    ORDER BY clock_in_time DESC
+    LIMIT 1
+  `, [user.id]);
+
+  if (!timeEntry) {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'User is not currently clocked in' }
+    });
+  }
+
+  const actualClockOutTime = clockOutTime ? new Date(clockOutTime).toISOString() : new Date().toISOString();
+  const clockInTime = new Date(timeEntry.clock_in_time);
+  const clockOut = new Date(actualClockOutTime);
+
+  // Calculate total hours (excluding breaks)
+  const totalMinutes = Math.floor((clockOut.getTime() - clockInTime.getTime()) / (1000 * 60));
+  const totalHours = Math.max(0, (totalMinutes - timeEntry.break_minutes) / 60);
+
+  // Update time entry
+  await db.run(`
+    UPDATE time_entries
+    SET clock_out_time = ?, total_hours = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `, [actualClockOutTime, totalHours.toFixed(2), notes || null, timeEntry.id]);
+
+  // Log the action
+  await DatabaseService.getInstance().logAudit(
+    user.restaurant_id,
+    managerId || 'manager',
+    'manager_clock_out',
+    'time_entry',
+    timeEntry.id,
+    {
+      clockOutTime: actualClockOutTime,
+      totalHours: totalHours.toFixed(2),
+      breakMinutes: timeEntry.break_minutes,
+      notes,
+      managerId
+    }
+  );
+
+  await eventBus.emit('staff.clock_out', {
+    restaurantId: user.restaurant_id,
+    type: 'staff.clock_out',
+    actor: { actorType: 'user', actorId: managerId || 'manager' },
+    payload: {
+      staffId: user.id,
+      staffName: user.name,
+      timeEntryId: timeEntry.id,
+      totalHours: Number(totalHours.toFixed(2)),
+      breakMinutes: timeEntry.break_minutes,
+      managerAction: true
+    },
+    occurredAt: actualClockOutTime
+  });
+
+  logger.info(`Manager clocked out user ${user.name} at ${actualClockOutTime}, worked ${totalHours.toFixed(2)} hours`);
+
+  res.json({
+    success: true,
+    data: {
+      entryId: timeEntry.id,
+      userId: user.id,
+      userName: user.name,
+      clockInTime: timeEntry.clock_in_time,
+      clockOutTime: actualClockOutTime,
+      totalHours: parseFloat(totalHours.toFixed(2)),
+      breakMinutes: timeEntry.break_minutes
+    }
+  });
+}));
+
+/**
+ * POST /api/timeclock/manager/reverse-entry
+ * Manager can reverse (delete) a time entry
+ * Requires manager authentication
+ */
+router.post('/manager/reverse-entry', asyncHandler(async (req: Request, res: Response) => {
+  const { entryId, reason, managerId } = req.body;
+
+  if (!entryId) {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'Entry ID is required' }
+    });
+  }
+
+  const db = DatabaseService.getInstance().getDatabase();
+
+  // Get existing entry
+  const existingEntry = await db.get('SELECT * FROM time_entries WHERE id = ?', [entryId]);
+
+  if (!existingEntry) {
+    return res.status(404).json({
+      success: false,
+      error: { message: 'Time entry not found' }
+    });
+  }
+
+  // Get user info for audit
+  const user = await db.get('SELECT name FROM users WHERE id = ?', [existingEntry.user_id]);
+
+  // Delete the time entry (and associated breaks)
+  await db.run('DELETE FROM time_entry_breaks WHERE time_entry_id = ?', [entryId]);
+  await db.run('DELETE FROM time_entries WHERE id = ?', [entryId]);
+
+  // Log the action
+  await DatabaseService.getInstance().logAudit(
+    existingEntry.restaurant_id,
+    managerId || 'manager',
+    'reverse_time_entry',
+    'time_entry',
+    entryId,
+    {
+      originalEntry: existingEntry,
+      deletedUserId: existingEntry.user_id,
+      deletedUserName: user?.name,
+      reason,
+      managerId
+    }
+  );
+
+  await eventBus.emit('staff.time_entry_reversed', {
+    restaurantId: existingEntry.restaurant_id,
+    type: 'staff.time_entry_reversed',
+    actor: { actorType: 'user', actorId: managerId || 'manager' },
+    payload: {
+      timeEntryId: entryId,
+      staffId: existingEntry.user_id,
+      staffName: user?.name,
+      reason,
+      managerAction: true
+    },
+    occurredAt: new Date().toISOString()
+  });
+
+  logger.info(`Manager reversed time entry ${entryId} for user ${user?.name}`);
+
+  res.json({
+    success: true,
+    data: {
+      entryId,
+      userId: existingEntry.user_id,
+      userName: user?.name,
+      clockInTime: existingEntry.clock_in_time,
+      clockOutTime: existingEntry.clock_out_time,
+      reversedAt: new Date().toISOString(),
+      reason
+    }
+  });
+}));
+
+/**
+ * GET /api/timeclock/manager/all-staff
+ * Get all staff members with their clock status (for manager dashboard)
+ * Requires manager authentication
+ */
+router.get('/manager/all-staff', asyncHandler(async (req: Request, res: Response) => {
+  const db = DatabaseService.getInstance().getDatabase();
+
+  // Get all active staff with their current status
+  const staff = await db.all(`
+    SELECT
+      u.id as user_id,
+      u.name,
+      u.role,
+      u.pin,
+      te.id as time_entry_id,
+      te.clock_in_time,
+      te.clock_out_time,
+      te.position,
+      te.break_minutes,
+      CASE
+        WHEN te.id IS NOT NULL AND te.clock_out_time IS NULL THEN 1
+        ELSE 0
+      END as is_clocked_in,
+      CASE
+        WHEN teb.id IS NOT NULL AND teb.break_end IS NULL THEN 1
+        ELSE 0
+      END as is_on_break
+    FROM users u
+    LEFT JOIN time_entries te ON u.id = te.user_id
+      AND te.clock_out_time IS NULL
+    LEFT JOIN time_entry_breaks teb ON te.id = teb.time_entry_id
+      AND teb.break_end IS NULL
+    WHERE u.is_active = TRUE
+    ORDER BY u.name ASC
+  `);
+
+  res.json({
+    success: true,
+    data: {
+      staff: staff.map(s => ({
+        userId: s.user_id,
+        name: s.name,
+        role: s.role,
+        pin: s.pin,
+        isClockedIn: Boolean(s.is_clocked_in),
+        timeEntryId: s.time_entry_id,
+        clockInTime: s.clock_in_time,
+        position: s.position,
+        breakMinutes: s.break_minutes,
+        isOnBreak: Boolean(s.is_on_break)
+      })),
+      totalStaff: staff.length,
+      clockedInCount: staff.filter(s => s.is_clocked_in).length
+    }
+  });
+}));
+
 export default router;

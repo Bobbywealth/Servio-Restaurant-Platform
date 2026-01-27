@@ -1,9 +1,16 @@
 import React, { useState, useEffect } from 'react'
 import Head from 'next/head'
+import dynamic from 'next/dynamic'
 import DashboardLayout from '../../components/Layout/DashboardLayout'
-import { Clock, Users, Play, Pause, Coffee, CheckCircle } from 'lucide-react'
+import ManagerTimeClockModal from '../../components/timeclock/ManagerTimeClockModal'
+import { Clock, Users, Play, Pause, Coffee, CheckCircle, UserCog } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { api } from '../../lib/api'
+
+const DashboardLayoutForTimeclock = dynamic(() => import('../../components/Layout/DashboardLayout'), {
+  ssr: true,
+  loading: () => <div className="min-h-screen bg-gray-50 animate-pulse" />
+})
 
 interface Staff {
   user_id: string
@@ -42,6 +49,8 @@ export default function TimeClockPage() {
     totalHoursToday: 0,
     avgHoursPerShift: 0
   })
+
+  const [showManagerModal, setShowManagerModal] = useState(false)
 
   useEffect(() => {
     fetchCurrentStaff()
@@ -193,7 +202,7 @@ export default function TimeClockPage() {
   }
 
   return (
-    <DashboardLayout>
+    <DashboardLayoutForTimeclock>
       <Head>
         <title>Time Clock - Servio</title>
       </Head>
@@ -206,20 +215,41 @@ export default function TimeClockPage() {
             <p className="text-gray-600">Staff time tracking and management</p>
           </div>
 
-          <div className="text-right">
-            <div className="text-2xl font-mono font-bold text-gray-900">
-              {new Date().toLocaleTimeString()}
-            </div>
-            <div className="text-sm text-gray-600">
-              {new Date().toLocaleDateString('en-US', {
-                weekday: 'long',
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric'
-              })}
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => setShowManagerModal(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white font-medium rounded-lg transition-colors"
+            >
+              <UserCog className="w-4 h-4" />
+              Manager Controls
+            </button>
+
+            <div className="text-right">
+              <div className="text-2xl font-mono font-bold text-gray-900">
+                {new Date().toLocaleTimeString()}
+              </div>
+              <div className="text-sm text-gray-600">
+                {new Date().toLocaleDateString('en-US', {
+                  weekday: 'long',
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric'
+                })}
+              </div>
             </div>
           </div>
         </div>
+
+        {/* Manager Modal */}
+        <ManagerTimeClockModal
+          isOpen={showManagerModal}
+          onClose={() => setShowManagerModal(false)}
+          onRefresh={() => {
+            fetchCurrentStaff()
+            fetchRecentEntries()
+            fetchStats()
+          }}
+        />
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
