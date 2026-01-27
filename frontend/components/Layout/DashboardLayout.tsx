@@ -321,6 +321,13 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           <div className="px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between items-center h-16">
               <div className="flex items-center space-x-3">
+                <button
+                  onClick={() => setSidebarOpen(true)}
+                  className="lg:hidden btn-icon"
+                  aria-label="Open menu"
+                >
+                  <Menu className="w-5 h-5" />
+                </button>
                 <div className="text-sm font-semibold text-gray-900 dark:text-white">{pageTitle}</div>
               </div>
               <div className="flex items-center space-x-3">

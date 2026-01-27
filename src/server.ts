@@ -154,7 +154,23 @@ async function initializeServer() {
     app.use('/api/sync', requireAuth, syncRoutes);
     app.use('/api/receipts', requireAuth, receiptsRoutes);
     app.use('/api/audit', requireAuth, auditRoutes);
-    app.use('/api/timeclock', requireAuth, timeclockRoutes);
+
+    // Timeclock routes: PIN-authenticated endpoints are public, others require auth
+    // POST /clock-in, /clock-out, /start-break, /end-break, /pin-login use PIN auth internally
+    // GET endpoints for stats/display can be public since they don't modify data
+    app.use('/api/timeclock', (req, res, next) => {
+      // PIN-based endpoints don't need JWT auth
+      const pinAuthEndpoints = ['/clock-in', '/clock-out', '/start-break', '/end-break', '/pin-login', '/my-stats'];
+      const isPinEndpoint = pinAuthEndpoints.some(endpoint => req.path.startsWith(endpoint));
+      if (isPinEndpoint) return next();
+      // Display-only endpoints (current-staff, staff-hours, user-daily-hours, stats) are public
+      const displayEndpoints = ['/current-staff', '/staff-hours', '/user-daily-hours', '/stats'];
+      const isDisplayEndpoint = displayEndpoints.some(endpoint => req.path.startsWith(endpoint));
+      if (isDisplayEndpoint) return next();
+      // All other endpoints require auth (like editing entries)
+      return requireAuth(req, res, next);
+    }, timeclockRoutes);
+
     app.use('/api/marketing', requireAuth, marketingRoutes);
     app.use('/api/restaurant', requireAuth, restaurantRoutes);
     app.use('/api/restaurants', (req, res, next) => {

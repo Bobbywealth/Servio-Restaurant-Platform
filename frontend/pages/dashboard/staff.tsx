@@ -925,45 +925,57 @@ export default function StaffPage() {
                   </div>
                 </div>
 
-                {/* Hours Summary */}
-                <div className="grid grid-cols-2 gap-3 mb-4">
-                  <div className={`rounded-xl p-3 ${
-                    hoursToday > 0
-                      ? 'bg-servio-green-500/10 border border-servio-green-500/20'
-                      : 'bg-gray-100 dark:bg-surface-700'
-                  }`}>
-                    <div className="flex items-center gap-2 mb-1">
-                      <Clock className={`w-4 h-4 ${
-                        hoursToday > 0 ? 'text-servio-green-500' : 'text-surface-400'
-                      }`} />
-                      <span className="text-xs font-medium text-surface-600 dark:text-surface-400">
-                        Today
-                      </span>
-                    </div>
-                    <p className={`text-xl font-bold ${
-                      hoursToday > 0 ? 'text-servio-green-500' : 'text-surface-900 dark:text-surface-100'
-                    }`}>
-                      {hoursToday > 0 ? `${hoursToday.toFixed(1)}h` : '—'}
-                    </p>
+                {/* Hours Summary with Daily Breakdown */}
+                <div className="mb-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-medium text-surface-600 dark:text-surface-400">
+                      This Week
+                    </span>
+                    <span className="text-sm font-bold text-surface-900 dark:text-surface-100">
+                      {hoursThisWeek > 0 ? `${hoursThisWeek.toFixed(1)}h` : '0h'}
+                    </span>
                   </div>
-                  <div className={`rounded-xl p-3 ${
-                    hoursThisWeek > 0
-                      ? 'bg-primary-500/10 border border-primary-500/20'
-                      : 'bg-gray-100 dark:bg-surface-700'
-                  }`}>
-                    <div className="flex items-center gap-2 mb-1">
-                      <Calendar className={`w-4 h-4 ${
-                        hoursThisWeek > 0 ? 'text-primary-500' : 'text-surface-400'
-                      }`} />
-                      <span className="text-xs font-medium text-surface-600 dark:text-surface-400">
-                        This Week
-                      </span>
-                    </div>
-                    <p className={`text-xl font-bold ${
-                      hoursThisWeek > 0 ? 'text-primary-500' : 'text-surface-900 dark:text-surface-100'
-                    }`}>
-                      {hoursThisWeek > 0 ? `${hoursThisWeek.toFixed(1)}h` : '—'}
-                    </p>
+                  {/* Daily breakdown bar chart */}
+                  <div className="flex gap-1">
+                    {weekDates.map((date) => {
+                      const dayHours = dailyHours?.userDailyHours[member.id]?.[date] || 0
+                      const isToday = date === new Date().toISOString().split('T')[0]
+                      const isFuture = new Date(date) > new Date()
+                      const maxHours = 12 // Scale bar to 12 hours max
+                      const heightPercent = Math.min((dayHours / maxHours) * 100, 100)
+                      const dayName = new Date(date).toLocaleDateString('en-US', { weekday: 'short' }).charAt(0)
+
+                      return (
+                        <div key={date} className="flex-1 flex flex-col items-center">
+                          <div className="relative w-full h-12 flex items-end">
+                            {/* Hour label on hover */}
+                            {dayHours > 0 && (
+                              <div className="absolute -top-5 left-1/2 transform -translate-x-1/2 text-[10px] font-medium text-surface-600 dark:text-surface-400 whitespace-nowrap">
+                                {dayHours.toFixed(1)}h
+                              </div>
+                            )}
+                            {/* Bar */}
+                            <div
+                              className={`w-full rounded-t-sm transition-all ${
+                                isFuture
+                                  ? 'bg-gray-100 dark:bg-surface-700'
+                                  : dayHours > 0
+                                    ? 'bg-primary-500'
+                                    : 'bg-gray-200 dark:bg-surface-600'
+                              }`}
+                              style={{ height: isFuture ? '4px' : `${Math.max(heightPercent, 4)}%` }}
+                            />
+                          </div>
+                          <span className={`text-[10px] mt-1 ${
+                            isToday
+                              ? 'font-bold text-primary-500'
+                              : 'text-surface-400 dark:text-surface-500'
+                          }`}>
+                            {dayName}
+                          </span>
+                        </div>
+                      )
+                    })}
                   </div>
                 </div>
 
