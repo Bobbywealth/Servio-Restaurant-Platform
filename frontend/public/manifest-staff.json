@@ -1,0 +1,42 @@
+{
+  "name": "Servio Staff Clock-In",
+  "short_name": "Clock-In",
+  "description": "Staff time tracking and clock-in for Servio restaurants",
+  "start_url": "/staff/clock",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#ff6b35",
+  "orientation": "portrait-primary",
+  "scope": "/staff/",
+  "icons": [
+    {
+      "src": "/icons/clock-in-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/clock-in-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["business", "productivity"],
+  "shortcuts": [
+    {
+      "name": "Clock In/Out",
+      "short_name": "Clock",
+      "description": "Clock in or out",
+      "url": "/staff/clock",
+      "icons": [{ "src": "/icons/clock-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "My Hours",
+      "short_name": "Hours",
+      "description": "View weekly hours",
+      "url": "/staff/clock/hours",
+      "icons": [{ "src": "/icons/hours-192.png", "sizes": "192x192" }]
+    }
+  ]
+}

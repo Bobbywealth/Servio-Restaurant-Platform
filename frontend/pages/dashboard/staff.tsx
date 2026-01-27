@@ -27,6 +27,7 @@ interface StaffUser {
   name: string
   email?: string | null
   role: 'staff' | 'manager' | 'owner' | 'admin' | 'platform-admin'
+  pin?: string | null
   is_active: boolean
   created_at: string
   updated_at: string
