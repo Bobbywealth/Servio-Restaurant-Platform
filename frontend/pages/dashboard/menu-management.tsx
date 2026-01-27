@@ -635,7 +635,9 @@ const MenuManagement: React.FC = () => {
     });
 
     try {
-      await api.put('/api/menu/categories/reorder', { categoryIds: nextOrderedIds });
+      const response = await api.put('/api/menu/categories/reorder', { categoryIds: nextOrderedIds });
+      const { updated } = response.data || {};
+      console.log('[handleReorderCategories] Category order saved:', { requested: nextOrderedIds.length, updated });
       toast.success('Category order saved');
     } catch (error) {
       console.error('Failed to persist category order', error);

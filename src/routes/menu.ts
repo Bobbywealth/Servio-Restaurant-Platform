@@ -786,12 +786,38 @@ router.put('/categories/reorder', asyncHandler(async (req: Request, res: Respons
     return res.status(400).json({ success: false, error: { message: 'categoryIds is required' } });
   }
 
-  for (let i = 0; i < categoryIds.length; i++) {
-    await db.run(
-      'UPDATE menu_categories SET sort_order = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND restaurant_id = ?',
-      [i, categoryIds[i], restaurantId]
-    );
+  // Verify all categories exist and belong to this restaurant using IN clause
+  const placeholders = categoryIds.map(() => '?').join(', ');
+  const existingCategories = await db.all(
+    `SELECT id FROM menu_categories WHERE id IN (${placeholders}) AND restaurant_id = ?`,
+    [...categoryIds, restaurantId]
+  );
+
+  const existingIds = new Set(existingCategories.map(c => c.id));
+  const missingIds = categoryIds.filter(id => !existingIds.has(id));
+
+  if (missingIds.length > 0) {
+    logger.warn(`Category reorder: ${missingIds.length} categories not found or don't belong to restaurant ${restaurantId}:`, missingIds);
+    // Continue with existing categories only
   }
+
+  // Update sort_order for each category
+  let updatedCount = 0;
+  for (let i = 0; i < categoryIds.length; i++) {
+    const categoryId = categoryIds[i];
+    if (!existingIds.has(categoryId)) continue;
+
+    const result = await db.run(
+      'UPDATE menu_categories SET sort_order = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND restaurant_id = ?',
+      [i, categoryId, restaurantId]
+    );
+
+    if (result.changes > 0) {
+      updatedCount++;
+    }
+  }
+
+  logger.info(`Category reorder: updated ${updatedCount}/${categoryIds.length} categories for restaurant ${restaurantId}`);
 
   await DatabaseService.getInstance().logAudit(
     restaurantId,
@@ -799,10 +825,10 @@ router.put('/categories/reorder', asyncHandler(async (req: Request, res: Respons
     'reorder_menu_categories',
     'menu_category',
     'multiple',
-    { categoryIds }
+    { categoryIds, updatedCount }
   );
 
-  res.json({ success: true });
+  res.json({ success: true, updated: updatedCount });
 }));
 
 /**
