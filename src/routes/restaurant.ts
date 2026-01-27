@@ -352,7 +352,8 @@ router.put('/settings', asyncHandler(async (req: Request, res: Response) => {
     printer_mode,
     printer_number_of_copies,
     printer_receipt_header_text,
-    printer_receipt_footer_text
+    printer_receipt_footer_text,
+    printer_font_size
   } = req.body;
 
   if (!restaurantId) {
@@ -401,6 +402,9 @@ router.put('/settings', asyncHandler(async (req: Request, res: Response) => {
   }
   if (printer_receipt_footer_text !== undefined) {
     (settings as any).printer_receipt_footer_text = String(printer_receipt_footer_text).slice(0, 50);
+  }
+  if (printer_font_size !== undefined) {
+    (settings as any).printer_font_size = String(printer_font_size);
   }
 
   // Save updated settings

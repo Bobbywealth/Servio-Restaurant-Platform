@@ -395,20 +395,21 @@ interface CurrentShiftCardProps {
 function CurrentShiftCard({ shift, onStartBreak, onEndBreak, onClockOut, loading }: CurrentShiftCardProps) {
   const [now, setNow] = useState(new Date());
 
-  // Update timer every minute for live tracking
+  // Update timer every 5 seconds for live tracking
   useEffect(() => {
     const interval = setInterval(() => {
       setNow(new Date());
-    }, 60000); // Update every minute
+    }, 5000); // Update every 5 seconds for live counter
     return () => clearInterval(interval);
   }, []);
 
   if (!shift) return null;
 
   const clockInTime = new Date(shift.clockInTime);
-  const hoursWorked = (now.getTime() - clockInTime.getTime()) / (1000 * 60 * 60);
-  const hours = Math.floor(hoursWorked);
-  const minutes = Math.floor((hoursWorked - hours) * 60);
+  const totalSeconds = Math.floor((now.getTime() - clockInTime.getTime()) / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
 
   const formatTime = (date: Date) => {
     return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
@@ -418,10 +419,11 @@ function CurrentShiftCard({ shift, onStartBreak, onEndBreak, onClockOut, loading
   let breakTimer = null;
   if (shift.isOnBreak && shift.currentBreakStart) {
     const breakStart = new Date(shift.currentBreakStart);
-    const breakMinutes = Math.floor((now.getTime() - breakStart.getTime()) / (1000 * 60));
-    const breakHours = Math.floor(breakMinutes / 60);
-    const breakMins = breakMinutes % 60;
-    breakTimer = `${String(breakHours).padStart(2, '0')}:${String(breakMins).padStart(2, '0')}`;
+    const breakSeconds = Math.floor((now.getTime() - breakStart.getTime()) / 1000);
+    const breakHours = Math.floor(breakSeconds / 3600);
+    const breakMinutes = Math.floor((breakSeconds % 3600) / 60);
+    const breakSecs = breakSeconds % 60;
+    breakTimer = `${String(breakHours).padStart(2, '0')}:${String(breakMinutes).padStart(2, '0')}:${String(breakSecs).padStart(2, '0')}`;
   }
 
   // Time since last break (if not on break)
@@ -521,7 +523,7 @@ function CurrentShiftCard({ shift, onStartBreak, onEndBreak, onClockOut, loading
               icon={Coffee}
               variant="warning"
               onClick={onStartBreak}
-              disabled={loading || hoursWorked < 0.5}
+              disabled={loading || hours < 0.5}
               loading={loading}
             />
             <ActionButton
@@ -824,6 +826,14 @@ export default function StaffClockPage() {
       const data = await response.json();
 
       if (data.success) {
+        // Update shift state to show on break status
+        const updatedShift = {
+          ...statusData.data.currentShift,
+          isOnBreak: true,
+          currentBreakStart: data.data.breakStart
+        };
+        setCurrentShift(updatedShift);
+
         // Show confirmation and auto-logout
         setConfirmDialog({
           isOpen: true,
@@ -1004,9 +1014,6 @@ export default function StaffClockPage() {
                 <LogOut className="w-5 h-5" />
               </button>
             </div>
-          </div>
-        </header>
-            </button>
           </div>
         </header>
 
