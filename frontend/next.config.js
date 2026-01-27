@@ -35,6 +35,19 @@ const nextConfig = {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || process.env.BACKEND_URL || 'http://localhost:3002',
   },
 
+  async rewrites() {
+    return [
+      // Proxy API requests to backend in production
+      // In development, use localhost:3002
+      {
+        source: '/api/:path*',
+        destination: process.env.NODE_ENV === 'production'
+          ? 'https://servio-backend-zexb.onrender.com/api/:path*'
+          : 'http://localhost:3002/api/:path*',
+      },
+    ]
+  },
+
   async headers() {
     return [
       // Service worker - no cache for updates
