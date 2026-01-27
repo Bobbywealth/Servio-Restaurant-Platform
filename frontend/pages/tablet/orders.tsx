@@ -328,6 +328,7 @@ export default function TabletOrdersPage() {
   const [autoPrintEnabled, setAutoPrintEnabled] = useState<boolean>(false);
   const [paperWidth, setPaperWidth] = useState<ReceiptPaperWidth>('80mm');
   const [printMode, setPrintMode] = useState<'bluetooth' | 'system' | 'bridge' | 'rawbt'>('system');
+  const [fontSize, setFontSize] = useState<string>('medium');
   const [lastPrintResult, setLastPrintResult] = useState<{ status: 'success' | 'error'; message?: string } | null>(null);
   const [autoPrintPendingId, setAutoPrintPendingId] = useState<string | null>(null);
   const lastAutoPromptedId = useRef<string | null>(null);
@@ -507,6 +508,11 @@ export default function TabletOrdersPage() {
       setPrintMode(storedMode);
     }
 
+    const storedFontSize = typeof window !== 'undefined' ? window.localStorage.getItem('servio_font_size') : null;
+    if (storedFontSize === 'small' || storedFontSize === 'medium' || storedFontSize === 'large' || storedFontSize === 'xlarge') {
+      setFontSize(storedFontSize);
+    }
+
     const storedResult = typeof window !== 'undefined' ? window.localStorage.getItem('servio_last_print_result') : null;
     if (storedResult) {
       try {
@@ -536,6 +542,11 @@ export default function TabletOrdersPage() {
           const mode = settings.printer_mode as 'bluetooth' | 'system' | 'bridge' | 'rawbt';
           setPrintMode(mode);
           window.localStorage.setItem('servio_print_mode', mode);
+        }
+        if (['small', 'medium', 'large', 'xlarge'].includes(settings.printer_font_size)) {
+          const size = settings.printer_font_size;
+          setFontSize(size);
+          window.localStorage.setItem('servio_font_size', size);
         }
       } catch (e) {
         // ignore printer settings load failures
@@ -697,11 +708,11 @@ export default function TabletOrdersPage() {
       }
 
       if (printMode === 'system') {
-        // System print mode - uses Android print dialog
         const html = generateReceiptHtml({
           restaurant: restaurant || null,
           order: order as ReceiptOrder,
-          paperWidth
+          paperWidth,
+          fontSize
         });
 
         setReceiptHtml(html);
@@ -813,7 +824,8 @@ export default function TabletOrdersPage() {
         const html = generateReceiptHtml({
           restaurant: restaurant || null,
           order: testOrder,
-          paperWidth
+          paperWidth,
+          fontSize
         });
 
         setReceiptHtml(html);

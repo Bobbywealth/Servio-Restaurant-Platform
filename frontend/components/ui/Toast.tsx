@@ -59,7 +59,7 @@ export const showToast = {
       />
     ), {
       duration: 4000,
-      position: 'top-right'
+      position: 'top-center'
     })
   },
 
@@ -72,7 +72,7 @@ export const showToast = {
       />
     ), {
       duration: 6000,
-      position: 'top-right'
+      position: 'top-center'
     })
   },
 
@@ -85,7 +85,7 @@ export const showToast = {
       />
     ), {
       duration: 5000,
-      position: 'top-right'
+      position: 'top-center'
     })
   },
 
@@ -98,7 +98,7 @@ export const showToast = {
       />
     ), {
       duration: 4000,
-      position: 'top-right'
+      position: 'top-center'
     })
   },
 
@@ -126,7 +126,7 @@ export const showToast = {
 export default function ToastProvider() {
   return (
     <Toaster
-      position="top-right"
+      position="top-center"
       gutter={8}
       containerClassName="z-[9999]"
       toastOptions={{
@@ -136,6 +136,14 @@ export default function ToastProvider() {
           border: 'none',
           padding: 0,
           boxShadow: 'none',
+        },
+        success: {
+          duration: 4000,
+          position: 'top-center',
+        },
+        error: {
+          duration: 6000,
+          position: 'top-center',
         },
       }}
     />

@@ -153,6 +153,8 @@ router.put('/profile', upload.fields([
         
         logoUrl = `/uploads/restaurants/${logoFileName}`;
         logger.info(`Logo saved: ${logoUrl}`);
+      } else {
+        logger.info('No logo file in upload');
       }
 
       // Process cover image upload
@@ -169,6 +171,8 @@ router.put('/profile', upload.fields([
         
         coverImageUrl = `/uploads/restaurants/${coverFileName}`;
         logger.info(`Cover image saved: ${coverImageUrl}`);
+      } else {
+        logger.info('No cover image file in upload');
       }
     } catch (uploadError) {
       logger.error('Image upload failed:', uploadError);
@@ -177,6 +181,8 @@ router.put('/profile', upload.fields([
         error: { message: 'Failed to process image upload. Please try again.' }
       });
     }
+  } else {
+    logger.info('No files in request');
   }
 
   // Build update query

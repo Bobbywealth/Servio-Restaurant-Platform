@@ -503,7 +503,11 @@ export default function RestaurantProfile() {
     formData.append(type === 'logo' ? 'logo' : 'coverImage', files[0]);
 
     try {
-      const response = await api.put('/api/restaurant/profile', formData);
+      const response = await api.put('/api/restaurant/profile', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
       const data = response.data;
       if (data.success) {
         toast.success(`${type === 'logo' ? 'Logo' : 'Cover image'} updated successfully`);
@@ -511,9 +515,10 @@ export default function RestaurantProfile() {
       } else {
         toast.error(data.error?.message || `Failed to update ${type}`);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error(`Error uploading ${type}:`, error);
-      toast.error(`Failed to update ${type}`);
+      const errorMessage = error.response?.data?.error?.message || error.message || `Failed to update ${type}`;
+      toast.error(errorMessage);
     }
   };
 

@@ -97,7 +97,8 @@ export default function SettingsPage() {
     printMode: 'system',
     numberOfCopies: 1,
     receiptHeaderText: '',
-    receiptFooterText: ''
+    receiptFooterText: '',
+    fontSize: 'medium'  // small, medium, large, xlarge
   })
   const [isSavingPrinterSettings, setIsSavingPrinterSettings] = useState(false)
   const [isTestingPrinter, setIsTestingPrinter] = useState(false)
@@ -149,7 +150,8 @@ export default function SettingsPage() {
         printMode: settings.printer_mode || 'system',
         numberOfCopies: settings.printer_number_of_copies || 1,
         receiptHeaderText: settings.printer_receipt_header_text || '',
-        receiptFooterText: settings.printer_receipt_footer_text || ''
+        receiptFooterText: settings.printer_receipt_footer_text || '',
+        fontSize: settings.printer_font_size || 'medium'
       })
     } catch (err) {
       console.error('Failed to load printer settings:', err)
@@ -182,7 +184,8 @@ export default function SettingsPage() {
         printer_mode: printerSettings.printMode,
         printer_number_of_copies: printerSettings.numberOfCopies,
         printer_receipt_header_text: printerSettings.receiptHeaderText,
-        printer_receipt_footer_text: printerSettings.receiptFooterText
+        printer_receipt_footer_text: printerSettings.receiptFooterText,
+        printer_font_size: printerSettings.fontSize
       })
       setPrinterSaveStatus('saved')
       setTimeout(() => setPrinterSaveStatus('idle'), 2000)
@@ -770,6 +773,61 @@ export default function SettingsPage() {
             <div className="bg-white dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-xl p-5">
               <h4 className="font-semibold text-surface-900 dark:text-surface-100 mb-4">Receipt Customization</h4>
               <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-surface-900 dark:text-surface-100 mb-2">
+                    Font Size
+                  </label>
+                  <div className="flex space-x-3">
+                    <button
+                      type="button"
+                      onClick={() => setPrinterSettings(prev => ({ ...prev, fontSize: 'small' }))}
+                      className={`flex-1 px-4 py-2.5 rounded-lg border-2 font-medium transition-all ${
+                        printerSettings.fontSize === 'small'
+                          ? 'border-primary-500 bg-primary-50 text-primary-700 dark:bg-primary-900/20 dark:text-primary-300'
+                          : 'border-surface-300 dark:border-surface-600 text-surface-700 dark:text-surface-300 hover:border-surface-400 dark:hover:border-surface-500'
+                      }`}
+                    >
+                      Small
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPrinterSettings(prev => ({ ...prev, fontSize: 'medium' }))}
+                      className={`flex-1 px-4 py-2.5 rounded-lg border-2 font-medium transition-all ${
+                        printerSettings.fontSize === 'medium'
+                          ? 'border-primary-500 bg-primary-50 text-primary-700 dark:bg-primary-900/20 dark:text-primary-300'
+                          : 'border-surface-300 dark:border-surface-600 text-surface-700 dark:text-surface-300 hover:border-surface-400 dark:hover:border-surface-500'
+                      }`}
+                    >
+                      Medium
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPrinterSettings(prev => ({ ...prev, fontSize: 'large' }))}
+                      className={`flex-1 px-4 py-2.5 rounded-lg border-2 font-medium transition-all ${
+                        printerSettings.fontSize === 'large'
+                          ? 'border-primary-500 bg-primary-50 text-primary-700 dark:bg-primary-900/20 dark:text-primary-300'
+                          : 'border-surface-300 dark:border-surface-600 text-surface-700 dark:text-surface-300 hover:border-surface-400 dark:hover:border-surface-500'
+                      }`}
+                    >
+                      Large
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPrinterSettings(prev => ({ ...prev, fontSize: 'xlarge' }))}
+                      className={`flex-1 px-4 py-2.5 rounded-lg border-2 font-medium transition-all ${
+                        printerSettings.fontSize === 'xlarge'
+                          ? 'border-primary-500 bg-primary-50 text-primary-700 dark:bg-primary-900/20 dark:text-primary-300'
+                          : 'border-surface-300 dark:border-surface-600 text-surface-700 dark:text-surface-300 hover:border-surface-400 dark:hover:border-surface-500'
+                      }`}
+                    >
+                      Extra Large
+                    </button>
+                  </div>
+                  <p className="text-xs text-surface-500 dark:text-surface-400 mt-2">
+                    Adjusts the text size on printed receipts. Larger sizes may cause text to wrap on narrow paper.
+                  </p>
+                </div>
+
                 <div>
                   <label className="block text-sm font-medium text-surface-900 dark:text-surface-100 mb-2">
                     Header Text (Optional)

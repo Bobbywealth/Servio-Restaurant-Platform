@@ -198,3 +198,98 @@
   color: #333;
 }
 
+/* Font Size Variants */
+.receipt.font-small {
+  --receipt-font-base: 10px;
+  --receipt-font-lg: 12px;
+  --receipt-font-xl: 14px;
+  --receipt-font-2xl: 16px;
+  --receipt-logo-size: 48px;
+}
+
+.receipt.font-medium {
+  --receipt-font-base: 12px;
+  --receipt-font-lg: 14px;
+  --receipt-font-xl: 16px;
+  --receipt-font-2xl: 18px;
+  --receipt-logo-size: 64px;
+}
+
+.receipt.font-large {
+  --receipt-font-base: 14px;
+  --receipt-font-lg: 16px;
+  --receipt-font-xl: 18px;
+  --receipt-font-2xl: 22px;
+  --receipt-logo-size: 80px;
+}
+
+.receipt.font-xlarge {
+  --receipt-font-base: 16px;
+  --receipt-font-lg: 18px;
+  --receipt-font-xl: 24px;
+  --receipt-font-2xl: 28px;
+  --receipt-logo-size: 96px;
+}
+
+/* Apply font size variables */
+.receipt {
+  font-size: var(--receipt-font-base, 12px);
+}
+
+.receipt-logo {
+  width: var(--receipt-logo-size, 64px);
+  height: var(--receipt-logo-size, 64px);
+}
+
+.receipt-title {
+  font-size: var(--receipt-font-2xl, 18px);
+}
+
+.receipt-subtitle {
+  font-size: var(--receipt-font-base, 12px);
+}
+
+.receipt-row {
+  font-size: var(--receipt-font-base, 12px);
+}
+
+.receipt-row-strong {
+  font-size: var(--receipt-font-lg, 14px);
+}
+
+.receipt-item-qty {
+  font-size: var(--receipt-font-lg, 14px);
+}
+
+.receipt-item-name {
+  font-size: var(--receipt-font-base, 12px);
+}
+
+.receipt-item-total {
+  font-size: var(--receipt-font-base, 12px);
+}
+
+.receipt-muted {
+  font-size: var(--receipt-font-base, 12px);
+}
+
+.receipt-notes-title {
+  font-size: var(--receipt-font-base, 12px);
+}
+
+.receipt-notes-body {
+  font-size: var(--receipt-font-base, 12px);
+}
+
+.receipt-footer {
+  font-size: var(--receipt-font-base, 12px);
+}
+
+.receipt-custom-header {
+  font-size: var(--receipt-font-lg, 14px);
+}
+
+.receipt-item-modifiers {
+  font-size: calc(var(--receipt-font-base, 12px) - 1px);
+}
+
