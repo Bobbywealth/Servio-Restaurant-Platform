@@ -199,6 +199,28 @@ router.post('/:id/start', asyncHandler(async (req: Request, res: Response) => {
 }));
 
 /**
+ * GET /api/tasks/staff
+ * Get all active staff members for the restaurant
+ */
+router.get('/staff', asyncHandler(async (req: Request, res: Response) => {
+  const db = DatabaseService.getInstance().getDatabase();
+  const restaurantId = req.user?.restaurantId;
+
+  const staff = await db.all(
+    `SELECT id, name, email, role, permissions, is_active, created_at
+     FROM users
+     WHERE restaurant_id = ? AND is_active = TRUE
+     ORDER BY name ASC`,
+    [restaurantId]
+  );
+
+  res.json({
+    success: true,
+    data: { staff }
+  });
+}));
+
+/**
  * GET /api/tasks/stats
  * Get task statistics
  */

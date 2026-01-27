@@ -19,11 +19,23 @@ interface Task {
   updatedAt: string
 }
 
+interface StaffMember {
+  id: string
+  name: string
+  email?: string | null
+  role: string
+  permissions: string
+  is_active: number
+  created_at: string
+}
+
 export default function TasksPage() {
   const { user, hasPermission, isManagerOrOwner } = useUser()
   const [tasks, setTasks] = useState<Task[]>([])
+  const [staff, setStaff] = useState<StaffMember[]>([])
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [priorityFilter, setPriorityFilter] = useState<string>('all')
+  const [assignedToFilter, setAssignedToFilter] = useState<string>('all')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showCreateModal, setShowCreateModal] = useState(false)
@@ -40,6 +52,7 @@ export default function TasksPage() {
       const params: any = {}
       if (statusFilter !== 'all') params.status = statusFilter
       if (priorityFilter !== 'all') params.priority = priorityFilter
+      if (assignedToFilter !== 'all') params.assignedTo = assignedToFilter
 
       const res = await api.get('/api/tasks', { params })
       setTasks(res.data?.data?.tasks || [])
@@ -52,10 +65,20 @@ export default function TasksPage() {
     }
   }
 
+  const fetchStaff = async () => {
+    try {
+      const res = await api.get('/api/tasks/staff')
+      setStaff(res.data?.data?.staff || [])
+    } catch (e: any) {
+      console.error('Failed to load staff:', e)
+    }
+  }
+
   useEffect(() => {
     if (!hasPermission('tasks', 'read')) return
     fetchTasks()
-  }, [statusFilter, priorityFilter])
+    fetchStaff()
+  }, [statusFilter, priorityFilter, assignedToFilter])
 
   const handleStatusUpdate = async (taskId: string, newStatus: Task['status']) => {
     try {
@@ -205,7 +228,7 @@ export default function TasksPage() {
                 Filters
               </h3>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-2">
                   Status
@@ -235,6 +258,25 @@ export default function TasksPage() {
                   <option value="high">High</option>
                   <option value="medium">Medium</option>
                   <option value="low">Low</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-2">
+                  Assigned To
+                </label>
+                <select
+                  className="input-field w-full"
+                  value={assignedToFilter}
+                  onChange={(e) => setAssignedToFilter(e.target.value)}
+                >
+                  <option value="all">All Staff</option>
+                  <option value="unassigned">Unassigned</option>
+                  {staff.map((member) => (
+                    <option key={member.id} value={member.id}>
+                      {member.name}
+                    </option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -339,6 +381,7 @@ export default function TasksPage() {
         {/* Create/Edit Task Modal */}
         {showCreateModal && (
           <TaskFormModal
+            staff={staff}
             onClose={() => setShowCreateModal(false)}
             onSuccess={() => {
               setShowCreateModal(false)
@@ -352,12 +395,13 @@ export default function TasksPage() {
 }
 
 // Simple Task Form Modal Component
-function TaskFormModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+function TaskFormModal({ staff, onClose, onSuccess }: { staff: StaffMember[]; onClose: () => void; onSuccess: () => void }) {
   const [formData, setFormData] = useState({
     title: '',
     description: '',
     status: 'pending' as Task['status'],
     priority: 'medium' as Task['priority'],
+    assignedTo: '',
     dueDate: '',
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -371,7 +415,10 @@ function TaskFormModal({ onClose, onSuccess }: { onClose: () => void; onSuccess:
 
     setIsSubmitting(true)
     try {
-      await api.post('/api/tasks', formData)
+      await api.post('/api/tasks', {
+        ...formData,
+        assignedTo: formData.assignedTo || undefined,
+      })
       toast.success('Task created successfully')
       onSuccess()
     } catch (e: any) {
@@ -430,7 +477,25 @@ function TaskFormModal({ onClose, onSuccess }: { onClose: () => void; onSuccess:
               />
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-2">
+                Assign To
+              </label>
+              <select
+                className="input-field w-full min-h-[44px]"
+                value={formData.assignedTo}
+                onChange={(e) => setFormData({ ...formData, assignedTo: e.target.value })}
+              >
+                <option value="">Unassigned</option>
+                {staff.map((member) => (
+                  <option key={member.id} value={member.id}>
+                    {member.name} ({member.role})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-2">
                   Status
