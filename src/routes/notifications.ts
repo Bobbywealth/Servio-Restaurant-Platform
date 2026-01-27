@@ -145,4 +145,66 @@ router.post('/read-all', asyncHandler(async (req: Request, res: Response) => {
   res.json({ success: true, data: { ok: true, unreadCount } });
 }));
 
+/**
+ * DELETE /api/notifications/:id
+ */
+router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
+  const user = req.user!;
+  const userId = user.id;
+  const id = req.params.id;
+
+  const db = DatabaseService.getInstance().getDatabase();
+  
+  // Check if notification belongs to user's restaurant
+  const notification = await db.get(
+    'SELECT id FROM notifications WHERE id = ? AND restaurant_id = ?',
+    [id, user.restaurantId]
+  );
+
+  if (!notification) {
+    return res.status(404).json({ success: false, error: 'Notification not found' });
+  }
+
+  // Delete read status
+  await db.run('DELETE FROM notification_reads WHERE notification_id = ?', [id]);
+  // Delete recipients
+  await db.run('DELETE FROM notification_recipients WHERE notification_id = ?', [id]);
+  // Delete notification
+  await db.run('DELETE FROM notifications WHERE id = ?', [id]);
+
+  res.json({ success: true, data: { ok: true } });
+}));
+
+/**
+ * DELETE /api/notifications/clear-all
+ */
+router.delete('/clear-all', asyncHandler(async (req: Request, res: Response) => {
+  const user = req.user!;
+  const userId = user.id;
+  const restaurantId = user.restaurantId;
+
+  const db = DatabaseService.getInstance().getDatabase();
+
+  // Delete all notifications for the user's restaurant that are read
+  await db.run(
+    `
+    DELETE FROM notifications 
+    WHERE restaurant_id = ? 
+    AND id IN (
+      SELECT n.id FROM notifications n
+      JOIN notification_recipients nr ON nr.notification_id = n.id
+      WHERE n.restaurant_id = ?
+      AND (
+        nr.recipient_type = 'restaurant'
+        OR (nr.recipient_type = 'role' AND nr.recipient_role = ?)
+        OR (nr.recipient_type = 'user' AND nr.recipient_user_id = ?)
+      )
+    )
+    `,
+    [restaurantId, restaurantId, user.role, userId]
+  );
+
+  res.json({ success: true, data: { ok: true } });
+}));
+
 export default router;

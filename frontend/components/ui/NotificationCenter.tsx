@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -15,6 +17,7 @@ import {
 } from 'lucide-react'
 import { useSocket } from '../../lib/socket'
 import { formatRelativeTime } from '../../lib/utils'
+import axios from 'axios'
 
 export interface Notification {
   id: string
@@ -40,6 +43,7 @@ export default function NotificationCenter({ className = '' }: NotificationCente
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [isOpen, setIsOpen] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
+  const [isLoading, setIsLoading] = useState(false)
   const socket = useSocket()
   const [alertAudio, setAlertAudio] = useState<HTMLAudioElement | null>(null)
 
@@ -52,213 +56,147 @@ export default function NotificationCenter({ className = '' }: NotificationCente
     return new Date()
   }
 
-  const normalizeNotifications = (items: any[]): Notification[] => (
-    items.map(item => ({
-      ...item,
-      timestamp: normalizeTimestamp(item?.timestamp)
-    }))
-  )
-
-  const markAsRead = useCallback((id: string) => {
-    setNotifications(prev => {
-      const updated = prev.map(n =>
-        n.id === id ? { ...n, read: true } : n
-      )
-      localStorage.setItem('servio_notifications', JSON.stringify(updated))
-      return updated
-    })
-
-    setUnreadCount(prev => Math.max(0, prev - 1))
+  // Fetch notifications from database API
+  const fetchNotifications = useCallback(async () => {
+    try {
+      setIsLoading(true)
+      const response = await axios.get('/api/notifications?limit=100')
+      if (response.data.success) {
+        const normalized = response.data.data.items.map((item: any) => ({
+          ...item,
+          timestamp: normalizeTimestamp(item.created_at),
+          read: item.is_read
+        }))
+        setNotifications(normalized)
+        setUnreadCount(response.data.data.unreadCount)
+      }
+    } catch (error) {
+      console.error('Failed to fetch notifications:', error)
+    } finally {
+      setIsLoading(false)
+    }
   }, [])
 
-  const addNotification = useCallback((notification: Omit<Notification, 'id' | 'timestamp' | 'read'>) => {
-    const newNotification: Notification = {
-      ...notification,
-      id: `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      timestamp: new Date(),
-      read: false
+  // Mark notification as read
+  const markAsRead = useCallback(async (id: string) => {
+    try {
+      await axios.post(`/api/notifications/${id}/read`)
+      setNotifications(prev =>
+        prev.map(n => (n.id === id ? { ...n, read: true } : n))
+      )
+      setUnreadCount(prev => Math.max(0, prev - 1))
+    } catch (error) {
+      console.error('Failed to mark notification as read:', error)
     }
+  }, [])
 
-    setNotifications(prev => {
-      const updated = [newNotification, ...prev].slice(0, 100) // Keep last 100 notifications
-      localStorage.setItem('servio_notifications', JSON.stringify(updated))
-      return updated
-    })
-
-    setUnreadCount(prev => prev + 1)
-
-    // Auto-dismiss low priority notifications
-    if (notification.priority === 'low') {
-      setTimeout(() => {
-        markAsRead(newNotification.id)
-      }, 5000)
+  // Mark all as read
+  const markAllAsRead = useCallback(async () => {
+    try {
+      await axios.post('/api/notifications/read-all')
+      setNotifications(prev => prev.map(n => ({ ...n, read: true })))
+      setUnreadCount(0)
+    } catch (error) {
+      console.error('Failed to mark all as read:', error)
     }
-  }, [markAsRead])
+  }, [])
+
+  // Clear all notifications
+  const clearAll = useCallback(async () => {
+    try {
+      await axios.delete('/api/notifications/clear-all')
+      setNotifications([])
+      setUnreadCount(0)
+    } catch (error) {
+      console.error('Failed to clear notifications:', error)
+    }
+  }, [])
+
+  // Remove single notification
+  const removeNotification = useCallback(async (id: string) => {
+    try {
+      await axios.delete(`/api/notifications/${id}`)
+      setNotifications(prev => {
+        const notification = prev.find(n => n.id === id)
+        if (notification && !notification.read) {
+          setUnreadCount(count => Math.max(0, count - 1))
+        }
+        return prev.filter(n => n.id !== id)
+      })
+    } catch (error) {
+      console.error('Failed to remove notification:', error)
+    }
+  }, [])
 
   useEffect(() => {
-    // Load saved notifications from localStorage
-    const savedNotifications = localStorage.getItem('servio_notifications')
-    if (savedNotifications) {
-      try {
-        const parsed = JSON.parse(savedNotifications)
-        const normalized = Array.isArray(parsed) ? normalizeNotifications(parsed) : []
-        setNotifications(normalized)
-        setUnreadCount(normalized.filter((n: Notification) => !n.read).length)
-      } catch (error) {
-        console.error('Failed to parse saved notifications:', error)
-      }
-    }
+    // Fetch notifications on mount
+    fetchNotifications()
 
     // Prefetch alert sound
     const audio = new Audio('/sounds/order-alert.mp3')
     audio.preload = 'auto'
     setAlertAudio(audio)
 
-    // Listen for socket events
+    // Listen for real-time notification events via socket
+    const handleNewNotification = (data: any) => {
+      const newNotification: Notification = {
+        id: data.id || `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        type: data.type || 'system',
+        priority: data.priority || 'medium',
+        title: data.title || 'New Notification',
+        message: data.message || 'New activity',
+        timestamp: new Date(),
+        read: false,
+        data
+      }
+
+      setNotifications(prev => [newNotification, ...prev].slice(0, 100))
+      setUnreadCount(prev => prev + 1)
+
+      if (audio) {
+        audio.currentTime = 0
+        audio.play().catch(() => {})
+      }
+    }
+
+    const handleUnreadCountUpdate = (data: { unreadCount: number }) => {
+      setUnreadCount(data.unreadCount)
+    }
+
+    // Register socket event listeners
+    socket.on('notifications.new', handleNewNotification)
+    socket.on('notifications.unread_count.updated', handleUnreadCountUpdate)
+
+    // Also listen for order events
     const handleOrderEvent = (data: any) => {
-      addNotification({
+      const notif: Notification = {
+        id: `order_${Date.now()}`,
         type: 'order',
         priority: 'medium',
         title: 'New Order',
         message: `Order #${data.id || data.orderId || 'Unknown'} received`,
+        timestamp: new Date(),
+        read: false,
         data
-      })
+      }
+      setNotifications(prev => [notif, ...prev])
+      setUnreadCount(prev => prev + 1)
       if (audio) {
         audio.currentTime = 0
         audio.play().catch(() => {})
       }
     }
 
-    const handleNotificationEvent = (payload: any) => {
-      const notif = payload?.notification || payload
-      addNotification({
-        type: 'system',
-        priority: notif?.severity === 'high' ? 'high' : 'medium',
-        title: notif?.title || 'Notification',
-        message: notif?.message || 'New activity',
-        data: notif
-      })
-      if (audio) {
-        audio.currentTime = 0
-        audio.play().catch(() => {})
-      }
-    }
-
-    const handleInventoryLowStock = (data: any) => {
-      addNotification({
-        type: 'inventory',
-        priority: 'high',
-        title: 'Low Stock Alert',
-        message: `${data.itemName || 'Item'} is running low (${data.currentLevel}/${data.threshold})`,
-        data,
-        actions: [
-          {
-            label: 'Reorder',
-            action: () => console.log('Reorder item:', data.itemId),
-            variant: 'primary'
-          }
-        ]
-      })
-    }
-
-    const handleStaffClockIn = (data: any) => {
-      addNotification({
-        type: 'staff',
-        priority: 'low',
-        title: 'Staff Clock In',
-        message: `${data.userName || 'Staff member'} clocked in`,
-        data
-      })
-    }
-
-    const handleTaskAssigned = (data: any) => {
-      addNotification({
-        type: 'task',
-        priority: 'medium',
-        title: 'Task Assigned',
-        message: `New task: ${data.taskName || 'Task'}`,
-        data,
-        actions: [
-          {
-            label: 'View',
-            action: () => console.log('View task:', data.taskId),
-            variant: 'primary'
-          }
-        ]
-      })
-    }
-
-    const handleVoiceCommand = (data: any) => {
-      addNotification({
-        type: 'voice',
-        priority: 'low',
-        title: 'Voice Command',
-        message: `Processed: "${data.transcript}"`,
-        data
-      })
-    }
-
-    const handleSystemAlert = (data: any) => {
-      addNotification({
-        type: 'system',
-        priority: data.priority || 'medium',
-        title: 'System Alert',
-        message: data.message,
-        data
-      })
-    }
-
-    // Register event listeners
     socket.on('order:new', handleOrderEvent)
     socket.on('new-order', handleOrderEvent)
-    socket.on('notifications.new', handleNotificationEvent)
-    socket.on('inventory:low_stock', handleInventoryLowStock)
-    socket.on('staff:clock_in', handleStaffClockIn)
-    socket.on('task:assigned', handleTaskAssigned)
-    socket.on('voice:command_received', handleVoiceCommand)
-    socket.on('system:alert', handleSystemAlert)
 
     return () => {
-      // Cleanup event listeners
+      socket.off('notifications.new', handleNewNotification)
+      socket.off('notifications.unread_count.updated', handleUnreadCountUpdate)
       socket.off('order:new', handleOrderEvent)
       socket.off('new-order', handleOrderEvent)
-      socket.off('notifications.new', handleNotificationEvent)
-      socket.off('inventory:low_stock', handleInventoryLowStock)
-      socket.off('staff:clock_in', handleStaffClockIn)
-      socket.off('task:assigned', handleTaskAssigned)
-      socket.off('voice:command_received', handleVoiceCommand)
-      socket.off('system:alert', handleSystemAlert)
     }
-  }, [socket, addNotification])
-
-  const markAllAsRead = () => {
-    setNotifications(prev => {
-      const updated = prev.map(n => ({ ...n, read: true }))
-      localStorage.setItem('servio_notifications', JSON.stringify(updated))
-      return updated
-    })
-    setUnreadCount(0)
-  }
-
-  const removeNotification = (id: string) => {
-    setNotifications(prev => {
-      const notification = prev.find(n => n.id === id)
-      const updated = prev.filter(n => n.id !== id)
-      localStorage.setItem('servio_notifications', JSON.stringify(updated))
-
-      if (notification && !notification.read) {
-        setUnreadCount(count => Math.max(0, count - 1))
-      }
-
-      return updated
-    })
-  }
-
-  const clearAll = () => {
-    setNotifications([])
-    setUnreadCount(0)
-    localStorage.removeItem('servio_notifications')
-  }
+  }, [socket, fetchNotifications])
 
   const getNotificationIcon = (type: Notification['type']) => {
     const iconMap = {
@@ -348,7 +286,11 @@ export default function NotificationCenter({ className = '' }: NotificationCente
 
                 {/* Notifications List */}
                 <div className="flex-1 overflow-y-auto">
-                  {notifications.length === 0 ? (
+                  {isLoading ? (
+                    <div className="flex items-center justify-center py-8">
+                      <div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+                    </div>
+                  ) : notifications.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-8 text-center">
                       <Bell className="w-12 h-12 text-surface-300 dark:text-surface-600 mb-2" />
                       <p className="text-surface-500 dark:text-surface-400">No notifications</p>

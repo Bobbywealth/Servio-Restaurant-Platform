@@ -36,6 +36,7 @@ export interface SocketEvents {
 
   // System events
   'notifications.new': (data: { notification: any }) => void
+  'notifications.unread_count.updated': (data: { unreadCount: number }) => void
   'new-order': (data: any) => void
   'printer.test': () => void
   'system:notification': (data: { type: string; message: string; priority: 'low' | 'medium' | 'high' }) => void
