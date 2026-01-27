@@ -25,10 +25,15 @@ export default function TabletPrintPage() {
   useEffect(() => {
     const storedPaper = window.localStorage.getItem('servio_thermal_paper_width');
     setPaperWidth(storedPaper === '58mm' ? '58mm' : '80mm');
-    
+
     const storedMode = window.localStorage.getItem('servio_print_mode');
     if (storedMode === 'bluetooth' || storedMode === 'system' || storedMode === 'bridge' || storedMode === 'rawbt') {
       setPrintMode(storedMode);
+    }
+
+    const storedFontSize = window.localStorage.getItem('servio_font_size');
+    if (storedFontSize === 'small' || storedFontSize === 'medium' || storedFontSize === 'large' || storedFontSize === 'xlarge') {
+      setFontSize(storedFontSize);
     }
   }, []);
 
