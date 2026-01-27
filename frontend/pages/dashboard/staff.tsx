@@ -5,6 +5,8 @@ import dynamic from 'next/dynamic'
 import {
   Users,
   Clock,
+  Calendar,
+  Coffee,
   UserPlus,
   Search,
   Filter,
@@ -49,6 +51,8 @@ interface CurrentStaff {
   current_break_start?: string
   hours_worked: number
 }
+
+// Add today's hours tracking
 
 // Add Staff Modal
 interface AddStaffModalProps {
@@ -278,6 +282,7 @@ export default function StaffPage() {
   const [staff, setStaff] = useState<StaffUser[]>([])
   const [currentStaff, setCurrentStaff] = useState<CurrentStaff[]>([])
   const [hoursByUserId, setHoursByUserId] = useState<Record<string, number>>({})
+  const [todayHoursByUserId, setTodayHoursByUserId] = useState<Record<string, number>>({})
   const [showAddModal, setShowAddModal] = useState(false)
 
   useEffect(() => {
@@ -313,6 +318,19 @@ export default function StaffPage() {
           if (isMounted) setHoursByUserId(hoursMap)
         } catch (statsError) {
           console.warn('Failed to load timeclock stats:', statsError)
+        }
+
+        // Fetch today's hours for each staff member
+        try {
+          const todayResp = await api.get('/api/timeclock/staff-hours')
+          const todayHours = (todayResp.data?.data?.staffHours || []) as Array<{ userId: string; todayHours: number }>
+          const todayHoursMap: Record<string, number> = {}
+          for (const s of todayHours) {
+            todayHoursMap[s.userId] = s.todayHours
+          }
+          if (isMounted) setTodayHoursByUserId(todayHoursMap)
+        } catch (todayError) {
+          console.warn('Failed to load today hours:', todayError)
         }
       } catch (e: any) {
         if (!isMounted) return
@@ -566,6 +584,7 @@ export default function StaffPage() {
               const activeShift = currentByUserId.get(member.id)
               const shiftLabel = activeShift ? `${formatTime(activeShift.clock_in_time)} - Now` : '—'
               const hoursThisWeek = hoursByUserId[member.id] ?? 0
+              const hoursToday = todayHoursByUserId[member.id] ?? 0
 
               return (
               <motion.div
@@ -599,27 +618,64 @@ export default function StaffPage() {
                   </div>
                 </div>
 
+                {/* Hours Summary */}
+                <div className="grid grid-cols-2 gap-3 mb-4">
+                  <div className={`rounded-xl p-3 ${
+                    hoursToday > 0
+                      ? 'bg-servio-green-500/10 border border-servio-green-500/20'
+                      : 'bg-gray-100 dark:bg-surface-700'
+                  }`}>
+                    <div className="flex items-center gap-2 mb-1">
+                      <Clock className={`w-4 h-4 ${
+                        hoursToday > 0 ? 'text-servio-green-500' : 'text-surface-400'
+                      }`} />
+                      <span className="text-xs font-medium text-surface-600 dark:text-surface-400">
+                        Today
+                      </span>
+                    </div>
+                    <p className={`text-xl font-bold ${
+                      hoursToday > 0 ? 'text-servio-green-500' : 'text-surface-900 dark:text-surface-100'
+                    }`}>
+                      {hoursToday > 0 ? `${hoursToday.toFixed(1)}h` : '—'}
+                    </p>
+                  </div>
+                  <div className={`rounded-xl p-3 ${
+                    hoursThisWeek > 0
+                      ? 'bg-primary-500/10 border border-primary-500/20'
+                      : 'bg-gray-100 dark:bg-surface-700'
+                  }`}>
+                    <div className="flex items-center gap-2 mb-1">
+                      <Calendar className={`w-4 h-4 ${
+                        hoursThisWeek > 0 ? 'text-primary-500' : 'text-surface-400'
+                      }`} />
+                      <span className="text-xs font-medium text-surface-600 dark:text-surface-400">
+                        This Week
+                      </span>
+                    </div>
+                    <p className={`text-xl font-bold ${
+                      hoursThisWeek > 0 ? 'text-primary-500' : 'text-surface-900 dark:text-surface-100'
+                    }`}>
+                      {hoursThisWeek > 0 ? `${hoursThisWeek.toFixed(1)}h` : '—'}
+                    </p>
+                  </div>
+                </div>
+
                 <div className="space-y-3">
                   <div className="flex items-center space-x-2 text-sm text-surface-600 dark:text-surface-400">
                     <Mail className="w-4 h-4" />
                     <span>{member.email || '—'}</span>
                   </div>
-                  <div className="flex items-center space-x-2 text-sm text-surface-600 dark:text-surface-400">
-                    <Clock className="w-4 h-4" />
-                    <span>{shiftLabel}</span>
-                  </div>
-                  <div className="flex items-center justify-between pt-2 border-t border-surface-200 dark:border-surface-700">
-                    <div>
-                      <span className="text-sm text-surface-600 dark:text-surface-400">Role:</span>
-                      <span className="ml-1 font-semibold text-surface-900 dark:text-surface-100">{member.role}</span>
+                  {activeShift && (
+                    <div className="flex items-center space-x-2 text-sm text-surface-600 dark:text-surface-400">
+                      <Clock className="w-4 h-4" />
+                      <span>{shiftLabel}</span>
+                      {activeShift.is_on_break && (
+                        <span className="text-amber-500 flex items-center gap-1">
+                          <Coffee className="w-3 h-3" /> On Break
+                        </span>
+                      )}
                     </div>
-                    <div>
-                      <span className="text-sm text-surface-600 dark:text-surface-400">This week:</span>
-                      <span className="ml-1 font-semibold text-surface-900 dark:text-surface-100">
-                        {Number(hoursThisWeek || 0).toFixed(1)}h
-                      </span>
-                    </div>
-                  </div>
+                  )}
                   {/* PIN display for staff */}
                   {member.pin && (
                     <div className="flex items-center justify-between pt-2 border-t border-surface-200 dark:border-surface-700">

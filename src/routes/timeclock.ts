@@ -924,4 +924,45 @@ router.get('/my-stats', asyncHandler(async (req: Request, res: Response) => {
   });
 }));
 
+/**
+ * GET /api/timeclock/staff-hours
+ * Get hours worked today for all staff (for dashboard display)
+ */
+router.get('/staff-hours', asyncHandler(async (req: Request, res: Response) => {
+  const db = DatabaseService.getInstance().getDatabase();
+
+  // Get start of today (midnight)
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+
+  // Get hours worked today for all staff
+  const todayHours = await db.all(`
+    SELECT
+      u.id as user_id,
+      u.name,
+      COALESCE(SUM(te.total_hours), 0) as today_hours,
+      COUNT(*) as shifts_today
+    FROM users u
+    LEFT JOIN time_entries te ON u.id = te.user_id
+      AND te.clock_in_time >= ?
+      AND te.clock_out_time IS NOT NULL
+    WHERE u.is_active = TRUE
+    GROUP BY u.id, u.name
+    ORDER BY today_hours DESC, u.name ASC
+  `, [startOfToday.toISOString()]);
+
+  res.json({
+    success: true,
+    data: {
+      staffHours: todayHours.map(s => ({
+        userId: s.user_id,
+        name: s.name,
+        todayHours: Number(s.today_hours || 0),
+        shiftsToday: Number(s.shifts_today || 0)
+      })),
+      date: startOfToday.toISOString().split('T')[0]
+    }
+  });
+}));
+
 export default router;
