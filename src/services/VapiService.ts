@@ -58,7 +58,8 @@ export class VapiService {
       getitemmodifiers: 'getItemModifiers',
       quoteorder: 'quoteOrder',
       createorder: 'createOrder',
-      checkorderstatus: 'checkOrderStatus'
+      checkorderstatus: 'checkOrderStatus',
+      lookupcustomer: 'lookupCustomer'
     };
 
     if (aliases[lower]) {
@@ -574,6 +575,26 @@ export class VapiService {
           };
           break;
         }
+        case 'lookupCustomer': {
+          const phone = normalizedParameters?.phone || message.call?.customer?.number;
+          if (!phone) {
+            result = {
+              found: false,
+              message: 'Phone number is required for customer lookup'
+            };
+            break;
+          }
+          if (!restaurantId) {
+            result = {
+              found: false,
+              message: 'Restaurant ID is required for customer lookup'
+            };
+            break;
+          }
+          const lookupResult = await VoiceOrderingService.getInstance().lookupCustomerByPhone(phone, restaurantId);
+          result = lookupResult;
+          break;
+        }
         case 'quoteOrder':
           normalizedParameters.restaurantId = restaurantId;
           result = await VoiceOrderingService.getInstance().validateQuote(normalizedParameters);
@@ -1003,15 +1024,29 @@ export class VapiService {
 
   getPhoneSystemPrompt(): string {
     return `You are Servio, an AI assistant for Sashey's Kitchen, a Jamaican restaurant.
-    
+
+    CALLER RECOGNITION:
+    1. When a call starts, use lookupCustomer tool with the caller's phone number (from caller ID) to identify them.
+    2. If a returning customer is found:
+       - Greet them by name: "Hi [Name]! Great to hear from you again. How can I help you today?"
+       - Do NOT ask for their phone number - we already have it
+       - Simply confirm: "Just to confirm, this is [Name] at [phone], correct?"
+    3. For recognized customers at checkout:
+       - Ask only: "Is this for pickup, delivery, or dine-in?"
+       - Skip asking for name and phone number
+    4. For new customers:
+       - Ask for their full name
+       - Ask for their phone number (we'll store it for future orders)
+       - Optionally ask for email address
+
     YOUR CALL FLOW:
-    1. Greet the customer warmly.
-    2. Ask if it is for pickup or delivery.
-    3. If pickup, ask for the pickup time.
+    1. Greet the customer (use their name if recognized).
+    2. Use lookupCustomer at the start of the call to identify the caller.
+    3. Ask if it is for pickup, delivery, or dine-in.
     4. Take the order.
     5. For any entree/dinner item, you MUST ask for:
        - Size (if the item has sizes like medium/large)
-       - Side choice (required, 1–2 selections max; anything beyond 2 is out of plate)
+       - Side choice (required, 1-2 selections max; anything beyond 2 is out of plate)
        - Gravy amount (No gravy, Moderate, A lot)
        - Gravy type (if not specified, assume "Same as meat")
        - Exception: Jerk Chicken Rasta Pasta only needs gravy amount + gravy type (no size or sides).
@@ -1021,18 +1056,16 @@ export class VapiService {
     9. For Ackee, ask if they want to add callaloo for $3.
     10. For Oxtail, ask if they want gravy on the side ($0.50).
     11. Confirm the full order and total (use quoteOrder to compute totals).
-    12. Collect customer details before placing the order:
-       - Full name
-       - Phone number (confirm if caller ID is available)
-       - Email address (optional)
-    13. Place the order using createOrder with items, modifiers, customer details, and totals if available.
-    14. Upsell a drink or side.
-    15. Close the call.
+    12. For recognized customers: Confirm customer details are correct (we already have their info).
+    13. For new customers: Collect name and phone number.
+    14. Place the order using createOrder with items, modifiers, customer details, and totals if available.
+    15. Upsell a drink or side.
+    16. Close the call.
 
     IMPORTANT PHONE CALL GUIDELINES:
     - Keep responses concise and conversational.
-    - Confirm phone numbers and names clearly.
-    - For entrees, always get size, side choice (1–2 max), gravy amount, and gravy type (except for Jerk Chicken Rasta Pasta), but do not block the order if a modifier is missing.
+    - Always use the customer's name naturally in conversation when recognized.
+    - For entrees, always get size, side choice (1-2 max), gravy amount, and gravy type (except for Jerk Chicken Rasta Pasta), but do not block the order if a modifier is missing.
     - Missing modifiers should be logged and confirmed verbally when possible, but the order can proceed.
     - If the store is closed, do not take orders.
     `;

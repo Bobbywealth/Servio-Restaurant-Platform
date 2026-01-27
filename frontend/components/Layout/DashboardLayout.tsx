@@ -317,7 +317,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       </motion.div>
 
       <div className="pl-0 lg:pl-72 transition-all duration-300">
-        <div className="bg-white/95 dark:bg-gray-900/95 sticky top-0 z-30 border-b border-gray-200 dark:border-gray-700 backdrop-blur-md pt-safe-top">
+        <div className="bg-white/95 dark:bg-gray-900/95 sticky top-0 z-30 border-b border-gray-200 dark:border-gray-700 backdrop-blur-md safe-area-inset-top">
           <div className="px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between items-center h-16">
               <div className="flex items-center space-x-3">
@@ -332,7 +332,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           </div>
         </div>
         <motion.main
-          className="px-4 sm:px-6 lg:px-8 py-6 pb-24 lg:pb-8"
+          className="px-4 sm:px-6 lg:px-8 py-6 pb-28 sm:pb-8"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3 }}
@@ -342,7 +342,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       </div>
 
       {/* Mobile bottom navigation */}
-      <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-gray-900/95 border-t border-gray-200 dark:border-gray-700 backdrop-blur-md lg:hidden pb-safe-bottom">
+      <div className="fixed bottom-0 left-0 right-0 z-40 w-full bg-white/95 dark:bg-gray-900/95 border-t border-gray-200 dark:border-gray-700 backdrop-blur-md lg:hidden safe-area-inset-bottom gpu-accelerated will-change-transform">
         <div className="grid grid-cols-5 px-2 py-2">
           {mobileNav.map((item) => {
             const isActive = !item.isMenuButton && currentPath === normalizePath(item.href);

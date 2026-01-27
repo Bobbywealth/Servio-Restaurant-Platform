@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { VapiService, VapiWebhookPayload } from '../services/VapiService';
+import { VoiceOrderingService } from '../services/VoiceOrderingService';
 import { logger } from '../utils/logger';
 import { DatabaseService } from '../services/DatabaseService';
 import { validateEnvironment } from '../utils/validateEnv';
@@ -8,6 +9,7 @@ import { requireVapiWebhookAuth } from '../middleware/vapiAuth';
 
 const router = Router();
 const vapiService = new VapiService();
+const voiceOrderingService = VoiceOrderingService.getInstance();
 
 // Webhook endpoint for Vapi
 router.post('/webhook', requireVapiWebhookAuth, async (req: Request, res: Response) => {
@@ -337,8 +339,21 @@ router.get('/assistant-config', async (req: Request, res: Response) => {
           }
         },
         {
+          name: 'lookupCustomer',
+          description: 'Look up a customer by phone number to retrieve their name and details. Use this at the start of the call to personalize the experience for returning customers.',
+          parameters: {
+            type: 'object',
+            properties: {
+              phone: { type: 'string', description: 'Customer phone number to look up' },
+              restaurantId: { type: 'string', description: 'Restaurant ID (optional if provided via metadata)' },
+              restaurantSlug: { type: 'string', description: 'Restaurant slug (optional fallback)' }
+            },
+            required: ['phone']
+          }
+        },
+        {
           name: 'createOrder',
-          description: 'Place the final order in the system as received',
+          description: 'Place the final order in the system. For returning customers (recognized by phone), customer fields are optional - we already have their information.',
           parameters: {
             type: 'object',
             properties: {
@@ -354,15 +369,15 @@ router.get('/assistant-config', async (req: Request, res: Response) => {
                   required: ['itemId', 'qty']
                 }
               },
+              customerId: { type: 'string', description: 'Customer ID from lookupCustomer tool (optional for recognized customers)' },
               customer: {
                 type: 'object',
                 properties: {
-                  name: { type: 'string' },
-                  phone: { type: 'string' },
-                  email: { type: 'string' },
-                  lastInitial: { type: 'string' }
-                },
-                required: ['name', 'phone']
+                  name: { type: 'string', description: 'Customer name (optional if recognized by phone)' },
+                  phone: { type: 'string', description: 'Phone number (optional if recognized by phone)' },
+                  email: { type: 'string', description: 'Email address (optional)' },
+                  lastInitial: { type: 'string', description: 'Last initial (optional, auto-derived from name)' }
+                }
               },
               totals: {
                 type: 'object',
@@ -374,12 +389,12 @@ router.get('/assistant-config', async (req: Request, res: Response) => {
                 }
               },
               orderType: { type: 'string', enum: ['pickup', 'delivery', 'dine-in'] },
-              pickupTime: { type: 'string' },
-              callId: { type: 'string' },
+              pickupTime: { type: 'string', description: 'Preferred pickup time for pickup orders (ISO format)' },
+              callId: { type: 'string', description: 'Call ID from Vapi' },
               restaurantId: { type: 'string', description: 'Restaurant ID (optional if provided via metadata)' },
               restaurantSlug: { type: 'string', description: 'Restaurant slug (optional fallback)' }
             },
-            required: ['items', 'customer', 'orderType']
+            required: ['items', 'orderType']
           }
         }
       ]

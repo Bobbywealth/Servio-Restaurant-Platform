@@ -650,8 +650,8 @@ export default function PublicProfile() {
       </div>
 
       {cart.length > 0 && (
-        <motion.div 
-          className="fixed bottom-0 left-0 right-0 p-4 bg-white/90 backdrop-blur-xl border-t border-slate-200/50 shadow-2xl shadow-slate-900/10 z-50"
+        <motion.div
+          className="fixed bottom-0 left-0 right-0 w-full p-4 bg-white/90 backdrop-blur-xl border-t border-slate-200/50 shadow-2xl shadow-slate-900/10 z-50 safe-area-inset-bottom gpu-accelerated will-change-transform"
           initial={{ y: 100 }}
           animate={{ y: 0 }}
           transition={{ type: "spring", bounce: 0.3 }}
@@ -691,7 +691,7 @@ export default function PublicProfile() {
             />
             <motion.div
               initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
-              className="fixed bottom-0 left-0 right-0 bg-white rounded-t-3xl z-[70] p-6 pb-safe-bottom max-h-[90vh] overflow-y-auto"
+              className="fixed bottom-0 left-0 right-0 w-full bg-white rounded-t-3xl z-[70] p-6 safe-area-inset-bottom max-h-[90vh] overflow-y-auto gpu-accelerated will-change-transform"
               style={{ maxHeight: 'calc(100vh - env(safe-area-inset-top, 0px))' }}
             >
               <div className="max-w-xl mx-auto">
@@ -995,7 +995,7 @@ export default function PublicProfile() {
             />
             <motion.div
               initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
-              className="fixed bottom-0 left-0 right-0 bg-white rounded-t-3xl z-[70] p-6 pb-safe-bottom max-h-[90vh] overflow-y-auto"
+              className="fixed bottom-0 left-0 right-0 w-full bg-white rounded-t-3xl z-[70] p-6 safe-area-inset-bottom max-h-[90vh] overflow-y-auto gpu-accelerated will-change-transform"
             >
               <div className="max-w-xl mx-auto">
                 <div className="flex justify-between items-start mb-4">

@@ -877,6 +877,94 @@ export class VoiceOrderingService {
     };
   }
 
+  /**
+   * Look up a customer by phone number for caller recognition
+   */
+  public async lookupCustomerByPhone(phone: string, restaurantId: string): Promise<{
+    found: boolean;
+    customer?: { id: string; name: string; email: string; phone: string };
+  }> {
+    const db = DatabaseService.getInstance().getDatabase();
+    // Normalize phone number (strip non-digits)
+    const normalizedPhone = String(phone || '').replace(/\D/g, '');
+
+    if (!normalizedPhone) {
+      return { found: false };
+    }
+
+    try {
+      const customer = await db.get(
+        `SELECT id, name, email, phone FROM customers WHERE phone = ? AND restaurant_id = ?`,
+        [normalizedPhone, restaurantId]
+      );
+
+      if (customer) {
+        return {
+          found: true,
+          customer: {
+            id: customer.id,
+            name: customer.name,
+            email: customer.email,
+            phone: customer.phone
+          }
+        };
+      }
+    } catch (error) {
+      logger.error('lookupCustomerByPhone error:', { phone: normalizedPhone, restaurantId, error });
+    }
+
+    return { found: false };
+  }
+
+  /**
+   * Upsert a customer from voice order (create if new, update if exists)
+   * Returns the customer ID
+   */
+  public async upsertCustomerFromVoiceOrder(customer: {
+    name: string;
+    phone: string;
+    email?: string;
+  }, restaurantId: string): Promise<string> {
+    const db = DatabaseService.getInstance().getDatabase();
+    const normalizedPhone = String(customer.phone || '').replace(/\D/g, '');
+
+    if (!normalizedPhone) {
+      throw new Error('Phone number is required for customer upsert');
+    }
+
+    // Check if customer already exists
+    const existing = await db.get(
+      `SELECT id, name, email FROM customers WHERE phone = ? AND restaurant_id = ?`,
+      [normalizedPhone, restaurantId]
+    );
+
+    if (existing) {
+      // Update if name or email changed
+      const nameChanged = existing.name !== customer.name;
+      const emailChanged = existing.email !== customer.email;
+
+      if (nameChanged || emailChanged) {
+        await db.run(
+          `UPDATE customers SET name = ?, email = ? WHERE id = ?`,
+          [customer.name, customer.email || null, existing.id]
+        );
+        logger.info('Customer updated via voice order', { customerId: existing.id, nameChanged, emailChanged });
+      }
+
+      return existing.id;
+    }
+
+    // Create new customer
+    const customerId = uuidv4();
+    await db.run(
+      `INSERT INTO customers (id, restaurant_id, name, email, phone, created_at) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+      [customerId, restaurantId, customer.name, customer.email || null, normalizedPhone]
+    );
+
+    logger.info('Customer created via voice order', { customerId, phone: normalizedPhone });
+    return customerId;
+  }
+
   public async createOrder(input: any) {
     const orderType = String(input?.orderType || 'pickup').toLowerCase();
     if (!VoiceOrderingService.ALLOWED_ORDER_TYPES.has(orderType)) {
@@ -893,13 +981,18 @@ export class VoiceOrderingService {
       logger.warn('createOrder missing items', { callId: input?.callId });
       return { success: false, errors: ['Missing items'] };
     }
-    if (!input?.customer?.name || !input?.customer?.phone) {
+
+    // Customer info is optional if customerId is provided (recognized customer)
+    const hasCustomerId = input?.customerId || input?.customer?.customerId;
+    const hasCustomerInfo = input?.customer?.name && input?.customer?.phone;
+
+    if (!hasCustomerId && !hasCustomerInfo) {
       logger.warn('createOrder missing customer details', {
         callId: input?.callId,
-        hasName: Boolean(input?.customer?.name),
-        hasPhone: Boolean(input?.customer?.phone)
+        hasCustomerId: Boolean(hasCustomerId),
+        hasCustomerInfo: Boolean(hasCustomerInfo)
       });
-      return { success: false, errors: ['Missing customer name or phone'] };
+      return { success: false, errors: ['Missing customer information'] };
     }
 
     const quote = await this.validateQuote(input);
@@ -920,6 +1013,34 @@ export class VoiceOrderingService {
         .pop()
         ?.charAt(0)
         ?.toUpperCase();
+
+    // Handle customer lookup/upsert for recognized customers
+    let customerId = input?.customerId || input?.customer?.customerId;
+    let customerName = input?.customer?.name;
+    let customerPhone = input?.customer?.phone;
+
+    if (!customerId && customerPhone) {
+      // Try to look up existing customer by phone
+      const lookupResult = await this.lookupCustomerByPhone(customerPhone, restaurantId);
+      if (lookupResult.found) {
+        customerId = lookupResult.customer!.id;
+        // Use the name from our records if customer provided a different one
+        if (!customerName) {
+          customerName = lookupResult.customer!.name;
+        }
+      } else {
+        // Create new customer from voice order
+        customerId = await this.upsertCustomerFromVoiceOrder({
+          name: customerName || 'Unknown',
+          phone: customerPhone,
+          email: input?.customer?.email
+        }, restaurantId);
+      }
+    } else if (customerId && !customerName) {
+      // Get customer info from database for recognized customer
+      const lookupResult = await this.lookupCustomerByPhone('', restaurantId);
+      // customerName will be filled from input or remains undefined
+    }
 
     // Optional totals validation - if provided, compare to calculated quote
     const providedTotals = input?.totals;
@@ -965,12 +1086,12 @@ export class VoiceOrderingService {
 
     await db.run(`
       INSERT INTO orders (
-        id, restaurant_id, channel, status, customer_name, customer_phone, last_initial,
+        id, restaurant_id, customer_id, channel, status, customer_name, customer_phone, last_initial,
         order_type, pickup_time, items, subtotal, tax, fees, total, total_amount,
         source, call_id, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     `, [
-      orderId, restaurantId, input.source || 'vapi', 'received', input.customer?.name, input.customer?.phone, lastInitial,
+      orderId, restaurantId, customerId, input.source || 'vapi', 'received', customerName, customerPhone, lastInitial,
       input.orderType, input.pickupTime, JSON.stringify(orderItems), quote.subtotal, quote.tax, quote.fees, quote.total, quote.total,
       input.source || 'vapi', input.callId
     ]);
@@ -1020,8 +1141,9 @@ export class VoiceOrderingService {
         actor: { actorType: 'system' },
         payload: {
           orderId,
-          customerName: input.customer?.name,
-          customerPhone: input.customer?.phone,
+          customerId,
+          customerName,
+          customerPhone,
           customerEmail: input.customer?.email,
           totalAmount: quote.total,
           channel: 'vapi',

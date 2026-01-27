@@ -197,7 +197,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
         {/* Main content */}
         <div className="lg:ml-64">
           {/* Top bar */}
-          <div className="sticky top-0 z-10 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 pt-safe-top">
+          <div className="sticky top-0 z-10 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 safe-area-inset-top">
             <div className="flex h-16 items-center justify-between px-4 sm:px-6">
               <div className="flex items-center">
                 <button
@@ -248,7 +248,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
           </div>
 
           {/* Page content */}
-          <main className="flex-1 pb-24 lg:pb-6">
+          <main className="flex-1 pb-28 sm:pb-6">
             <div className="py-6">
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
@@ -262,7 +262,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
         </div>
 
         {/* Mobile bottom navigation */}
-        <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 border-t border-gray-200 backdrop-blur-md lg:hidden pb-safe-bottom">
+        <div className="fixed bottom-0 left-0 right-0 z-40 w-full bg-white/95 border-t border-gray-200 backdrop-blur-md lg:hidden safe-area-inset-bottom gpu-accelerated will-change-transform">
           <div className="grid grid-cols-2 px-2 py-2">
             {navigation.map((item) => {
               const isActive = router.pathname === item.href || router.pathname.startsWith(item.href)

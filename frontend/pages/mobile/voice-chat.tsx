@@ -350,7 +350,7 @@ export default function MobileVoiceChat() {
         </main>
 
         {/* Fixed Bottom Recording Area */}
-        <footer className="fixed bottom-0 left-0 right-0 bg-white/90 dark:bg-violet-950/90 backdrop-blur-xl border-t border-violet-200/50 dark:border-violet-800/50">
+        <footer className="fixed bottom-0 left-0 right-0 w-full bg-white/90 dark:bg-violet-950/90 backdrop-blur-xl border-t border-violet-200/50 dark:border-violet-800/50 safe-area-inset-bottom gpu-accelerated will-change-transform">
           <div className="max-w-md mx-auto px-4 py-4">
             {/* Waveform display */}
             <AnimatePresence>
