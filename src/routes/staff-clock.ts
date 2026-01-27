@@ -62,7 +62,7 @@ router.post('/pin-login', asyncHandler(async (req: Request, res: Response) => {
       te.break_minutes,
       te.position,
       CASE
-        WHEN teb.break_end IS NULL THEN 1
+        WHEN teb.id IS NOT NULL AND teb.break_end IS NULL THEN 1
         ELSE 0
       END as is_on_break,
       teb.break_start as current_break_start
