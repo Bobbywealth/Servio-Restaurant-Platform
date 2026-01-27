@@ -329,11 +329,11 @@ export class AssistantService {
   private async getSystemPrompt(userId: string): Promise<string> {
     const restaurantId = await this.resolveRestaurantId(userId);
 
-    // Get current restaurant context
-    const orders = await this.db.all('SELECT * FROM orders WHERE restaurant_id = ? AND status != "completed" ORDER BY created_at DESC LIMIT 10', [restaurantId]);
+    // Get current restaurant context - NOTE: Using single quotes for string literals (PostgreSQL compatible)
+    const orders = await this.db.all('SELECT * FROM orders WHERE restaurant_id = ? AND status != $1 ORDER BY created_at DESC LIMIT 10', [restaurantId, 'completed']);
     const unavailableItems = await this.db.all('SELECT * FROM menu_items WHERE restaurant_id = ? AND is_available = 0', [restaurantId]);
     const lowStockItems = await this.db.all('SELECT * FROM inventory_items WHERE restaurant_id = ? AND on_hand_qty <= low_stock_threshold', [restaurantId]);
-    const pendingTasks = await this.db.all('SELECT * FROM tasks WHERE restaurant_id = ? AND status = "pending" LIMIT 5', [restaurantId]);
+    const pendingTasks = await this.db.all('SELECT * FROM tasks WHERE restaurant_id = ? AND status = $1 LIMIT 5', [restaurantId, 'pending']);
 
     const context = {
       activeOrders: orders.length,
@@ -610,8 +610,8 @@ Use the available tools to perform actions. Always be helpful and professional.`
     const restaurantId = await this.resolveRestaurantId(userId);
 
     const activeOrders = await this.db.all(
-      'SELECT id, status, created_at FROM orders WHERE restaurant_id = ? AND status != "completed" ORDER BY created_at DESC LIMIT 25',
-      [restaurantId]
+      'SELECT id, status, created_at FROM orders WHERE restaurant_id = ? AND status != $1 ORDER BY created_at DESC LIMIT 25',
+      [restaurantId, 'completed']
     );
     const unavailableItems = await this.db.all(
       'SELECT id, name FROM menu_items WHERE restaurant_id = ? AND is_available = 0 ORDER BY name LIMIT 50',
@@ -622,8 +622,8 @@ Use the available tools to perform actions. Always be helpful and professional.`
       [restaurantId]
     );
     const pendingTasks = await this.db.all(
-      'SELECT id, title, status FROM tasks WHERE restaurant_id = ? AND status = "pending" ORDER BY created_at DESC LIMIT 25',
-      [restaurantId]
+      'SELECT id, title, status FROM tasks WHERE restaurant_id = ? AND status = $1 ORDER BY created_at DESC LIMIT 25',
+      [restaurantId, 'pending']
     );
 
     const snapshot = {
