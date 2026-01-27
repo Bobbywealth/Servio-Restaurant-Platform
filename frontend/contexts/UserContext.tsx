@@ -55,6 +55,25 @@ export function UserProvider({ children }: UserProviderProps) {
   useEffect(() => {
     setMounted(true)
     const loadUser = async () => {
+      const startedAt = Date.now()
+      const log = (...args: any[]) => {
+        // Always log; this is debugging-critical when the UI is stuck on "Initializing..."
+        // eslint-disable-next-line no-console
+        console.info('[auth-init]', ...args)
+      }
+
+      let watchdog: ReturnType<typeof setTimeout> | null = null
+      if (typeof window !== 'undefined') {
+        watchdog = setTimeout(() => {
+          // eslint-disable-next-line no-console
+          console.warn('[auth-init] still loading after 10s', {
+            hasAccessToken: Boolean(localStorage.getItem('servio_access_token')),
+            hasRefreshToken: Boolean(localStorage.getItem('servio_refresh_token')),
+            hasSavedUser: Boolean(localStorage.getItem('servio_user'))
+          })
+        }, 10_000)
+      }
+
       try {
         if (typeof window === 'undefined') {
           setIsLoading(false)
@@ -65,32 +84,49 @@ export function UserProvider({ children }: UserProviderProps) {
         const accessToken = safeLocalStorage.getItem('servio_access_token')
         const refreshToken = safeLocalStorage.getItem('servio_refresh_token')
 
+        log('begin', {
+          hasSavedUser: Boolean(savedUser),
+          hasAccessToken: Boolean(accessToken),
+          hasRefreshToken: Boolean(refreshToken)
+        })
+
         if (savedUser && accessToken) {
           setUser(JSON.parse(savedUser))
+          log('hydrated user from localStorage')
         } else if (savedUser && !accessToken && !refreshToken) {
           setUser(null)
           clearAuthStorage()
+          log('cleared stale saved user (no tokens)')
         }
 
         if (accessToken) {
           try {
-            const meResp = await api.get('/api/auth/me')
+            log('calling /api/auth/me')
+            const meResp = await api.get('/api/auth/me', { timeout: 15_000 })
             const meUser = meResp.data?.data?.user as User | undefined
             if (meUser) {
               setUser(meUser)
               safeLocalStorage.setItem('servio_user', JSON.stringify(meUser))
               // Load available accounts for switching
               loadAvailableAccounts().catch(console.error)
+              log('/api/auth/me success', { userId: meUser.id, restaurantId: meUser.restaurantId, role: meUser.role })
               return
             }
-          } catch {
+            log('/api/auth/me returned no user payload')
+          } catch (error: any) {
+            log('/api/auth/me failed', {
+              message: error?.message,
+              status: error?.response?.status,
+              code: error?.code
+            })
             // try refresh below
           }
         }
 
         if (refreshToken) {
           try {
-            const refreshResp = await api.post('/api/auth/refresh', { refreshToken })
+            log('calling /api/auth/refresh')
+            const refreshResp = await api.post('/api/auth/refresh', { refreshToken }, { timeout: 15_000 })
             const newAccessToken = refreshResp.data?.data?.accessToken as string | undefined
             const refreshedUser = refreshResp.data?.data?.user as User | undefined
             if (newAccessToken) safeLocalStorage.setItem('servio_access_token', newAccessToken)
@@ -99,24 +135,40 @@ export function UserProvider({ children }: UserProviderProps) {
               safeLocalStorage.setItem('servio_user', JSON.stringify(refreshedUser))
               // Load available accounts for switching
               loadAvailableAccounts().catch(console.error)
+              log('/api/auth/refresh success', {
+                hasNewAccessToken: Boolean(newAccessToken),
+                userId: refreshedUser.id,
+                restaurantId: refreshedUser.restaurantId,
+                role: refreshedUser.role
+              })
               return
             }
-          } catch {
+            log('/api/auth/refresh returned no user payload', { hasNewAccessToken: Boolean(newAccessToken) })
+          } catch (error: any) {
+            log('/api/auth/refresh failed', {
+              message: error?.message,
+              status: error?.response?.status,
+              code: error?.code
+            })
             // fall through to clear auth
           }
         }
 
         setUser(null)
         clearAuthStorage()
+        log('no valid session; cleared auth storage')
 
         // Development convenience: auto-login disabled for testing
         // const demoEmail = process.env.NEXT_PUBLIC_DEMO_EMAIL || 'admin@servio.com'
         // const demoPassword = process.env.NEXT_PUBLIC_DEMO_PASSWORD || 'password'
         // await login(demoEmail, demoPassword)
       } catch (error) {
-        console.error('Failed to load user:', error)
+        // eslint-disable-next-line no-console
+        console.error('[auth-init] failed to load user:', error)
       } finally {
+        if (watchdog) clearTimeout(watchdog)
         setIsLoading(false)
+        log('done', { ms: Date.now() - startedAt })
       }
     }
 

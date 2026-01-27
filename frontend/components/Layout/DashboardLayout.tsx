@@ -42,10 +42,24 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
   React.useEffect(() => {
     setMounted(true);
+    // eslint-disable-next-line no-console
+    console.info('[layout-init] mounted');
   }, []);
 
   React.useEffect(() => {
+    // eslint-disable-next-line no-console
+    console.info('[layout-init] state', {
+      mounted,
+      isLoading,
+      hasUser: Boolean(user),
+      path: router.asPath
+    });
+  }, [mounted, isLoading, user, router.asPath]);
+
+  React.useEffect(() => {
     if (mounted && !isLoading && !user) {
+      // eslint-disable-next-line no-console
+      console.warn('[layout-init] redirecting to /login (no user)');
       router.push('/login');
     }
   }, [user, isLoading, router, mounted]);

@@ -6,7 +6,6 @@ import { DatabaseService } from './DatabaseService';
 import { logger } from '../utils/logger';
 import { ensureUploadsDir } from '../utils/uploads';
 import { v4 as uuidv4 } from 'uuid';
-import { findBestMatches, fuzzyMatch, needsConfirmation, getConfidenceLevel } from '../utils/fuzzyMatch';
 
 interface AssistantResponse {
   transcript?: string;
@@ -67,15 +66,6 @@ export class AssistantService {
         };
       }
 
-      // Check if transcript is too short or unclear
-      if (transcript.trim().length < 3) {
-        return {
-          response: "I only heard a very short sound. Can you try again?",
-          actions: [],
-          processingTime: Date.now() - startTime
-        };
-      }
-
       // 2. Process the text with LLM
       const result = await this.processText(transcript, userId);
 
@@ -87,24 +77,13 @@ export class AssistantService {
 
     } catch (error) {
       logger.error('Failed to process audio:', error);
-
-      // Provide more specific error messages
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      let userMessage = "I'm having trouble processing your request right now. Please try again.";
-
-      if (errorMessage.includes('transcribe') || errorMessage.includes('audio')) {
-        userMessage = "I had trouble understanding the audio. Could you speak a bit louder or clearer?";
-      } else if (errorMessage.includes('timeout')) {
-        userMessage = "The request took too long. Can you try again with a shorter command?";
-      }
-
       return {
-        response: userMessage,
+        response: "I'm having trouble processing your request right now. Please try again.",
         actions: [{
           type: 'error',
           status: 'error',
           description: 'Audio processing failed',
-          error: errorMessage
+          error: error instanceof Error ? error.message : 'Unknown error'
         }],
         processingTime: Date.now() - startTime
       };
@@ -115,11 +94,12 @@ export class AssistantService {
     const startTime = Date.now();
 
     try {
+      logger.info('[assistant] processText start', { userId, textPreview: text?.slice?.(0, 200) });
       // Get system prompt with current context
       const systemPrompt = await this.getSystemPrompt(userId);
 
       const completion = await this.openai.chat.completions.create({
-        model: 'gpt-4-turbo',
+        model: 'gpt-4',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: text }
@@ -139,6 +119,7 @@ export class AssistantService {
 
       // Process tool calls
       if (message.tool_calls) {
+        logger.info('[assistant] tool_calls received', { userId, count: message.tool_calls.length });
         for (const toolCall of message.tool_calls) {
           const action = await this.executeTool(toolCall, userId);
           actions.push(action);
@@ -157,28 +138,13 @@ export class AssistantService {
 
     } catch (error) {
       logger.error('Failed to process text:', error);
-
-      // Provide more helpful error messages
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      let userMessage = "I'm having trouble understanding your request. Could you try rephrasing it?";
-
-      if (errorMessage.includes('not found')) {
-        userMessage = errorMessage; // Use the specific "not found" error message
-      } else if (errorMessage.includes('Did you mean')) {
-        userMessage = errorMessage; // Use the clarification question
-      } else if (errorMessage.includes('multiple items')) {
-        userMessage = errorMessage; // Use the disambiguation message
-      } else if (errorMessage.includes('API')) {
-        userMessage = "I'm temporarily having connection issues. Please try again in a moment.";
-      }
-
       return {
-        response: userMessage,
+        response: "I'm having trouble understanding your request. Could you try rephrasing it?",
         actions: [{
           type: 'error',
           status: 'error',
           description: 'Text processing failed',
-          error: errorMessage
+          error: error instanceof Error ? error.message : 'Unknown error'
         }],
         processingTime: Date.now() - startTime
       };
@@ -189,10 +155,12 @@ export class AssistantService {
     const startTime = Date.now();
 
     try {
+      logger.info('[assistant] processTextStream start', { userId, textPreview: text?.slice?.(200) });
+
       // Get system prompt with current context
       const systemPrompt = await this.getSystemPrompt(userId);
 
-      const stream = await this.openai.chat.completions.create({
+      const completion = await this.openai.chat.completions.create({
         model: 'gpt-4-turbo',
         messages: [
           { role: 'system', content: systemPrompt },
@@ -205,11 +173,10 @@ export class AssistantService {
       });
 
       let fullResponse = '';
-      let toolCalls: OpenAI.Chat.Completions.ChatCompletionMessageToolCall[] = [];
-      let currentToolCall: any = null;
+      let toolCalls: any[] = [];
 
       // Stream the response
-      for await (const chunk of stream) {
+      for await (const chunk of completion) {
         const delta = chunk.choices[0]?.delta;
 
         if (!delta) continue;
@@ -228,34 +195,28 @@ export class AssistantService {
           for (const toolCallDelta of delta.tool_calls) {
             const index = toolCallDelta.index;
 
-            if (!currentToolCall || currentToolCall.index !== index) {
-              // Start a new tool call
-              currentToolCall = {
+            // Find or create tool call
+            let toolCall = toolCalls.find(tc => tc.index === index);
+            if (!toolCall) {
+              toolCall = {
                 index,
                 id: toolCallDelta.id || '',
-                type: 'function' as const,
+                type: 'function',
                 function: {
-                  name: toolCallDelta.function?.name || '',
-                  arguments: toolCallDelta.function?.arguments || ''
+                  name: '',
+                  arguments: ''
                 }
               };
-            } else {
-              // Append to existing tool call
-              if (toolCallDelta.function?.name) {
-                currentToolCall.function.name += toolCallDelta.function.name;
-              }
-              if (toolCallDelta.function?.arguments) {
-                currentToolCall.function.arguments += toolCallDelta.function.arguments;
-              }
+              toolCalls.push(toolCall);
             }
-          }
-        }
 
-        // If tool call is complete, add to array
-        if (chunk.choices[0]?.finish_reason === 'tool_calls' || chunk.choices[0]?.finish_reason === 'stop') {
-          if (currentToolCall && currentToolCall.id) {
-            toolCalls.push(currentToolCall);
-            currentToolCall = null;
+            // Update tool call
+            if (toolCallDelta.function?.name) {
+              toolCall.function.name += toolCallDelta.function.name;
+            }
+            if (toolCallDelta.function?.arguments) {
+              toolCall.function.arguments += toolCallDelta.function.arguments;
+            }
           }
         }
       }
@@ -263,7 +224,11 @@ export class AssistantService {
       // Process tool calls after streaming is complete
       const actions: AssistantResponse['actions'] = [];
       if (toolCalls.length > 0) {
+        logger.info('[assistant] processing tool calls', { userId, count: toolCalls.length });
+
         for (const toolCall of toolCalls) {
+          if (!toolCall.id) continue;
+
           const action = await this.executeTool(toolCall, userId);
           actions.push(action);
           yield {
@@ -273,16 +238,9 @@ export class AssistantService {
         }
       }
 
-      // Generate TTS audio (optional - can be skipped for faster response)
+      // Generate TTS audio
       const audioUrl = await this.generateSpeech(fullResponse);
-      if (audioUrl) {
-        yield {
-          type: 'audio',
-          audioUrl
-        };
-      }
 
-      // Send done signal with processing time
       yield {
         type: 'done',
         processingTime: Date.now() - startTime
@@ -290,25 +248,23 @@ export class AssistantService {
 
     } catch (error) {
       logger.error('Failed to process text stream:', error);
-
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      let userMessage = "I'm having trouble understanding your request. Could you try rephrasing it?";
-
-      if (errorMessage.includes('not found')) {
-        userMessage = errorMessage;
-      } else if (errorMessage.includes('Did you mean')) {
-        userMessage = errorMessage;
-      } else if (errorMessage.includes('multiple items')) {
-        userMessage = errorMessage;
-      } else if (errorMessage.includes('API')) {
-        userMessage = "I'm temporarily having connection issues. Please try again in a moment.";
-      }
-
       yield {
         type: 'error',
-        error: userMessage
+        error: error instanceof Error ? error.message : 'Unknown error'
       };
     }
+  }
+
+  private async resolveRestaurantId(userId: string): Promise<string> {
+    const user = await this.db.get('SELECT restaurant_id FROM users WHERE id = ?', [userId]);
+    const restaurantId = user?.restaurant_id || 'demo-restaurant-1';
+    logger.info('[assistant] resolved restaurantId', {
+      userId,
+      restaurantId,
+      hasUserRow: Boolean(user),
+      hasRestaurantId: Boolean(user?.restaurant_id)
+    });
+    return restaurantId;
   }
 
   private async transcribeAudio(audioBuffer: Buffer): Promise<string> {
@@ -337,7 +293,6 @@ export class AssistantService {
   private async generateSpeech(text: string): Promise<string> {
     try {
       if (!process.env.OPENAI_API_KEY) {
-        logger.warn('TTS skipped: OPENAI_API_KEY not configured');
         return '';
       }
 
@@ -345,8 +300,6 @@ export class AssistantService {
       const input = text.length > 2000 ? text.slice(0, 2000) : text;
       const model = process.env.OPENAI_TTS_MODEL || 'tts-1';
       const voice = (process.env.OPENAI_TTS_VOICE || 'alloy') as any;
-
-      logger.info(`Generating TTS audio: model=${model}, voice=${voice}, length=${input.length}`);
 
       const speech = await this.openai.audio.speech.create({
         model,
@@ -365,11 +318,8 @@ export class AssistantService {
       const outPath = path.join(ttsDir, fileName);
       await fs.promises.writeFile(outPath, audioBuffer);
 
-      const audioUrl = `/uploads/tts/${fileName}`;
-      logger.info(`TTS audio generated successfully: ${audioUrl}`);
-
       // Served by backend static route: /uploads/*
-      return audioUrl;
+      return `/uploads/tts/${fileName}`;
     } catch (error) {
       logger.error('TTS generation failed:', error);
       return '';
@@ -377,36 +327,13 @@ export class AssistantService {
   }
 
   private async getSystemPrompt(userId: string): Promise<string> {
-    const user = await this.db.get('SELECT restaurant_id FROM users WHERE id = ?', [userId]);
-    const restaurantId = user?.restaurant_id || 'demo-restaurant-1';
+    const restaurantId = await this.resolveRestaurantId(userId);
 
-    // Get current restaurant context with error handling - run queries in parallel
-    const [ordersResult, unavailableItemsResult, lowStockItemsResult, pendingTasksResult] = await Promise.allSettled([
-      this.db.all('SELECT * FROM orders WHERE restaurant_id = ? AND status != "completed" ORDER BY created_at DESC LIMIT 10', [restaurantId]),
-      this.db.all('SELECT * FROM menu_items WHERE restaurant_id = ? AND is_available = 0', [restaurantId]),
-      this.db.all('SELECT * FROM inventory_items WHERE restaurant_id = ? AND on_hand_qty <= low_stock_threshold', [restaurantId]),
-      this.db.all('SELECT id, title, description, status, priority, type, assigned_to, due_date, created_at, updated_at FROM tasks WHERE restaurant_id = ? AND status = "pending" LIMIT 5', [restaurantId])
-    ]);
-
-    // Extract results or use empty arrays on failure
-    const orders = ordersResult.status === 'fulfilled' ? ordersResult.value : [];
-    const unavailableItems = unavailableItemsResult.status === 'fulfilled' ? unavailableItemsResult.value : [];
-    const lowStockItems = lowStockItemsResult.status === 'fulfilled' ? lowStockItemsResult.value : [];
-    const pendingTasks = pendingTasksResult.status === 'fulfilled' ? pendingTasksResult.value : [];
-
-    // Log any failures
-    if (ordersResult.status === 'rejected') {
-      logger.warn('Failed to fetch orders for assistant context:', ordersResult.reason);
-    }
-    if (unavailableItemsResult.status === 'rejected') {
-      logger.warn('Failed to fetch unavailable items for assistant context:', unavailableItemsResult.reason);
-    }
-    if (lowStockItemsResult.status === 'rejected') {
-      logger.warn('Failed to fetch low stock items for assistant context:', lowStockItemsResult.reason);
-    }
-    if (pendingTasksResult.status === 'rejected') {
-      logger.warn('Failed to fetch pending tasks for assistant context:', pendingTasksResult.reason);
-    }
+    // Get current restaurant context
+    const orders = await this.db.all('SELECT * FROM orders WHERE restaurant_id = ? AND status != "completed" ORDER BY created_at DESC LIMIT 10', [restaurantId]);
+    const unavailableItems = await this.db.all('SELECT * FROM menu_items WHERE restaurant_id = ? AND is_available = 0', [restaurantId]);
+    const lowStockItems = await this.db.all('SELECT * FROM inventory_items WHERE restaurant_id = ? AND on_hand_qty <= low_stock_threshold', [restaurantId]);
+    const pendingTasks = await this.db.all('SELECT * FROM tasks WHERE restaurant_id = ? AND status = "pending" LIMIT 5', [restaurantId]);
 
     const context = {
       activeOrders: orders.length,
@@ -430,46 +357,39 @@ YOUR CAPABILITIES:
 4. Tasks: View daily tasks, mark as complete
 5. General info: Provide restaurant operational assistance
 
-CRITICAL SAFETY & CLARIFICATION RULES:
-1. ALWAYS confirm destructive actions (86ing items, large inventory changes)
-2. If you're NOT 100% certain what the user means, ASK for clarification - NEVER guess
-3. If multiple items could match, list them and ask which one
-4. For unclear audio or ambiguous commands, say "Can you repeat that?" or "Did you mean [X]?"
-5. For 86 operations, confirm which channels (DoorDash, Uber Eats, GrubHub)
-6. When user says similar-sounding item names, confirm: "Do you mean [item A] or [item B]?"
-
-SMART MATCHING:
-- Use fuzzy matching to find items even with slight misspellings
-- If confidence is medium (70-84%), ask for confirmation: "Did you mean [best match]?"
-- If confidence is low (<70%), list top matches and ask user to clarify
-- Accept variations: "jerk chicken", "chicken jerk", "da jerk chicken" → all match "Jerk Chicken"
+SAFETY RULES:
+1. Always confirm destructive actions (86ing items, large inventory changes)
+2. If multiple items match a request, ask for clarification
+3. Log all actions for audit purposes
+4. For 86 operations, confirm which channels (DoorDash, Uber Eats, GrubHub)
 
 RESPONSE STYLE:
 - Be concise and actionable
 - Use restaurant terminology naturally
 - Confirm actions taken with specific details
-- If you're unsure, ALWAYS ask - don't assume
-- After completing an action, confirm what was done
+- If you need clarification, ask direct questions
 
 Examples:
-✅ GOOD:
 - "I'm marking Jerk Chicken unavailable on all platforms. This will take about 30 seconds to sync."
-- "I found 3 pending orders: #214 (15 mins), #215 (18 mins), #217 (22 mins). Which one should I update?"
-- "Did you mean 'Jerk Chicken' or 'BBQ Chicken'? I found both in the menu."
-- "I didn't quite catch that. Can you repeat the item name?"
-- "Just to confirm - you want to 86 the Beef Patties, correct?"
+- "I found 3 orders waiting over 15 minutes: #214, #215, #217. Which one do you want to update?"
+- "Added 2 cases of chicken to inventory. Current level: 27 pieces."
 
-❌ BAD:
-- Guessing which item the user meant without asking
-- Performing destructive actions without confirmation
-- Assuming you understood unclear audio
-- Not listing options when multiple matches exist
-
-Use the available tools to perform actions. Always be helpful, professional, and CAUTIOUS.`;
+Use the available tools to perform actions. Always be helpful and professional.`;
   }
 
   private getTools(): any[] {
     return [
+      {
+        type: 'function',
+        function: {
+          name: 'get_store_status',
+          description: 'Get a quick operational status snapshot for the current restaurant (orders, 86d items, low stock, pending tasks)',
+          parameters: {
+            type: 'object',
+            properties: {}
+          }
+        }
+      },
       {
         type: 'function',
         function: {
@@ -647,10 +567,17 @@ Use the available tools to perform actions. Always be helpful, professional, and
     const { name, arguments: args } = toolCall.function;
 
     try {
-      const parsedArgs = JSON.parse(args);
-      logger.info(`Executing tool: ${name} with args:`, parsedArgs);
+      const parsedArgs = args ? JSON.parse(args) : {};
+      logger.info('[assistant] executing tool', {
+        name,
+        userId,
+        toolCallId: (toolCall as any)?.id,
+        args: parsedArgs
+      });
 
       switch (name) {
+        case 'get_store_status':
+          return await this.handleGetStoreStatus(parsedArgs, userId);
         case 'get_orders':
           return await this.handleGetOrders(parsedArgs, userId);
         case 'update_order_status':
@@ -679,10 +606,53 @@ Use the available tools to perform actions. Always be helpful, professional, and
     }
   }
 
+  private async handleGetStoreStatus(_args: any, userId: string): Promise<AssistantResponse['actions'][0]> {
+    const restaurantId = await this.resolveRestaurantId(userId);
+
+    const activeOrders = await this.db.all(
+      'SELECT id, status, created_at FROM orders WHERE restaurant_id = ? AND status != "completed" ORDER BY created_at DESC LIMIT 25',
+      [restaurantId]
+    );
+    const unavailableItems = await this.db.all(
+      'SELECT id, name FROM menu_items WHERE restaurant_id = ? AND is_available = 0 ORDER BY name LIMIT 50',
+      [restaurantId]
+    );
+    const lowStockItems = await this.db.all(
+      'SELECT id, name, on_hand_qty, low_stock_threshold FROM inventory_items WHERE restaurant_id = ? AND on_hand_qty <= low_stock_threshold ORDER BY on_hand_qty ASC LIMIT 50',
+      [restaurantId]
+    );
+    const pendingTasks = await this.db.all(
+      'SELECT id, title, status FROM tasks WHERE restaurant_id = ? AND status = "pending" ORDER BY created_at DESC LIMIT 25',
+      [restaurantId]
+    );
+
+    const snapshot = {
+      activeOrders: activeOrders.length,
+      unavailableItems: unavailableItems.length,
+      lowStockItems: lowStockItems.length,
+      pendingTasks: pendingTasks.length
+    };
+
+    await DatabaseService.getInstance().logAudit(
+      restaurantId,
+      userId,
+      'get_store_status',
+      'store',
+      'snapshot',
+      snapshot
+    );
+
+    return {
+      type: 'get_store_status',
+      status: 'success',
+      description: `Store status: ${snapshot.activeOrders} active orders, ${snapshot.unavailableItems} 86'd items, ${snapshot.lowStockItems} low stock items, ${snapshot.pendingTasks} pending tasks.`,
+      details: { snapshot, activeOrders, unavailableItems, lowStockItems, pendingTasks }
+    };
+  }
+
   private async handleGetOrders(args: any, userId: string): Promise<AssistantResponse['actions'][0]> {
     const { status, limit = 10 } = args;
-    const user = await this.db.get('SELECT restaurant_id FROM users WHERE id = ?', [userId]);
-    const restaurantId = user?.restaurant_id || 'demo-restaurant-1';
+    const restaurantId = await this.resolveRestaurantId(userId);
 
     let query = 'SELECT * FROM orders WHERE restaurant_id = ?';
     const params: any[] = [restaurantId];
@@ -717,8 +687,7 @@ Use the available tools to perform actions. Always be helpful, professional, and
 
   private async handleUpdateOrderStatus(args: any, userId: string): Promise<AssistantResponse['actions'][0]> {
     const { orderId, status } = args;
-    const user = await this.db.get('SELECT restaurant_id FROM users WHERE id = ?', [userId]);
-    const restaurantId = user?.restaurant_id || 'demo-restaurant-1';
+    const restaurantId = await this.resolveRestaurantId(userId);
 
     const result = await this.db.run(
       'UPDATE orders SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND restaurant_id = ?',
@@ -743,44 +712,16 @@ Use the available tools to perform actions. Always be helpful, professional, and
 
   private async handleSetItemAvailability(args: any, userId: string): Promise<AssistantResponse['actions'][0]> {
     const { itemName, available, channels = ['all'] } = args;
-    const user = await this.db.get('SELECT restaurant_id FROM users WHERE id = ?', [userId]);
-    const restaurantId = user?.restaurant_id || 'demo-restaurant-1';
+    const restaurantId = await this.resolveRestaurantId(userId);
 
-    // Get all menu items for fuzzy matching
-    const allItems = await this.db.all(
-      'SELECT * FROM menu_items WHERE restaurant_id = ?',
-      [restaurantId]
+    // Find the menu item
+    const item = await this.db.get(
+      'SELECT * FROM menu_items WHERE name LIKE ? AND restaurant_id = ?',
+      [`%${itemName}%`, restaurantId]
     );
 
-    if (allItems.length === 0) {
-      throw new Error('No menu items found in your restaurant');
-    }
-
-    // Try exact match first
-    let item = allItems.find((i: any) => i.name.toLowerCase() === itemName.toLowerCase());
-
-    // If no exact match, use fuzzy matching
     if (!item) {
-      const matches = findBestMatches(itemName, allItems, 'name', 60, 5);
-
-      if (matches.length === 0) {
-        throw new Error(`I couldn't find any menu item similar to "${itemName}". Can you try again with the exact name?`);
-      }
-
-      // If top match needs confirmation (medium confidence)
-      if (matches.length === 1 && needsConfirmation(matches[0].score)) {
-        throw new Error(`Did you mean "${matches[0].item.name}"? Please confirm the exact item name.`);
-      }
-
-      // If multiple similar matches
-      if (matches.length > 1 && matches[0].score < 95) {
-        const matchList = matches.map((m, i) => `${i + 1}. ${m.item.name} (${m.score}% match)`).join('\n');
-        throw new Error(`I found multiple items similar to "${itemName}":\n${matchList}\n\nWhich one did you mean?`);
-      }
-
-      // High confidence match
-      item = matches[0].item;
-      logger.info(`Fuzzy matched "${itemName}" to "${item.name}" with ${matches[0].score}% confidence`);
+      throw new Error(`Menu item "${itemName}" not found`);
     }
 
     // Update availability
@@ -807,8 +748,7 @@ Use the available tools to perform actions. Always be helpful, professional, and
 
   private async handleGetInventory(args: any, userId: string): Promise<AssistantResponse['actions'][0]> {
     const { search, lowStock } = args;
-    const user = await this.db.get('SELECT restaurant_id FROM users WHERE id = ?', [userId]);
-    const restaurantId = user?.restaurant_id || 'demo-restaurant-1';
+    const restaurantId = await this.resolveRestaurantId(userId);
 
     let query = 'SELECT * FROM inventory_items WHERE restaurant_id = ?';
     const params: any[] = [restaurantId];
@@ -846,44 +786,16 @@ Use the available tools to perform actions. Always be helpful, professional, and
 
   private async handleAdjustInventory(args: any, userId: string): Promise<AssistantResponse['actions'][0]> {
     const { itemName, quantity, reason } = args;
-    const user = await this.db.get('SELECT restaurant_id FROM users WHERE id = ?', [userId]);
-    const restaurantId = user?.restaurant_id || 'demo-restaurant-1';
+    const restaurantId = await this.resolveRestaurantId(userId);
 
-    // Get all inventory items for fuzzy matching
-    const allItems = await this.db.all(
-      'SELECT * FROM inventory_items WHERE restaurant_id = ?',
-      [restaurantId]
+    // Find the inventory item
+    const item = await this.db.get(
+      'SELECT * FROM inventory_items WHERE name LIKE ? AND restaurant_id = ?',
+      [`%${itemName}%`, restaurantId]
     );
 
-    if (allItems.length === 0) {
-      throw new Error('No inventory items found in your restaurant');
-    }
-
-    // Try exact match first
-    let item = allItems.find((i: any) => i.name.toLowerCase() === itemName.toLowerCase());
-
-    // If no exact match, use fuzzy matching
     if (!item) {
-      const matches = findBestMatches(itemName, allItems, 'name', 60, 5);
-
-      if (matches.length === 0) {
-        throw new Error(`I couldn't find any inventory item similar to "${itemName}". Can you try again with the exact name?`);
-      }
-
-      // If top match needs confirmation (medium confidence)
-      if (matches.length === 1 && needsConfirmation(matches[0].score)) {
-        throw new Error(`Did you mean "${matches[0].item.name}"? Please confirm the exact item name.`);
-      }
-
-      // If multiple similar matches
-      if (matches.length > 1 && matches[0].score < 95) {
-        const matchList = matches.map((m, i) => `${i + 1}. ${m.item.name} (${m.score}% match)`).join('\n');
-        throw new Error(`I found multiple items similar to "${itemName}":\n${matchList}\n\nWhich one did you mean?`);
-      }
-
-      // High confidence match
-      item = matches[0].item;
-      logger.info(`Fuzzy matched "${itemName}" to "${item.name}" with ${matches[0].score}% confidence`);
+      throw new Error(`Inventory item "${itemName}" not found`);
     }
 
     const newQuantity = item.on_hand_qty + quantity;
@@ -915,10 +827,9 @@ Use the available tools to perform actions. Always be helpful, professional, and
 
   private async handleGetTasks(args: any, userId: string): Promise<AssistantResponse['actions'][0]> {
     const { status, type } = args;
-    const user = await this.db.get('SELECT restaurant_id FROM users WHERE id = ?', [userId]);
-    const restaurantId = user?.restaurant_id || 'demo-restaurant-1';
+    const restaurantId = await this.resolveRestaurantId(userId);
 
-    let query = 'SELECT id, title, description, status, priority, type, assigned_to, due_date, created_at, updated_at FROM tasks WHERE restaurant_id = ?';
+    let query = 'SELECT * FROM tasks WHERE restaurant_id = ?';
     const params: any[] = [restaurantId];
     const conditions: string[] = [];
 
@@ -954,18 +865,17 @@ Use the available tools to perform actions. Always be helpful, professional, and
 
   private async handleCompleteTask(args: any, userId: string): Promise<AssistantResponse['actions'][0]> {
     const { taskId } = args;
-    const user = await this.db.get('SELECT restaurant_id FROM users WHERE id = ?', [userId]);
-    const restaurantId = user?.restaurant_id || 'demo-restaurant-1';
+    const restaurantId = await this.resolveRestaurantId(userId);
 
-    const task = await this.db.get('SELECT id, title, description, status, priority, type, assigned_to, due_date, created_at, updated_at FROM tasks WHERE id = ? AND restaurant_id = ?', [taskId, restaurantId]);
+    const task = await this.db.get('SELECT * FROM tasks WHERE id = ? AND restaurant_id = ?', [taskId, restaurantId]);
 
     if (!task) {
       throw new Error(`Task ${taskId} not found`);
     }
 
     await this.db.run(
-      'UPDATE tasks SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND restaurant_id = ?',
-      ['completed', taskId, restaurantId]
+      'UPDATE tasks SET status = ?, completed_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND restaurant_id = ?',
+      ['completed', new Date().toISOString(), taskId, restaurantId]
     );
 
     await DatabaseService.getInstance().logAudit(
