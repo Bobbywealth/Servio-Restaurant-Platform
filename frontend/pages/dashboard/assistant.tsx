@@ -950,18 +950,18 @@ export default function AssistantPage() {
       </Head>
 
       <DashboardLayout>
-        <div className="max-w-7xl mx-auto">
-          {/* Premium Header */}
-          <div className="mb-6">
+        <div className="h-[calc(100vh-6rem)] flex flex-col">
+          {/* Header */}
+          <div className="flex-shrink-0 mb-4">
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
               <div>
                 <div className="flex items-center gap-2 mb-2">
                   <span className="text-sm font-semibold text-surface-500 dark:text-surface-400 uppercase tracking-widest">AI Assistant</span>
                 </div>
-                <h1 className="text-3xl md:text-4xl font-black text-surface-900 dark:text-white tracking-tight">
+                <h1 className="text-2xl md:text-3xl font-black text-surface-900 dark:text-white tracking-tight">
                   Talk to Servio
                 </h1>
-                <p className="mt-2 text-surface-600 dark:text-surface-400 max-w-lg">
+                <p className="mt-1 text-sm text-surface-600 dark:text-surface-400 max-w-lg">
                   Manage orders, inventory, and tasks with natural voice commands.
                 </p>
               </div>
@@ -969,58 +969,57 @@ export default function AssistantPage() {
               {/* Status Pills */}
               <div className="flex flex-wrap items-center gap-2">
                 {state.isRecording && (
-                  <span className="inline-flex items-center gap-2 px-4 py-2 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded-full text-sm font-semibold">
+                  <span className="inline-flex items-center gap-2 px-3 py-1 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded-full text-xs font-semibold">
                     <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
                     Recording
                   </span>
                 )}
                 {state.isProcessing && (
-                  <span className="inline-flex items-center gap-2 px-4 py-2 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 rounded-full text-sm font-semibold">
+                  <span className="inline-flex items-center gap-2 px-3 py-1 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 rounded-full text-xs font-semibold">
                     <span className="w-2 h-2 bg-amber-500 rounded-full animate-pulse"></span>
                     Processing
                   </span>
                 )}
                 {state.isSpeaking && (
-                  <span className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 rounded-full text-sm font-semibold">
+                  <span className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 rounded-full text-xs font-semibold">
                     <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
                     Speaking
                   </span>
                 )}
                 {!state.isRecording && !state.isProcessing && !state.isSpeaking && (
-                  <span className="inline-flex items-center gap-2 px-4 py-2 bg-surface-100 dark:bg-surface-800 text-surface-600 dark:text-surface-400 rounded-full text-sm font-semibold">
+                  <span className="inline-flex items-center gap-2 px-3 py-1 bg-surface-100 dark:bg-surface-800 text-surface-600 dark:text-surface-400 rounded-full text-xs font-semibold">
                     <span className="w-2 h-2 bg-emerald-500 rounded-full"></span>
                     Ready
                   </span>
                 )}
                 {state.alwaysListening && (
-                  <span className="inline-flex items-center gap-2 px-4 py-2 bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 rounded-full text-sm font-semibold">
+                  <span className="inline-flex items-center gap-2 px-3 py-1 bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 rounded-full text-xs font-semibold">
                     <span className="w-2 h-2 bg-violet-500 rounded-full animate-pulse"></span>
-                    {state.inConversationWindow ? 'Conversation Active' : 'Listening for "Servio"'}
+                    {state.inConversationWindow ? 'Active' : 'Hands-Free'}
                   </span>
                 )}
               </div>
             </div>
           </div>
 
-
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-5">
+          <div className="flex-1 grid grid-cols-1 md:grid-cols-4 gap-4 min-h-0">
             {/* Left Panel - Controls */}
-            <div className="lg:col-span-1 space-y-4">
+            <div className="md:col-span-1 space-y-3 overflow-y-auto">
               {/* Avatar Card */}
-              <div className="relative bg-white/80 dark:bg-surface-800/80 backdrop-blur-xl rounded-3xl p-6 shadow-xl border border-white/50 dark:border-surface-700/50 overflow-hidden">
-                <div className="absolute -top-20 -right-20 w-40 h-40 rounded-full bg-gradient-to-br from-teal-400/20 to-violet-400/20 blur-2xl" />
+              <div className="relative bg-white/80 dark:bg-surface-800/80 backdrop-blur-xl rounded-2xl p-4 shadow-xl border border-white/50 dark:border-surface-700/50 overflow-hidden flex flex-col items-center">
+                <div className="absolute -top-10 -right-10 w-20 h-20 rounded-full bg-gradient-to-br from-teal-400/20 to-violet-400/20 blur-2xl" />
                 
                 <RealisticAvatar
                   isTalking={state.isSpeaking}
                   isListening={state.isRecording}
                   isThinking={state.isProcessing}
-                  size="large"
+                  size="medium"
                   gender="female"
                   name="Servio Assistant"
                   audioLevel={talkIntensity * 100}
                 />
 
-                <div className="mt-4">
+                <div className="mt-3 w-full">
                   <MicrophoneButton
                     isRecording={state.isRecording}
                     isProcessing={state.isProcessing}
@@ -1032,37 +1031,6 @@ export default function AssistantPage() {
                 </div>
               </div>
 
-              {/* Debug Tools */}
-              <div className="relative bg-white/80 dark:bg-surface-800/80 backdrop-blur-xl rounded-3xl p-5 shadow-xl border border-white/50 dark:border-surface-700/50">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-bold text-surface-900 dark:text-white">Debug tools</h3>
-                  <span className="text-xs text-surface-500 dark:text-surface-400">audio</span>
-                </div>
-                <button
-                  onClick={playBeepTest}
-                  className="w-full py-3 text-sm font-bold rounded-xl transition-all bg-surface-100 dark:bg-surface-700 text-surface-900 dark:text-surface-100 hover:bg-surface-200 dark:hover:bg-surface-600"
-                >
-                  Beep test (local sound)
-                </button>
-                <button
-                  onClick={() => runProcessTextDebug('Hello, this is a test.', 'Test Voice (TTS)')}
-                  disabled={state.isProcessing || state.isRecording}
-                  className="mt-2 w-full py-3 text-sm font-bold rounded-xl transition-all bg-surface-100 dark:bg-surface-700 text-surface-900 dark:text-surface-100 hover:bg-surface-200 dark:hover:bg-surface-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Test Voice (backend TTS)
-                </button>
-                <button
-                  onClick={() => runProcessTextDebug('What is the store status?', 'Test Tool: store status')}
-                  disabled={state.isProcessing || state.isRecording}
-                  className="mt-2 w-full py-3 text-sm font-bold rounded-xl transition-all bg-surface-100 dark:bg-surface-700 text-surface-900 dark:text-surface-100 hover:bg-surface-200 dark:hover:bg-surface-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Test Tool (store status)
-                </button>
-                <p className="mt-2 text-xs text-surface-600 dark:text-surface-400">
-                  Confirms browser audio output before STT/TTS.
-                </p>
-              </div>
-
               {/* Always Listening Card */}
               <div className="relative bg-gradient-to-br from-violet-500/10 to-fuchsia-500/10 dark:from-violet-900/30 dark:to-fuchsia-900/30 backdrop-blur-xl rounded-3xl p-5 shadow-xl border border-violet-200/50 dark:border-violet-800/50 overflow-hidden">
                 <div className="absolute -bottom-10 -left-10 w-32 h-32 rounded-full bg-violet-500/20 blur-2xl" />
@@ -1070,7 +1038,7 @@ export default function AssistantPage() {
                 <div className="relative">
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="text-sm font-bold text-violet-900 dark:text-violet-100">
-                      Always Listening
+                      Hands-Free Mode
                     </h3>
                     <div className={`w-3 h-3 rounded-full ${
                       state.alwaysListening ? 'bg-violet-500 animate-pulse shadow-lg shadow-violet-500/50' : 'bg-surface-300 dark:bg-surface-600'
@@ -1079,8 +1047,8 @@ export default function AssistantPage() {
                   
                   <p className="text-xs text-violet-700 dark:text-violet-300 mb-4">
                     {state.alwaysListening 
-                      ? 'Continuously listening for commands' 
-                      : 'Enable hands-free voice control'
+                      ? 'Say "Servio" to activate voice commands' 
+                      : 'Enable to use voice commands hands-free'
                     }
                   </p>
 
@@ -1092,7 +1060,7 @@ export default function AssistantPage() {
                       if (newAlwaysListening) {
                         addMessageRef.current?.({
                           type: 'system',
-                          content: 'Always Listening activated! Say "Servio" to start a command.',
+                          content: 'Hands-Free Mode activated! Say "Servio" to start a command.',
                           metadata: { action: { type: 'always_listening', status: 'completed' } }
                         });
                         
@@ -1115,7 +1083,7 @@ export default function AssistantPage() {
                         
                         addMessageRef.current?.({
                           type: 'system',
-                          content: 'Always Listening deactivated.',
+                          content: 'Hands-Free Mode deactivated.',
                           metadata: { action: { type: 'always_listening', status: 'completed' } }
                         });
                       }
@@ -1127,13 +1095,13 @@ export default function AssistantPage() {
                         : 'bg-gradient-to-r from-violet-500 to-fuchsia-600 hover:from-violet-600 hover:to-fuchsia-700 text-white shadow-lg shadow-violet-500/30'
                     } disabled:opacity-50 disabled:cursor-not-allowed`}
                   >
-                    {state.alwaysListening ? 'Stop Listening' : 'Start Listening'}
+                    {state.alwaysListening ? 'Disable' : 'Enable'}
                   </button>
 
                   {state.alwaysListening && state.inConversationWindow && (
                     <div className="mt-3 p-3 bg-emerald-100 dark:bg-emerald-900/30 rounded-xl">
                       <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-300">
-                        Conversation active - speak freely
+                        Listening - speak your command
                       </p>
                     </div>
                   )}
@@ -1144,7 +1112,7 @@ export default function AssistantPage() {
             {/* Right Panel - Conversation */}
             <div className="lg:col-span-3 space-y-4">
               {/* Conversation History */}
-              <div className="relative bg-white/80 dark:bg-surface-800/80 backdrop-blur-xl rounded-3xl p-6 shadow-xl border border-white/50 dark:border-surface-700/50 h-[50vh] lg:h-[420px] flex flex-col">
+              <div className="relative bg-white/80 dark:bg-surface-800/80 backdrop-blur-xl rounded-2xl p-4 shadow-xl border border-white/50 dark:border-surface-700/50 flex-1 flex flex-col min-h-0">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-lg font-bold text-surface-900 dark:text-white">
                     Conversation
