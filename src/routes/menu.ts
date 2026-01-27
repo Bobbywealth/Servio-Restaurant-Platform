@@ -1873,7 +1873,7 @@ router.get('/unavailable', asyncHandler(async (req: Request, res: Response) => {
   const unavailableItems = await db.all(`
     SELECT *, updated_at as unavailable_since
     FROM menu_items
-    WHERE is_available = 0
+    WHERE is_available = FALSE
     ORDER BY updated_at DESC
   `);
 

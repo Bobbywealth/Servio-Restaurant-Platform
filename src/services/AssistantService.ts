@@ -331,7 +331,7 @@ export class AssistantService {
 
     // Get current restaurant context - NOTE: Using single quotes for string literals (PostgreSQL compatible)
     const orders = await this.db.all("SELECT * FROM orders WHERE restaurant_id = ? AND status != 'completed' ORDER BY created_at DESC LIMIT 10", [restaurantId]);
-    const unavailableItems = await this.db.all('SELECT * FROM menu_items WHERE restaurant_id = ? AND is_available = 0', [restaurantId]);
+    const unavailableItems = await this.db.all("SELECT * FROM menu_items WHERE restaurant_id = ? AND is_available = FALSE", [restaurantId]);
     const lowStockItems = await this.db.all('SELECT * FROM inventory_items WHERE restaurant_id = ? AND on_hand_qty <= low_stock_threshold', [restaurantId]);
     const pendingTasks = await this.db.all("SELECT * FROM tasks WHERE restaurant_id = ? AND status = 'pending' LIMIT 5", [restaurantId]);
 
@@ -614,7 +614,7 @@ Use the available tools to perform actions. Always be helpful and professional.`
       [restaurantId]
     );
     const unavailableItems = await this.db.all(
-      'SELECT id, name FROM menu_items WHERE restaurant_id = ? AND is_available = 0 ORDER BY name LIMIT 50',
+      "SELECT id, name FROM menu_items WHERE restaurant_id = ? AND is_available = FALSE ORDER BY name LIMIT 50",
       [restaurantId]
     );
     const lowStockItems = await this.db.all(
