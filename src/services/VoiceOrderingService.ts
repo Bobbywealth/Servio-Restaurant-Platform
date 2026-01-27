@@ -703,9 +703,9 @@ export class VoiceOrderingService {
     if (items) {
       items.forEach((item: any, index: number) => {
         console.log(`🛒 [validateQuote] Item ${index}:`, {
-          hasItemId: !!item.itemId,
+          hasItemId: !!(item.itemId || item.id),
           hasName: !!(item.name || item.itemName),
-          itemId: item.itemId,
+          itemId: item.itemId || item.id,
           name: item.name || item.itemName,
           qty: item.qty || item.quantity
         });
@@ -736,11 +736,13 @@ export class VoiceOrderingService {
       let menuItem = null;
 
       // Try to get by itemId first (prefer database-backed menu)
-      if (inputItem.itemId) {
-        menuItem = await this.getMenuItemLive(inputItem.itemId, restaurantId);
+      // Accept both "itemId" (from frontend) and "id" (from Vapi)
+      const itemId = inputItem.itemId || inputItem.id;
+      if (itemId) {
+        menuItem = await this.getMenuItemLive(itemId, restaurantId);
         if (!menuItem) {
-          console.log(`⚠️ [validateQuote] Failed to get item by ID ${inputItem.itemId}, trying local menu data...`);
-          menuItem = this.getMenuItem(inputItem.itemId);
+          console.log(`⚠️ [validateQuote] Failed to get item by ID ${itemId}, trying local menu data...`);
+          menuItem = this.getMenuItem(itemId);
         }
       }
 
@@ -776,7 +778,7 @@ export class VoiceOrderingService {
       }
 
       if (!menuItem) {
-        const itemDesc = inputItem.itemId || inputItem.name || inputItem.itemName || 'unknown';
+        const itemDesc = inputItem.itemId || inputItem.id || inputItem.name || inputItem.itemName || 'unknown';
         errors.push(`Item not found: ${itemDesc}`);
         console.error('❌ [validateQuote] Could not resolve item:', inputItem);
         return null;
