@@ -1,15 +1,10 @@
-// LIGHTNING FAST CACHING VERSION v3.1.0 - ULTRA TURBO MODE WITH AUTH
-const CACHE_VERSION = 'v3.1.0-ultra'
+// LIGHTNING FAST CACHING VERSION v3.2.0 - SIMPLE PASSTHROUGH MODE
+const CACHE_VERSION = 'v3.2.0'
 const STATIC_CACHE_NAME = `servio-static-${CACHE_VERSION}`
 const DYNAMIC_CACHE_NAME = `servio-dynamic-${CACHE_VERSION}`
 const API_CACHE_NAME = `servio-api-${CACHE_VERSION}`
 const IMAGE_CACHE_NAME = `servio-images-${CACHE_VERSION}`
 const FONT_CACHE_NAME = `servio-fonts-${CACHE_VERSION}`
-
-// AUTH TOKEN STORAGE (IndexedDB)
-let cachedAuthToken = null
-let cachedAuthTokenTime = 0
-const TOKEN_CACHE_MS = 60 * 60 * 1000 // 1 hour
 
 // AGGRESSIVE PRE-CACHING FOR INSTANT LOADS
 const CRITICAL_ASSETS = [
@@ -148,11 +143,11 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(handleGenericRequest(request))
 })
 
-// API HANDLER - Network first with fast timeout for real-time data
+// API HANDLER - Pass through without modification (let browser/axios handle auth)
 async function handleAPIRequest(request) {
   const url = new URL(request.url)
 
-  // Never cache auth endpoints
+  // Auth endpoints - never cache, pass through
   if (url.pathname.includes('/auth/')) {
     try {
       return await fetch(request)
@@ -161,105 +156,12 @@ async function handleAPIRequest(request) {
     }
   }
 
-  // Clone request to add auth header
-  let authRequest = request
-  const authToken = await getAuthToken()
-  
-  if (authToken) {
-    const headers = new Headers(request.headers)
-    headers.set('Authorization', `Bearer ${authToken}`)
-    authRequest = new Request(request.url, {
-      method: request.method,
-      headers,
-      body: request.body,
-      mode: request.mode,
-      credentials: request.credentials,
-      cache: request.cache,
-      redirect: request.redirect,
-      referrer: request.referrer,
-      integrity: request.integrity
-    })
-  }
-
-  // Use network with fast timeout for other API calls
-  const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), 3000) // 3s timeout
-
+  // All other API requests - pass through without caching
+  // This ensures axios interceptors handle auth tokens correctly
   try {
-    const response = await fetch(authRequest, { signal: controller.signal })
-    clearTimeout(timeoutId)
-    return response
+    return await fetch(request)
   } catch (error) {
-    clearTimeout(timeoutId)
     return createOfflineResponse()
-  }
-}
-
-// AUTH TOKEN MANAGEMENT
-async function getAuthToken() {
-  // Check memory cache first
-  if (cachedAuthToken && Date.now() - cachedAuthTokenTime < TOKEN_CACHE_MS) {
-    return cachedAuthToken
-  }
-
-  try {
-    // Try IndexedDB first
-    const token = await getTokenFromIndexedDB()
-    if (token) {
-      cachedAuthToken = token
-      cachedAuthTokenTime = Date.now()
-      return token
-    }
-  } catch (e) {
-    // IndexedDB not available
-  }
-
-  return null
-}
-
-async function getTokenFromIndexedDB() {
-  return new Promise((resolve) => {
-    try {
-      const request = indexedDB.open('servioAuth', 1)
-
-      request.onerror = () => resolve(null)
-      request.onsuccess = () => {
-        const db = request.result
-        const tx = db.transaction('tokens', 'readonly')
-        const store = tx.objectStore('tokens')
-        const getRequest = store.get('accessToken')
-
-        getRequest.onsuccess = () => {
-          const result = getRequest.result
-          resolve(result?.value || null)
-        }
-        getRequest.onerror = () => resolve(null)
-      }
-
-      request.onupgradeneeded = (event) => {
-        const db = event.target.result
-        if (!db.objectStoreNames.contains('tokens')) {
-          db.createObjectStore('tokens', { keyPath: 'id' })
-        }
-      }
-    } catch (e) {
-      resolve(null)
-    }
-  })
-}
-
-async function saveTokenToIndexedDB(token) {
-  try {
-    const request = indexedDB.open('servioAuth', 1)
-
-    request.onsuccess = () => {
-      const db = request.result
-      const tx = db.transaction('tokens', 'readwrite')
-      const store = tx.objectStore('tokens')
-      store.put({ id: 'accessToken', value: token, timestamp: Date.now() })
-    }
-  } catch (e) {
-    // Ignore IndexedDB errors
   }
 }
 
@@ -580,32 +482,9 @@ self.addEventListener('message', (event) => {
       event.ports[0]?.postMessage({ alive: true, timestamp: Date.now() })
       break
 
-    case 'SET_AUTH_TOKEN':
-      // Store auth token from frontend
-      if (payload?.token) {
-        cachedAuthToken = payload.token
-        cachedAuthTokenTime = Date.now()
-        // Also save to IndexedDB for persistence
-        saveTokenToIndexedDB(payload.token)
-        console.log('🔐 SW: Auth token received and stored')
-      }
-      break
-
-    case 'CLEAR_AUTH_TOKEN':
-      // Clear auth token on logout
-      cachedAuthToken = null
-      cachedAuthTokenTime = 0
-      try {
-        indexedDB.deleteDatabase('servioAuth')
-      } catch (e) {
-        // Ignore
-      }
-      console.log('🔐 SW: Auth token cleared')
-      break
-
     default:
       console.log('🔔 SW: Message received:', type)
   }
 })
 
-console.log(`⚡ Servio Service Worker ${CACHE_VERSION} - ULTRA TURBO MODE WITH AUTH 🚀`)
+console.log(`⚡ Servio Service Worker ${CACHE_VERSION} - SIMPLE PASSTHROUGH MODE`)

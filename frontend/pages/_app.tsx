@@ -119,45 +119,11 @@ export default function App({ Component, pageProps }: AppProps) {
       window.location.reload()
     }
 
-    const sendAuthTokenToSW = () => {
-      const token = window.localStorage.getItem('servio_access_token')
-      if (token && navigator.serviceWorker.controller) {
-        navigator.serviceWorker.controller.postMessage({
-          type: 'SET_AUTH_TOKEN',
-          payload: { token }
-        })
-        console.log('📤 Sent auth token to service worker')
-      }
-    }
-
-    const clearAuthTokenInSW = () => {
-      if (navigator.serviceWorker.controller) {
-        navigator.serviceWorker.controller.postMessage({
-          type: 'CLEAR_AUTH_TOKEN'
-        })
-        console.log('📤 Cleared auth token in service worker')
-      }
-    }
-
     const registerServiceWorker = () => {
       navigator.serviceWorker
         .register('/sw.js')
         .then((registration) => {
           registration.update()
-
-          // Send auth token when SW is ready
-          sendAuthTokenToSW()
-
-          // Listen for token changes and update SW
-          window.addEventListener('storage', (e) => {
-            if (e.key === 'servio_access_token') {
-              if (e.newValue) {
-                sendAuthTokenToSW()
-              } else {
-                clearAuthTokenInSW()
-              }
-            }
-          })
 
           if (registration.waiting) {
             registration.waiting.postMessage({ type: 'SKIP_WAITING' })
