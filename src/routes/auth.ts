@@ -75,7 +75,7 @@ router.post(
     const requestId = getRequestId(req);
     const start = Date.now();
 
-    const { email, password } = req.body ?? {};
+    const { email, password, stayLoggedIn } = req.body ?? {};
     const normalizedEmail = String(email ?? '').trim().toLowerCase();
 
     logger.info(
@@ -86,6 +86,7 @@ router.post(
         hasEmail: Boolean(email),
         email: normalizedEmail || null,
         hasPassword: Boolean(password),
+        stayLoggedIn: Boolean(stayLoggedIn),
         origin: req.headers.origin ?? null,
         userAgent: req.headers['user-agent'] ?? null
       })}`
@@ -127,9 +128,12 @@ router.post(
       const sessionId = uuidv4();
       const refreshToken = uuidv4();
       const refreshTokenHash = await bcrypt.hash(refreshToken, 10);
-      const expiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000).toISOString();
+      
+      // If stayLoggedIn is true, set TTL to 24 hours, otherwise use default
+      const daysUntilExpiry = stayLoggedIn ? 1 : REFRESH_TOKEN_TTL_DAYS;
+      const expiresAt = new Date(Date.now() + daysUntilExpiry * 24 * 60 * 60 * 1000).toISOString();
 
-      logger.info(`[auth.login] before_db_insert_session ${JSON.stringify({ requestId, sessionId })}`);
+      logger.info(`[auth.login] before_db_insert_session ${JSON.stringify({ requestId, sessionId, daysUntilExpiry })}`);
       await db.run(
         'INSERT INTO auth_sessions (id, user_id, refresh_token_hash, expires_at) VALUES (?, ?, ?, ?)',
         [sessionId, user.id, refreshTokenHash, expiresAt]

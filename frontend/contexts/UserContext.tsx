@@ -21,7 +21,7 @@ interface AccountOption {
 interface UserContextType {
   user: User | null
   isLoading: boolean
-  login: (email: string, password: string) => Promise<void>
+  login: (email: string, password: string, stayLoggedIn?: boolean) => Promise<void>
   logout: () => void
   hasPermission: (resource: string, action?: string) => boolean
   updateUser: (updates: Partial<User>) => void
@@ -175,7 +175,7 @@ export function UserProvider({ children }: UserProviderProps) {
     loadUser()
   }, [])
 
-  const login = async (email: string, password: string) => {
+  const login = async (email: string, password: string, stayLoggedIn: boolean = false) => {
     setIsLoading(true)
     
     // Clear any existing stale tokens before login
@@ -183,7 +183,7 @@ export function UserProvider({ children }: UserProviderProps) {
     
     try {
       const normalizedEmail = email.trim().toLowerCase()
-      const resp = await api.post('/api/auth/login', { email: normalizedEmail, password })
+      const resp = await api.post('/api/auth/login', { email: normalizedEmail, password, stayLoggedIn })
       const userData = resp.data?.data?.user as User
       const accessToken = resp.data?.data?.accessToken as string
       const refreshToken = resp.data?.data?.refreshToken as string
