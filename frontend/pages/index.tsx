@@ -76,30 +76,31 @@ export default function HomePage() {
                   <span className="ml-3 text-xl font-bold text-white">Servio</span>
                 </div>
 
-              {/* Desktop Navigation */}
-              <div className="hidden md:flex items-center space-x-8">
-                <a href="#top" className="text-gray-300 hover:text-white font-medium transition-colors">Home</a>
-                <a href="#services" className="text-gray-300 hover:text-white font-medium transition-colors">Services</a>
-                <a href="#features" className="text-gray-300 hover:text-white font-medium transition-colors">Features</a>
-                <a href="#pricing" className="text-gray-300 hover:text-white font-medium transition-colors">Pricing</a>
-                <a href="#faq" className="text-gray-300 hover:text-white font-medium transition-colors">FAQ</a>
-                <Link href="/login" className="text-gray-300 hover:text-white font-medium transition-colors">Login</Link>
-                <Link
-                  href="/dashboard/assistant"
-                  className="bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700 text-white px-5 py-2 rounded-xl font-semibold transition-all duration-300 shadow-lg shadow-primary-500/25 hover:shadow-primary-500/40"
-                >
-                  Get Started
-                </Link>
-              </div>
+                {/* Desktop Navigation */}
+                <div className="hidden md:flex items-center space-x-8">
+                  <a href="#top" className="text-gray-300 hover:text-white font-medium transition-colors">Home</a>
+                  <a href="#services" className="text-gray-300 hover:text-white font-medium transition-colors">Services</a>
+                  <a href="#features" className="text-gray-300 hover:text-white font-medium transition-colors">Features</a>
+                  <a href="#pricing" className="text-gray-300 hover:text-white font-medium transition-colors">Pricing</a>
+                  <a href="#faq" className="text-gray-300 hover:text-white font-medium transition-colors">FAQ</a>
+                  <Link href="/login" className="text-gray-300 hover:text-white font-medium transition-colors">Login</Link>
+                  <Link
+                    href="/dashboard/assistant"
+                    className="bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700 text-white px-5 py-2 rounded-xl font-semibold transition-all duration-300 shadow-lg shadow-primary-500/25 hover:shadow-primary-500/40"
+                  >
+                    Get Started
+                  </Link>
+                </div>
 
-              {/* Mobile Menu Button */}
-              <button
-                onClick={() => setMobileMenuOpen(true)}
-                className="md:hidden p-2 rounded-lg text-gray-300 hover:text-white hover:bg-white/10 transition-colors"
-                aria-label="Open menu"
-              >
-                <Menu className="w-6 h-6" />
-              </button>
+                {/* Mobile Menu Button */}
+                <button
+                  onClick={() => setMobileMenuOpen(true)}
+                  className="md:hidden p-2 rounded-lg text-gray-300 hover:text-white hover:bg-white/10 transition-colors"
+                  aria-label="Open menu"
+                >
+                  <Menu className="w-6 h-6" />
+                </button>
+              </div>
             </div>
           </nav>
         </div>
