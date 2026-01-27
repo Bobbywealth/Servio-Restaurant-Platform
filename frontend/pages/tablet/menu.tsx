@@ -139,30 +139,30 @@ export default function TabletMenuPage() {
         <title>Menu • Servio</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0" />
       </Head>
-      <div className="no-print flex min-h-screen flex-col lg:flex-row">
+      <div className="no-print flex min-h-screen flex-col md:flex-row">
         <TabletSidebar />
-        <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8">
-          <div className="max-w-4xl">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <main className="flex-1 px-4 py-5 sm:px-6 md:px-6 lg:px-8">
+          <div className="max-w-5xl">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <h1 className="text-2xl sm:text-3xl font-semibold">Menu Management</h1>
+                <h1 className="text-2xl md:text-3xl font-semibold">Menu Management</h1>
                 <p className="text-[var(--tablet-muted)] mt-2">
                   Review items and toggle availability for the live menu.
                 </p>
               </div>
               <button
                 onClick={loadMenu}
-                className="rounded-xl bg-[var(--tablet-accent)] px-4 py-2 text-sm font-semibold text-[var(--tablet-accent-contrast)] hover:opacity-90"
+                className="rounded-xl bg-[var(--tablet-accent)] px-5 py-3 text-sm font-semibold text-[var(--tablet-accent-contrast)] hover:opacity-90 touch-manipulation min-h-[48px]"
                 disabled={loading}
               >
-                {loading ? 'Refreshing…' : 'Refresh'}
+                {loading ? 'Refreshing...' : 'Refresh'}
               </button>
             </div>
 
-            <div className="mt-6 bg-[var(--tablet-surface)] border border-[var(--tablet-border)] rounded-2xl p-4 sm:p-6 shadow-[0_2px_8px_rgba(0,0,0,0.3)]">
-              <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-[var(--tablet-muted)]">
-                <span>{categories.length} categories</span>
-                <span>{totalItems} items</span>
+            <div className="mt-5 bg-[var(--tablet-surface)] border border-[var(--tablet-border)] rounded-2xl p-5 sm:p-6 shadow-[0_2px_8px_rgba(0,0,0,0.3)]">
+              <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-[var(--tablet-muted)]">
+                <span className="text-base">{categories.length} categories</span>
+                <span className="text-base">{totalItems} items</span>
               </div>
 
               {error && (
@@ -180,48 +180,48 @@ export default function TabletMenuPage() {
                   No menu categories found.
                 </div>
               ) : (
-                <div className="mt-4 space-y-4">
+                <div className="mt-5 space-y-5">
                   {categories.map((category) => (
-                    <div key={category.id} className="rounded-2xl border border-[var(--tablet-border)] bg-[var(--tablet-bg)]/60 p-4">
-                      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                    <div key={category.id} className="rounded-2xl border border-[var(--tablet-border)] bg-[var(--tablet-bg)]/60 p-5">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                         <div>
-                          <h2 className="text-base font-semibold">{category.name}</h2>
+                          <h2 className="text-lg font-semibold">{category.name}</h2>
                           {category.description && (
-                            <p className="text-xs text-[var(--tablet-muted)]">{category.description}</p>
+                            <p className="text-sm text-[var(--tablet-muted)] mt-1">{category.description}</p>
                           )}
                         </div>
-                        <span className="text-xs text-[var(--tablet-muted)]">{category.items.length} items</span>
+                        <span className="text-sm text-[var(--tablet-muted)]">{category.items.length} items</span>
                       </div>
-                      <div className="mt-3 space-y-2">
+                      <div className="mt-4 space-y-3">
                         {category.items.length === 0 ? (
-                          <div className="text-xs text-[var(--tablet-muted)]">No items in this category.</div>
+                          <div className="text-sm text-[var(--tablet-muted)]">No items in this category.</div>
                         ) : (
                           category.items.map((item) => (
                             <div
                               key={item.id}
-                              className="flex flex-col gap-2 rounded-xl border border-[var(--tablet-border)] bg-[var(--tablet-surface)] px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
+                              className="flex flex-col gap-3 rounded-xl border border-[var(--tablet-border)] bg-[var(--tablet-surface)] p-4 sm:flex-row sm:items-center sm:justify-between"
                             >
-                              <div>
-                                <div className="text-sm font-semibold">{item.name}</div>
+                              <div className="flex-1">
+                                <div className="text-base font-semibold">{item.name}</div>
                                 {item.description && (
-                                  <div className="text-xs text-[var(--tablet-muted)]">{item.description}</div>
+                                  <div className="text-sm text-[var(--tablet-muted)] mt-1">{item.description}</div>
                                 )}
                               </div>
-                              <div className="flex flex-wrap items-center gap-2 text-xs">
-                                <span className="rounded-full bg-[var(--tablet-bg)] px-3 py-1 text-[var(--tablet-text)]">
+                              <div className="flex flex-wrap items-center gap-3 text-sm">
+                                <span className="rounded-full bg-[var(--tablet-bg)] px-4 py-2 text-[var(--tablet-text)] font-medium">
                                   {formatMoney(item.price)}
                                 </span>
                                 <button
                                   onClick={() => toggleAvailability(item)}
                                   disabled={pendingItemId === item.id}
-                                  className={`rounded-full px-3 py-1 font-semibold transition-colors ${
+                                  className={`rounded-full px-4 py-2 font-semibold transition-colors touch-manipulation min-w-[100px] ${
                                     item.is_available
                                       ? 'bg-emerald-500/20 text-emerald-200 hover:bg-emerald-500/30'
                                       : 'bg-rose-500/20 text-rose-200 hover:bg-rose-500/30'
                                   }`}
                                 >
                                   {pendingItemId === item.id
-                                    ? 'Updating…'
+                                    ? 'Updating...'
                                     : item.is_available
                                       ? 'Available'
                                       : 'Unavailable'}

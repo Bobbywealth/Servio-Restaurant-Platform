@@ -1187,35 +1187,35 @@ export default function TabletOrdersPage() {
         {receiptHtml ? <PrintReceipt receiptHtml={receiptHtml} copies={2} paperWidth={paperWidth} /> : null}
       </div>
 
-      <div className="no-print flex min-h-screen flex-col lg:flex-row">
+      <div className="no-print flex min-h-screen flex-col md:flex-row">
         <TabletSidebar statusDotClassName={isOnline && socketConnected ? 'bg-emerald-400' : 'bg-amber-400'} />
 
-        <main className="flex-1 bg-[var(--tablet-bg)] text-[var(--tablet-text)] px-4 py-4 sm:px-6 sm:py-6">
-          <div className="flex flex-col gap-6">
+        <main className="flex-1 bg-[var(--tablet-bg)] text-[var(--tablet-text)] px-4 py-4 sm:px-6 md:px-6 lg:px-8">
+          <div className="flex flex-col gap-5 lg:gap-6">
             {/* Header with search and filters */}
             <div className="flex flex-col gap-4">
               <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div>
                   <div className="text-xs uppercase tracking-[0.2em] text-[var(--tablet-muted)]">Order Management</div>
-                  <div className="text-3xl font-semibold">All Orders</div>
+                  <div className="text-2xl md:text-3xl font-semibold">All Orders</div>
                 </div>
                 <div className="flex flex-wrap items-center gap-3 md:justify-end">
-                  <div className={`px-3 py-1 text-xs font-semibold uppercase border rounded-full ${connectionClasses}`}>
+                  <div className={`px-3 py-1.5 text-xs font-semibold uppercase border rounded-full ${connectionClasses}`}>
                     {connectionLabel}
                   </div>
                   {cachedAt && (
-                    <div className="text-xs text-[var(--tablet-muted)] font-medium">
+                    <div className="text-xs text-[var(--tablet-muted)] font-medium hidden sm:block">
                       Cached: {new Date(cachedAt).toLocaleTimeString()}
                     </div>
                   )}
                   <div className="text-right">
-                    <div className="text-2xl font-semibold tabular-nums">
+                    <div className="text-xl md:text-2xl font-semibold tabular-nums">
                       {now ? new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}
                     </div>
                   </div>
                   <button
                     onClick={refresh}
-                    className="bg-[var(--tablet-surface-alt)] hover:brightness-110 p-3 rounded-full transition shadow-[0_2px_8px_rgba(0,0,0,0.3)]"
+                    className="bg-[var(--tablet-surface-alt)] hover:brightness-110 p-3 rounded-full transition shadow-[0_2px_8px_rgba(0,0,0,0.3)] touch-manipulation"
                     aria-label="Refresh"
                   >
                     <RefreshCcw className={clsx('h-5 w-5', loading && 'animate-spin')} />
@@ -1227,18 +1227,18 @@ export default function TabletOrdersPage() {
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                 {/* Search Input */}
                 <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-[var(--tablet-muted)]" />
+                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-[var(--tablet-muted)]" />
                   <input
                     type="text"
                     placeholder="Search orders..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-10 pr-10 py-3 rounded-xl border border-[var(--tablet-border)] bg-[var(--tablet-surface)] text-[var(--tablet-text)] placeholder-[var(--tablet-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--tablet-accent)] focus:border-transparent transition-all"
+                    className="w-full pl-11 pr-10 py-3.5 rounded-xl border border-[var(--tablet-border)] bg-[var(--tablet-surface)] text-[var(--tablet-text)] placeholder-[var(--tablet-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--tablet-accent)] focus:border-transparent transition-all text-base"
                   />
                   {searchQuery && (
                     <button
                       onClick={() => setSearchQuery('')}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-[var(--tablet-border)] transition"
+                      className="absolute right-3.5 top-1/2 -translate-y-1/2 p-1.5 rounded-full hover:bg-[var(--tablet-border)] transition touch-manipulation"
                     >
                       <X className="h-4 w-4 text-[var(--tablet-muted)]" />
                     </button>
@@ -1249,7 +1249,7 @@ export default function TabletOrdersPage() {
                 <button
                   onClick={() => setShowFilters(!showFilters)}
                   className={clsx(
-                    'flex items-center gap-2 px-4 py-3 rounded-xl border transition-all',
+                    'flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl border transition-all touch-manipulation min-h-[48px]',
                     showFilters || statusFilter !== 'all' || channelFilter !== 'all'
                       ? 'bg-[var(--tablet-accent)] border-[var(--tablet-accent)] text-[var(--tablet-accent-contrast)]'
                       : 'bg-[var(--tablet-surface)] border-[var(--tablet-border)] text-[var(--tablet-text)]'
@@ -1268,11 +1268,11 @@ export default function TabletOrdersPage() {
                 <select
                   value={sortBy}
                   onChange={(e) => setSortBy(e.target.value as OrderFilter['sortBy'])}
-                  className="px-4 py-3 rounded-xl border border-[var(--tablet-border)] bg-[var(--tablet-surface)] text-[var(--tablet-text)] focus:outline-none focus:ring-2 focus:ring-[var(--tablet-accent)] cursor-pointer"
+                  className="px-4 py-3.5 rounded-xl border border-[var(--tablet-border)] bg-[var(--tablet-surface)] text-[var(--tablet-text)] focus:outline-none focus:ring-2 focus:ring-[var(--tablet-accent)] cursor-pointer min-h-[48px]"
                 >
                   <option value="newest">Newest First</option>
                   <option value="oldest">Oldest First</option>
-                  <option value="prep-time">Prep Time Priority</option>
+                  <option value="prep-time">Prep Time</option>
                 </select>
               </div>
 
@@ -1377,9 +1377,9 @@ export default function TabletOrdersPage() {
                 <p className="text-base mt-3 font-medium uppercase tracking-widest">No active orders</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 gap-4 sm:gap-6 tablet-orders-responsive">
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-5 tablet-orders-responsive">
                 {/* Left Panel: Order Queue */}
-                <section className="bg-[var(--tablet-surface)] rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.3)] border border-[var(--tablet-border)] flex flex-col min-h-[50vh] lg:min-h-[70vh]">
+                <section className="bg-[var(--tablet-surface)] rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.3)] border border-[var(--tablet-border)] flex flex-col min-h-[50vh] md:min-h-[60vh] lg:min-h-[70vh]">
                   <div className="px-4 py-4 border-b border-[var(--tablet-border)] flex items-center justify-between">
                     <button className="flex items-center gap-2 text-sm font-semibold uppercase text-[var(--tablet-accent)]">
                       All Orders
@@ -1387,7 +1387,7 @@ export default function TabletOrdersPage() {
                     </button>
                     <div className="text-xs font-semibold text-[var(--tablet-muted)]">{filtered.length} Active</div>
                   </div>
-                  <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+                  <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 scrollbar-thin">
                     {filtered.map((o, index) => {
                       const status = normalizeStatus(o.status);
                       const isNew = status === 'received';
@@ -1427,7 +1427,7 @@ export default function TabletOrdersPage() {
                           type="button"
                           onClick={() => setSelectedOrder(o)}
                           className={clsx(
-                            'w-full text-left rounded-lg border border-[var(--tablet-border)] p-4 shadow-[0_2px_8px_rgba(0,0,0,0.3)] transition transform hover:brightness-110 hover:scale-[1.01]',
+                            'w-full text-left rounded-xl border border-[var(--tablet-border)] p-4 sm:p-5 shadow-[0_2px_8px_rgba(0,0,0,0.3)] transition transform hover:brightness-110 hover:scale-[1.01] touch-manipulation',
                             isSelected && 'bg-[var(--tablet-info)] border-[var(--tablet-info)] shadow-[0_4px_12px_rgba(93,112,153,0.45)]',
                             !isSelected && 'bg-[var(--tablet-card)]',
                             isOverdue && 'order-overdue'
@@ -1435,20 +1435,20 @@ export default function TabletOrdersPage() {
                         >
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                              <span className={clsx('text-[11px] font-semibold tracking-widest px-2 py-1 rounded-full', statusBadgeClasses)}>
+                              <span className={clsx('text-xs font-semibold tracking-widest px-2.5 py-1.5 rounded-full', statusBadgeClasses)}>
                                 {statusLabel}
                               </span>
-                              <span className="text-lg" title={o.channel || 'Unknown'}>
+                              <span className="text-xl" title={o.channel || 'Unknown'}>
                                 {getChannelIcon(o.channel)}
                               </span>
                             </div>
                             <div className="flex items-center gap-2">
                               {isLatest && (
-                                <span className="text-[11px] font-semibold uppercase text-[var(--tablet-accent)]">Newest</span>
+                                <span className="text-xs font-semibold uppercase text-[var(--tablet-accent)] hidden sm:inline">Newest</span>
                               )}
                               {isPreparing && prepTimeData && (
                                 <span className={clsx(
-                                  'text-[11px] font-semibold px-2 py-1 rounded-full',
+                                  'text-xs font-semibold px-2.5 py-1.5 rounded-full',
                                   prepTimeColorClass,
                                   prepWarningLevel === 'critical' && 'prep-time-critical'
                                 )}>
@@ -1458,7 +1458,7 @@ export default function TabletOrdersPage() {
                             </div>
                           </div>
 
-                          <div className="mt-2 flex items-center justify-between">
+                          <div className="mt-3 flex items-center justify-between">
                             <div className={clsx('text-lg font-semibold truncate', 'text-[var(--tablet-text)]')}>
                               {o.customer_name || 'Guest'}
                             </div>
@@ -1470,8 +1470,8 @@ export default function TabletOrdersPage() {
 
                           {/* Prep Time Progress Bar (for preparing orders) */}
                           {isPreparing && prepTimeData && !prepTimeData.isOverdue && (
-                            <div className="mt-2">
-                              <div className="h-1.5 rounded-full bg-[var(--tablet-border)] overflow-hidden">
+                            <div className="mt-3">
+                              <div className="h-2 rounded-full bg-[var(--tablet-border)] overflow-hidden">
                                 <div
                                   className={clsx(
                                     'h-full rounded-full prep-time-progress-bar',
@@ -1485,11 +1485,11 @@ export default function TabletOrdersPage() {
                             </div>
                           )}
 
-                          <div className="mt-2 flex items-center justify-between text-sm text-[var(--tablet-muted)]">
+                          <div className="mt-3 flex items-center justify-between text-sm text-[var(--tablet-muted)]">
                             <div className="flex items-center gap-2">
                               <span>{itemCount} item{itemCount !== 1 ? 's' : ''}</span>
                               {o.order_type && (
-                                <span className="px-2 py-0.5 rounded text-[10px] bg-[var(--tablet-border)] uppercase tracking-wide">
+                                <span className="px-2.5 py-0.5 rounded text-xs bg-[var(--tablet-border)] uppercase tracking-wide">
                                   {o.order_type}
                                 </span>
                               )}
@@ -1498,19 +1498,19 @@ export default function TabletOrdersPage() {
                           </div>
 
                           {hasPendingAction && (
-                            <div className="mt-2 text-[11px] font-semibold uppercase text-[var(--tablet-accent)]">
+                            <div className="mt-2 text-xs font-semibold uppercase text-[var(--tablet-accent)]">
                               Pending Sync
                             </div>
                           )}
 
                           {/* View Details Button */}
-                          <div className="mt-3 flex items-center gap-2">
+                          <div className="mt-4 flex items-center gap-2">
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setOrderDetailsOrder(o);
                               }}
-                              className="flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-semibold uppercase bg-[var(--tablet-surface-alt)] border border-[var(--tablet-border)] hover:bg-[var(--tablet-border)] transition"
+                              className="flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-xs font-semibold uppercase bg-[var(--tablet-surface-alt)] border border-[var(--tablet-border)] hover:bg-[var(--tablet-border)] transition touch-manipulation"
                             >
                               <Eye className="h-4 w-4" />
                               View Details
@@ -1523,11 +1523,11 @@ export default function TabletOrdersPage() {
                 </section>
 
                 {/* Middle Panel: Order Details */}
-                <section className="flex flex-col gap-6">
+                <section className="flex flex-col gap-5 hidden md:flex">
                   {/* Order Details */}
                   <div className="bg-[var(--tablet-surface)] rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.3)] border border-[var(--tablet-border)]">
-                    <div className="px-6 py-5 border-b border-[var(--tablet-border)]">
-                      <div className="text-2xl font-semibold">
+                    <div className="px-5 py-4 border-b border-[var(--tablet-border)]">
+                      <div className="text-xl font-semibold">
                         {selectedOrder ? (
                           <>ORDER #{selectedOrder.external_id ? selectedOrder.external_id.slice(-4).toUpperCase() : selectedOrder.id.slice(-4).toUpperCase()} - {(selectedOrder.customer_name || 'Guest').toUpperCase()}</>
                         ) : (
@@ -1536,18 +1536,18 @@ export default function TabletOrdersPage() {
                       </div>
                     </div>
                     {selectedOrder ? (
-                      <div className="px-6 py-5 space-y-6">
+                      <div className="px-5 py-5 space-y-5">
                         <div className="flex items-center justify-between border-b border-[var(--tablet-border)] pb-4">
                           <span className="text-sm text-[var(--tablet-muted)] uppercase">Total Cost</span>
-                          <span className="text-3xl font-semibold">{formatMoney(selectedOrder.total_amount)}</span>
+                          <span className="text-2xl font-semibold">{formatMoney(selectedOrder.total_amount)}</span>
                         </div>
 
                         <div>
                           <div className="text-lg font-semibold mb-3">Items ({selectedOrder.items?.length || 0})</div>
-                          <div className="space-y-3 max-h-[260px] sm:max-h-[320px] overflow-y-auto pr-2">
+                          <div className="space-y-3 max-h-[280px] sm:max-h-[320px] overflow-y-auto pr-2 scrollbar-thin">
                             {(selectedOrder.items || []).map((it, idx) => (
                               <div key={idx} className="flex items-center gap-4 pb-3 border-b border-[var(--tablet-border)] last:border-0">
-                                <div className="h-14 w-14 rounded-md bg-[var(--tablet-border-strong)] flex items-center justify-center text-sm text-[var(--tablet-muted)]">
+                                <div className="h-12 w-12 rounded-lg bg-[var(--tablet-border-strong)] flex items-center justify-center text-sm text-[var(--tablet-muted)] font-semibold">
                                   {it.quantity || 1}
                                 </div>
                                 <div className="flex-1">
@@ -1563,8 +1563,8 @@ export default function TabletOrdersPage() {
                         </div>
                       </div>
                     ) : (
-                      <div className="px-6 py-16 text-center text-[var(--tablet-muted)]">
-                        Waiting for orders...
+                      <div className="px-5 py-16 text-center text-[var(--tablet-muted)]">
+                        Select an order to view details.
                       </div>
                     )}
                   </div>
@@ -1572,15 +1572,15 @@ export default function TabletOrdersPage() {
                 </section>
 
                 {/* Right Panel: Customer + Actions */}
-                <section className="flex flex-col gap-6">
+                <section className="flex flex-col gap-5 hidden xl:flex">
                   <div className="bg-[var(--tablet-surface)] rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.3)] border border-[var(--tablet-border)]">
-                    <div className="px-6 py-5 border-b border-[var(--tablet-border)]">
-                      <div className="text-xl font-semibold">Customer</div>
+                    <div className="px-5 py-4 border-b border-[var(--tablet-border)]">
+                      <div className="text-lg font-semibold">Customer</div>
                     </div>
                     {selectedOrder ? (
-                      <div className="px-6 py-5 space-y-5">
+                      <div className="px-5 py-5 space-y-5">
                         <div className="flex items-center gap-4">
-                          <div className="h-14 w-14 rounded-full bg-[var(--tablet-border-strong)] flex items-center justify-center text-xl font-semibold">
+                          <div className="h-12 w-12 rounded-full bg-[var(--tablet-border-strong)] flex items-center justify-center text-lg font-semibold">
                             {(selectedOrder.customer_name || 'G')[0]}
                           </div>
                           <div className="flex-1">
@@ -1590,7 +1590,7 @@ export default function TabletOrdersPage() {
                         </div>
 
                         <div className="flex flex-wrap gap-3 text-sm">
-                          <span className="text-[11px] uppercase tracking-widest text-[var(--tablet-muted)]">
+                          <span className="text-xs uppercase tracking-widest text-[var(--tablet-muted)]">
                             {selectedOrder.order_type || 'Pickup'}
                           </span>
                           <span className="text-[var(--tablet-text)]">
@@ -1606,17 +1606,17 @@ export default function TabletOrdersPage() {
                         </div>
 
                         <div className="flex flex-wrap gap-2">
-                          <span className={clsx('px-3 py-1 rounded-full text-[11px] font-semibold uppercase text-center', statusBadgeClassesForStatus(normalizeStatus(selectedOrder.status)))}>
+                          <span className={clsx('px-3 py-1 rounded-full text-xs font-semibold uppercase text-center', statusBadgeClassesForStatus(normalizeStatus(selectedOrder.status)))}>
                             {normalizeStatus(selectedOrder.status)}
                           </span>
-                          <span className="px-3 py-1 rounded-full text-[11px] font-semibold uppercase text-center bg-[var(--tablet-border)] text-[var(--tablet-muted-strong)]">
+                          <span className="px-3 py-1 rounded-full text-xs font-semibold uppercase text-center bg-[var(--tablet-border)] text-[var(--tablet-muted-strong)]">
                             {selectedOrder.channel || 'POS'}
                           </span>
                         </div>
 
                         {selectedOrder.special_instructions && (
                           <div className="bg-[var(--tablet-border)] rounded-lg p-4">
-                            <div className="text-[11px] uppercase tracking-widest text-[var(--tablet-accent)] mb-2">
+                            <div className="text-xs uppercase tracking-widest text-[var(--tablet-accent)] mb-2">
                               Special Instructions
                             </div>
                             <div className="text-sm text-[var(--tablet-text)] opacity-90">{selectedOrder.special_instructions}</div>
@@ -1624,7 +1624,7 @@ export default function TabletOrdersPage() {
                         )}
                       </div>
                     ) : (
-                      <div className="px-6 py-12 text-center text-[var(--tablet-muted)]">
+                      <div className="px-5 py-12 text-center text-[var(--tablet-muted)]">
                         Select an order to view customer details.
                       </div>
                     )}
@@ -1637,14 +1637,14 @@ export default function TabletOrdersPage() {
                           <button
                             disabled={busyId === selectedOrder.id}
                             onClick={() => acceptOrder(selectedOrder)}
-                            className="h-14 rounded-full bg-[var(--tablet-accent)] text-[var(--tablet-accent-contrast)] font-semibold uppercase shadow-[0_2px_8px_rgba(0,0,0,0.3)] transition hover:brightness-110 active:scale-95 disabled:opacity-50"
+                            className="h-14 rounded-full bg-[var(--tablet-accent)] text-[var(--tablet-accent-contrast)] font-semibold uppercase shadow-[0_2px_8px_rgba(0,0,0,0.3)] transition hover:brightness-110 active:scale-95 disabled:opacity-50 touch-manipulation"
                           >
                             Confirm Order
                           </button>
                           <button
                             disabled={busyId === selectedOrder.id}
                             onClick={() => declineOrder(selectedOrder)}
-                            className="h-14 rounded-full border-2 border-[var(--tablet-border-strong)] text-[var(--tablet-text)] font-semibold uppercase transition hover:brightness-110 active:scale-95 disabled:opacity-50"
+                            className="h-14 rounded-full border-2 border-[var(--tablet-border-strong)] text-[var(--tablet-text)] font-semibold uppercase transition hover:brightness-110 active:scale-95 disabled:opacity-50 touch-manipulation"
                           >
                             Decline
                           </button>
@@ -1655,14 +1655,14 @@ export default function TabletOrdersPage() {
                           <button
                             disabled={busyId === selectedOrder.id}
                             onClick={() => setStatus(selectedOrder.id, 'ready')}
-                            className="h-14 rounded-full bg-[var(--tablet-success)] text-white font-semibold uppercase shadow-[0_2px_8px_rgba(0,0,0,0.3)] transition hover:brightness-110 active:scale-95 disabled:opacity-50"
+                            className="h-14 rounded-full bg-[var(--tablet-success)] text-white font-semibold uppercase shadow-[0_2px_8px_rgba(0,0,0,0.3)] transition hover:brightness-110 active:scale-95 disabled:opacity-50 touch-manipulation"
                           >
                             Ready for Pickup
                           </button>
                           <button
                             onClick={() => printOrder(selectedOrder.id)}
                             disabled={printingOrderId === selectedOrder.id}
-                            className="h-14 rounded-full border-2 border-[var(--tablet-border-strong)] text-[var(--tablet-text)] font-semibold uppercase transition hover:brightness-110 active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
+                            className="h-14 rounded-full border-2 border-[var(--tablet-border-strong)] text-[var(--tablet-text)] font-semibold uppercase transition hover:brightness-110 active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2 touch-manipulation"
                           >
                             <Printer className="h-5 w-5" />
                             Print
@@ -1679,12 +1679,12 @@ export default function TabletOrdersPage() {
                                 setSelectedOrder(null);
                               }
                             }}
-                            className="h-14 rounded-full bg-[var(--tablet-success)] text-white font-semibold uppercase shadow-[0_2px_8px_rgba(0,0,0,0.3)] transition hover:brightness-110 active:scale-95 disabled:opacity-50"
+                            className="h-14 rounded-full bg-[var(--tablet-success)] text-white font-semibold uppercase shadow-[0_2px_8px_rgba(0,0,0,0.3)] transition hover:brightness-110 active:scale-95 disabled:opacity-50 touch-manipulation"
                           >
                             Complete Order
                           </button>
                           <button
-                            className="h-14 rounded-full border-2 border-[var(--tablet-border-strong)] text-[var(--tablet-text)] font-semibold uppercase transition hover:brightness-110 active:scale-95"
+                            className="h-14 rounded-full border-2 border-[var(--tablet-border-strong)] text-[var(--tablet-text)] font-semibold uppercase transition hover:brightness-110 active:scale-95 touch-manipulation"
                             type="button"
                           >
                             Assign Driver
