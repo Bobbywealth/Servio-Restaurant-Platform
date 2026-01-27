@@ -194,6 +194,7 @@ module.exports = {
         'glow-orange': '0 0 15px rgb(255 107 53 / 0.5), 0 0 30px rgb(255 107 53 / 0.3)',
         'glow-blue': '0 0 15px rgb(59 130 246 / 0.5), 0 0 30px rgb(59 130 246 / 0.3)',
         'glow-purple': '0 0 15px rgb(168 85 247 / 0.5), 0 0 30px rgb(168 85 247 / 0.3)',
+        'glow-red': '0 0 15px rgb(220 38 38 / 0.5), 0 0 30px rgb(220 38 38 / 0.3)',
         'inner-lg': 'inset 0 0 10px rgb(0 0 0 / 0.1)',
         'soft': '0 2px 15px -3px rgb(0 0 0 / 0.07), 0 10px 20px -2px rgb(0 0 0 / 0.04)',
         'soft-lg': '0 10px 40px -10px rgb(0 0 0 / 0.1), 0 20px 50px -20px rgb(0 0 0 / 0.15)',

@@ -506,6 +506,6 @@ export default function TimeClockPage() {
           </div>
         </motion.div>
       </div>
-    </DashboardLayout>
+    </DashboardLayoutForTimeclock>
   )
 }

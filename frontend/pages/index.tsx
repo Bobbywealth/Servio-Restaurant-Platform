@@ -103,7 +103,6 @@ export default function HomePage() {
               </div>
             </div>
           </nav>
-        </div>
 
         {/* Mobile Menu Overlay */}
         <AnimatePresence>
