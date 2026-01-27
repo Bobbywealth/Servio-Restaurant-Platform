@@ -16,7 +16,15 @@ import {
   Wallet,
   User,
   ArrowLeft,
-  ArrowRight
+  ArrowRight,
+  Search,
+  ChevronDown,
+  ChevronUp,
+  X,
+  Filter,
+  Flame,
+  Leaf,
+  DollarSign
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import toast from 'react-hot-toast';
@@ -127,6 +135,107 @@ export default function PublicProfile() {
   const [selectedModifiers, setSelectedModifiers] = useState<Record<string, SelectedModifier[]>>({});
   const [currentStep, setCurrentStep] = useState(0);
   const [validationError, setValidationError] = useState<string | null>(null);
+
+  // Search and filter state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeFilters, setActiveFilters] = useState<string[]>([]);
+  const [isFilterMenuOpen, setIsFilterMenuOpen] = useState(false);
+  const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
+  const [showStickyNav, setShowStickyNav] = useState(false);
+
+  // Scroll listener for sticky navigation
+  useEffect(() => {
+    const handleScroll = () => {
+      // Show sticky nav after scrolling past hero section (around 200px)
+      setShowStickyNav(window.scrollY > 200);
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // Toggle category collapse
+  const toggleCategory = (cat: string) => {
+    setCollapsedCategories(prev => {
+      const next = new Set(prev);
+      if (next.has(cat)) next.delete(cat);
+      else next.add(cat);
+      return next;
+    });
+  };
+
+  // Toggle filter
+  const toggleFilter = (filter: string) => {
+    setActiveFilters(prev => {
+      if (prev.includes(filter)) {
+        return prev.filter(f => f !== filter);
+      }
+      return [...prev, filter];
+    });
+  };
+
+  // Clear all filters
+  const clearFilters = () => {
+    setSearchQuery('');
+    setActiveFilters([]);
+  };
+
+  // Get unique categories
+  const categories = Array.from(new Set(items.map(i => i.category_name))).sort((a, b) => {
+    // Put "Popular" or "Hottest" items first
+    const aLower = a.toLowerCase();
+    const bLower = b.toLowerCase();
+    if (aLower.includes('popular') || aLower.includes('hot') || aLower.includes('best')) return -1;
+    if (bLower.includes('popular') || bLower.includes('hot') || bLower.includes('best')) return 1;
+    return a.localeCompare(b);
+  });
+
+  // Filter items based on search and filters
+  const getFilteredItems = () => {
+    let filtered = items;
+
+    // Apply search query
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(item =>
+        item.name.toLowerCase().includes(query) ||
+        item.description.toLowerCase().includes(query)
+      );
+    }
+
+    // Apply filters (for future use - could check item tags/metadata)
+    if (activeFilters.length > 0) {
+      filtered = filtered.filter(item => {
+        // Placeholder - would check item metadata for tags
+        return true;
+      });
+    }
+
+    return filtered;
+  };
+
+  // Get filtered items by category
+  const getItemsByCategory = () => {
+    const filtered = getFilteredItems();
+    const itemsByCat: Record<string, typeof filtered> = {};
+    categories.forEach(cat => {
+      itemsByCat[cat] = filtered.filter(i => i.category_name === cat);
+    });
+    return itemsByCat;
+  };
+
+  // Scroll to category
+  const scrollToCategory = (cat: string) => {
+    const element = document.getElementById(`category-${cat.replace(/\s+/g, '-').toLowerCase()}`);
+    if (element) {
+      // Account for sticky nav height (about 120px)
+      const offset = 120;
+      const elementPosition = element.getBoundingClientRect().top + window.scrollY;
+      window.scrollTo({
+        top: elementPosition - offset,
+        behavior: 'smooth'
+      });
+    }
+  };
 
   useEffect(() => {
     if (!restaurantSlug) return;
@@ -588,65 +697,267 @@ export default function PublicProfile() {
         </div>
       </div>
 
-      {/* Menu */}
-      <div className="max-w-4xl mx-auto px-4 py-8">
-        <div className="space-y-10">
-          {Array.from(new Set(items.map(i => i.category_name))).map((cat, catIndex) => (
-            <motion.div 
-              key={cat}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: catIndex * 0.1 }}
+      {/* Search and Filter Bar */}
+      <div className="sticky top-[68px] z-20 bg-white/95 backdrop-blur-md border-b border-slate-200/50 shadow-sm">
+        <div className="max-w-4xl mx-auto px-4 py-3">
+          {/* Search Input */}
+          <div className="relative mb-3">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search menu items..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-12 pr-10 py-3 bg-slate-100 border-2 border-transparent focus:border-blue-500 rounded-xl focus:outline-none text-base transition-all"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-4 top-1/2 -translate-y-1/2 p-1 hover:bg-slate-200 rounded-full transition-colors"
+              >
+                <X className="w-4 h-4 text-slate-500" />
+              </button>
+            )}
+          </div>
+
+          {/* Filter Row */}
+          <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1">
+            {/* Popular filter */}
+            <button
+              onClick={() => toggleFilter('popular')}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all ${
+                activeFilters.includes('popular')
+                  ? 'bg-orange-100 text-orange-700 border-2 border-orange-300'
+                  : 'bg-slate-100 text-slate-600 border-2 border-transparent hover:bg-slate-200'
+              }`}
             >
-              <h2 className="text-2xl font-black text-slate-900 mb-5">{cat}</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {items.filter(i => i.category_name === cat).map((item, itemIndex) => (
-                  <motion.div 
-                    key={item.id} 
-                    className="group bg-white rounded-2xl p-5 shadow-sm border border-slate-100 hover:shadow-xl hover:border-slate-200 transition-all duration-300"
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: (catIndex * 0.1) + (itemIndex * 0.05) }}
-                    whileHover={{ y: -2 }}
-                  >
-                    <div className="flex justify-between items-start gap-3 sm:gap-4">
-                      <div className="flex-1 flex gap-3 sm:gap-4">
-                        {item.image && (
-                          <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-xl overflow-hidden bg-slate-100 border border-slate-200 flex-shrink-0">
-                            <img
-                              src={resolveMediaUrl(item.image)}
-                              alt={item.name}
-                              className="w-full h-full object-cover"
-                              loading="lazy"
-                            />
-                          </div>
-                        )}
-                        <div className="min-w-0">
-                        <h3 className="font-bold text-base sm:text-lg text-slate-900 group-hover:text-blue-600 transition-colors">{item.name}</h3>
-                        <p className="text-slate-500 text-xs sm:text-sm mt-1 line-clamp-2">{item.description}</p>
-                        <p className="font-black text-lg sm:text-xl text-slate-900 mt-2 sm:mt-3">
-                          {item.sizes && item.sizes.length > 0 ? (
-                            <>From ${item.fromPrice?.toFixed(2) || item.price.toFixed(2)}</>
-                          ) : (
-                            <>${item.price.toFixed(2)}</>
-                          )}
-                        </p>
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => openItemDetail(item)}
-                        className="shrink-0 p-2.5 sm:p-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-600/20 min-w-[44px] min-h-[44px] flex items-center justify-center"
-                        aria-label={`Add ${item.name} to cart`}
-                      >
-                        <Plus className="w-5 h-5" />
-                      </button>
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
-            </motion.div>
-          ))}
+              <Flame className="w-4 h-4" />
+              Popular
+            </button>
+
+            {/* Vegetarian filter */}
+            <button
+              onClick={() => toggleFilter('vegetarian')}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all ${
+                activeFilters.includes('vegetarian')
+                  ? 'bg-green-100 text-green-700 border-2 border-green-300'
+                  : 'bg-slate-100 text-slate-600 border-2 border-transparent hover:bg-slate-200'
+              }`}
+            >
+              <Leaf className="w-4 h-4" />
+              Vegetarian
+            </button>
+
+            {/* Under $10 filter */}
+            <button
+              onClick={() => toggleFilter('under10')}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all ${
+                activeFilters.includes('under10')
+                  ? 'bg-blue-100 text-blue-700 border-2 border-blue-300'
+                  : 'bg-slate-100 text-slate-600 border-2 border-transparent hover:bg-slate-200'
+              }`}
+            >
+              <DollarSign className="w-4 h-4" />
+              Under $10
+            </button>
+
+            {/* More Filters button */}
+            <button
+              onClick={() => setIsFilterMenuOpen(!isFilterMenuOpen)}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all ${
+                isFilterMenuOpen
+                  ? 'bg-slate-800 text-white'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              <Filter className="w-4 h-4" />
+              More
+            </button>
+
+            {/* Clear all if filters active */}
+            {(searchQuery || activeFilters.length > 0) && (
+              <button
+                onClick={clearFilters}
+                className="ml-auto text-sm text-slate-500 hover:text-slate-700 font-medium whitespace-nowrap"
+              >
+                Clear all
+              </button>
+            )}
+          </div>
+
+          {/* Results count */}
+          {searchQuery && (
+            <div className="text-sm text-slate-500 mt-2">
+              {getFilteredItems().length} results found
+            </div>
+          )}
         </div>
+      </div>
+
+      {/* Sticky Category Navigation */}
+      {showStickyNav && (
+        <motion.div
+          initial={{ y: -100 }}
+          animate={{ y: 0 }}
+          className="sticky top-[140px] z-10 bg-white/95 backdrop-blur-md border-b border-slate-200/50 shadow-sm"
+          style={{ maxHeight: 'calc(100vh - 140px)', overflowY: 'auto' }}
+        >
+          <div className="max-w-4xl mx-auto px-4 py-2">
+            <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-2">
+              {categories.map(cat => {
+                const catLower = cat.toLowerCase();
+                const isPopular = catLower.includes('popular') || catLower.includes('hot') || catLower.includes('best');
+                return (
+                  <button
+                    key={cat}
+                    onClick={() => scrollToCategory(cat)}
+                    className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all ${
+                      isPopular
+                        ? 'bg-orange-500 text-white'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </motion.div>
+      )}
+
+      {/* Menu */}
+      <div className="max-w-4xl mx-auto px-4 py-6">
+        <div className="space-y-8">
+          {categories.map((cat, catIndex) => {
+            const itemsByCat = getItemsByCategory();
+            const categoryItems = itemsByCat[cat] || [];
+            const isCollapsed = collapsedCategories.has(cat);
+            const catLower = cat.toLowerCase();
+            const isPopular = catLower.includes('popular') || catLower.includes('hot') || catLower.includes('best');
+            const categoryId = `category-${cat.replace(/\s+/g, '-').toLowerCase()}`;
+
+            // Skip empty categories
+            if (categoryItems.length === 0) return null;
+
+            return (
+              <motion.div
+                key={cat}
+                id={categoryId}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: catIndex * 0.05 }}
+              >
+                {/* Visual Category Header with Collapsible */}
+                <div className="flex items-center justify-between mb-4 bg-white/95 py-2 -mt-2">
+                  <div className="flex items-center gap-3">
+                    {isPopular && (
+                      <span className="flex items-center gap-1 px-2 py-1 bg-orange-500 text-white text-xs font-bold rounded-full">
+                        <Flame className="w-3 h-3" />
+                        HOT
+                      </span>
+                    )}
+                    <h2 className={`font-black text-slate-900 ${
+                      isPopular ? 'text-2xl' : 'text-xl'
+                    }`}>
+                      {cat}
+                    </h2>
+                    <span className="text-sm text-slate-400 font-medium">({categoryItems.length})</span>
+                  </div>
+                  <button
+                    onClick={() => toggleCategory(cat)}
+                    className="flex items-center justify-center w-10 h-10 rounded-full bg-slate-100 hover:bg-slate-200 transition-colors"
+                    aria-label={isCollapsed ? `Expand ${cat}` : `Collapse ${cat}`}
+                  >
+                    {isCollapsed ? (
+                      <ChevronDown className="w-5 h-5 text-slate-600" />
+                    ) : (
+                      <ChevronUp className="w-5 h-5 text-slate-600" />
+                    )}
+                  </button>
+                </div>
+
+                {/* Category Items or Collapsed Message */}
+                {isCollapsed ? (
+                  <div className="bg-slate-50 rounded-xl p-4 text-center text-slate-500">
+                    <p className="font-medium">{categoryItems.length} items in {cat}</p>
+                    <button
+                      onClick={() => toggleCategory(cat)}
+                      className="text-blue-600 font-semibold mt-1 hover:underline"
+                    >
+                      Tap to expand
+                    </button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {categoryItems.map((item, itemIndex) => (
+                      <motion.div
+                        key={item.id}
+                        className="group bg-white rounded-2xl p-4 shadow-sm border border-slate-100 hover:shadow-xl hover:border-slate-200 transition-all duration-300"
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: (catIndex * 0.05) + (itemIndex * 0.03) }}
+                        whileHover={{ y: -2 }}
+                      >
+                        <div className="flex justify-between items-start gap-3">
+                          <div className="flex-1 flex gap-3">
+                            {item.image && (
+                              <div className="w-18 h-18 sm:w-20 sm:h-20 rounded-xl overflow-hidden bg-slate-100 border border-slate-200 flex-shrink-0">
+                                <img
+                                  src={resolveMediaUrl(item.image)}
+                                  alt={item.name}
+                                  className="w-full h-full object-cover"
+                                  loading="lazy"
+                                />
+                              </div>
+                            )}
+                            <div className="min-w-0 flex-1">
+                              <h3 className="font-bold text-base text-slate-900 group-hover:text-blue-600 transition-colors line-clamp-1">
+                                {item.name}
+                              </h3>
+                              <p className="text-slate-500 text-xs sm:text-sm mt-1 line-clamp-2">
+                                {item.description || 'Delicious item'}
+                              </p>
+                              <p className="font-black text-lg text-slate-900 mt-1">
+                                {item.sizes && item.sizes.length > 0 ? (
+                                  <>From ${item.fromPrice?.toFixed(2) || item.price.toFixed(2)}</>
+                                ) : (
+                                  <>${item.price.toFixed(2)}</>
+                                )}
+                              </p>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => openItemDetail(item)}
+                            className="shrink-0 p-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-600/20 min-w-[44px] min-h-[44px] flex items-center justify-center"
+                            aria-label={`Add ${item.name} to cart`}
+                          >
+                            <Plus className="w-5 h-5" />
+                          </button>
+                        </div>
+                      </motion.div>
+                    ))}
+                  </div>
+                )}
+              </motion.div>
+            );
+          })}
+        </div>
+
+        {/* No Results Message */}
+        {getFilteredItems().length === 0 && (
+          <div className="text-center py-12">
+            <Search className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+            <h3 className="text-xl font-bold text-slate-700 mb-2">No items found</h3>
+            <p className="text-slate-500 mb-4">Try adjusting your search or filters</p>
+            <button
+              onClick={clearFilters}
+              className="px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors"
+            >
+              Clear all filters
+            </button>
+          </div>
+        )}
       </div>
 
       {cart.length > 0 && (
