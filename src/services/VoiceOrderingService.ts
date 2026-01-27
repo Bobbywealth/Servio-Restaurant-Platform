@@ -161,6 +161,10 @@ export class VoiceOrderingService {
   /**
    * Get modifier groups for an item formatted for Vapi AI to ask questions.
    * Returns modifiers in exact display_order with question prompts.
+   *
+   * Smart defaults: Modifier groups that have a preselected default AND are not required
+   * will be auto-applied silently (not asked). This is useful for gravy type where
+   * "same as meat" is the default and we only ask if customer wants something different.
    */
   public async getItemModifiersForVapi(itemId: string, restaurantId: string): Promise<any[]> {
     const groups = await this.getModifierGroupsForItem(itemId, restaurantId);
@@ -169,20 +173,49 @@ export class VoiceOrderingService {
       return [];
     }
 
-    // Format each modifier group with a natural language question
-    return groups.map((group: any, index: number) => {
-      const optionNames = group.options
-        .filter((opt: any) => !opt.isSoldOut)
-        .map((opt: any) => {
-          if (opt.priceDelta > 0) {
-            return `${opt.name} (+$${opt.priceDelta.toFixed(2)})`;
-          }
-          return opt.name;
+    const questionsToAsk: any[] = [];
+    const autoAppliedDefaults: any[] = [];
+
+    // Process each modifier group
+    groups.forEach((group: any, index: number) => {
+      const groupNameLower = group.name.toLowerCase();
+
+      // Check if this group has a preselected default option
+      const defaultOption = group.options.find((opt: any) => opt.isPreselected && !opt.isSoldOut);
+
+      // Determine if this modifier should be asked or auto-applied
+      // Auto-apply (don't ask) if:
+      // 1. It's NOT required AND
+      // 2. It HAS a default option AND
+      // 3. It's a "gravy type" modifier (customers usually want same gravy as their meat)
+      const isGravyType = groupNameLower.includes('gravy') &&
+                          (groupNameLower.includes('type') || groupNameLower.includes('style') || groupNameLower.includes('kind'));
+
+      const shouldAutoApply = !group.required && defaultOption && isGravyType;
+
+      if (shouldAutoApply) {
+        // Don't ask - auto-apply the default
+        autoAppliedDefaults.push({
+          groupId: group.id,
+          groupName: group.name,
+          defaultOptionId: defaultOption.id,
+          defaultOptionName: defaultOption.name,
+          priceDelta: defaultOption.priceDelta || 0
         });
+        return; // Skip adding to questions
+      }
+
+      // This modifier needs to be asked
+      const availableOptions = group.options.filter((opt: any) => !opt.isSoldOut);
+      const optionNames = availableOptions.map((opt: any) => {
+        if (opt.priceDelta > 0) {
+          return `${opt.name} (+$${opt.priceDelta.toFixed(2)})`;
+        }
+        return opt.name;
+      });
 
       // Generate a natural question based on the group name
       let question = '';
-      const groupNameLower = group.name.toLowerCase();
 
       if (groupNameLower.includes('size')) {
         question = `What size would you like? Options are: ${optionNames.join(', ')}.`;
@@ -202,7 +235,7 @@ export class VoiceOrderingService {
         question = `For ${group.name}, please choose from: ${optionNames.join(', ')}.`;
       }
 
-      return {
+      questionsToAsk.push({
         groupId: group.id,
         groupName: group.name,
         question,
@@ -211,15 +244,54 @@ export class VoiceOrderingService {
         minSelections: group.minSelect,
         maxSelections: group.maxSelect,
         displayOrder: index + 1,
-        options: group.options.map((opt: any) => ({
+        options: availableOptions.map((opt: any) => ({
           id: opt.id,
           name: opt.name,
           priceDelta: opt.priceDelta,
           isSoldOut: opt.isSoldOut,
           isDefault: opt.isPreselected
         }))
-      };
+      });
     });
+
+    // Return questions to ask, plus info about auto-applied defaults
+    // The AI should include autoAppliedDefaults in the order without asking
+    return questionsToAsk.map((q, idx) => ({ ...q, displayOrder: idx + 1 }));
+  }
+
+  /**
+   * Get auto-applied default modifiers for an item (modifiers that don't need to be asked).
+   * These should be included in the order automatically.
+   */
+  public async getAutoAppliedModifiers(itemId: string, restaurantId: string): Promise<any[]> {
+    const groups = await this.getModifierGroupsForItem(itemId, restaurantId);
+
+    if (!groups || groups.length === 0) {
+      return [];
+    }
+
+    const autoApplied: any[] = [];
+
+    groups.forEach((group: any) => {
+      const groupNameLower = group.name.toLowerCase();
+      const defaultOption = group.options.find((opt: any) => opt.isPreselected && !opt.isSoldOut);
+
+      // Auto-apply gravy type modifiers that have a default
+      const isGravyType = groupNameLower.includes('gravy') &&
+                          (groupNameLower.includes('type') || groupNameLower.includes('style') || groupNameLower.includes('kind'));
+
+      if (!group.required && defaultOption && isGravyType) {
+        autoApplied.push({
+          groupId: group.id,
+          groupName: group.name,
+          optionId: defaultOption.id,
+          optionName: defaultOption.name,
+          priceDelta: defaultOption.priceDelta || 0
+        });
+      }
+    });
+
+    return autoApplied;
   }
 
   private resolveRestaurantId(input?: string | null) {

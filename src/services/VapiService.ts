@@ -558,13 +558,19 @@ export class VapiService {
             break;
           }
 
-          const modifiers = await VoiceOrderingService.getInstance().getItemModifiersForVapi(String(itemId), restaurantId);
+          const voiceService = VoiceOrderingService.getInstance();
+          const modifiers = await voiceService.getItemModifiersForVapi(String(itemId), restaurantId);
+          const autoApplied = await voiceService.getAutoAppliedModifiers(String(itemId), restaurantId);
+
           result = {
             ok: true,
             itemId: String(itemId),
             hasModifiers: modifiers.length > 0,
             modifierCount: modifiers.length,
-            modifiers
+            modifiers,
+            // Auto-applied defaults (like gravy type) - include these in the order without asking
+            autoAppliedDefaults: autoApplied,
+            autoAppliedCount: autoApplied.length
           };
           break;
         }
