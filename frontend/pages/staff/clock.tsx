@@ -515,7 +515,7 @@ function ErrorBanner({ error, onDismiss }: ErrorBannerProps) {
 
   return (
     <div className="fixed top-4 left-4 right-4 z-50">
-      <div className="bg-red-500/20 backdrop-blur-xl border border-red-500/30 rounded-2xl p-4 flex items-center gap-3 animate-pulse">
+      <div className="bg-red-500/20 backdrop-blur-xl border border-red-500/30 rounded-2xl p-4 flex items-center gap-3">
         <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
         <p className="text-red-400 text-sm flex-1">{error}</p>
         <button
@@ -677,6 +677,7 @@ export default function StaffClockPage() {
   const handleStartBreak = async () => {
     if (!user) return;
     setLoading(true);
+    setError(null);
 
     try {
       const response = await fetch('/api/staff/clock/start-break', {
@@ -691,8 +692,11 @@ export default function StaffClockPage() {
         setCurrentShift((prev: any) => ({
           ...prev,
           isOnBreak: true,
-          currentBreakStart: data.data.breakStart
+          currentBreakStart: data.data.breakStart,
+          breakMinutes: prev?.breakMinutes || 0
         }));
+        // Refresh from server to get accurate status
+        await fetchUserStatus(user.pin);
       } else {
         setError(data.error?.message || 'Failed to start break');
       }
@@ -706,6 +710,7 @@ export default function StaffClockPage() {
   const handleEndBreak = async () => {
     if (!user) return;
     setLoading(true);
+    setError(null);
 
     try {
       const response = await fetch('/api/staff/clock/end-break', {
@@ -720,8 +725,11 @@ export default function StaffClockPage() {
         setCurrentShift((prev: any) => ({
           ...prev,
           isOnBreak: false,
-          breakMinutes: data.data.totalBreakMinutes
+          breakMinutes: data.data.totalBreakMinutes,
+          currentBreakStart: null
         }));
+        // Refresh from server to get accurate status
+        await fetchUserStatus(user.pin);
       } else {
         setError(data.error?.message || 'Failed to end break');
       }
@@ -778,12 +786,27 @@ export default function StaffClockPage() {
                 <p className="text-xs text-slate-400">{user.restaurantName}</p>
               </div>
             </div>
-            <button
-              onClick={handleLogout}
-              className="p-2 text-slate-400 hover:text-white hover:bg-slate-700/50 rounded-xl transition-all"
-              title="Logout"
-            >
-              <LogOut className="w-5 h-5" />
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  setError(null);
+                  fetchUserStatus(user.pin);
+                }}
+                className="p-2 text-slate-400 hover:text-white hover:bg-slate-700/50 rounded-xl transition-all"
+                title="Refresh status"
+              >
+                <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+              </button>
+              <button
+                onClick={handleLogout}
+                className="p-2 text-slate-400 hover:text-white hover:bg-slate-700/50 rounded-xl transition-all"
+                title="Logout"
+              >
+                <LogOut className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+        </header>
             </button>
           </div>
         </header>
