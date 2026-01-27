@@ -18,6 +18,7 @@ const router = Router();
  * Authenticate staff by PIN for PWA clock-in (public - no auth required)
  */
 router.post('/pin-login', asyncHandler(async (req: Request, res: Response) => {
+  logger.info('[staff-clock] pin-login request received');
   const { pin } = req.body;
 
   if (!pin || pin.length !== 4) {
@@ -44,11 +45,14 @@ router.post('/pin-login', asyncHandler(async (req: Request, res: Response) => {
   `, [pin]);
 
   if (!user) {
+    logger.info('[staff-clock] pin-login failed: invalid PIN');
     return res.status(401).json({
       success: false,
       error: { message: 'Invalid PIN or user inactive' }
     });
   }
+
+  logger.info(`[staff-clock] pin-login success: ${user.name}`);
 
   // Get current shift status
   const currentShift = await db.get(`
@@ -527,6 +531,7 @@ router.post('/end-break', asyncHandler(async (req: Request, res: Response) => {
  * This handles the case where user starts break, logs out, logs back in
  */
 router.post('/end-pending-break', asyncHandler(async (req: Request, res: Response) => {
+  logger.info('[staff-clock] end-pending-break request received');
   const { pin } = req.body;
 
   if (!pin || pin.length !== 4) {
@@ -549,6 +554,8 @@ router.post('/end-pending-break', asyncHandler(async (req: Request, res: Respons
     });
   }
 
+  logger.info(`[staff-clock] end-pending-break for user: ${user.name}`);
+
   // Find any pending break (break without end time) for this user
   const pendingBreak = await db.get(`
     SELECT tb.*, te.restaurant_id, te.clock_in_time
@@ -558,6 +565,8 @@ router.post('/end-pending-break', asyncHandler(async (req: Request, res: Respons
     ORDER BY tb.break_start DESC
     LIMIT 1
   `, [user.id]);
+
+  logger.info(`[staff-clock] pendingBreak found:`, pendingBreak ? 'yes' : 'no');
 
   if (!pendingBreak) {
     return res.status(400).json({
