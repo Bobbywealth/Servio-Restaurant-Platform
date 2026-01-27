@@ -3,7 +3,7 @@ import { DndContext, DragEndEvent, PointerSensor, useSensor, useSensors } from '
 import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import clsx from 'clsx';
-import { Eye, EyeOff, GripVertical, Plus } from 'lucide-react';
+import { Eye, EyeOff, GripVertical, Plus, Trash2, AlertTriangle } from 'lucide-react';
 
 export type CategorySidebarItem = {
   id: string;
@@ -22,18 +22,21 @@ type Props = {
   onAddCategory: () => void;
   onToggleHidden: (categoryId: string, nextHidden: boolean) => void;
   onReorderCategories: (nextOrderedIds: string[]) => void;
+  onDeleteCategory: (categoryId: string) => void;
 };
 
 function SortableCategoryRow({
   category,
   selected,
   onSelect,
-  onToggleHidden
+  onToggleHidden,
+  onDelete
 }: {
   category: CategorySidebarItem;
   selected: boolean;
   onSelect: () => void;
   onToggleHidden: () => void;
+  onDelete: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: category.id });
   const style: React.CSSProperties = {
@@ -41,12 +44,26 @@ function SortableCategoryRow({
     transition
   };
 
+  const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
+
+  const handleDelete = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (showDeleteConfirm) {
+      onDelete();
+      setShowDeleteConfirm(false);
+    } else {
+      setShowDeleteConfirm(true);
+      // Auto-hide confirmation after 3 seconds
+      setTimeout(() => setShowDeleteConfirm(false), 3000);
+    }
+  };
+
   return (
     <div
       ref={setNodeRef}
       style={style}
       className={clsx(
-        'group flex items-center gap-2 rounded-xl border px-3 py-2 cursor-pointer select-none',
+        'group relative flex items-center gap-2 rounded-xl border px-3 py-2 cursor-pointer select-none',
         selected ? 'border-teal-400 bg-teal-500/10' : 'border-gray-700 bg-gray-800/60 hover:bg-gray-800',
         isDragging && 'opacity-70'
       )}
@@ -79,20 +96,44 @@ function SortableCategoryRow({
             ) : null}
           </div>
 
-          <button
-            type="button"
-            className="shrink-0 text-gray-400 hover:text-gray-200"
-            onClick={(e) => {
-              e.stopPropagation();
-              onToggleHidden();
-            }}
-            aria-label={category.is_hidden ? 'Show category' : 'Hide category'}
-            title={category.is_hidden ? 'Hidden from menu (tap to show)' : 'Visible on menu (tap to hide)'}
-          >
-            {category.is_hidden ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              className="shrink-0 text-gray-400 hover:text-gray-200"
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleHidden();
+              }}
+              aria-label={category.is_hidden ? 'Show category' : 'Hide category'}
+              title={category.is_hidden ? 'Hidden from menu (tap to show)' : 'Visible on menu (tap to hide)'}
+            >
+              {category.is_hidden ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+            </button>
+            
+            <button
+              type="button"
+              className={clsx(
+                'shrink-0 transition-colors',
+                showDeleteConfirm 
+                  ? 'text-red-500 animate-pulse' 
+                  : 'text-gray-400 hover:text-red-400'
+              )}
+              onClick={handleDelete}
+              aria-label="Delete category"
+              title={showDeleteConfirm ? 'Tap again to confirm delete' : 'Delete category'}
+            >
+              {showDeleteConfirm ? <AlertTriangle className="h-5 w-5" /> : <Trash2 className="h-5 w-5" />}
+            </button>
+          </div>
         </div>
       </div>
+
+      {/* Delete confirmation tooltip */}
+      {showDeleteConfirm && (
+        <div className="absolute right-2 top-2 z-10 bg-red-500/90 text-white text-xs px-2 py-1 rounded">
+          Tap to confirm
+        </div>
+      )}
     </div>
   );
 }
@@ -103,7 +144,8 @@ export function CategorySidebar({
   onSelectCategory,
   onAddCategory,
   onToggleHidden,
-  onReorderCategories
+  onReorderCategories,
+  onDeleteCategory
 }: Props) {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
@@ -158,6 +200,7 @@ export function CategorySidebar({
                 selected={selectedCategoryId === c.id}
                 onSelect={() => onSelectCategory(c.id)}
                 onToggleHidden={() => onToggleHidden(c.id, !Boolean(c.is_hidden))}
+                onDelete={() => onDeleteCategory(c.id)}
               />
             ))}
           </div>

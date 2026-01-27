@@ -644,6 +644,43 @@ const MenuManagement: React.FC = () => {
     }
   };
 
+  const handleDeleteCategory = async (categoryId: string) => {
+    const category = categories.find((c) => c.id === categoryId);
+    if (!category) return;
+
+    // Check if category has items
+    const itemCount = category.items?.length || 0;
+    const confirmMessage = itemCount > 0
+      ? `Are you sure you want to delete "${category.name}"? This will also delete ${itemCount} item(s). This action cannot be undone.`
+      : `Are you sure you want to delete "${category.name}"? This action cannot be undone.`;
+
+    if (!confirm(confirmMessage)) {
+      return;
+    }
+
+    try {
+      await api.delete(`/api/menu/categories/${encodeURIComponent(categoryId)}`);
+      
+      // Remove category from UI
+      setCategories((prev) => prev.filter((c) => c.id !== categoryId));
+      
+      // If active category was deleted, select first category
+      if (activeCategoryId === categoryId) {
+        const remaining = categories.filter((c) => c.id !== categoryId);
+        if (remaining.length > 0) {
+          requestSelectCategory(remaining[0].id);
+        } else {
+          setActiveCategoryId(null);
+        }
+      }
+      
+      toast.success(`Category "${category.name}" deleted`);
+    } catch (error) {
+      console.error('Failed to delete category', error);
+      toast.error('Failed to delete category');
+    }
+  };
+
   const handleSetCategoryModifierGroups = async (categoryId: string, groupIds: string[]) => {
     try {
       await api.post(`/api/menu/categories/${encodeURIComponent(categoryId)}/modifier-groups`, { groupIds });
@@ -1573,6 +1610,7 @@ const MenuManagement: React.FC = () => {
                 onAddCategory={() => setShowAddCategoryModal(true)}
                 onToggleHidden={handleToggleCategoryHidden}
                 onReorderCategories={handleReorderCategories}
+                onDeleteCategory={handleDeleteCategory}
               />
 
               {/* Middle pane: Items */}
