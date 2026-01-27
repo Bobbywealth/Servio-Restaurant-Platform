@@ -837,29 +837,28 @@ const MenuManagement: React.FC = () => {
     attachments: AttachedGroup[],
     existingAttachments: AttachedGroup[]
   ) => {
-    // Detach existing
-    for (const existing of existingAttachments) {
-      if (existing.groupId) {
-        try {
-          await api.delete(`/api/menu-items/${itemId}/modifier-groups/${existing.groupId}`);
-        } catch (err) {
-          console.warn('Failed to detach modifier group', existing.groupId, err);
-        }
-      }
+    // Build list of groups to attach
+    const attachmentsToCreate = [];
+    for (const att of attachments) {
+      attachmentsToCreate.push({
+        groupId: att.groupId,
+        overrideMin: att.overrideMin ?? null,
+        overrideMax: att.overrideMax ?? null,
+        overrideRequired: att.overrideRequired ?? null,
+        displayOrder: att.displayOrder ?? 0
+      });
     }
 
-    // Attach current list
-    for (const [idx, att] of attachments.entries()) {
-      try {
-        await api.post(`/api/menu-items/${itemId}/modifier-groups`, {
-          groupId: att.groupId,
-          overrideMin: att.overrideMin ?? null,
-          overrideMax: att.overrideMax ?? null,
-          overrideRequired: att.overrideRequired ?? null,
-          displayOrder: att.displayOrder ?? idx
-        });
-      } catch (err) {
-        console.warn('Failed to attach modifier group', att.groupId, err);
+    // First, create all new attachments
+    for (const att of attachmentsToCreate) {
+      await api.post(`/api/menu-items/${itemId}/modifier-groups`, att);
+    }
+
+    // Then, delete only the old attachments that aren't in the new list
+    const newGroupIds = new Set(attachments.map(a => a.groupId));
+    for (const existing of existingAttachments) {
+      if (existing.groupId && !newGroupIds.has(existing.groupId)) {
+        await api.delete(`/api/menu-items/${itemId}/modifier-groups/${existing.groupId}`);
       }
     }
   };
