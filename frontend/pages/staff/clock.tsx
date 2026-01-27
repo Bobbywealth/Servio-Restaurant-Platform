@@ -1,20 +1,23 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import Head from 'next/head';
-import { useRouter } from 'next/router';
+import Link from 'next/link';
+import Image from 'next/image';
 import {
   Clock,
   Coffee,
   LogOut,
   LogIn,
   Calendar,
-  ChevronRight,
   RefreshCw,
   AlertCircle,
   CheckCircle,
-  Timer
+  Timer,
+  User,
+  TrendingUp,
+  Briefcase
 } from 'lucide-react';
 
-// PIN entry component
+// PIN entry component - Redesigned with modern styling
 interface PINEntryProps {
   onLogin: (pin: string) => void;
   error?: string | null;
@@ -22,19 +25,21 @@ interface PINEntryProps {
 
 function PINEntry({ onLogin, error }: PINEntryProps) {
   const [pin, setPin] = useState(['', '', '', '']);
+  const [isFocused, setIsFocused] = useState<number | null>(0);
   const inputRefs = [React.useRef<HTMLInputElement>(null), React.useRef<HTMLInputElement>(null), React.useRef<HTMLInputElement>(null), React.useRef<HTMLInputElement>(null)];
 
   const handleKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Backspace' && !pin[index] && index > 0) {
       inputRefs[index - 1].current?.focus();
+      setIsFocused(index - 1);
     } else if (e.key >= '0' && e.key <= '9') {
       const newPin = [...pin];
       newPin[index] = e.key;
       setPin(newPin);
       if (index < 3) {
         inputRefs[index + 1].current?.focus();
+        setIsFocused(index + 1);
       } else {
-        // Auto-submit on last digit
         onLogin(newPin.join(''));
       }
     }
@@ -47,8 +52,10 @@ function PINEntry({ onLogin, error }: PINEntryProps) {
       setPin(newPin);
       if (value && index < 3) {
         inputRefs[index + 1].current?.focus();
+        setIsFocused(index + 1);
       } else if (!value && index > 0) {
         inputRefs[index - 1].current?.focus();
+        setIsFocused(index - 1);
       }
     }
   };
@@ -71,59 +78,117 @@ function PINEntry({ onLogin, error }: PINEntryProps) {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        {/* Logo and Title */}
-        <div className="text-center mb-8">
-          <div className="w-20 h-20 bg-white rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
-            <Clock className="w-10 h-10 text-orange-500" />
-          </div>
-          <h1 className="text-2xl font-bold text-white mb-1">Servio Staff</h1>
-          <p className="text-orange-100">Enter your PIN to clock in</p>
-        </div>
-
-        {/* PIN Input */}
-        <div className="bg-white rounded-2xl p-6 shadow-xl">
-          <div className="flex justify-center gap-3 mb-6">
-            {pin.map((digit, index) => (
-              <input
-                key={index}
-                ref={inputRefs[index]}
-                type="text"
-                inputMode="numeric"
-                maxLength={1}
-                value={digit}
-                onChange={(e) => handleChange(index, e.target.value)}
-                onKeyDown={(e) => handleKeyDown(index, e)}
-                onPaste={handlePaste}
-                className="w-16 h-16 text-center text-3xl font-bold border-2 border-gray-200 rounded-xl focus:border-orange-500 focus:outline-none transition-colors"
-                disabled={!!error}
-              />
-            ))}
-          </div>
-
-          {error && (
-            <div className="flex items-center justify-center text-red-500 mb-4">
-              <AlertCircle className="w-5 h-5 mr-2" />
-              <span>{error}</span>
+    <div className="min-h-screen bg-slate-900 flex flex-col">
+      {/* Header with Logo */}
+      <header className="bg-slate-800/50 backdrop-blur-xl border-b border-slate-700/50 px-6 py-4">
+        <div className="max-w-md mx-auto flex items-center justify-center">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-gradient-to-br from-orange-400 to-orange-500 rounded-xl flex items-center justify-center shadow-lg shadow-orange-500/20">
+              <Clock className="w-6 h-6 text-white" />
             </div>
-          )}
+            <div>
+              <h1 className="text-lg font-bold text-white">Servio</h1>
+              <p className="text-xs text-slate-400">Staff Clock-In</p>
+            </div>
+          </div>
+        </div>
+      </header>
 
-          <p className="text-center text-sm text-gray-500">
-            Ask your manager if you don&apos;t have a PIN
+      {/* Main Content */}
+      <main className="flex-1 flex items-center justify-center p-6">
+        <div className="w-full max-w-md">
+          {/* Welcome Section */}
+          <div className="text-center mb-8">
+            <div className="w-20 h-20 bg-gradient-to-br from-orange-400 to-orange-500 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-2xl shadow-orange-500/20">
+              <User className="w-10 h-10 text-white" />
+            </div>
+            <h2 className="text-2xl font-bold text-white mb-2">Welcome Back</h2>
+            <p className="text-slate-400">Enter your PIN to continue</p>
+          </div>
+
+          {/* PIN Input Card */}
+          <div className="bg-slate-800/50 backdrop-blur-xl rounded-3xl p-8 border border-slate-700/50 shadow-2xl">
+            {/* PIN Dots */}
+            <div className="flex justify-center gap-4 mb-8">
+              {pin.map((digit, index) => (
+                <input
+                  key={index}
+                  ref={inputRefs[index]}
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={1}
+                  value={digit}
+                  onChange={(e) => handleChange(index, e.target.value)}
+                  onKeyDown={(e) => handleKeyDown(index, e)}
+                  onPaste={handlePaste}
+                  onFocus={() => setIsFocused(index)}
+                  onBlur={() => setIsFocused(null)}
+                  placeholder="•"
+                  className={`
+                    w-16 h-16 text-center text-3xl font-bold rounded-2xl
+                    transition-all duration-300 ease-out
+                    ${isFocused === index 
+                      ? 'bg-orange-500/20 border-orange-500 text-white shadow-lg shadow-orange-500/20 scale-105' 
+                      : 'bg-slate-700/50 border-slate-600/50 text-white'
+                    }
+                    border-2 outline-none
+                  `}
+                />
+              ))}
+            </div>
+
+            {/* Error Message */}
+            {error && (
+              <div className="flex items-center justify-center text-red-400 mb-4 animate-pulse">
+                <AlertCircle className="w-5 h-5 mr-2" />
+                <span className="text-sm">{error}</span>
+              </div>
+            )}
+
+            {/* Help Text */}
+            <div className="text-center">
+              <p className="text-slate-400 text-sm mb-2">
+                Enter your 4-digit employee PIN
+              </p>
+              <p className="text-slate-500 text-xs">
+                Ask your manager if you don&apos;t have one
+              </p>
+            </div>
+          </div>
+
+          {/* Quick Tips */}
+          <div className="mt-8 grid grid-cols-2 gap-3">
+            <div className="bg-slate-800/30 rounded-xl p-4 border border-slate-700/30">
+              <div className="flex items-center gap-2 text-orange-400 mb-1">
+                <Clock className="w-4 h-4" />
+                <span className="text-xs font-medium text-orange-400">Quick Clock-In</span>
+              </div>
+              <p className="text-xs text-slate-500">Enter PIN to start shift</p>
+            </div>
+            <div className="bg-slate-800/30 rounded-xl p-4 border border-slate-700/30">
+              <div className="flex items-center gap-2 text-orange-400 mb-1">
+                <Coffee className="w-4 h-4" />
+                <span className="text-xs font-medium text-orange-400">Take Breaks</span>
+              </div>
+              <p className="text-xs text-slate-500">Track your break time</p>
+            </div>
+          </div>
+        </div>
+      </main>
+
+      {/* Footer */}
+      <footer className="px-6 py-4 border-t border-slate-800">
+        <div className="text-center">
+          <p className="text-xs text-slate-600">
+            Powered by Servio Restaurant Platform
           </p>
         </div>
-
-        {/* Footer */}
-        <div className="text-center mt-6 text-orange-100 text-sm">
-          <p>Tap each box and enter your 4-digit code</p>
-        </div>
-      </div>
+      </footer>
     </div>
   );
 }
 
-// Clock action button
+// Action Button - Modern Design
 interface ActionButtonProps {
   onClick: () => void;
   icon: React.ComponentType<{ className?: string }>;
@@ -135,11 +200,11 @@ interface ActionButtonProps {
 
 function ActionButton({ onClick, icon: Icon, label, variant = 'primary', disabled = false, loading = false }: ActionButtonProps) {
   const variants = {
-    primary: 'bg-orange-500 hover:bg-orange-600 text-white',
-    secondary: 'bg-gray-100 hover:bg-gray-200 text-gray-900',
-    success: 'bg-green-500 hover:bg-green-600 text-white',
-    warning: 'bg-yellow-500 hover:bg-yellow-600 text-white',
-    danger: 'bg-red-500 hover:bg-red-600 text-white'
+    primary: 'bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white shadow-lg shadow-orange-500/25',
+    secondary: 'bg-slate-700/50 hover:bg-slate-600/50 text-white border border-slate-600/50',
+    success: 'bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white shadow-lg shadow-emerald-500/25',
+    warning: 'bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white shadow-lg shadow-amber-500/25',
+    danger: 'bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white shadow-lg shadow-red-500/25'
   };
 
   return (
@@ -147,12 +212,12 @@ function ActionButton({ onClick, icon: Icon, label, variant = 'primary', disable
       onClick={onClick}
       disabled={disabled || loading}
       className={`
-        w-full py-4 px-6 rounded-xl font-semibold text-lg
+        w-full py-4 px-6 rounded-2xl font-semibold text-lg
         flex items-center justify-center gap-3
-        transition-all duration-200 transform active:scale-95
+        transition-all duration-300 ease-out transform active:scale-95
         ${variants[variant]}
-        ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
-        shadow-md hover:shadow-lg
+        ${disabled ? 'opacity-50 cursor-not-allowed transform-none' : 'hover:-translate-y-0.5'}
+        shadow-lg hover:shadow-xl
       `}
     >
       {loading ? (
@@ -167,58 +232,78 @@ function ActionButton({ onClick, icon: Icon, label, variant = 'primary', disable
   );
 }
 
-// Status badge
+// Status Badge
 interface StatusBadgeProps {
   status: string;
 }
 
 function StatusBadge({ status }: StatusBadgeProps) {
-  const config: Record<string, { color: string; icon: React.ComponentType<{ className?: string }>; label: string }> = {
-    'clocked-in': { color: 'bg-green-100 text-green-700', icon: CheckCircle, label: 'On Shift' },
-    'on-break': { color: 'bg-yellow-100 text-yellow-700', icon: Coffee, label: 'On Break' },
-    'clocked-out': { color: 'bg-gray-100 text-gray-700', icon: Clock, label: 'Off Shift' }
+  const config: Record<string, { color: string; icon: any; label: string }> = {
+    'clocked-in': { color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30', icon: CheckCircle, label: 'On Shift' },
+    'on-break': { color: 'bg-amber-500/20 text-amber-400 border-amber-500/30', icon: Coffee, label: 'On Break' },
+    'clocked-out': { color: 'bg-slate-500/20 text-slate-400 border-slate-500/30', icon: Clock, label: 'Off Shift' }
   };
 
   const { color, icon: Icon, label } = config[status] || config['clocked-out'];
 
   return (
-    <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full ${color}`}>
+    <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full border ${color}`}>
       <Icon className="w-5 h-5" />
       <span className="font-medium">{label}</span>
     </div>
   );
 }
 
-// Weekly hours card
+// Weekly Hours Card
 interface WeeklyHoursCardProps {
   weeklyHours: number;
 }
 
 function WeeklyHoursCard({ weeklyHours }: WeeklyHoursCardProps) {
+  const progress = Math.min((weeklyHours / 40) * 100, 100);
+  const isComplete = weeklyHours >= 40;
+
   return (
-    <div className="bg-white rounded-2xl p-6 shadow-md">
+    <div className="bg-slate-800/50 backdrop-blur-xl rounded-3xl p-6 border border-slate-700/50">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold text-gray-900">This Week</h2>
-        <Calendar className="w-5 h-5 text-gray-400" />
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-gradient-to-br from-orange-400 to-orange-500 rounded-xl flex items-center justify-center">
+            <TrendingUp className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <h3 className="font-semibold text-white">This Week</h3>
+            <p className="text-xs text-slate-400">Hours tracked</p>
+          </div>
+        </div>
+        <div className="text-right">
+          <p className="text-3xl font-bold text-white">{weeklyHours.toFixed(1)}</p>
+          <p className="text-xs text-slate-400">hours</p>
+        </div>
       </div>
-      <div className="flex items-end gap-2">
-        <span className="text-4xl font-bold text-orange-500">{weeklyHours.toFixed(1)}</span>
-        <span className="text-gray-500 mb-1">hours</span>
-      </div>
-      <div className="mt-3 h-2 bg-gray-100 rounded-full overflow-hidden">
+
+      {/* Progress Bar */}
+      <div className="relative h-3 bg-slate-700/50 rounded-full overflow-hidden mb-3">
         <div
-          className="h-full bg-orange-500 rounded-full transition-all duration-500"
-          style={{ width: `${Math.min((weeklyHours / 40) * 100, 100)}%` }}
+          className={`absolute left-0 top-0 h-full rounded-full transition-all duration-1000 ease-out ${
+            isComplete 
+              ? 'bg-gradient-to-r from-emerald-400 to-emerald-500' 
+              : 'bg-gradient-to-r from-orange-400 to-orange-500'
+          }`}
+          style={{ width: `${progress}%` }}
         />
       </div>
-      <p className="text-sm text-gray-500 mt-2">
-        {weeklyHours >= 40 ? 'Full week completed!' : `${(40 - weeklyHours).toFixed(1)} hours to reach 40`}
+
+      <p className={`text-sm ${isComplete ? 'text-emerald-400' : 'text-slate-400'}`}>
+        {isComplete 
+          ? '✓ Full week completed!' 
+          : `${(40 - weeklyHours).toFixed(1)} hours to reach 40`
+        }
       </p>
     </div>
   );
 }
 
-// Current shift card
+// Current Shift Card
 interface CurrentShiftCardProps {
   shift: {
     clockInTime: string;
@@ -241,26 +326,43 @@ function CurrentShiftCard({ shift, onStartBreak, onEndBreak, onClockOut, loading
   const hours = Math.floor(hoursWorked);
   const minutes = Math.floor((hoursWorked - hours) * 60);
 
+  const formatTime = (date: Date) => {
+    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+  };
+
   return (
-    <div className="bg-white rounded-2xl p-6 shadow-md">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold text-gray-900">Current Shift</h2>
+    <div className="bg-slate-800/50 backdrop-blur-xl rounded-3xl p-6 border border-slate-700/50">
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-gradient-to-br from-emerald-400 to-emerald-500 rounded-xl flex items-center justify-center">
+            <Briefcase className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <h3 className="font-semibold text-white">Current Shift</h3>
+            <p className="text-xs text-slate-400">Started at {formatTime(clockInTime)}</p>
+          </div>
+        </div>
         <StatusBadge status={shift.isOnBreak ? 'on-break' : 'clocked-in'} />
       </div>
 
-      <div className="text-center py-4">
-        <div className="text-3xl font-bold text-gray-900">
-          {String(hours).padStart(2, '0')}:{String(minutes).padStart(2, '0')}
+      {/* Timer Display */}
+      <div className="text-center py-6 bg-slate-900/50 rounded-2xl mb-6">
+        <div className="flex items-center justify-center gap-2 mb-2">
+          <Timer className="w-5 h-5 text-orange-400" />
         </div>
-        <p className="text-gray-500 text-sm mt-1">
-          Clocked in at {clockInTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+        <p className="text-5xl font-bold text-white tabular-nums tracking-tight">
+          {String(hours).padStart(2, '0')}:{String(minutes).padStart(2, '0')}
+        </p>
+        <p className="text-sm text-slate-400 mt-2">
+          Clocked in at {formatTime(clockInTime)}
         </p>
         {shift.position && (
-          <p className="text-gray-400 text-sm">Position: {shift.position}</p>
+          <p className="text-xs text-slate-500 mt-1">Position: {shift.position}</p>
         )}
       </div>
 
-      <div className="mt-4 space-y-3">
+      {/* Action Buttons */}
+      <div className="space-y-3">
         {shift.isOnBreak ? (
           <ActionButton
             label="End Break"
@@ -295,7 +397,7 @@ function CurrentShiftCard({ shift, onStartBreak, onEndBreak, onClockOut, loading
   );
 }
 
-// Clock in card
+// Clock In Card
 interface ClockInCardProps {
   onClockIn: () => void;
   loading: boolean;
@@ -303,38 +405,51 @@ interface ClockInCardProps {
 
 function ClockInCard({ onClockIn, loading }: ClockInCardProps) {
   return (
-    <div className="bg-white rounded-2xl p-6 shadow-md">
-      <div className="text-center py-6">
-        <div className="w-20 h-20 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
-          <LogIn className="w-10 h-10 text-orange-500" />
-        </div>
-        <h2 className="text-xl font-semibold text-gray-900 mb-2">Ready to Clock In?</h2>
-        <p className="text-gray-500 mb-6">Tap below to start your shift</p>
-        <ActionButton
-          label="Clock In"
-          icon={LogIn}
-          variant="success"
-          onClick={onClockIn}
-          disabled={loading}
-          loading={loading}
-        />
+    <div className="bg-slate-800/50 backdrop-blur-xl rounded-3xl p-8 border border-slate-700/50 text-center">
+      <div className="w-24 h-24 bg-gradient-to-br from-orange-400 to-orange-500 rounded-full flex items-center justify-center mx-auto mb-6 shadow-2xl shadow-orange-500/20">
+        <LogIn className="w-12 h-12 text-white" />
+      </div>
+      <h2 className="text-2xl font-bold text-white mb-2">Ready to Clock In?</h2>
+      <p className="text-slate-400 mb-8">Tap below to start your shift</p>
+      <ActionButton
+        label="Clock In"
+        icon={LogIn}
+        variant="success"
+        onClick={onClockIn}
+        disabled={loading}
+        loading={loading}
+      />
+    </div>
+  );
+}
+
+// Error Banner
+interface ErrorBannerProps {
+  error: string | null;
+  onDismiss: () => void;
+}
+
+function ErrorBanner({ error, onDismiss }: ErrorBannerProps) {
+  if (!error) return null;
+
+  return (
+    <div className="fixed top-4 left-4 right-4 z-50">
+      <div className="bg-red-500/20 backdrop-blur-xl border border-red-500/30 rounded-2xl p-4 flex items-center gap-3 animate-pulse">
+        <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
+        <p className="text-red-400 text-sm flex-1">{error}</p>
+        <button
+          onClick={onDismiss}
+          className="text-red-400 hover:text-red-300 p-1"
+        >
+          ×
+        </button>
       </div>
     </div>
   );
 }
 
 // Main clock page
-interface ShiftState {
-  clockInTime?: string;
-  timeEntryId?: string;
-  breakMinutes: number;
-  position?: string;
-  isOnBreak: boolean;
-  currentBreakStart?: string;
-}
-
 export default function StaffClockPage() {
-  const router = useRouter();
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -396,7 +511,6 @@ export default function StaffClockPage() {
         }));
       } else {
         setError(data.error?.message || 'Invalid PIN');
-        // PIN will remain entered so user can retry
       }
     } catch (err) {
       setError('Connection error. Please try again.');
@@ -483,7 +597,7 @@ export default function StaffClockPage() {
       const data = await response.json();
 
       if (data.success) {
-        setCurrentShift((prev: ShiftState) => ({
+        setCurrentShift((prev: any) => ({
           ...prev,
           isOnBreak: true,
           currentBreakStart: data.data.breakStart
@@ -536,7 +650,7 @@ export default function StaffClockPage() {
           <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
           <meta name="apple-mobile-web-app-capable" content="yes" />
           <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-          <meta name="theme-color" content="#ff6b35" />
+          <meta name="theme-color" content="#0f172a" />
           <link rel="manifest" href="/manifest-staff.json" />
         </Head>
         <PINEntry onLogin={handleLogin} error={error} />
@@ -551,26 +665,29 @@ export default function StaffClockPage() {
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-        <meta name="theme-color" content="#ff6b35" />
+        <meta name="theme-color" content="#0f172a" />
         <link rel="manifest" href="/manifest-staff.json" />
       </Head>
 
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-slate-900">
+        {/* Error Banner */}
+        <ErrorBanner error={error} onDismiss={() => setError(null)} />
+
         {/* Header */}
-        <header className="bg-white shadow-sm sticky top-0 z-10">
+        <header className="bg-slate-800/50 backdrop-blur-xl border-b border-slate-700/50 sticky top-0 z-10">
           <div className="max-w-lg mx-auto px-4 py-4 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-orange-500 rounded-lg flex items-center justify-center">
+              <div className="w-10 h-10 bg-gradient-to-br from-orange-400 to-orange-500 rounded-xl flex items-center justify-center shadow-lg shadow-orange-500/20">
                 <Clock className="w-6 h-6 text-white" />
               </div>
               <div>
-                <h1 className="font-semibold text-gray-900">Servio Staff</h1>
-                <p className="text-xs text-gray-500">{user.restaurantName}</p>
+                <h1 className="font-semibold text-white">Servio Staff</h1>
+                <p className="text-xs text-slate-400">{user.restaurantName}</p>
               </div>
             </div>
             <button
               onClick={handleLogout}
-              className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
+              className="p-2 text-slate-400 hover:text-white hover:bg-slate-700/50 rounded-xl transition-all"
               title="Logout"
             >
               <LogOut className="w-5 h-5" />
@@ -580,32 +697,28 @@ export default function StaffClockPage() {
 
         {/* Main Content */}
         <main className="max-w-lg mx-auto px-4 py-6 space-y-6">
-          {/* Welcome Card */}
-          <div className="bg-gradient-to-r from-orange-500 to-orange-600 rounded-2xl p-6 text-white">
+          {/* Welcome Banner */}
+          <div className="bg-gradient-to-r from-orange-500 to-orange-600 rounded-3xl p-6 shadow-2xl shadow-orange-500/20">
             <div className="flex items-center justify-between">
-              <div>
-                <p className="text-orange-100 text-sm">Welcome back,</p>
-                <h2 className="text-2xl font-bold">{user.name}</h2>
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 bg-white/20 backdrop-blur-xl rounded-2xl flex items-center justify-center">
+                  <User className="w-8 h-8 text-white" />
+                </div>
+                <div>
+                  <p className="text-orange-100 text-sm">Welcome back,</p>
+                  <h2 className="text-2xl font-bold text-white">{user.name}</h2>
+                </div>
               </div>
-              <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
-                <Timer className="w-6 h-6 text-white" />
+              <div className="text-right">
+                <p className="text-3xl font-bold text-white tabular-nums">
+                  {new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                </p>
+                <p className="text-xs text-orange-200">
+                  {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
+                </p>
               </div>
             </div>
           </div>
-
-          {/* Error Message */}
-          {error && (
-            <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-center gap-3">
-              <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
-              <p className="text-red-700 text-sm">{error}</p>
-              <button
-                onClick={() => setError(null)}
-                className="ml-auto text-red-500 hover:text-red-700"
-              >
-                ×
-              </button>
-            </div>
-          )}
 
           {/* Weekly Hours */}
           <WeeklyHoursCard weeklyHours={weeklyHours} />
@@ -624,8 +737,10 @@ export default function StaffClockPage() {
           )}
 
           {/* Footer */}
-          <div className="text-center text-sm text-gray-400 pt-4">
-            <p>Need help? Contact your manager</p>
+          <div className="text-center py-4">
+            <p className="text-xs text-slate-600">
+              Powered by Servio Restaurant Platform
+            </p>
           </div>
         </main>
       </div>
