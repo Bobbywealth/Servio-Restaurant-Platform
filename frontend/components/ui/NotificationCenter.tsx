@@ -134,6 +134,13 @@ export default function NotificationCenter({ className = '' }: NotificationCente
   }, [])
 
   useEffect(() => {
+    // Only fetch notifications if user is authenticated
+    const accessToken = localStorage.getItem('servio_access_token')
+    if (!accessToken) {
+      setIsLoading(false)
+      return
+    }
+
     // Fetch notifications on mount
     fetchNotifications()
 
