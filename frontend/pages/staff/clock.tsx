@@ -245,11 +245,14 @@ function StatusBadge({ status }: StatusBadgeProps) {
 // Weekly Hours Card
 interface WeeklyHoursCardProps {
   weeklyHours: number;
+  breakMinutes?: number;
 }
 
-function WeeklyHoursCard({ weeklyHours }: WeeklyHoursCardProps) {
+function WeeklyHoursCard({ weeklyHours, breakMinutes = 0 }: WeeklyHoursCardProps) {
   const progress = Math.min((weeklyHours / 40) * 100, 100);
   const isComplete = weeklyHours >= 40;
+
+  const breakHours = (breakMinutes / 60).toFixed(1);
 
   return (
     <div className="bg-slate-800/50 backdrop-blur-xl rounded-3xl p-6 border border-slate-700/50">
@@ -273,20 +276,41 @@ function WeeklyHoursCard({ weeklyHours }: WeeklyHoursCardProps) {
       <div className="relative h-3 bg-slate-700/50 rounded-full overflow-hidden mb-3">
         <div
           className={`absolute left-0 top-0 h-full rounded-full transition-all duration-1000 ease-out ${
-            isComplete 
-              ? 'bg-gradient-to-r from-emerald-400 to-emerald-500' 
+            isComplete
+              ? 'bg-gradient-to-r from-emerald-400 to-emerald-500'
               : 'bg-gradient-to-r from-orange-400 to-orange-500'
           }`}
           style={{ width: `${progress}%` }}
         />
       </div>
 
-      <p className={`text-sm ${isComplete ? 'text-emerald-400' : 'text-slate-400'}`}>
-        {isComplete 
-          ? '✓ Full week completed!' 
-          : `${(40 - weeklyHours).toFixed(1)} hours to reach 40`
-        }
-      </p>
+      <div className="flex items-center justify-between text-sm mb-4">
+        <p className={isComplete ? 'text-emerald-400' : 'text-slate-400'}>
+          {isComplete
+            ? '✓ Full week completed!'
+            : `${(40 - weeklyHours).toFixed(1)} hours to reach 40`
+          }
+        </p>
+        {breakMinutes > 0 && (
+          <div className="flex items-center gap-1 text-amber-400">
+            <Coffee className="w-3 h-3" />
+            <span>{breakHours}h breaks</span>
+          </div>
+        )}
+      </div>
+
+      {/* Break Summary */}
+      {breakMinutes > 0 && (
+        <div className="bg-amber-500/10 rounded-xl p-3 border border-amber-500/20">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Coffee className="w-4 h-4 text-amber-400" />
+              <span className="text-sm text-amber-400">Total Break Time</span>
+            </div>
+            <span className="text-lg font-bold text-amber-400">{breakHours}h</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -298,6 +322,8 @@ interface CurrentShiftCardProps {
     breakMinutes: number;
     position?: string | null;
     isOnBreak: boolean;
+    currentBreakStart?: string | null;
+    timeEntryId: string;
   } | null;
   onStartBreak: () => void;
   onEndBreak: () => void;
@@ -306,10 +332,19 @@ interface CurrentShiftCardProps {
 }
 
 function CurrentShiftCard({ shift, onStartBreak, onEndBreak, onClockOut, loading }: CurrentShiftCardProps) {
+  const [now, setNow] = useState(new Date());
+
+  // Update timer every minute for live tracking
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setNow(new Date());
+    }, 60000); // Update every minute
+    return () => clearInterval(interval);
+  }, []);
+
   if (!shift) return null;
 
   const clockInTime = new Date(shift.clockInTime);
-  const now = new Date();
   const hoursWorked = (now.getTime() - clockInTime.getTime()) / (1000 * 60 * 60);
   const hours = Math.floor(hoursWorked);
   const minutes = Math.floor((hoursWorked - hours) * 60);
@@ -318,43 +353,98 @@ function CurrentShiftCard({ shift, onStartBreak, onEndBreak, onClockOut, loading
     return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
   };
 
+  // Break timer
+  let breakTimer = null;
+  if (shift.isOnBreak && shift.currentBreakStart) {
+    const breakStart = new Date(shift.currentBreakStart);
+    const breakMinutes = Math.floor((now.getTime() - breakStart.getTime()) / (1000 * 60));
+    const breakHours = Math.floor(breakMinutes / 60);
+    const breakMins = breakMinutes % 60;
+    breakTimer = `${String(breakHours).padStart(2, '0')}:${String(breakMins).padStart(2, '0')}`;
+  }
+
+  // Time since last break (if not on break)
+  const lastBreakTime = shift.breakMinutes > 0 ? `${Math.floor(shift.breakMinutes)}m` : null;
+
   return (
     <div className="bg-slate-800/50 backdrop-blur-xl rounded-3xl p-6 border border-slate-700/50">
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-gradient-to-br from-emerald-400 to-emerald-500 rounded-xl flex items-center justify-center">
-            <Briefcase className="w-5 h-5 text-white" />
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+            shift.isOnBreak
+              ? 'bg-gradient-to-br from-amber-400 to-amber-500'
+              : 'bg-gradient-to-br from-emerald-400 to-emerald-500'
+          }`}>
+            {shift.isOnBreak ? (
+              <Coffee className="w-5 h-5 text-white" />
+            ) : (
+              <Briefcase className="w-5 h-5 text-white" />
+            )}
           </div>
           <div>
-            <h3 className="font-semibold text-white">Current Shift</h3>
-            <p className="text-xs text-slate-400">Started at {formatTime(clockInTime)}</p>
+            <h3 className="font-semibold text-white">
+              {shift.isOnBreak ? 'On Break' : 'On Shift'}
+            </h3>
+            <p className="text-xs text-slate-400">
+              {shift.isOnBreak
+                ? `Started at ${formatTime(clockInTime)}`
+                : `Started at ${formatTime(clockInTime)}`
+              }
+            </p>
           </div>
         </div>
         <StatusBadge status={shift.isOnBreak ? 'on-break' : 'clocked-in'} />
       </div>
 
       {/* Timer Display */}
-      <div className="text-center py-6 bg-slate-900/50 rounded-2xl mb-6">
+      <div className={`text-center py-6 rounded-2xl mb-6 ${
+        shift.isOnBreak
+          ? 'bg-amber-500/10 border-2 border-amber-500/30'
+          : 'bg-slate-900/50'
+      }`}>
         <div className="flex items-center justify-center gap-2 mb-2">
-          <Timer className="w-5 h-5 text-orange-400" />
+          {shift.isOnBreak ? (
+            <>
+              <Coffee className="w-6 h-6 text-amber-400" />
+              <span className="text-amber-400 font-medium">BREAK TIME</span>
+            </>
+          ) : (
+            <Timer className="w-5 h-5 text-orange-400" />
+          )}
         </div>
-        <p className="text-5xl font-bold text-white tabular-nums tracking-tight">
-          {String(hours).padStart(2, '0')}:{String(minutes).padStart(2, '0')}
+        <p className={`text-5xl font-bold tabular-nums tracking-tight ${
+          shift.isOnBreak ? 'text-amber-400' : 'text-white'
+        }`}>
+          {shift.isOnBreak && breakTimer ? breakTimer : `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`}
         </p>
         <p className="text-sm text-slate-400 mt-2">
-          Clocked in at {formatTime(clockInTime)}
+          {shift.isOnBreak
+            ? `Break in progress`
+            : `Clocked in at ${formatTime(clockInTime)}`
+          }
         </p>
-        {shift.position && (
+        {shift.position && !shift.isOnBreak && (
           <p className="text-xs text-slate-500 mt-1">Position: {shift.position}</p>
         )}
       </div>
+
+      {/* Break Summary Card */}
+      {!shift.isOnBreak && lastBreakTime && (
+        <div className="bg-slate-900/50 rounded-xl p-3 mb-6 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Coffee className="w-4 h-4 text-amber-400" />
+            <span className="text-sm text-slate-400">Total break time today</span>
+          </div>
+          <span className="text-sm font-medium text-amber-400">{lastBreakTime}</span>
+        </div>
+      )}
 
       {/* Action Buttons */}
       <div className="space-y-3">
         {shift.isOnBreak ? (
           <ActionButton
-            label="End Break"
-            icon={Coffee}
+            label="End Break & Return to Work"
+            icon={Briefcase}
             variant="success"
             onClick={onEndBreak}
             disabled={loading}
@@ -363,9 +453,12 @@ function CurrentShiftCard({ shift, onStartBreak, onEndBreak, onClockOut, loading
         ) : (
           <>
             <ActionButton
-              label={shift.breakMinutes > 0 ? `Take Break (${Math.floor(shift.breakMinutes)}m used)` : 'Take Break'}
+              label={shift.breakMinutes > 0
+                ? `Take Break (${Math.floor(shift.breakMinutes)}m used today)`
+                : 'Start Break'
+              }
               icon={Coffee}
-              variant="secondary"
+              variant="warning"
               onClick={onStartBreak}
               disabled={loading || hoursWorked < 0.5}
               loading={loading}
@@ -443,22 +536,32 @@ export default function StaffClockPage() {
   const [error, setError] = useState<string | null>(null);
   const [currentShift, setCurrentShift] = useState<any>(null);
   const [weeklyHours, setWeeklyHours] = useState(0);
+  const [weeklyBreakMinutes, setWeeklyBreakMinutes] = useState(0);
 
-  // Check for existing session
+  // Check for existing session and set up periodic refresh
   useEffect(() => {
     const savedUser = localStorage.getItem('staffUser');
     if (savedUser) {
       try {
         const userData = JSON.parse(savedUser);
         setUser(userData);
-        fetchUserStatus(userData.id, userData.pin);
+        fetchUserStatus(userData.pin);
       } catch {
         localStorage.removeItem('staffUser');
       }
     }
+
+    // Refresh status every minute for live updates
+    const refreshInterval = setInterval(() => {
+      if (user) {
+        fetchUserStatus(user.pin);
+      }
+    }, 60000);
+
+    return () => clearInterval(refreshInterval);
   }, []);
 
-  const fetchUserStatus = async (userId: string, pin: string) => {
+  const fetchUserStatus = async (pin: string) => {
     try {
       const response = await fetch(`/api/staff/clock/pin-login`, {
         method: 'POST',
@@ -711,7 +814,10 @@ export default function StaffClockPage() {
           </div>
 
           {/* Weekly Hours */}
-          <WeeklyHoursCard weeklyHours={weeklyHours} />
+          <WeeklyHoursCard
+            weeklyHours={weeklyHours}
+            breakMinutes={currentShift?.breakMinutes || 0}
+          />
 
           {/* Clock In/Out Section */}
           {currentShift ? (
