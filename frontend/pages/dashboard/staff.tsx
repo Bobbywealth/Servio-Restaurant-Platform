@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import Head from 'next/head'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import dynamic from 'next/dynamic'
 import {
   Users,
@@ -13,7 +13,11 @@ import {
   Mail,
   DollarSign,
   LogIn,
-  Smartphone
+  Smartphone,
+  X,
+  Loader2,
+  CheckCircle,
+  AlertCircle
 } from 'lucide-react'
 import { api } from '../../lib/api'
 
@@ -46,6 +50,226 @@ interface CurrentStaff {
   hours_worked: number
 }
 
+// Add Staff Modal
+interface AddStaffModalProps {
+  isOpen: boolean
+  onClose: () => void
+  onSuccess: () => void
+}
+
+function AddStaffModal({ isOpen, onClose, onSuccess }: AddStaffModalProps) {
+  const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+  const [role, setRole] = useState<'staff' | 'manager'>('staff')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState(false)
+  const [createdStaff, setCreatedStaff] = useState<{ name: string; pin: string } | null>(null)
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoading(true)
+    setError(null)
+
+    try {
+      const response = await api.post('/api/restaurant/staff', {
+        name,
+        email: email || undefined,
+        role
+      })
+
+      if (response.data.success) {
+        setCreatedStaff({
+          name: response.data.data.name,
+          pin: response.data.data.pin
+        })
+        setSuccess(true)
+        setTimeout(() => {
+          onSuccess()
+          onClose()
+          resetForm()
+        }, 3000)
+      } else {
+        setError(response.data.error?.message || 'Failed to create staff member')
+      }
+    } catch (err: any) {
+      setError(err.response?.data?.error?.message || 'Failed to create staff member')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const resetForm = () => {
+    setName('')
+    setEmail('')
+    setRole('staff')
+    setError(null)
+    setSuccess(false)
+    setCreatedStaff(null)
+  }
+
+  const handleClose = () => {
+    resetForm()
+    onClose()
+  }
+
+  if (!isOpen) return null
+
+  return (
+    <AnimatePresence>
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+          onClick={handleClose}
+        />
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95, y: 20 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.95, y: 20 }}
+          className="relative bg-white dark:bg-surface-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-surface-700">
+            <h2 className="text-xl font-bold text-surface-900 dark:text-surface-100">
+              Add Staff Member
+            </h2>
+            <button
+              onClick={handleClose}
+              className="p-2 text-surface-400 hover:text-surface-600 dark:hover:text-surface-200 rounded-lg hover:bg-gray-100 dark:hover:bg-surface-700 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Content */}
+          <div className="p-6">
+            {success && createdStaff ? (
+              <div className="text-center py-6">
+                <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <CheckCircle className="w-8 h-8 text-green-500" />
+                </div>
+                <h3 className="text-lg font-semibold text-surface-900 dark:text-surface-100 mb-2">
+                  Staff Member Created!
+                </h3>
+                <p className="text-surface-600 dark:text-surface-400 mb-4">
+                  {createdStaff.name} has been added successfully.
+                </p>
+                <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-xl p-4 mb-4">
+                  <p className="text-sm text-orange-800 dark:text-orange-200 mb-1">
+                    Their PIN is:
+                  </p>
+                  <p className="text-3xl font-bold text-orange-600 dark:text-orange-400 font-mono">
+                    {createdStaff.pin}
+                  </p>
+                </div>
+                <p className="text-xs text-surface-500">
+                  Please save this PIN. It will only be shown once.
+                </p>
+              </div>
+            ) : (
+              <form onSubmit={handleSubmit} className="space-y-4">
+                {error && (
+                  <div className="flex items-center gap-2 text-red-500 text-sm bg-red-50 dark:bg-red-900/20 px-4 py-3 rounded-xl">
+                    <AlertCircle className="w-5 h-5 flex-shrink-0" />
+                    <span>{error}</span>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-2">
+                    Full Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    required
+                    placeholder="John Doe"
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-surface-600 bg-white dark:bg-surface-700 text-surface-900 dark:text-surface-100 focus:ring-2 focus:ring-orange-500/30 focus:border-orange-500 transition-all outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-2">
+                    Email Address
+                  </label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="john@restaurant.com"
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-surface-600 bg-white dark:bg-surface-700 text-surface-900 dark:text-surface-100 focus:ring-2 focus:ring-orange-500/30 focus:border-orange-500 transition-all outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-2">
+                    Role
+                  </label>
+                  <select
+                    value={role}
+                    onChange={(e) => setRole(e.target.value as 'staff' | 'manager')}
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-surface-600 bg-white dark:bg-surface-700 text-surface-900 dark:text-surface-100 focus:ring-2 focus:ring-orange-500/30 focus:border-orange-500 transition-all outline-none"
+                  >
+                    <option value="staff">Staff</option>
+                    <option value="manager">Manager</option>
+                  </select>
+                </div>
+
+                <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-xl p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="w-8 h-8 bg-orange-100 dark:bg-orange-900/50 rounded-lg flex items-center justify-center flex-shrink-0">
+                      <LogIn className="w-4 h-4 text-orange-600 dark:text-orange-400" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-orange-800 dark:text-orange-200">
+                        Auto-Generated PIN
+                      </p>
+                      <p className="text-xs text-orange-600 dark:text-orange-300 mt-1">
+                        A unique 4-digit PIN will be automatically generated for this staff member to clock in.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={handleClose}
+                    className="flex-1 px-4 py-3 rounded-xl border border-gray-200 dark:border-surface-600 text-surface-700 dark:text-surface-300 font-medium hover:bg-gray-50 dark:hover:bg-surface-700 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={loading || !name.trim()}
+                    className="flex-1 px-4 py-3 rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 text-white font-medium hover:from-orange-600 hover:to-orange-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    {loading ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        Creating...
+                      </>
+                    ) : (
+                      <>
+                        <UserPlus className="w-5 h-5" />
+                        Add Staff Member
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </motion.div>
+      </div>
+    </AnimatePresence>
+  )
+}
+
 export default function StaffPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedRole, setSelectedRole] = useState('all')
@@ -54,6 +278,7 @@ export default function StaffPage() {
   const [staff, setStaff] = useState<StaffUser[]>([])
   const [currentStaff, setCurrentStaff] = useState<CurrentStaff[]>([])
   const [hoursByUserId, setHoursByUserId] = useState<Record<string, number>>({})
+  const [showAddModal, setShowAddModal] = useState(false)
 
   useEffect(() => {
     let isMounted = true
@@ -62,24 +287,22 @@ export default function StaffPage() {
       setIsLoading(true)
       setError(null)
       try {
-        // Fetch staff data - this is the primary data we need
+        // Fetch staff data
         const staffResp = await api.get('/api/restaurant/staff')
         const staffList = (staffResp.data?.data?.staff || []) as StaffUser[]
-        
+
         if (!isMounted) return
         setStaff(staffList)
-        
-        // Fetch timeclock data separately with graceful error handling
-        // These are secondary and should not block the page from loading
+
+        // Fetch timeclock data separately
         try {
           const currentResp = await api.get('/api/timeclock/current-staff')
           const current = (currentResp.data?.data?.currentStaff || []) as CurrentStaff[]
           if (isMounted) setCurrentStaff(current)
         } catch (timeclockError) {
           console.warn('Failed to load current staff timeclock data:', timeclockError)
-          // Continue without timeclock data
         }
-        
+
         try {
           const statsResp = await api.get('/api/timeclock/stats')
           const userStats = (statsResp.data?.data?.userStats || []) as Array<{ user_id: string; total_hours: number }>
@@ -90,7 +313,6 @@ export default function StaffPage() {
           if (isMounted) setHoursByUserId(hoursMap)
         } catch (statsError) {
           console.warn('Failed to load timeclock stats:', statsError)
-          // Continue without stats data
         }
       } catch (e: any) {
         if (!isMounted) return
@@ -109,6 +331,19 @@ export default function StaffPage() {
       isMounted = false
     }
   }, [])
+
+  const handleStaffCreated = () => {
+    // Reload staff data
+    const load = async () => {
+      try {
+        const staffResp = await api.get('/api/restaurant/staff')
+        setStaff(staffResp.data?.data?.staff || [])
+      } catch (e) {
+        console.error('Failed to reload staff:', e)
+      }
+    }
+    load()
+  }
 
   const roles = useMemo(() => {
     const unique = Array.from(new Set(staff.map((s) => s.role))).sort()
@@ -185,6 +420,12 @@ export default function StaffPage() {
       </Head>
 
       <DashboardLayout>
+        <AddStaffModal
+          isOpen={showAddModal}
+          onClose={() => setShowAddModal(false)}
+          onSuccess={handleStaffCreated}
+        />
+
         <div className="space-y-6">
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -210,8 +451,7 @@ export default function StaffPage() {
                 className="btn-primary inline-flex items-center space-x-2"
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
-                disabled
-                title="Coming soon"
+                onClick={() => setShowAddModal(true)}
               >
                 <UserPlus className="w-4 h-4" />
                 <span>Add Staff Member</span>
