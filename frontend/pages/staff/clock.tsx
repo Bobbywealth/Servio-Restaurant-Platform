@@ -40,6 +40,10 @@ function PINEntry({ onLogin, error }: PINEntryProps) {
         inputRefs[index - 1].current?.focus();
         setIsFocused(index - 1);
       }
+      // Auto-submit when all 4 digits are entered
+      if (newPin.every(digit => digit !== '')) {
+        onLogin(newPin.join(''));
+      }
     }
   };
 
