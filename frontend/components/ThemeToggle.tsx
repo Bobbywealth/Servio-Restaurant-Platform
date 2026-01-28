@@ -34,7 +34,7 @@ export function ReducedMotionToggle() {
             const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
             document.documentElement.style.setProperty(
               '--tw-animate-duration',
-              reduced ? '0.01ms' : undefined
+              reduced ? '0.01ms' : null
             );
           }}
           className="p-2 rounded-md transition-all bg-[var(--tablet-accent)] text-[var(--tablet-accent-contrast)]"
