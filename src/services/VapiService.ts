@@ -694,6 +694,8 @@ export class VapiService {
     const customerNumber = message.call?.customer?.number;
     const duration = message.call?.duration;
     const endedReason = message.endedReason;
+    const direction = message.call?.type === 'inboundPhoneCall' ? 'inbound' : 'outbound';
+    const startedAt = message.call?.startedAt ? new Date(message.call.startedAt) : new Date();
     const restaurantId = process.env.VAPI_RESTAURANT_ID || 'demo-restaurant-1';
 
     // Log the call for analytics
@@ -707,6 +709,35 @@ export class VapiService {
     );
 
     logger.info(`Call ${callId} ended: ${endedReason}, duration: ${duration}s`);
+
+    // Create session in call_sessions table for Conversation Intelligence
+    try {
+      const { ConversationService } = await import('./ConversationService');
+      const existingSession = await ConversationService.getInstance().getSessionByProviderCallId('vapi', callId);
+      
+      if (!existingSession) {
+        // Create new session
+        const session = await ConversationService.getInstance().createSession({
+          restaurantId,
+          provider: 'vapi',
+          providerCallId: callId,
+          direction,
+          fromNumber: customerNumber,
+          startedAt,
+          endedAt: new Date(),
+          durationSeconds: duration,
+          status: 'transcript_pending',
+          audioUrl: undefined
+        });
+        logger.info(`Created conversation session: ${session.id}`);
+      } else {
+        // Update existing session
+        await ConversationService.getInstance().updateSessionStatus(existingSession.id, 'completed');
+        logger.info(`Updated existing session: ${existingSession.id}`);
+      }
+    } catch (error) {
+      logger.error(`Failed to create/update session for call ${callId}:`, error);
+    }
 
     // Persist a call log row (used by Voice Hub to match inbound calls to orders)
     if (callId) {
