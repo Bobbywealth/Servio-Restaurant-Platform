@@ -1,5 +1,6 @@
 'use client';
 
+import { Sun } from 'lucide-react';
 import { ThemeProvider } from './ThemeProvider';
 
 export function ThemeWrapper({ children }: { children: React.ReactNode }) {
