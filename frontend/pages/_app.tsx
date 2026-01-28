@@ -96,14 +96,27 @@ export default function App({ Component, pageProps }: AppProps) {
       activityTimeout = setTimeout(keepSessionAlive, 5 * 60 * 1000) // 5 min after activity
     }
 
+    let eventCleanup: (() => void)[] = []
+
     const events = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll']
-    events.forEach(event => window.addEventListener(event, handleActivity, { passive: true }))
+    events.forEach(event => {
+      const handler = (e: Event) => {
+        if (e.type === 'touchstart') {
+          if (activityTimeout) clearTimeout(activityTimeout)
+          activityTimeout = setTimeout(keepSessionAlive, 5 * 60 * 1000)
+        } else {
+          handleActivity()
+        }
+      }
+      window.addEventListener(event, handler, { passive: true })
+      eventCleanup.push(() => window.removeEventListener(event, handler))
+    })
 
     return () => {
       clearTimeout(initialTimeout)
       clearInterval(interval)
       if (activityTimeout) clearTimeout(activityTimeout)
-      events.forEach(event => window.removeEventListener(event, handleActivity))
+      eventCleanup.forEach(cleanup => cleanup())
     }
   }, [keepSessionAlive])
 
