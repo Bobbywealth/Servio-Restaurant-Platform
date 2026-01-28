@@ -10,7 +10,7 @@ interface ThemeContextType {
   theme: Theme;
   motionPreference: MotionPreference;
   setTheme: (theme: Theme) => void;
-  setMotionPreference: (preference: MotionPreference) => void;
+  updateMotionPreference: (preference: MotionPreference) => void;
   isDarkMode: boolean;
   isReducedMotion: boolean;
   toggleTheme: () => void;
@@ -60,7 +60,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     setTheme((prev) => (prev === 'light' ? 'dark' : 'light'));
   };
 
-  const setMotionPreference = (preference: MotionPreference) => {
+  const updateMotionPreference = (preference: MotionPreference) => {
     setMotionPreference(preference);
     localStorage.setItem('motion', preference);
   };
@@ -71,7 +71,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         theme,
         motionPreference,
         setTheme,
-        setMotionPreference,
+        updateMotionPreference,
         isDarkMode,
         isReducedMotion: motionPreference === 'reduce',
         toggleTheme,
@@ -133,12 +133,12 @@ export function ThemeToggle() {
 }
 
 export function MotionPreferenceToggle() {
-  const { motionPreference, setMotionPreference, isReducedMotion } = useTheme();
+  const { motionPreference, updateMotionPreference, isReducedMotion } = useTheme();
 
   return (
     <div className="flex items-center gap-2 p-2 rounded-lg bg-[var(--tablet-surface)] border border-[var(--tablet-border)]">
       <button
-        onClick={() => setMotionPreference('normal')}
+        onClick={() => updateMotionPreference('normal')}
         className={`p-2 rounded-md transition-all ${
           motionPreference === 'normal'
             ? 'bg-[var(--tablet-accent)] text-[var(--tablet-accent-contrast)]'
@@ -149,7 +149,7 @@ export function MotionPreferenceToggle() {
         <Sun className="h-5 w-5" />
       </button>
       <button
-        onClick={() => setMotionPreference('reduce')}
+        onClick={() => updateMotionPreference('reduce')}
         className={`p-2 rounded-md transition-all ${
           motionPreference === 'reduce'
             ? 'bg-[var(--tablet-accent)] text-[var(--tablet-accent-contrast)]'
