@@ -1397,10 +1397,24 @@ export class VoiceOrderingService {
     for (const item of (quote.items as any[])) {
       const menuItem = await resolveMenuItem(item.itemId);
 
-      // Convert Vapi format modifiers to frontend-compatible format
+      // Convert Vapi format modifiers to user-friendly format with names
       // Vapi sends: [{id: "...", optionId: "..."}] or [{id: "...", optionIds": ["..."]}]
-      // Frontend expects: {groupId: "...", optionId": "..."} or {groupId: "...", optionIds": ["..."]}
-      let formattedModifiers = {};
+      // Get modifier groups to look up option names
+      const itemGroups = await this.getModifierGroupsForItem(menuItem.id, restaurantId);
+
+      // Map option IDs to option names
+      const optionNamesMap: Record<string, string[]> = {};
+      const modifierGroupMap: Record<string, any> = {};
+
+      itemGroups.forEach((group: any) => {
+        modifierGroupMap[group.id] = group;
+        optionNamesMap[group.id] = group.options
+          .filter((opt: any) => !opt.isSoldOut)
+          .map((opt: any) => opt.name);
+      });
+
+      let formattedModifiers: any = {};
+
       if (item.modifiers) {
         if (Array.isArray(item.modifiers)) {
           // Convert array format to object format for frontend display
@@ -1410,12 +1424,47 @@ export class VoiceOrderingService {
             const optionValue = mod.optionId || mod.option_id || mod.optionIds;
 
             if (optionValue) {
-              modifierObj[groupId] = optionValue;
+              // Get group name and look up option names
+              const groupName = modifierGroupMap[groupId]?.name || groupId;
+              const groupOptions = optionNamesMap[groupId] || [];
+
+              // Format as group: option(s)
+              if (Array.isArray(optionValue)) {
+                // Multi-select (e.g., sides)
+                const selectedNames = groupOptions.filter((name: string) =>
+                  optionValue.some((val: any) => String(val).toLowerCase() === String(name).toLowerCase())
+                );
+                modifierObj[groupName] = selectedNames.length > 0 ? selectedNames.join(', ') : optionValue;
+              } else {
+                // Single-select
+                const selectedName = groupOptions.find((name: string) =>
+                  String(optionValue).toLowerCase() === String(name).toLowerCase()
+                ) || optionValue;
+                modifierObj[groupName] = selectedName;
+              }
             }
           });
           formattedModifiers = modifierObj;
         } else if (typeof item.modifiers === 'object') {
-          formattedModifiers = item.modifiers;
+          // Already an object, try to look up names
+          const modifierObj: any = {};
+          Object.entries(item.modifiers).forEach(([groupId, optionValue]) => {
+            const groupName = modifierGroupMap[groupId]?.name || groupId;
+            const groupOptions = optionNamesMap[groupId] || [];
+
+            if (Array.isArray(optionValue)) {
+              const selectedNames = groupOptions.filter((name: string) =>
+                optionValue.some((val: any) => String(val).toLowerCase() === String(name).toLowerCase())
+              );
+              modifierObj[groupName] = selectedNames.length > 0 ? selectedNames.join(', ') : optionValue;
+            } else {
+              const selectedName = groupOptions.find((name: string) =>
+                String(optionValue).toLowerCase() === String(name).toLowerCase()
+              ) || optionValue;
+              modifierObj[groupName] = selectedName;
+            }
+          });
+          formattedModifiers = modifierObj;
         }
       }
 
@@ -1443,6 +1492,68 @@ export class VoiceOrderingService {
 
     for (const item of (quote.items as any[])) {
       const menuItem = await resolveMenuItem(item.itemId);
+
+      // Get modifier groups to look up option names for this item
+      const itemGroups = await this.getModifierGroupsForItem(menuItem.id, restaurantId);
+
+      // Map option IDs to option names
+      const optionNamesMap: Record<string, string[]> = {};
+      const modifierGroupMap: Record<string, any> = {};
+
+      itemGroups.forEach((group: any) => {
+        modifierGroupMap[group.id] = group;
+        optionNamesMap[group.id] = group.options
+          .filter((opt: any) => !opt.isSoldOut)
+          .map((opt: any) => opt.name);
+      });
+
+      // Format modifiers with names
+      let formattedModifiers: any = {};
+      const modifiers = item.modifiers;
+
+      if (modifiers) {
+        if (Array.isArray(modifiers)) {
+          modifiers.forEach((mod: any) => {
+            const groupId = mod.id || mod.group_id;
+            const optionValue = mod.optionId || mod.option_id || mod.optionIds;
+
+            if (optionValue) {
+              const groupName = modifierGroupMap[groupId]?.name || groupId;
+              const groupOptions = optionNamesMap[groupId] || [];
+
+              if (Array.isArray(optionValue)) {
+                const selectedNames = groupOptions.filter((name: string) =>
+                  optionValue.some((val: any) => String(val).toLowerCase() === String(name).toLowerCase())
+                );
+                formattedModifiers[groupName] = selectedNames.length > 0 ? selectedNames.join(', ') : optionValue;
+              } else {
+                const selectedName = groupOptions.find((name: string) =>
+                  String(optionValue).toLowerCase() === String(name).toLowerCase()
+                ) || optionValue;
+                formattedModifiers[groupName] = selectedName;
+              }
+            }
+          });
+        } else if (typeof modifiers === 'object') {
+          Object.entries(modifiers).forEach(([groupId, optionValue]) => {
+            const groupName = modifierGroupMap[groupId]?.name || groupId;
+            const groupOptions = optionNamesMap[groupId] || [];
+
+            if (Array.isArray(optionValue)) {
+              const selectedNames = groupOptions.filter((name: string) =>
+                optionValue.some((val: any) => String(val).toLowerCase() === String(name).toLowerCase())
+              );
+              formattedModifiers[groupName] = selectedNames.length > 0 ? selectedNames.join(', ') : optionValue;
+            } else {
+              const selectedName = groupOptions.find((name: string) =>
+                String(optionValue).toLowerCase() === String(name).toLowerCase()
+              ) || optionValue;
+              formattedModifiers[groupName] = selectedName;
+            }
+          });
+        }
+      }
+
       await db.run(`
         INSERT INTO order_items (
           id, order_id, menu_item_id, item_id, name, item_name_snapshot,
@@ -1459,7 +1570,7 @@ export class VoiceOrderingService {
         item.qty,
         item.price,
         item.price,
-        JSON.stringify(item.modifiers || {})
+        JSON.stringify(formattedModifiers)
       ]);
     }
 
