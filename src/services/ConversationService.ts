@@ -218,10 +218,11 @@ export class ConversationService {
   /**
    * Get a call session by ID
    */
-  async getSessionById(sessionId: string, restaurantId: string): Promise<CallSession | null> {
+  async getSessionById(sessionId: string, restaurantId: string | string[]): Promise<CallSession | null> {
+    const rid = Array.isArray(restaurantId) ? restaurantId[0] : restaurantId;
     const session = await this.db.get(
       'SELECT * FROM call_sessions WHERE id = ? AND restaurant_id = ?',
-      [sessionId, restaurantId]
+      [sessionId, rid]
     );
     return session || null;
   }
@@ -671,7 +672,7 @@ export class ConversationService {
   /**
    * Get full session details with transcript, insights, and review
    */
-  async getSessionDetails(sessionId: string, restaurantId: string): Promise<{
+  async getSessionDetails(sessionId: string, restaurantId: string | string[]): Promise<{
     session: CallSession | null;
     transcript: CallTranscript | null;
     insights: CallInsights | null;
@@ -697,9 +698,10 @@ export class ConversationService {
   /**
    * Enqueue a transcription job
    */
-  async enqueueTranscription(sessionId: string, restaurantId: string, audioUrl?: string): Promise<string> {
+  async enqueueTranscription(sessionId: string, restaurantId: string | string[], audioUrl?: string): Promise<string> {
+    const rid = Array.isArray(restaurantId) ? restaurantId[0] : restaurantId;
     return JobRunnerService.getInstance().addJob({
-      restaurant_id: restaurantId,
+      restaurant_id: rid,
       job_type: 'transcribe_call',
       payload: { sessionId, audioUrl },
       priority: 10,
@@ -710,9 +712,10 @@ export class ConversationService {
   /**
    * Enqueue an analysis job
    */
-  async enqueueAnalysis(sessionId: string, restaurantId: string): Promise<string> {
+  async enqueueAnalysis(sessionId: string, restaurantId: string | string[]): Promise<string> {
+    const rid = Array.isArray(restaurantId) ? restaurantId[0] : restaurantId;
     return JobRunnerService.getInstance().addJob({
-      restaurant_id: restaurantId,
+      restaurant_id: rid,
       job_type: 'analyze_call',
       payload: { sessionId },
       priority: 5,

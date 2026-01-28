@@ -6,14 +6,12 @@ import { logger } from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
 
 const isString = (value: unknown): value is string => typeof value === 'string';
-
-const getRestaurantId = (req: Request): string => {
-  const restaurantId = req.user?.restaurantId;
-  if (Array.isArray(restaurantId)) {
-    return restaurantId[0] || '';
+const asRestaurantId = (value: unknown): string => {
+  if (Array.isArray(value)) {
+    return value[0] || '';
   }
-  if (isString(restaurantId)) {
-    return restaurantId;
+  if (isString(value)) {
+    return value;
   }
   return '';
 };
@@ -35,7 +33,7 @@ const getRequestId = (req: Request) => {
  */
 router.get('/', asyncHandler(async (req: Request, res: Response) => {
   const requestId = getRequestId(req);
-  const restaurantId = getRestaurantId(req);
+  const restaurantId = asRestaurantId(req.user?.restaurantId);
 
   logger.info(`[conversations.list] entry ${JSON.stringify({ requestId, restaurantId, query: req.query })}`);
 
@@ -105,18 +103,16 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
  */
 router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
   const requestId = getRequestId(req);
-  const restaurantId: string = getRestaurantId(req);
-  const { id } = req.params;
+  const rid = asRestaurantId(req.user?.restaurantId);
+  const id = req.params.id as string;
 
-  logger.info(`[conversations.get] entry ${JSON.stringify({ requestId, restaurantId, conversationId: id })}`);
+  logger.info(`[conversations.get] entry ${JSON.stringify({ requestId, restaurantId: rid, conversationId: id })}`);
 
-  if (!restaurantId) {
+  if (!rid) {
     throw new BadRequestError('Missing restaurantId');
   }
 
-  // Workaround for TypeScript type inference issue with Express Request user property
-  // @ts-ignore
-  const details = await conversationService.getSessionDetails(id, restaurantId);
+  const details = await conversationService.getSessionDetails(id, (rid as any) as string);
 
   if (!details.session) {
     throw new NotFoundError('Conversation not found');
@@ -178,7 +174,7 @@ router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
  */
 router.post('/:id/review', asyncHandler(async (req: Request, res: Response) => {
   const requestId = getRequestId(req);
-  const restaurantId: string = getRestaurantId(req);
+  const restaurantId = asRestaurantId(req.user?.restaurantId);
   const userId = req.user?.id;
   const id = req.params.id as string;
 
@@ -203,8 +199,7 @@ router.post('/:id/review', asyncHandler(async (req: Request, res: Response) => {
   const followUpAction: string | undefined = body.followUpAction;
 
   // Verify the session exists
-  // @ts-ignore
-  const session = await conversationService.getSessionById(id, restaurantId);
+  const session = await conversationService.getSessionById(id, (restaurantId as any) as string);
   if (!session) {
     throw new NotFoundError('Conversation not found');
   }
@@ -245,7 +240,7 @@ router.post('/:id/review', asyncHandler(async (req: Request, res: Response) => {
  */
 router.get('/analytics/summary', asyncHandler(async (req: Request, res: Response) => {
   const requestId = getRequestId(req);
-  const restaurantId = getRestaurantId(req);
+  const restaurantId = asRestaurantId(req.user?.restaurantId);
 
   logger.info(`[conversations.analytics] entry ${JSON.stringify({ requestId, restaurantId, query: req.query })}`);
 
@@ -284,7 +279,12 @@ router.post('/internal/:id/transcribe', asyncHandler(async (req: Request, res: R
     throw new NotFoundError('Session not found');
   }
 
-  const sessionRestaurantId = Array.isArray(session.restaurant_id) ? session.restaurant_id[0] : session.restaurant_id;
+  let sessionRestaurantId: string = '';
+  if (Array.isArray(session.restaurant_id)) {
+    sessionRestaurantId = String(session.restaurant_id[0] || '');
+  } else {
+    sessionRestaurantId = String(session.restaurant_id || '');
+  }
   if (!sessionRestaurantId) {
     throw new NotFoundError('Session has no restaurant_id');
   }
@@ -322,7 +322,12 @@ router.post('/internal/:id/analyze', asyncHandler(async (req: Request, res: Resp
     throw new NotFoundError('Session not found');
   }
 
-  const sessionRestaurantId = Array.isArray(session.restaurant_id) ? session.restaurant_id[0] : session.restaurant_id;
+  let sessionRestaurantId: string = '';
+  if (Array.isArray(session.restaurant_id)) {
+    sessionRestaurantId = String(session.restaurant_id[0] || '');
+  } else {
+    sessionRestaurantId = String(session.restaurant_id || '');
+  }
   if (!sessionRestaurantId) {
     throw new NotFoundError('Session has no restaurant_id');
   }
