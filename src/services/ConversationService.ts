@@ -829,7 +829,7 @@ export class ConversationService {
   /**
    * Update session status
    */
-  private async updateSessionStatus(sessionId: string, status: string): Promise<void> {
+  async updateSessionStatus(sessionId: string, status: string): Promise<void> {
     await this.db.run(
       'UPDATE call_sessions SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
       [status, sessionId]
