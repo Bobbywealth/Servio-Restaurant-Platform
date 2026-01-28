@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Activity, Zap, Cpu, Network, Database, DatabaseBackup } from 'lucide-react';
 
 export function PerformanceStats() {
@@ -16,23 +16,26 @@ export function PerformanceStats() {
     if ('PerformanceObserver' in window) {
       // Measure First Contentful Paint
       const fcpObserver = new PerformanceObserver((entries) => {
-        const entry = entries[0] as PerformanceMetricEntry;
-        setMetrics((prev) => ({ ...prev, firstContentfulPaint: entry.startTime }));
+        const entryList = entries.getEntriesByType('paint');
+        const entry = entryList[0] as PerformanceEntry;
+        setMetrics((prev) => ({ ...prev, firstContentfulPaint: entry ? entry.startTime : prev.firstContentfulPaint }));
       });
       fcpObserver.observe({ entryTypes: ['paint'] });
 
       // Measure Largest Contentful Paint
       const lcpObserver = new PerformanceObserver((entries) => {
-        const entry = entries[0] as PerformanceMetricEntry;
-        setMetrics((prev) => ({ ...prev, largestContentfulPaint: entry.startTime }));
+        const entryList = entries.getEntriesByType('largest-contentful-paint');
+        const entry = entryList[entryList.length - 1] as PerformanceEntry;
+        setMetrics((prev) => ({ ...prev, largestContentfulPaint: entry ? entry.startTime : prev.largestContentfulPaint }));
       });
       lcpObserver.observe({ entryTypes: ['largest-contentful-paint'] });
 
       // Measure Layout Shift
       let clsScore = 0;
       const clsObserver = new PerformanceObserver((entries) => {
-        entries.forEach((entry) => {
-          clsScore += entry.value;
+        const layoutShifts = entries.getEntries();
+        layoutShifts.forEach((entry) => {
+          clsScore += (entry as any).value || 0;
         });
         setMetrics((prev) => ({ ...prev, cumulativeLayoutShift: clsScore }));
       });

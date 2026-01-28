@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 
 export function usePerformanceMonitor() {
   const initialized = useRef(false);
@@ -14,12 +14,14 @@ export function usePerformanceMonitor() {
     // Monitor performance
     if ('PerformanceObserver' in window) {
       const observer = new PerformanceObserver((entries) => {
-        entries.forEach((entry) => {
+        const entryList = entries.getEntries();
+        entryList.forEach((entry) => {
           if (entry.entryType === 'navigation') {
+            const navEntry = entry as any;
             console.log('[Performance] Navigation metrics:', {
-              loadTime: entry.loadEventEnd - entry.startTime,
-              domReady: entry.domContentLoadedEventEnd - entry.startTime,
-              fetchTime: entry.responseEnd - entry.requestStart,
+              loadTime: navEntry.loadEventEnd - navEntry.startTime,
+              domReady: navEntry.domContentLoadedEventEnd - navEntry.startTime,
+              fetchTime: navEntry.responseEnd - navEntry.requestStart,
             });
           }
           if (entry.entryType === 'longtask') {
@@ -130,7 +132,7 @@ export function useWindowSize() {
 }
 
 export function usePrevious<T>(value: T): T | undefined {
-  const ref = React.useRef<T>();
+  const ref = React.useRef<T>(undefined);
   useEffect(() => {
     ref.current = value;
   }, [value]);
