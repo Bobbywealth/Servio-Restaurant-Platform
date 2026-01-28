@@ -189,8 +189,10 @@ export class VoiceOrderingService {
         data: {
           itemId,
           totalGroups: groups.length,
-          providedModifiers: modifiers,
-          groupNames: groups.map((g: any) => g.name)
+          modifiersIsArray: Array.isArray(modifiers),
+          modifiersRaw: modifiers,
+          groupNames: groups.map((g: any) => g.name),
+          groupIds: groups.map((g: any) => g.id)
         },
         timestamp: Date.now(),
         sessionId: 'debug-session',
@@ -1046,18 +1048,20 @@ export class VoiceOrderingService {
         inputItem.modifiers
       );
 
-      // #region agent log - hypothesis A, B
+      // #region agent log - hypothesis A, B, C, E
       fetch('http://127.0.0.1:7245/ingest/736b35ed-f7bd-4b4f-b5c9-370964b02fb5', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          location: 'VoiceOrderingService.ts:1014',
+          location: 'VoiceOrderingService.ts:1100',
           message: 'modifierValidation result',
           data: {
             menuItemName: menuItem.name,
+            menuItemId: menuItem.id,
             isValid: modifierValidation.valid,
             missingModifiers: modifierValidation.missingModifiers,
-            priceDelta: modifierValidation.priceDelta
+            priceDelta: modifierValidation.priceDelta,
+            inputModifiers: inputItem.modifiers
           },
           timestamp: Date.now(),
           sessionId: 'debug-session',
