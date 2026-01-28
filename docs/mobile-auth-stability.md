@@ -6,3 +6,4 @@ Summary of changes:
 • SafeStorage wrapper usage in API layer
 • Stabilized token refresh path
 • Listener cleanup improvements in app bootstrap
+\nQA: verify login/logout persistence on mobile devices; token refresh flow; storage quota behavior; and proper cleanup of listeners.
