@@ -130,6 +130,14 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       roles: ['manager', 'owner', 'admin']
     },
     {
+      name: 'Conversations',
+      href: '/dashboard/conversations',
+      icon: FileText,
+      description: 'Call transcripts & insights',
+      color: 'text-indigo-500',
+      roles: ['manager', 'owner', 'admin']
+    },
+    {
       name: 'Orders',
       href: '/dashboard/orders',
       icon: ClipboardList,

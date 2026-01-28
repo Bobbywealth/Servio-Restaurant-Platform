@@ -1,4 +1,5 @@
 import { AssistantService } from './AssistantService';
+import { ConversationService } from './ConversationService';
 import { DatabaseService } from './DatabaseService';
 import { VoiceOrderingService } from './VoiceOrderingService';
 import { logger } from '../utils/logger';
@@ -39,9 +40,11 @@ export interface VapiResponse {
 
 export class VapiService {
   private assistantService: AssistantService;
+  private conversationService: ConversationService;
 
   constructor() {
     this.assistantService = new AssistantService();
+    this.conversationService = ConversationService.getInstance();
   }
 
   private normalizeToolName(name: string): string {
@@ -346,10 +349,10 @@ export class VapiService {
       (parameters && (parameters as any).restaurant_slug) ||
       safeGet(parameters, ['restaurant', 'slug']) ||
       (parameters && (parameters as any).slug) ||
-      parameters?.restaurantSlug ??
-      parameters?.restaurant_slug ??
-      parameters?.restaurant?.slug ??
-      parameters?.slug ??
+      (parameters?.restaurantSlug) ||
+      (parameters?.restaurant_slug) ||
+      (parameters?.restaurant?.slug) ||
+      (parameters?.slug) ||
       process.env.VAPI_RESTAURANT_SLUG;
     if (typeof fromSlug === 'string' && fromSlug.trim()) {
       return { restaurantId: null, restaurantSlug: fromSlug.trim(), source: 'parameters.restaurantSlug' };
@@ -694,16 +697,82 @@ export class VapiService {
     const customerNumber = message.call?.customer?.number;
     const duration = message.call?.duration;
     const endedReason = message.endedReason;
-    const restaurantId = process.env.VAPI_RESTAURANT_ID || 'demo-restaurant-1';
+    const transcript = message.transcript;
+    const direction = message.call?.type === 'inboundPhoneCall' ? 'inbound' : 'outbound';
 
-    // Log the call for analytics
+    // Resolve restaurant ID from Vapi context
+    const { restaurantId, restaurantSlug, source } = await this.getRestaurantIdFromParams({}, message);
+    const resolvedRestaurantId = restaurantId || process.env.VAPI_RESTAURANT_ID || 'demo-restaurant-1';
+
+    logger.info(`[conversations] Call ${callId} ended for restaurant ${resolvedRestaurantId}: ${endedReason}, duration: ${duration}s`);
+
+    // Create conversation session
+    let session;
+    try {
+      session = await this.conversationService.createSession({
+        restaurantId: resolvedRestaurantId,
+        provider: 'vapi',
+        providerCallId: callId,
+        direction,
+        fromNumber: customerNumber,
+        toNumber: message.call?.phoneNumberId,
+        startedAt: new Date(message.call?.createdAt || Date.now() - (duration * 1000)),
+        endedAt: new Date(),
+        durationSeconds: duration,
+        status: this.mapEndReasonToStatus(endedReason),
+        audioUrl: message.call?.recordingUrl || null,
+        metadata: {
+          endedReason,
+          phoneNumberId: message.call?.phoneNumberId,
+          source
+        }
+      });
+
+      logger.info(`[conversations] Created session ${session.id} for call ${callId}`);
+    } catch (error: any) {
+      logger.error(`[conversations] Failed to create session for call ${callId}:`, error.message);
+    }
+
+    // Store transcript if available
+    if (session && transcript) {
+      try {
+        await this.conversationService.saveTranscript({
+          callSessionId: session.id,
+          transcriptText: transcript,
+          language: 'en',
+          sttProvider: 'vapi'
+        });
+        logger.info(`[conversations] Stored transcript for session ${session.id}`);
+      } catch (error: any) {
+        logger.error(`[conversations] Failed to store transcript for session ${session.id}:`, error.message);
+      }
+    }
+
+    // Trigger background jobs for transcription and analysis
+    if (session) {
+      try {
+        // If no transcript from Vapi, enqueue transcription job
+        if (!transcript && message.call?.recordingUrl) {
+          await this.conversationService.enqueueTranscription(session.id, session.restaurant_id, message.call.recordingUrl);
+          logger.info(`[conversations] Enqueued transcription job for session ${session.id}`);
+        }
+
+        // Enqueue analysis job (will wait for transcript if needed)
+        await this.conversationService.enqueueAnalysis(session.id, session.restaurant_id);
+        logger.info(`[conversations] Enqueued analysis job for session ${session.id}`);
+      } catch (error: any) {
+        logger.error(`[conversations] Failed to enqueue jobs for session ${session.id}:`, error.message);
+      }
+    }
+
+    // Log the call for analytics (existing behavior)
     await DatabaseService.getInstance().logAudit(
-      restaurantId,
+      resolvedRestaurantId,
       null,
       'phone_call_ended',
       'call',
       callId,
-      { duration, endedReason, customerNumber }
+      { duration, endedReason, customerNumber, conversationSessionId: session?.id }
     );
 
     logger.info(`Call ${callId} ended: ${endedReason}, duration: ${duration}s`);
@@ -721,8 +790,42 @@ export class VapiService {
         }
       });
     }
-    
+
     return { result: 'call logged' };
+  }
+
+  /**
+   * Map Vapi ended reason to session status
+   */
+  private mapEndReasonToStatus(endedReason: string): string {
+    const failureReasons = [
+      'assistant-error',
+      'pipeline-error-openai-llm-failed',
+      'db-error',
+      'assistant-not-found',
+      'license-check-failed',
+      'pipeline-error-voice-model-failed',
+      'assistant-not-invalid',
+      'assistant-request-failed',
+      'unknown-error',
+      'sip-gateway-failed-to-connect-call',
+      'twilio-failed-to-connect-call'
+    ];
+
+    const noAnswerReasons = [
+      'customer-did-not-answer',
+      'customer-did-not-give-microphone-permission'
+    ];
+
+    if (failureReasons.includes(endedReason)) {
+      return 'failed';
+    }
+
+    if (noAnswerReasons.includes(endedReason)) {
+      return 'no_answer';
+    }
+
+    return 'completed';
   }
 
   private async logTranscript(message: any): Promise<void> {

@@ -3,6 +3,7 @@ dotenv.config();
 
 import { DatabaseService } from './services/DatabaseService';
 import { JobRunnerService } from './services/JobRunnerService';
+import { ConversationService } from './services/ConversationService';
 import { logger } from './utils/logger';
 
 async function startWorker() {
@@ -37,6 +38,25 @@ async function startWorker() {
       logger.info(`Sending notification: ${job.payload.type}`);
       // Here we would call the NotificationAdapter (e.g. TwilioAdapter.sendSms)
       return { sent: true };
+    });
+
+    // Conversation Intelligence Handlers
+    const conversationService = ConversationService.getInstance();
+
+    // Transcription Job Handler
+    jobRunner.registerHandler('transcribe_call', async (job) => {
+      logger.info(`[worker] Processing transcription job: ${job.id}`);
+      const result = await conversationService.handleTranscribeJob(job);
+      logger.info(`[worker] Transcription job completed: ${job.id}`);
+      return result;
+    });
+
+    // Analysis Job Handler
+    jobRunner.registerHandler('analyze_call', async (job) => {
+      logger.info(`[worker] Processing analysis job: ${job.id}`);
+      const result = await conversationService.handleAnalyzeJob(job);
+      logger.info(`[worker] Analysis job completed: ${job.id}`);
+      return result;
     });
 
     // 4. Start polling

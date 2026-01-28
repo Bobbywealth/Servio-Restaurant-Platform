@@ -125,6 +125,7 @@ async function initializeServer() {
     const { default: deliveryPlatformsRoutes } = await import('./routes/delivery-platforms');
     const { default: deliveryPlatformsSessionsRoutes } = await import('./routes/delivery-platforms-sessions');
     const { default: staffClockRoutes } = await import('./routes/staff-clock');
+    const { default: conversationsRoutes } = await import('./routes/conversations');
 
     // API Routes
     app.use('/api/auth', authRoutes);
@@ -195,6 +196,7 @@ async function initializeServer() {
     app.use('/api/notifications', requireAuth, notificationsRoutes);
     app.use('/api/delivery-platforms', requireAuth, deliveryPlatformsRoutes);
     app.use('/api/delivery-platforms-sessions', requireAuth, deliveryPlatformsSessionsRoutes);
+    app.use('/api/conversations', requireAuth, conversationsRoutes);
 
     // Staff clock-in PWA routes (public - PIN authenticated)
     app.use('/api/staff/clock', staffClockRoutes);
