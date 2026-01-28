@@ -5,6 +5,17 @@ import { asyncHandler, BadRequestError, NotFoundError } from '../middleware/erro
 import { logger } from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
 
+const getRestaurantId = (req: Request): string => {
+  const restaurantId = req.user?.restaurantId;
+  if (Array.isArray(restaurantId)) {
+    return restaurantId[0] as string || '';
+  }
+  return (restaurantId as string) || '';
+};
+
+// Type assertion helper to handle Express type inference issues
+const asString = (value: unknown): string => String(value ?? '');
+
 const router = Router();
 const conversationService = ConversationService.getInstance();
 
@@ -22,7 +33,7 @@ const getRequestId = (req: Request) => {
  */
 router.get('/', asyncHandler(async (req: Request, res: Response) => {
   const requestId = getRequestId(req);
-  const restaurantId = req.user?.restaurantId;
+  const restaurantId = getRestaurantId(req);
 
   logger.info(`[conversations.list] entry ${JSON.stringify({ requestId, restaurantId, query: req.query })}`);
 
@@ -92,7 +103,7 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
  */
 router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
   const requestId = getRequestId(req);
-  const restaurantId = req.user?.restaurantId;
+  const restaurantId = getRestaurantId(req);
   const { id } = req.params;
 
   logger.info(`[conversations.get] entry ${JSON.stringify({ requestId, restaurantId, conversationId: id })}`);
@@ -101,7 +112,7 @@ router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
     throw new BadRequestError('Missing restaurantId');
   }
 
-  const details = await conversationService.getSessionDetails(id, restaurantId);
+  const details = await conversationService.getSessionDetails(id, asString(restaurantId));
 
   if (!details.session) {
     throw new NotFoundError('Conversation not found');
@@ -163,7 +174,7 @@ router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
  */
 router.post('/:id/review', asyncHandler(async (req: Request, res: Response) => {
   const requestId = getRequestId(req);
-  const restaurantId = req.user?.restaurantId;
+  const restaurantId = getRestaurantId(req);
   const userId = req.user?.id;
   const { id } = req.params;
 
@@ -180,7 +191,7 @@ router.post('/:id/review', asyncHandler(async (req: Request, res: Response) => {
   const { internalNotes, tags, followUpAction } = req.body;
 
   // Verify the session exists
-  const session = await conversationService.getSessionById(id, restaurantId);
+  const session = await conversationService.getSessionById(id, asString(restaurantId));
   if (!session) {
     throw new NotFoundError('Conversation not found');
   }
@@ -221,7 +232,7 @@ router.post('/:id/review', asyncHandler(async (req: Request, res: Response) => {
  */
 router.get('/analytics/summary', asyncHandler(async (req: Request, res: Response) => {
   const requestId = getRequestId(req);
-  const restaurantId = req.user?.restaurantId;
+  const restaurantId = getRestaurantId(req);
 
   logger.info(`[conversations.analytics] entry ${JSON.stringify({ requestId, restaurantId, query: req.query })}`);
 
@@ -260,8 +271,13 @@ router.post('/internal/:id/transcribe', asyncHandler(async (req: Request, res: R
     throw new NotFoundError('Session not found');
   }
 
+  const sessionRestaurantId = Array.isArray(session.restaurant_id) ? session.restaurant_id[0] : session.restaurant_id;
+  if (!sessionRestaurantId) {
+    throw new NotFoundError('Session has no restaurant_id');
+  }
+
   // Enqueue transcription job
-  const jobId = await conversationService.enqueueTranscription(id, session.restaurant_id, audioUrl);
+  const jobId = await conversationService.enqueueTranscription(id, String(sessionRestaurantId), audioUrl);
 
   // Update session status
   await db.run(
@@ -292,8 +308,13 @@ router.post('/internal/:id/analyze', asyncHandler(async (req: Request, res: Resp
     throw new NotFoundError('Session not found');
   }
 
+  const sessionRestaurantId = Array.isArray(session.restaurant_id) ? session.restaurant_id[0] : session.restaurant_id;
+  if (!sessionRestaurantId) {
+    throw new NotFoundError('Session has no restaurant_id');
+  }
+
   // Enqueue analysis job
-  const jobId = await conversationService.enqueueAnalysis(id, session.restaurant_id);
+  const jobId = await conversationService.enqueueAnalysis(id, String(sessionRestaurantId));
 
   // Update session status
   await db.run(

@@ -402,7 +402,7 @@ export default function ConversationDetailPage() {
                       <div>
                         <span className="text-gray-500 dark:text-gray-400 block mb-2">Entities Detected</span>
                         <div className="space-y-2">
-                          {insights.extractedEntities.items_mention && insights.extractedEntities.items_mentioned.length > 0 && (
+                          {insights.extractedEntities.items_mentioned && insights.extractedEntities.items_mentioned.length > 0 && (
                             <div>
                               <span className="text-xs text-gray-400">Items:</span>
                               <div className="flex flex-wrap gap-1 mt-1">
