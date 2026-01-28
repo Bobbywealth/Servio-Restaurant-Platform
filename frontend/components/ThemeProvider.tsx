@@ -57,7 +57,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   };
 
   const toggleTheme = () => {
-    setTheme((prev) => (prev === 'light' ? 'dark' : 'light'));
+    const newTheme = theme === 'light' ? 'dark' : 'light';
+    setThemeState(newTheme);
+    localStorage.setItem('theme', newTheme);
   };
 
   const updateMotionPreference = (preference: MotionPreference) => {
