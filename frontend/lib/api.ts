@@ -20,7 +20,9 @@ export const api = axios.create({
   timeout: 60_000,
   headers: {
     'Content-Type': 'application/json'
-  }
+  },
+  // Disable automatic retries for now to prevent multiple refresh requests
+  maxRetries: 0
 })
 
 const refreshClient = axios.create({
@@ -217,4 +219,47 @@ api.interceptors.response.use(
 export async function refreshAccessToken(): Promise<boolean> {
   const newToken = await proactiveRefresh()
   return !!newToken
+}
+
+// Check if localStorage is available
+function isLocalStorageAvailable(): boolean {
+  try {
+    if (typeof window === 'undefined') return false
+    const test = '__storage_test__'
+    localStorage.setItem(test, test)
+    localStorage.removeItem(test)
+    return true
+  } catch {
+    return false
+  }
+}
+
+// Safe localStorage operations with error handling
+const safeLocalStorage = {
+  getItem: (key: string): string | null => {
+    try {
+      if (!isLocalStorageAvailable()) return null
+      return localStorage.getItem(key)
+    } catch {
+      return null
+    }
+  },
+  setItem: (key: string, value: string): void => {
+    try {
+      if (!isLocalStorageAvailable()) return
+      localStorage.setItem(key, value)
+    } catch (error) {
+      if (error instanceof Error && error.name === 'QuotaExceededError') {
+        console.warn('[api] localStorage quota exceeded')
+      }
+    }
+  },
+  removeItem: (key: string): void => {
+    try {
+      if (!isLocalStorageAvailable()) return
+      localStorage.removeItem(key)
+    } catch {
+      // Ignore errors
+    }
+  }
 }
