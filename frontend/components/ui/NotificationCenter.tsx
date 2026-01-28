@@ -18,6 +18,13 @@ import {
 import { useSocket } from '../../lib/socket'
 import { formatRelativeTime } from '../../lib/utils'
 import axios from 'axios'
+import dynamic from 'next/dynamic'
+
+// Lazy load the settings modal
+const NotificationSettings = dynamic(
+  () => import('../settings/NotificationSettings'),
+  { ssr: false }
+)
 
 export interface Notification {
   id: string
@@ -42,6 +49,7 @@ interface NotificationCenterProps {
 export default function NotificationCenter({ className = '' }: NotificationCenterProps) {
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [isOpen, setIsOpen] = useState(false)
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
   const [isLoading, setIsLoading] = useState(false)
   const socket = useSocket()
@@ -279,6 +287,16 @@ export default function NotificationCenter({ className = '' }: NotificationCente
                     Notifications
                   </h3>
                   <div className="flex items-center space-x-2">
+                    <button
+                      onClick={() => {
+                        setIsOpen(false)
+                        setIsSettingsOpen(true)
+                      }}
+                      className="btn-icon w-6 h-6 text-surface-500 hover:text-surface-700 dark:hover:text-surface-300"
+                      title="Notification Settings"
+                    >
+                      <Settings className="w-4 h-4" />
+                    </button>
                     {unreadCount > 0 && (
                       <button
                         onClick={markAllAsRead}
@@ -409,6 +427,12 @@ export default function NotificationCenter({ className = '' }: NotificationCente
           </>
         )}
       </AnimatePresence>
+
+      {/* Settings Modal */}
+      <NotificationSettings
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+      />
     </div>
   )
 }

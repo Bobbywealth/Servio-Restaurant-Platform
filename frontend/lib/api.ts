@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { safeLocalStorage } from './utils'
+import { safeLocalStorage as SLS } from './utils'
 
 const BACKEND_URL =
   process.env.NEXT_PUBLIC_API_URL ||
@@ -62,10 +62,10 @@ async function proactiveRefresh(): Promise<string | null> {
 
   const now = Date.now()
   if (now - lastRefreshTime < MIN_REFRESH_INTERVAL) {
-    return safeLocalStorage.getItem('servio_access_token')
+    return SLS.getItem('servio_access_token')
   }
 
-  const refreshToken = safeLocalStorage.getItem('servio_refresh_token')
+  const refreshToken = SLS.getItem('servio_refresh_token')
   if (!refreshToken) return null
 
   if (!refreshInFlight) {
@@ -74,7 +74,7 @@ async function proactiveRefresh(): Promise<string | null> {
       .then((resp) => {
         const newAccessToken = resp?.data?.data?.accessToken as string | undefined
         if (!newAccessToken) return null
-        safeLocalStorage.setItem('servio_access_token', newAccessToken)
+        SLS.setItem('servio_access_token', newAccessToken)
         lastRefreshTime = Date.now()
         if (process.env.NODE_ENV !== 'production') {
           console.info('[api] proactively refreshed access token')
@@ -93,7 +93,7 @@ async function proactiveRefresh(): Promise<string | null> {
 api.interceptors.request.use(async (config) => {
   if (typeof window === 'undefined') return config
 
-  let token = safeLocalStorage.getItem('servio_access_token')
+  let token = SLS.getItem('servio_access_token')
 
   // Check if token exists and is expiring soon
   if (token && isTokenExpiringSoon(token)) {
@@ -110,7 +110,7 @@ api.interceptors.request.use(async (config) => {
     return config
   }
 
-  const refreshToken = safeLocalStorage.getItem('servio_refresh_token')
+  const refreshToken = SLS.getItem('servio_refresh_token')
   if (!refreshToken) return config
 
   if (!refreshInFlight) {
@@ -119,7 +119,7 @@ api.interceptors.request.use(async (config) => {
       .then((resp) => {
         const newAccessToken = resp?.data?.data?.accessToken as string | undefined
         if (!newAccessToken) return null
-        safeLocalStorage.setItem('servio_access_token', newAccessToken)
+        SLS.setItem('servio_access_token', newAccessToken)
         lastRefreshTime = Date.now()
         if (process.env.NODE_ENV !== 'production') {
           console.info('[api] refreshed access token (request)')
@@ -166,12 +166,12 @@ api.interceptors.response.use(
     // Handle 401 with retry logic
     if (status === 401 && !originalConfig?._retry) {
       originalConfig._retry = true
-      const refreshToken = safeLocalStorage.getItem('servio_refresh_token')
+      const refreshToken = SLS.getItem('servio_refresh_token')
 
       if (!refreshToken) {
-        safeLocalStorage.removeItem('servio_access_token')
-        safeLocalStorage.removeItem('servio_refresh_token')
-        safeLocalStorage.removeItem('servio_user')
+        SLS.removeItem('servio_access_token')
+        SLS.removeItem('servio_refresh_token')
+        SLS.removeItem('servio_user')
         window.location.href = getLoginUrl()
         return Promise.reject(error)
       }
@@ -182,7 +182,7 @@ api.interceptors.response.use(
           .then((resp) => {
             const newAccessToken = resp?.data?.data?.accessToken as string | undefined
             if (!newAccessToken) return null
-            safeLocalStorage.setItem('servio_access_token', newAccessToken)
+            SLS.setItem('servio_access_token', newAccessToken)
             lastRefreshTime = Date.now()
             if (process.env.NODE_ENV !== 'production') {
               console.info('[api] refreshed access token')
@@ -202,9 +202,9 @@ api.interceptors.response.use(
         return api.request(originalConfig)
       }
 
-      safeLocalStorage.removeItem('servio_access_token')
-      safeLocalStorage.removeItem('servio_refresh_token')
-      safeLocalStorage.removeItem('servio_user')
+      SLS.removeItem('servio_access_token')
+      SLS.removeItem('servio_refresh_token')
+      SLS.removeItem('servio_user')
       if (process.env.NODE_ENV !== 'production') {
         console.info('[api] refresh failed, redirecting to login', message)
       }

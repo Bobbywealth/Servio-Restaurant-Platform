@@ -11,7 +11,9 @@ import {
   History,
   RotateCcw,
   Calendar,
-  ChevronRight
+  ChevronRight,
+  Plus,
+  UserPlus
 } from 'lucide-react'
 import { api } from '../../lib/api'
 
@@ -62,6 +64,7 @@ export default function ManagerTimeClockModal({ isOpen, onClose, onRefresh }: Ma
   const [showClockInModal, setShowClockInModal] = useState(false)
   const [showClockOutModal, setShowClockOutModal] = useState(false)
   const [showReverseModal, setShowReverseModal] = useState(false)
+  const [showAddStaffModal, setShowAddStaffModal] = useState(false)
   const [selectedEntry, setSelectedEntry] = useState<TimeEntry | null>(null)
 
   // Form states
@@ -70,6 +73,12 @@ export default function ManagerTimeClockModal({ isOpen, onClose, onRefresh }: Ma
   const [position, setPosition] = useState('')
   const [notes, setNotes] = useState('')
   const [reverseReason, setReverseReason] = useState('')
+
+  // Add staff form states
+  const [newStaffName, setNewStaffName] = useState('')
+  const [newStaffEmail, setNewStaffEmail] = useState('')
+  const [newStaffRole, setNewStaffRole] = useState('staff')
+  const [generatedPin, setGeneratedPin] = useState<string | null>(null)
 
   useEffect(() => {
     if (isOpen) {
@@ -178,10 +187,52 @@ export default function ManagerTimeClockModal({ isOpen, onClose, onRefresh }: Ma
     }
   }
 
+  const handleAddStaff = async () => {
+    if (!newStaffName.trim()) {
+      setError('Name is required')
+      return
+    }
+
+    setActionLoading('add-staff')
+
+    try {
+      const response = await api.post('/api/restaurant/staff', {
+        name: newStaffName.trim(),
+        email: newStaffEmail.trim() || undefined,
+        role: newStaffRole
+      })
+
+      if (response.data.success) {
+        setGeneratedPin(response.data.data.pin)
+        setSuccess(`Successfully added ${newStaffName}!`)
+        onRefresh()
+        loadData()
+        // Don't close the modal yet - show the PIN
+      } else {
+        setError(response.data.error?.message || 'Failed to add staff member')
+      }
+    } catch (err: any) {
+      setError(err.response?.data?.error?.message || 'Failed to add staff member')
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  const closeAddStaffModal = () => {
+    setShowAddStaffModal(false)
+    setNewStaffName('')
+    setNewStaffEmail('')
+    setNewStaffRole('staff')
+    setGeneratedPin(null)
+    setError(null)
+    setSuccess(null)
+  }
+
   const closeAllModals = () => {
     setShowClockInModal(false)
     setShowClockOutModal(false)
     setShowReverseModal(false)
+    setShowAddStaffModal(false)
     setSelectedStaff(null)
     setSelectedEntry(null)
     setClockInTime('')
@@ -189,6 +240,10 @@ export default function ManagerTimeClockModal({ isOpen, onClose, onRefresh }: Ma
     setPosition('')
     setNotes('')
     setReverseReason('')
+    setNewStaffName('')
+    setNewStaffEmail('')
+    setNewStaffRole('staff')
+    setGeneratedPin(null)
   }
 
   const openClockInModal = (staffMember: StaffMember) => {

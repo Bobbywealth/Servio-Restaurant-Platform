@@ -122,6 +122,7 @@ async function initializeServer() {
     const { default: voiceRoutes } = await import('./routes/voice');
     const { default: voiceHubRoutes } = await import('./routes/voice-hub');
     const { default: notificationsRoutes } = await import('./routes/notifications');
+    const { default: pushRoutes } = await import('./routes/push');
     const { default: deliveryPlatformsRoutes } = await import('./routes/delivery-platforms');
     const { default: deliveryPlatformsSessionsRoutes } = await import('./routes/delivery-platforms-sessions');
     const { default: staffClockRoutes } = await import('./routes/staff-clock');
@@ -193,6 +194,7 @@ async function initializeServer() {
     }, restaurantsRoutes);
     app.use('/api/integrations', requireAuth, integrationsRoutes);
     app.use('/api/notifications', requireAuth, notificationsRoutes);
+    app.use('/api/push', requireAuth, pushRoutes);
     app.use('/api/delivery-platforms', requireAuth, deliveryPlatformsRoutes);
     app.use('/api/delivery-platforms-sessions', requireAuth, deliveryPlatformsSessionsRoutes);
 

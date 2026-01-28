@@ -506,50 +506,148 @@ async function processOfflineQueue() {
 
 // PUSH NOTIFICATIONS - Enhanced
 self.addEventListener('push', (event) => {
+  // Default notification options
   const defaultOptions = {
     body: 'New notification from Servio',
     icon: '/icons/servio-icon-192.svg',
     badge: '/icons/servio-icon-192.svg',
-    vibrate: [200, 100, 200],
-    data: { dateOfArrival: Date.now() },
+    vibrate: [200, 100, 200, 100, 200],
+    tag: 'servio-notification',
+    renotify: true,
+    requireInteraction: false,
+    silent: false,
+    data: {
+      dateOfArrival: Date.now(),
+      primaryKey: 1,
+      url: '/tablet/orders'
+    },
     actions: [
-      { action: 'view', title: 'View' },
-      { action: 'dismiss', title: 'Dismiss' }
-    ],
-    requireInteraction: true
+      { action: 'view', title: 'View', icon: '/icons/servio-icon-192.svg' },
+      { action: 'dismiss', title: 'Dismiss', icon: '/icons/servio-icon-192.svg' }
+    ]
   }
 
-  let options = defaultOptions
+  let options = { ...defaultOptions }
+
+  // Parse push data
   if (event.data) {
     try {
-      options = { ...defaultOptions, ...event.data.json() }
-    } catch {
-      options.body = event.data.text()
+      const data = event.data.json()
+      options = { ...defaultOptions, ...data }
+
+      // Ensure data object exists
+      if (!options.data) {
+        options.data = defaultOptions.data
+      }
+
+      // Map notification type to appropriate routing
+      if (options.data?.type) {
+        options.data.url = getNotificationUrl(options.data.type, options.data)
+      }
+
+      // Set vibration pattern based on priority
+      if (options.data?.severity === 'critical') {
+        options.vibrate = [500, 200, 500, 200, 500]
+        options.requireInteraction = true
+      } else if (options.data?.severity === 'high') {
+        options.vibrate = [300, 100, 300, 100, 300]
+        options.requireInteraction = true
+      }
+    } catch (e) {
+      // Fallback for plain text push
+      options.body = event.data.text() || options.body
     }
   }
 
+  console.log('🔔 SW: Received push notification', { tag: options.tag, body: options.body })
+
   event.waitUntil(
-    self.registration.showNotification('⚡ Servio', options)
+    self.registration.showNotification('Servio', options)
   )
 })
 
-// NOTIFICATION CLICK - Smart routing
+// Helper function to get the appropriate URL for notification type
+function getNotificationUrl(type, data) {
+  const routes = {
+    'order.created_web': '/tablet/orders',
+    'order.created_vapi': '/tablet/orders',
+    'order.status_changed': '/tablet/orders',
+    'order': '/tablet/orders',
+    'staff.clock_in': '/dashboard/staff',
+    'staff.clock_out': '/dashboard/staff',
+    'staff': '/dashboard/staff',
+    'inventory.low_stock': '/dashboard/inventory',
+    'inventory': '/dashboard/inventory',
+    'task.created': '/dashboard/tasks',
+    'task': '/dashboard/tasks',
+    'system.error': '/admin/system-health',
+    'system.warning': '/admin/system-health',
+    'system': '/dashboard'
+  }
+
+  // Check for specific order ID in data
+  if ((type.includes('order') || data?.orderId) && data?.orderId) {
+    return `/tablet/orders/${data.orderId}`
+  }
+
+  // Check for specific task ID in data
+  if ((type.includes('task') || data?.taskId) && data?.taskId) {
+    return `/dashboard/tasks?task=${data.taskId}`
+  }
+
+  return routes[type] || routes[type.split('.')[0]] || '/dashboard'
+}
+
+// NOTIFICATION CLICK - Smart routing with action handling
 self.addEventListener('notificationclick', (event) => {
   event.notification.close()
-  const data = event.notification.data || {}
 
+  const data = event.notification.data || {}
+  const action = event.action
+  let url = data.url || '/dashboard'
+
+  console.log('🔔 SW: Notification clicked', { action, url })
+
+  // Handle different actions
+  if (action === 'dismiss') {
+    // Just close the notification - no action needed
+    return
+  }
+
+  // Default action (click on notification body) - view the notification
   event.waitUntil(
-    clients.matchAll({ type: 'window' }).then(clientList => {
-      // Focus existing window if available
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      // Try to focus an existing window first
       for (const client of clientList) {
-        if ('focus' in client) {
+        // Check if this client matches our app
+        if (client.url.includes(self.registration.scope) && 'focus' in client) {
+          // Navigate to the URL
+          client.postMessage({
+            type: 'NOTIFICATION_CLICK',
+            url,
+            data
+          })
           return client.focus()
         }
       }
-      // Open new window
-      return clients.openWindow(data.url || '/tablet/orders')
+
+      // No existing window - open a new one
+      if (clients.openWindow) {
+        return clients.openWindow(url)
+      }
     })
   )
+})
+
+// NOTIFICATION CLOSE - Handle when user dismisses notification
+self.addEventListener('notificationclose', (event) => {
+  const data = event.notification.data
+  console.log('🔔 SW: Notification closed', { tag: event.notification.tag })
+
+  // Could send analytics event here
+  if (data?.type) {
+    // Track notification dismissal
+  }
 })
 
 // MESSAGE HANDLER - Inter-client communication

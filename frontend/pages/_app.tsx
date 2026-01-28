@@ -8,6 +8,7 @@ import dynamic from 'next/dynamic'
 import { UserProvider } from '../contexts/UserContext'
 import { ThemeProvider } from '../contexts/ThemeContext'
 import { Inter } from 'next/font/google'
+import { usePushSubscription } from '../lib/hooks'
 
 // LOAD INTER FONT VIA NEXT.JS FONT OPTIMIZATION
 const inter = Inter({
@@ -202,6 +203,39 @@ export default function App({ Component, pageProps }: AppProps) {
       navigator.serviceWorker.removeEventListener('controllerchange', handleControllerChange)
     }
   }, [])
+
+  // Push notification subscription
+  const pushSubscription = usePushSubscription()
+
+  // Auto-subscribe to push notifications when user is authenticated
+  useEffect(() => {
+    // Only try to subscribe if:
+    // 1. Push is supported
+    // 2. User is authenticated (has access token)
+    // 3. Not already subscribed
+    // 4. Permission not denied
+    if (
+      !pushSubscription.isSupported ||
+      !pushSubscription.subscription &&
+      pushSubscription.permission !== 'denied' &&
+      !pushSubscription.isLoading
+    ) {
+      // Check if user is authenticated
+      const accessToken = window.localStorage.getItem('servio_access_token')
+      if (accessToken) {
+        // Request notification permission and subscribe
+        Notification.requestPermission().then(permission => {
+          if (permission === 'granted') {
+            pushSubscription.subscribe().catch(err => {
+              console.warn('[Push] Auto-subscribe failed:', err)
+            })
+          }
+        }).catch(err => {
+          console.warn('[Push] Permission request failed:', err)
+        })
+      }
+    }
+  }, [pushSubscription, pushSubscription.isSupported, pushSubscription.subscription, pushSubscription.permission, pushSubscription.isLoading])
 
   return (
     <>
