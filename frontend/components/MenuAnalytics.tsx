@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { TrendingUp, TrendingDown, Clock, DollarSign, Users, Package } from 'lucide-react';
 import { api } from '@/lib/api';
 
@@ -43,25 +43,28 @@ type MenuAnalytics = {
 export function MenuAnalytics({ restaurantId }: { restaurantId?: string }) {
   const [analytics, setAnalytics] = useState<MenuAnalytics | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
 
-  useMemo(() => {
-    const fetchAnalytics = async () => {
-      try {
-        const response = await api.get('/api/menu/analytics', {
-          params: { restaurantId: restaurantId || 'sasheys-kitchen-union' }
-        });
-        setAnalytics(response.data);
-      } catch (error) {
-        console.error('Failed to fetch analytics:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
+  const fetchAnalytics = React.useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await api.get('/api/menu/analytics', {
+        params: { restaurantId: restaurantId || 'sasheys-kitchen-union' }
+      });
+      setAnalytics(response.data);
+    } catch (err) {
+      setError(err instanceof Error ? err : new Error('Failed to fetch analytics'));
+    } finally {
+      setLoading(false);
+    }
+  }, [restaurantId]);
 
+  useEffect(() => {
     fetchAnalytics();
     const interval = setInterval(fetchAnalytics, 30000); // Refresh every 30 seconds
     return () => clearInterval(interval);
-  }, [restaurantId]);
+  }, [fetchAnalytics]);
 
   if (loading) {
     return (
