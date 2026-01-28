@@ -61,7 +61,7 @@ router.get('/profile', asyncHandler(async (req: Request, res: Response) => {
     if (!str) return fallback;
     try {
       return JSON.parse(str);
-    } catch (error) {
+    } catch {
       logger.warn(`Failed to parse JSON`);
       return fallback;
     }

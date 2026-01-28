@@ -1,6 +1,5 @@
 import { DatabaseService } from './DatabaseService';
 import { JobRunnerService } from './JobRunnerService';
-import { v4 as uuidv4 } from 'uuid';
 import OpenAI from 'openai';
 import { logger } from '../utils/logger';
 
@@ -882,7 +881,7 @@ ${transcriptText}
 
 ${transcriptJson?.turns ? `
 # Structured Turns
-${transcriptJson.turns.map((turn, i) => `[${turn.start}s - ${turn.end}s] ${turn.speaker}: ${turn.text}`).join('\n')}
+${transcriptJson.turns.map((turn, _i) => `[${turn.start}s - ${turn.end}s] ${turn.speaker}: ${turn.text}`).join('\n')}
 ` : ''}
 
 # Analysis Required

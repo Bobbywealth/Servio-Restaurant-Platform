@@ -701,7 +701,7 @@ export class VapiService {
     const direction = message.call?.type === 'inboundPhoneCall' ? 'inbound' : 'outbound';
 
     // Resolve restaurant ID from Vapi context
-    const { restaurantId, restaurantSlug, source } = await this.getRestaurantIdFromParams({}, message);
+    const { restaurantId, source } = await this.getRestaurantIdFromParams({}, message);
     const resolvedRestaurantId = restaurantId || process.env.VAPI_RESTAURANT_ID || 'demo-restaurant-1';
 
     logger.info(`[conversations] Call ${callId} ended for restaurant ${resolvedRestaurantId}: ${endedReason}, duration: ${duration}s`);

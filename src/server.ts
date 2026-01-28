@@ -404,7 +404,8 @@ app.use((req, res, next) => {
 });
 
 // Clean up cache periodically
-let cleanupInterval: NodeJS.Timeout | null = setInterval(() => {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const cleanupInterval = setInterval(() => {
   try {
     const now = Date.now();
     for (const [key, value] of cache.entries()) {
