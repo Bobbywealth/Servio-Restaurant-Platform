@@ -61,8 +61,8 @@ router.get('/profile', asyncHandler(async (req: Request, res: Response) => {
     if (!str) return fallback;
     try {
       return JSON.parse(str);
-    } catch {
-      logger.warn(`Failed to parse JSON: ${str.substring(0, 50)}...`);
+    } catch (error) {
+      logger.warn(`Failed to parse JSON`);
       return fallback;
     }
   };
