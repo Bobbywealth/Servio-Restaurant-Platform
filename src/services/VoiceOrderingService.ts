@@ -206,9 +206,11 @@ export class VoiceOrderingService {
 
       // Handle both array format (from Vapi AI) and object format
       if (Array.isArray(modifiers)) {
-        // Vapi format: [{id: "...", optionId: "..."}] or [{group_id: "...", option_id: "..."}]
+        // Vapi format: [{id: "...", optionIds: ["..."]}, ...]
+        // OR legacy: [{group_id: "...", option_id: "..."}, ...]
         const found = modifiers.find((m: any) => m.id === group.id || m.group_id === group.id);
-        selection = found?.optionId || found?.option_id;
+        // Support both single optionId and array of optionIds for multi-select modifiers like sides
+        selection = found?.optionId || found?.option_id || found?.optionIds;
       } else {
         // Object format: {"<group-id>": "<option-id>"}
         selection = modifiers[group.id];
