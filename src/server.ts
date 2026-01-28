@@ -402,22 +402,26 @@ app.use((req, res, next) => {
 });
 
 // Clean up cache periodically
-setInterval(() => {
-  const now = Date.now();
-  for (const [key, value] of cache.entries()) {
-    if (now - value.timestamp > CACHE_TTL) {
-      cache.delete(key);
+let cleanupInterval: NodeJS.Timeout | null = setInterval(() => {
+  try {
+    const now = Date.now();
+    for (const [key, value] of cache.entries()) {
+      if (now - value.timestamp > CACHE_TTL) {
+        cache.delete(key);
+      }
     }
-  }
 
-  // Safety valve: ensure cache can't grow unbounded even if cleanup misses entries.
-  if (cache.size > MAX_CACHE_SIZE) {
-    const entries = Array.from(cache.entries());
-    entries.sort((a, b) => (a[1]?.timestamp || 0) - (b[1]?.timestamp || 0)); // oldest first
-    const toRemove = cache.size - MAX_CACHE_SIZE;
-    for (let i = 0; i < toRemove; i++) {
-      cache.delete(entries[i][0]);
+    // Safety valve: ensure cache can't grow unbounded even if cleanup misses entries.
+    if (cache.size > MAX_CACHE_SIZE) {
+      const entries = Array.from(cache.entries());
+      entries.sort((a, b) => (a[1]?.timestamp || 0) - (b[1]?.timestamp || 0)); // oldest first
+      const toRemove = cache.size - MAX_CACHE_SIZE;
+      for (let i = 0; i < toRemove; i++) {
+        cache.delete(entries[i][0]);
+      }
     }
+  } catch (error) {
+    logger.error('Error during cache cleanup:', error);
   }
 }, 5 * 60 * 1000); // Clean every 5 minutes
 

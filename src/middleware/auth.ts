@@ -4,7 +4,13 @@ import { DatabaseService } from '../services/DatabaseService';
 import { UnauthorizedError, ForbiddenError } from './errorHandler';
 import type { AccessTokenPayload, AuthUser } from '../types/auth';
 
-const getJwtSecret = () => process.env.JWT_SECRET || 'dev_insecure_jwt_secret_change_me';
+const getJwtSecret = () => {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    throw new Error('JWT_SECRET environment variable is not set. Set it to a secure random string.');
+  }
+  return secret;
+};
 const ACCESS_TOKEN_TTL_SECONDS = Number(process.env.ACCESS_TOKEN_TTL_SECONDS ?? 60 * 15); // 15m default
 
 function parsePermissions(value: any): string[] {

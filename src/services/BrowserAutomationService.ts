@@ -38,7 +38,11 @@ export class BrowserAutomationService {
 
   private constructor() {
     // Use JWT secret for encryption (in production, use a separate key)
-    this.encryptionKey = process.env.JWT_SECRET || 'dev_insecure_jwt_secret_change_me';
+    const secret = process.env.JWT_SECRET;
+    if (!secret) {
+      throw new Error('JWT_SECRET environment variable is not set. Set it to a secure random string.');
+    }
+    this.encryptionKey = secret;
   }
 
   public static getInstance(): BrowserAutomationService {

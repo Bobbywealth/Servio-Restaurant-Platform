@@ -204,9 +204,9 @@ export class VoiceOrderingService {
 
       // Handle both array format (from Vapi AI) and object format
       if (Array.isArray(modifiers)) {
-        // Vapi format: [{group_id: "...", option_id: "..."}, ...]
-        const found = modifiers.find((m: any) => m.group_id === group.id);
-        selection = found?.option_id;
+        // Vapi format: [{id: "...", optionId: "..."}] or [{group_id: "...", option_id: "..."}]
+        const found = modifiers.find((m: any) => m.id === group.id || m.group_id === group.id);
+        selection = found?.optionId || found?.option_id;
       } else {
         // Object format: {"<group-id>": "<option-id>"}
         selection = modifiers[group.id];
@@ -227,7 +227,13 @@ export class VoiceOrderingService {
             groupRequired: group.required,
             selectionValue: selection,
             hasSelection,
-            willAddToMissing: group.required && !hasSelection
+            willAddToMissing: group.required && !hasSelection,
+            groupId: group.id,
+            availableOptions: group.options.map((opt: any) => ({
+              id: opt.id,
+              name: opt.name,
+              isPreselected: opt.isPreselected
+            }))
           },
           timestamp: Date.now(),
           sessionId: 'debug-session',
