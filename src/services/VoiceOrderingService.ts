@@ -1396,13 +1396,36 @@ export class VoiceOrderingService {
     const orderItems: any[] = [];
     for (const item of (quote.items as any[])) {
       const menuItem = await resolveMenuItem(item.itemId);
+
+      // Convert Vapi format modifiers to frontend-compatible format
+      // Vapi sends: [{id: "...", optionId: "..."}] or [{id: "...", optionIds": ["..."]}]
+      // Frontend expects: {groupId: "...", optionId": "..."} or {groupId: "...", optionIds": ["..."]}
+      let formattedModifiers = {};
+      if (item.modifiers) {
+        if (Array.isArray(item.modifiers)) {
+          // Convert array format to object format for frontend display
+          const modifierObj: any = {};
+          item.modifiers.forEach((mod: any) => {
+            const groupId = mod.id || mod.group_id;
+            const optionValue = mod.optionId || mod.option_id || mod.optionIds;
+
+            if (optionValue) {
+              modifierObj[groupId] = optionValue;
+            }
+          });
+          formattedModifiers = modifierObj;
+        } else if (typeof item.modifiers === 'object') {
+          formattedModifiers = item.modifiers;
+        }
+      }
+
       orderItems.push({
         item_id: item.itemId,
         name: menuItem?.name || item.itemId,
         quantity: item.qty || 1,
         unit_price: item.price,
         price: item.price,
-        modifiers: item.modifiers || {}
+        modifiers: formattedModifiers
       });
     }
 
