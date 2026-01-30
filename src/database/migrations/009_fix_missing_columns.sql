@@ -25,7 +25,7 @@ ALTER TABLE orders ADD COLUMN items TEXT DEFAULT '[]';
 ALTER TABLE sync_jobs ADD COLUMN attempt_count INTEGER DEFAULT 0;
 ALTER TABLE sync_jobs ADD COLUMN payload TEXT DEFAULT '{}';
 ALTER TABLE sync_jobs ADD COLUMN metadata TEXT DEFAULT '{}';
-ALTER TABLE sync_jobs ADD COLUMN next_run_at TEXT DEFAULT (datetime('now'));
+ALTER TABLE sync_jobs ADD COLUMN next_run_at TEXT DEFAULT CURRENT_TIMESTAMP;
 ALTER TABLE sync_jobs ADD COLUMN priority INTEGER DEFAULT 10;
 
 -- ============================================================================
@@ -52,7 +52,7 @@ CREATE INDEX IF NOT EXISTS idx_sync_jobs_type ON sync_jobs(job_type);
 UPDATE orders
 SET status = 'received', received = created_at
 WHERE status = 'NEW'
-  AND created_at < datetime('now', '-5 minutes');
+  AND created_at < NOW() - INTERVAL '5 minutes';
 
 -- Backfill completed timestamp compatibility column
 UPDATE tasks
