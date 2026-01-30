@@ -14,8 +14,8 @@ import {
   ChevronRight
 } from 'lucide-react'
 import { api } from '../../lib/api'
-import { EmptyState } from '../ui/EmptyState'
-import { Button } from '../ui/Button'
+import { EmptyState } from '../../components/ui/EmptyState'
+import { Button } from '../../components/ui/Button'
 
 const DashboardLayout = dynamic(() => import('../../components/Layout/DashboardLayout'), {
   ssr: true,
