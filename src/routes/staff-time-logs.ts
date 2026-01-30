@@ -3,6 +3,7 @@ import { asyncHandler } from '../middleware/errorHandler';
 import { DatabaseService } from '../services/DatabaseService';
 import { logger } from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
+import { eventBus } from '../events/bus';
 
 const router = Router();
 
@@ -32,14 +33,14 @@ router.get('/staff/time-logs/:id', asyncHandler(async (req: Request, res: Respon
     success: true,
     data: { entry }
   });
-});
+}));
 
 /**
  * PUT /api/staff/time-logs/:id
  * Update a time entry
  */
 router.put('/staff/time-logs/:id', asyncHandler(async (req: Request, res: Response) => {
-  const { id } = req.params;
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const { user_id, clock_in_time, clock_out_time, break_minutes, notes } = req.body;
   const restaurantId = (req as any).restaurantId;
   const requestingUserId = (req as any).userId;
@@ -68,7 +69,7 @@ router.put('/staff/time-logs/:id', asyncHandler(async (req: Request, res: Respon
   if (!user) {
     return res.status(404).json({
       success: false,
-      error: { { message: 'User not found' }
+      error: { message: 'User not found' }
     });
   }
 
@@ -112,7 +113,7 @@ router.put('/staff/time-logs/:id', asyncHandler(async (req: Request, res: Respon
 
   await db.run(
     `UPDATE time_entries SET ${updates.join(', ')} WHERE id = ? AND restaurant_id = ?`,
-      params
+    params
   );
 
   await DatabaseService.getInstance().logAudit(
@@ -128,7 +129,7 @@ router.put('/staff/time-logs/:id', asyncHandler(async (req: Request, res: Respon
     success: true,
     data: { message: 'Time entry updated successfully' }
   });
-});
+}));
 
 /**
  * POST /api/staff/time-logs
@@ -189,7 +190,6 @@ router.post('/staff/time-logs', asyncHandler(async (req: Request, res: Response)
   );
 
   // Emit event for real-time updates
-  const eventBus = await import('../events/bus').then(m => m.default);
   eventBus.emit('staff.time_entry_created', {
     restaurantId,
     type: 'staff.time_entry_created',
@@ -205,7 +205,7 @@ router.post('/staff/time-logs', asyncHandler(async (req: Request, res: Response)
       message: 'Time entry created successfully'
     }
   });
-});
+}));
 
 /**
  * GET /api/staff/time-logs/manual/:userId
@@ -230,6 +230,6 @@ router.get('/staff/time-logs/manual/:userId', asyncHandler(async (req: Request, 
     success: true,
     data: { entries }
   });
-});
+}));
 
 export default router;
