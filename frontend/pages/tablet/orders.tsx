@@ -308,23 +308,14 @@ function loadActionQueue(): PendingAction[] {
 
 function saveActionQueue(next: PendingAction[]) {
   if (typeof window === 'undefined') return;
-  try {
-    safeLocalStorage.setItem(ACTION_QUEUE_KEY, JSON.stringify(next));
-  } catch (error) {
-    console.error('[action-queue] Failed to save:', error);
-  }
+  safeLocalStorage.setItem(ACTION_QUEUE_KEY, JSON.stringify(next));
 }
 
 function removeAuthTokens() {
   if (typeof window === 'undefined') return;
-  try {
-    safeLocalStorage.removeItem('servio_access_token');
-    safeLocalStorage.removeItem('servio_refresh_token');
-    safeLocalStorage.removeItem('servio_user');
-    console.log('[tablet-logout] Idle timeout - cleared auth tokens');
-  } catch (error) {
-    console.error('[tablet-logout] Failed to clear auth tokens:', error);
-  }
+  safeLocalStorage.removeItem('servio_access_token');
+  safeLocalStorage.removeItem('servio_refresh_token');
+  safeLocalStorage.removeItem('servio_user');
 }
 
 export default function TabletOrdersPage() {
@@ -506,9 +497,23 @@ export default function TabletOrdersPage() {
 
   useEffect(() => {
     const storedAuto = typeof window !== 'undefined' ? safeLocalStorage.getItem('servio_auto_print_enabled') : null;
+    const auto = storedAuto === 'true';
+    setAutoPrintEnabled(auto);
+
     const storedPaper = typeof window !== 'undefined' ? safeLocalStorage.getItem('servio_thermal_paper_width') : null;
+    const paper: ReceiptPaperWidth = storedPaper === '58mm' ? '58mm' : '80mm';
+    setPaperWidth(paper);
+
     const storedMode = typeof window !== 'undefined' ? safeLocalStorage.getItem('servio_print_mode') : null;
+    if (storedMode === 'bluetooth' || storedMode === 'bridge' || storedMode === 'system' || storedMode === 'rawbt') {
+      setPrintMode(storedMode);
+    }
+
     const storedFontSize = typeof window !== 'undefined' ? safeLocalStorage.getItem('servio_font_size') : null;
+    if (storedFontSize === 'small' || storedFontSize === 'medium' || storedFontSize === 'large' || storedFontSize === 'xlarge') {
+      setFontSize(storedFontSize);
+    }
+
     const storedResult = typeof window !== 'undefined' ? safeLocalStorage.getItem('servio_last_print_result') : null;
     if (storedResult) {
       try {
@@ -601,25 +606,10 @@ export default function TabletOrdersPage() {
       const json = await apiGet<OrdersResponse>('/api/orders?limit=50&offset=0');
       const list = Array.isArray(json?.data?.orders) ? json.data!.orders! : [];
       setOrders(list);
-          try {
-          try {
-          try {
-          try {
-            if (typeof window !== 'undefined') {
-              safeLocalStorage.setItem('servio_font_size', size);
-            }
-          } catch (error) {
-            console.error('[print] Failed to save font size:', error);
-          }
-          } catch (error) {
-            console.error('[print] Failed to save print mode:', error);
-          }
-          } catch (error) {
-            console.error('[print] Failed to save paper width:', error);
-          }
-          } catch (error) {
-            console.error('[print] Failed to save auto-print setting:', error);
-          }
+      if (typeof window !== 'undefined') {
+        const payload = JSON.stringify({ orders: list, cachedAt: new Date().toISOString() });
+        safeLocalStorage.setItem(ORDER_CACHE_KEY, payload);
+        setCachedAt(new Date().toISOString());
       }
       lastRefreshAt.current = Date.now();
     } catch (e: unknown) {
@@ -1388,7 +1378,7 @@ export default function TabletOrdersPage() {
                 <p className="text-base mt-3 font-medium uppercase tracking-widest">No active orders</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 tablet-orders-responsive">
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-5 tablet-orders-responsive">
                 {/* Left Panel: Order Queue */}
                 <section className="bg-[var(--tablet-surface)] rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.3)] border border-[var(--tablet-border)] flex flex-col min-h-[50vh] md:min-h-[60vh] lg:min-h-[70vh]">
                   <div className="px-4 py-4 border-b border-[var(--tablet-border)] flex items-center justify-between">
