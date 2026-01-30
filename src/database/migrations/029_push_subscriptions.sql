@@ -8,8 +8,8 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
   restaurant_id TEXT NOT NULL,
   subscription_data TEXT NOT NULL,
   endpoint TEXT NOT NULL,
-  created_at TEXT DEFAULT (datetime('now')),
-  updated_at TEXT DEFAULT (datetime('now')),
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
   is_active INTEGER DEFAULT 1,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
   FOREIGN KEY (restaurant_id) REFERENCES restaurants(id) ON DELETE CASCADE
@@ -33,8 +33,8 @@ CREATE TABLE IF NOT EXISTS notification_preferences (
   quiet_hours_enabled INTEGER DEFAULT 0,
   quiet_hours_start TEXT DEFAULT '22:00',
   quiet_hours_end TEXT DEFAULT '07:00',
-  created_at TEXT DEFAULT (datetime('now')),
-  updated_at TEXT DEFAULT (datetime('now')),
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
