@@ -20,9 +20,12 @@ import {
   Loader2,
   CheckCircle,
   AlertCircle,
-  RefreshCw
+  RefreshCw,
+  History
 } from 'lucide-react'
 import { api } from '../../lib/api'
+import { StaffCard, HoursEditorModal, QuickTimeActionModal } from '../../components/staff'
+import { showToast } from '../../components/ui/Toast'
 
 const DashboardLayout = dynamic(() => import('../../components/Layout/DashboardLayout'), {
   ssr: true,
@@ -59,8 +62,6 @@ interface DailyHours {
   userCurrentHours: Record<string, number>
   weekStartDate: string
 }
-
-// Add today's hours tracking
 
 // Add Staff Modal
 interface AddStaffModalProps {
@@ -512,7 +513,29 @@ export default function StaffPage() {
   const [dailyHours, setDailyHours] = useState<DailyHours | null>(null)
   const [showAddModal, setShowAddModal] = useState(false)
   const [editingStaff, setEditingStaff] = useState<StaffUser | null>(null)
+  const [hoursEditorStaff, setHoursEditorStaff] = useState<StaffUser | null>(null)
+  const [viewingHistoryStaff, setViewingHistoryStaff] = useState<StaffUser | null>(null)
+  const [quickActionStaff, setQuickActionStaff] = useState<StaffUser | null>(null)
+  const [quickActionType, setQuickActionType] = useState<'clock-in' | 'clock-out' | 'start-break' | 'end-break'>('clock-in')
   const [openMenu, setOpenMenu] = useState<string | null>(null)
+
+  // Get week dates for the bar chart
+  const getWeekDates = () => {
+    const now = new Date()
+    const dayOfWeek = now.getDay()
+    const monday = new Date(now)
+    monday.setDate(now.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1))
+
+    const dates: string[] = []
+    for (let i = 0; i < 7; i++) {
+      const date = new Date(monday)
+      date.setDate(monday.getDate() + i)
+      dates.push(date.toISOString().split('T')[0])
+    }
+    return dates
+  }
+
+  const weekDates = getWeekDates()
 
   useEffect(() => {
     let isMounted = true
@@ -600,6 +623,167 @@ export default function StaffPage() {
     load()
   }
 
+  // Clock action handlers
+  const handleClockIn = async (userId: string) => {
+    try {
+      const response = await api.post('/api/timeclock/manager/clock-in', {
+        userId,
+        managerId: 'current-user'
+      })
+
+      if (response.data.success) {
+        // Refresh current staff data
+        const currentResp = await api.get('/api/timeclock/current-staff')
+        setCurrentStaff(currentResp.data?.data?.currentStaff || [])
+        showToast.success(`${response.data.data.userName} clocked in successfully`)
+      }
+    } catch (err: any) {
+      console.error('Failed to clock in:', err)
+      showToast.error(err.response?.data?.error?.message || 'Failed to clock in staff member')
+      throw err
+    }
+  }
+
+  const handleClockOut = async (userId: string) => {
+    try {
+      const response = await api.post('/api/timeclock/manager/clock-out', {
+        userId,
+        managerId: 'current-user'
+      })
+
+      if (response.data.success) {
+        // Refresh current staff data
+        const currentResp = await api.get('/api/timeclock/current-staff')
+        setCurrentStaff(currentResp.data?.data?.currentStaff || [])
+
+        // Refresh today's hours
+        const todayResp = await api.get('/api/timeclock/staff-hours')
+        const todayHours = (todayResp.data?.data?.staffHours || []) as Array<{ userId: string; todayHours: number }>
+        const todayHoursMap: Record<string, number> = {}
+        for (const s of todayHours) {
+          todayHoursMap[s.userId] = s.todayHours
+        }
+        setTodayHoursByUserId(todayHoursMap)
+
+        // Refresh weekly stats
+        const statsResp = await api.get('/api/timeclock/stats')
+        const userStats = (statsResp.data?.data?.userStats || []) as Array<{ user_id: string; total_hours: number }>
+        const hoursMap: Record<string, number> = {}
+        for (const s of userStats) {
+          hoursMap[s.user_id] = Number(s.total_hours || 0)
+        }
+        setHoursByUserId(hoursMap)
+
+        showToast.success(`${response.data.data.userName} clocked out successfully`)
+      }
+    } catch (err: any) {
+      console.error('Failed to clock out:', err)
+      showToast.error(err.response?.data?.error?.message || 'Failed to clock out staff member')
+      throw err
+    }
+  }
+
+  const handleStartBreak = async (userId: string) => {
+    try {
+      const response = await api.post('/api/timeclock/start-break', {
+        userId
+      })
+
+      if (response.data.success) {
+        // Refresh current staff data
+        const currentResp = await api.get('/api/timeclock/current-staff')
+        setCurrentStaff(currentResp.data?.data?.currentStaff || [])
+        showToast.success('Break started successfully')
+      }
+    } catch (err: any) {
+      console.error('Failed to start break:', err)
+      showToast.error(err.response?.data?.error?.message || 'Failed to start break')
+      throw err
+    }
+  }
+
+  const handleEndBreak = async (userId: string) => {
+    try {
+      const response = await api.post('/api/timeclock/end-break', {
+        userId
+      })
+
+      if (response.data.success) {
+        // Refresh current staff data
+        const currentResp = await api.get('/api/timeclock/current-staff')
+        setCurrentStaff(currentResp.data?.data?.currentStaff || [])
+        showToast.success('Break ended successfully')
+      }
+    } catch (err: any) {
+      console.error('Failed to end break:', err)
+      showToast.error(err.response?.data?.error?.message || 'Failed to end break')
+      throw err
+    }
+  }
+
+  const handleQuickAction = async (userId: string, time: Date, reason?: string) => {
+    // This is called from QuickTimeActionModal for backdated actions
+    switch (quickActionType) {
+      case 'clock-in':
+        await api.post('/api/timeclock/manager/clock-in', {
+          userId,
+          clockInTime: time.toISOString(),
+          managerId: 'current-user',
+          reason
+        })
+        break
+      case 'clock-out':
+        await api.post('/api/timeclock/manager/clock-out', {
+          userId,
+          clockOutTime: time.toISOString(),
+          managerId: 'current-user',
+          notes: reason
+        })
+        break
+    }
+
+    // Refresh all data
+    const [currentResp, todayResp, statsResp, dailyResp] = await Promise.all([
+      api.get('/api/timeclock/current-staff'),
+      api.get('/api/timeclock/staff-hours'),
+      api.get('/api/timeclock/stats'),
+      api.get('/api/timeclock/user-daily-hours')
+    ])
+
+    setCurrentStaff(currentResp.data?.data?.currentStaff || [])
+
+    const todayHours = (todayResp.data?.data?.staffHours || []) as Array<{ userId: string; todayHours: number }>
+    const todayHoursMap: Record<string, number> = {}
+    for (const s of todayHours) {
+      todayHoursMap[s.userId] = s.todayHours
+    }
+    setTodayHoursByUserId(todayHoursMap)
+
+    const userStats = (statsResp.data?.data?.userStats || []) as Array<{ user_id: string; total_hours: number }>
+    const hoursMap: Record<string, number> = {}
+    for (const s of userStats) {
+      hoursMap[s.user_id] = Number(s.total_hours || 0)
+    }
+    setHoursByUserId(hoursMap)
+
+    setDailyHours(dailyResp.data?.data || null)
+
+    const actionText = quickActionType === 'clock-in' ? 'clocked in' : 'clocked out'
+    showToast.success(`Staff ${actionText} successfully`)
+  }
+
+  const handleResetPin = async (member: StaffUser) => {
+    try {
+      const response = await api.post(`/api/restaurant/staff/${member.id}/reset-pin`, {})
+      if (response.data.success) {
+        showToast.success(`PIN reset to: ${response.data.data.pin}`)
+      }
+    } catch (err: any) {
+      console.error('Failed to reset PIN:', err)
+      showToast.error(err.response?.data?.error?.message || 'Failed to reset PIN')
+    }
+  }
+
   const roles = useMemo(() => {
     const unique = Array.from(new Set(staff.map((s) => s.role))).sort()
     return ['all', ...unique]
@@ -667,30 +851,6 @@ export default function StaffPage() {
     }
   }
 
-  // Get day abbreviation for the current week
-  const getDayAbbrev = (dateStr: string) => {
-    const date = new Date(dateStr)
-    return date.toLocaleDateString('en-US', { weekday: 'short' }).charAt(0).toUpperCase()
-  }
-
-  // Get all dates for the current week (Mon-Sun)
-  const getWeekDates = () => {
-    const now = new Date()
-    const dayOfWeek = now.getDay()
-    const monday = new Date(now)
-    monday.setDate(now.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1))
-
-    const dates: string[] = []
-    for (let i = 0; i < 7; i++) {
-      const date = new Date(monday)
-      date.setDate(monday.getDate() + i)
-      dates.push(date.toISOString().split('T')[0])
-    }
-    return dates
-  }
-
-  const weekDates = getWeekDates()
-
   return (
     <>
       <Head>
@@ -710,6 +870,21 @@ export default function StaffPage() {
           staffMember={editingStaff}
           onClose={() => setEditingStaff(null)}
           onSuccess={handleStaffCreated}
+        />
+
+        <HoursEditorModal
+          isOpen={!!hoursEditorStaff}
+          staffMember={hoursEditorStaff}
+          onClose={() => setHoursEditorStaff(null)}
+          onSave={handleStaffCreated}
+        />
+
+        <QuickTimeActionModal
+          isOpen={!!quickActionStaff}
+          staffMember={quickActionStaff}
+          action={quickActionType}
+          onAction={handleQuickAction}
+          onClose={() => setQuickActionStaff(null)}
         />
 
         <div className="space-y-6">
@@ -845,7 +1020,7 @@ export default function StaffPage() {
             </div>
           </div>
 
-          {/* Staff Cards Grid */}
+          {/* Staff Cards Grid - Using enhanced StaffCard component */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             {(isLoading ? [] : filteredStaff).map((member, index) => {
               const status = getStatus(member.id)
@@ -855,169 +1030,26 @@ export default function StaffPage() {
               const hoursToday = todayHoursByUserId[member.id] ?? 0
 
               return (
-              <motion.div
-                key={member.id}
-                className="card-hover"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.1 * index }}
-              >
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-12 h-12 bg-primary-500 rounded-xl flex items-center justify-center text-white font-semibold">
-                      {initials(member.name)}
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-surface-900 dark:text-surface-100">
-                        {member.name}
-                      </h3>
-                      <p className="text-sm text-surface-600 dark:text-surface-400">
-                        {member.role}{!member.is_active ? ' • Inactive' : ''}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className={`status-badge ${getStatusColor(status)}`}>
-                      {getStatusText(status)}
-                    </span>
-                    <div className="relative">
-                      <button
-                        onClick={() => setOpenMenu(openMenu === member.id ? null : member.id)}
-                        className="btn-icon min-w-[44px] min-h-[44px]"
-                        aria-label="More options"
-                      >
-                        <MoreVertical className="w-4 h-4" />
-                      </button>
-                      {/* Dropdown Menu */}
-                      {openMenu === member.id && (
-                        <>
-                          <div
-                            className="fixed inset-0 z-10"
-                            onClick={() => setOpenMenu(null)}
-                          />
-                          <div className="absolute right-0 top-12 z-20 w-48 bg-white dark:bg-surface-800 rounded-xl shadow-lg border border-gray-200 dark:border-surface-700 py-1">
-                            <button
-                              onClick={() => {
-                                setEditingStaff(member)
-                                setOpenMenu(null)
-                              }}
-                              className="w-full px-4 py-3 text-left text-sm text-surface-700 dark:text-surface-200 hover:bg-gray-100 dark:hover:bg-surface-700 flex items-center gap-2"
-                            >
-                              <Edit3 className="w-4 h-4" />
-                              Edit Staff
-                            </button>
-                            <button
-                              className="w-full px-4 py-3 text-left text-sm text-surface-700 dark:text-surface-200 hover:bg-gray-100 dark:hover:bg-surface-700 flex items-center gap-2"
-                            >
-                              <RefreshCw className="w-4 h-4" />
-                              Reset PIN
-                            </button>
-                            <button
-                              className="w-full px-4 py-3 text-left text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2"
-                            >
-                              <X className="w-4 h-4" />
-                              Deactivate
-                            </button>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Hours Summary with Daily Breakdown */}
-                <div className="mb-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-medium text-surface-600 dark:text-surface-400">
-                      This Week
-                    </span>
-                    <span className="text-sm font-bold text-surface-900 dark:text-surface-100">
-                      {hoursThisWeek > 0 ? `${hoursThisWeek.toFixed(1)}h` : '0h'}
-                    </span>
-                  </div>
-                  {/* Daily breakdown bar chart */}
-                  <div className="flex gap-1">
-                    {weekDates.map((date) => {
-                      const dayHours = dailyHours?.userDailyHours[member.id]?.[date] || 0
-                      const isToday = date === new Date().toISOString().split('T')[0]
-                      const isFuture = new Date(date) > new Date()
-                      const maxHours = 12 // Scale bar to 12 hours max
-                      const heightPercent = Math.min((dayHours / maxHours) * 100, 100)
-                      const dayName = new Date(date).toLocaleDateString('en-US', { weekday: 'short' }).charAt(0)
-
-                      return (
-                        <div key={date} className="flex-1 flex flex-col items-center">
-                          <div className="relative w-full h-12 flex items-end">
-                            {/* Hour label on hover */}
-                            {dayHours > 0 && (
-                              <div className="absolute -top-5 left-1/2 transform -translate-x-1/2 text-[10px] font-medium text-surface-600 dark:text-surface-400 whitespace-nowrap">
-                                {dayHours.toFixed(1)}h
-                              </div>
-                            )}
-                            {/* Bar */}
-                            <div
-                              className={`w-full rounded-t-sm transition-all ${
-                                isFuture
-                                  ? 'bg-gray-100 dark:bg-surface-700'
-                                  : dayHours > 0
-                                    ? 'bg-primary-500'
-                                    : 'bg-gray-200 dark:bg-surface-600'
-                              }`}
-                              style={{ height: isFuture ? '4px' : `${Math.max(heightPercent, 4)}%` }}
-                            />
-                          </div>
-                          <span className={`text-[10px] mt-1 ${
-                            isToday
-                              ? 'font-bold text-primary-500'
-                              : 'text-surface-400 dark:text-surface-500'
-                          }`}>
-                            {dayName}
-                          </span>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  <div className="flex items-center space-x-2 text-sm text-surface-600 dark:text-surface-400">
-                    <Mail className="w-4 h-4" />
-                    <span>{member.email || '—'}</span>
-                  </div>
-                  {activeShift && (
-                    <div className="flex items-center space-x-2 text-sm text-surface-600 dark:text-surface-400">
-                      <Clock className="w-4 h-4" />
-                      <span>{shiftLabel}</span>
-                      {activeShift.is_on_break && (
-                        <span className="text-amber-500 flex items-center gap-1">
-                          <Coffee className="w-3 h-3" /> On Break
-                        </span>
-                      )}
-                    </div>
-                  )}
-                  {/* PIN display for staff */}
-                  {member.pin && (
-                    <div className="flex items-center justify-between pt-2 border-t border-surface-200 dark:border-surface-700">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm text-surface-600 dark:text-surface-400">PIN:</span>
-                        <span className="font-mono font-bold text-surface-900 dark:text-surface-100">
-                          {member.pin}
-                        </span>
-                      </div>
-                      <a
-                        href={`/staff/clock`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 font-medium"
-                      >
-                        <LogIn className="w-4 h-4" />
-                        Clock In
-                      </a>
-                    </div>
-                  )}
-                </div>
-              </motion.div>
-            )})}
+                <StaffCard
+                  key={member.id}
+                  member={member}
+                  status={status as 'on-shift' | 'on-break' | 'off-shift'}
+                  activeShift={activeShift}
+                  hoursThisWeek={hoursThisWeek}
+                  hoursToday={hoursToday}
+                  dailyHours={dailyHours || undefined}
+                  weekDates={weekDates}
+                  onEditStaff={setEditingStaff}
+                  onResetPin={handleResetPin}
+                  onEditHours={setHoursEditorStaff}
+                  onViewHistory={setViewingHistoryStaff}
+                  onClockIn={handleClockIn}
+                  onClockOut={handleClockOut}
+                  onStartBreak={handleStartBreak}
+                  onEndBreak={handleEndBreak}
+                />
+              )
+            })}
           </div>
 
           {isLoading && (

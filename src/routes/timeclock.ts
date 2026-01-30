@@ -1369,4 +1369,32 @@ router.get('/manager/all-staff', asyncHandler(async (req: Request, res: Response
   });
 }));
 
+/**
+ * GET /api/timeclock/entry-breaks/:entryId
+ * Get all breaks for a specific time entry
+ */
+router.get('/entry-breaks/:entryId', asyncHandler(async (req: Request, res: Response) => {
+  const entryId = Array.isArray(req.params.entryId) ? req.params.entryId[0] : req.params.entryId;
+
+  const db = DatabaseService.getInstance().getDatabase();
+
+  const breaks = await db.all(`
+    SELECT * FROM time_entry_breaks
+    WHERE time_entry_id = ?
+    ORDER BY break_start DESC
+  `, [entryId]);
+
+  res.json({
+    success: true,
+    data: {
+      breaks: breaks.map(b => ({
+        id: b.id,
+        break_start: b.break_start,
+        break_end: b.break_end,
+        duration_minutes: b.duration_minutes
+      }))
+    }
+  });
+}));
+
 export default router;
