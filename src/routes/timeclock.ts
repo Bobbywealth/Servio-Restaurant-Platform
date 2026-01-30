@@ -588,9 +588,9 @@ router.put('/entries/:id', asyncHandler(async (req: Request, res: Response) => {
     clockOutTime,
     breakMinutes,
     position,
-    notes,
-    editedBy
+    notes
   } = req.body;
+  const editedBy = (req as any).userId;
 
   const db = DatabaseService.getInstance().getDatabase();
 
@@ -638,7 +638,7 @@ router.put('/entries/:id', asyncHandler(async (req: Request, res: Response) => {
   // Log the edit
   await DatabaseService.getInstance().logAudit(
     existingEntry.restaurant_id,
-    editedBy || 'system',
+    editedBy,
     'edit_time_entry',
     'time_entry',
     id,
@@ -1040,7 +1040,8 @@ router.get('/user-daily-hours', asyncHandler(async (req: Request, res: Response)
  * Requires manager authentication
  */
 router.post('/manager/clock-in', asyncHandler(async (req: Request, res: Response) => {
-  const { userId, position, clockInTime, managerId } = req.body;
+  const { userId, position, clockInTime } = req.body;
+  const managerId = (req as any).userId;
 
   if (!userId) {
     return res.status(400).json({
@@ -1092,11 +1093,11 @@ router.post('/manager/clock-in', asyncHandler(async (req: Request, res: Response
   // Log the action
   await DatabaseService.getInstance().logAudit(
     user.restaurant_id,
-    managerId || 'manager',
+    managerId,
     'manager_clock_in',
     'time_entry',
     entryId,
-    { position, clockInTime: actualClockInTime, managerId }
+    { position, clockInTime: actualClockInTime, targetUserId: userId }
   );
 
   await eventBus.emit('staff.clock_in', {
@@ -1133,7 +1134,8 @@ router.post('/manager/clock-in', asyncHandler(async (req: Request, res: Response
  * Requires manager authentication
  */
 router.post('/manager/clock-out', asyncHandler(async (req: Request, res: Response) => {
-  const { userId, notes, clockOutTime, managerId } = req.body;
+  const { userId, notes, clockOutTime } = req.body;
+  const managerId = (req as any).userId;
 
   if (!userId) {
     return res.status(400).json({
@@ -1187,7 +1189,7 @@ router.post('/manager/clock-out', asyncHandler(async (req: Request, res: Respons
   // Log the action
   await DatabaseService.getInstance().logAudit(
     user.restaurant_id,
-    managerId || 'manager',
+    managerId,
     'manager_clock_out',
     'time_entry',
     timeEntry.id,
@@ -1196,14 +1198,14 @@ router.post('/manager/clock-out', asyncHandler(async (req: Request, res: Respons
       totalHours: totalHours.toFixed(2),
       breakMinutes: timeEntry.break_minutes,
       notes,
-      managerId
+      targetUserId: userId
     }
   );
 
   await eventBus.emit('staff.clock_out', {
     restaurantId: user.restaurant_id,
     type: 'staff.clock_out',
-    actor: { actorType: 'user', actorId: managerId || 'manager' },
+    actor: { actorType: 'user', actorId: managerId },
     payload: {
       staffId: user.id,
       staffName: user.name,
@@ -1237,7 +1239,8 @@ router.post('/manager/clock-out', asyncHandler(async (req: Request, res: Respons
  * Requires manager authentication
  */
 router.post('/manager/reverse-entry', asyncHandler(async (req: Request, res: Response) => {
-  const { entryId, reason, managerId } = req.body;
+  const { entryId, reason } = req.body;
+  const managerId = (req as any).userId;
 
   if (!entryId) {
     return res.status(400).json({
@@ -1268,7 +1271,7 @@ router.post('/manager/reverse-entry', asyncHandler(async (req: Request, res: Res
   // Log the action
   await DatabaseService.getInstance().logAudit(
     existingEntry.restaurant_id,
-    managerId || 'manager',
+    managerId,
     'reverse_time_entry',
     'time_entry',
     entryId,
@@ -1277,14 +1280,14 @@ router.post('/manager/reverse-entry', asyncHandler(async (req: Request, res: Res
       deletedUserId: existingEntry.user_id,
       deletedUserName: user?.name,
       reason,
-      managerId
+      targetEntryId: entryId
     }
   );
 
   await eventBus.emit('staff.time_entry_reversed', {
     restaurantId: existingEntry.restaurant_id,
     type: 'staff.time_entry_reversed',
-    actor: { actorType: 'user', actorId: managerId || 'manager' },
+    actor: { actorType: 'user', actorId: managerId },
     payload: {
       timeEntryId: entryId,
       staffId: existingEntry.user_id,
