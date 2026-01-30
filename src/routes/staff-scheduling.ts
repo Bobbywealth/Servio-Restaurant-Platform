@@ -31,6 +31,7 @@ interface ShiftTemplateData {
   break_minutes?: number;
   position?: string;
   color?: string;
+  is_active?: boolean;
 }
 
 /**
@@ -302,7 +303,7 @@ router.put('/schedules/:id', asyncHandler(async (req: Request, res: Response) =>
     userId,
     'update_schedule',
     'staff_schedule',
-    id,
+    String(id),
     data
   );
 
@@ -347,7 +348,7 @@ router.delete('/schedules/:id', asyncHandler(async (req: Request, res: Response)
     userId,
     'delete_schedule',
     'staff_schedule',
-    id,
+    String(id),
     {}
   );
 
