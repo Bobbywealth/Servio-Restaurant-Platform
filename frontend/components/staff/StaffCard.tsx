@@ -37,8 +37,8 @@ interface StaffCardProps {
 export default function StaffCard({
   staff,
   status,
-  hoursThisWeek,
-  hoursToday,
+  hoursThisWeek = 0,
+  hoursToday = 0,
   activeShift,
   onEdit,
   onResetPin,
@@ -205,14 +205,12 @@ export default function StaffCard({
               {hoursThisWeek > 0 ? `${hoursThisWeek.toFixed(1)}h` : '0h'}
             </span>
           </div>
-          {hoursToday !== undefined && (
-            <div className="flex items-center justify-between text-sm mt-1">
-              <span className="text-surface-600 dark:text-surface-400">Today</span>
-              <span className="font-semibold text-surface-900 dark:text-surface-100">
-                {hoursToday > 0 ? `${hoursToday.toFixed(1)}h` : '0h'}
-              </span>
-            </div>
-          )}
+          <div className="flex items-center justify-between text-sm mt-1">
+            <span className="text-surface-600 dark:text-surface-400">Today</span>
+            <span className="font-semibold text-surface-900 dark:text-surface-100">
+              {hoursToday > 0 ? `${hoursToday.toFixed(1)}h` : '0h'}
+            </span>
+          </div>
         </div>
 
         {/* Contact Info */}
