@@ -11,7 +11,7 @@ const getJwtSecret = () => {
   }
   return secret;
 };
-const ACCESS_TOKEN_TTL_SECONDS = Number(process.env.ACCESS_TOKEN_TTL_SECONDS ?? 60 * 15); // 15m default
+const ACCESS_TOKEN_TTL_SECONDS = Number(process.env.ACCESS_TOKEN_TTL_SECONDS ?? 60 * 60 * 24); // 24 hours default
 
 function parsePermissions(value: any): string[] {
   if (!value) return [];
