@@ -91,6 +91,12 @@ async function proactiveRefresh(): Promise<string | null> {
 api.interceptors.request.use(async (config) => {
   if (typeof window === 'undefined') return config
 
+  // Check network status
+  if (!isOnline()) {
+    console.warn('[api] Network is offline, skipping token refresh')
+    return config
+  }
+
   let token = SLS.getItem('servio_access_token')
 
   // Check if token exists and is expiring soon
@@ -255,6 +261,34 @@ const safeLocalStorage = {
     } catch {
       return null
     }
+  },
+  setItem: (key: string, value: string): void => {
+    try {
+      if (!isLocalStorageAvailable()) return
+      localStorage.setItem(key, value)
+    } catch (error) {
+      if (error instanceof Error && error.name === 'QuotaExceededError') {
+        console.warn('[api] localStorage quota exceeded for key:', key)
+      } else {
+        console.warn('[api] Failed to set localStorage key:', key, error)
+      }
+    }
+  },
+  removeItem: (key: string): void => {
+    try {
+      if (!isLocalStorageAvailable()) return
+      localStorage.removeItem(key)
+    } catch {
+      // Silent fail - localStorage is unreliable in some browsers
+    }
+  }
+}
+
+// Network detection helper
+function isOnline(): boolean {
+  if (typeof navigator === 'undefined') return true
+  return navigator.onLine !== undefined ? navigator.onLine : true
+}
   },
   setItem: (key: string, value: string): void => {
     try {
