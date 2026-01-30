@@ -56,7 +56,7 @@ export function UserProvider({ children }: UserProviderProps) {
     }
   }
 
-   useEffect(() => {
+  useEffect(() => {
     setMounted(true)
     let isMounted = true
     let watchdog: ReturnType<typeof setTimeout> | null = null
@@ -64,6 +64,17 @@ export function UserProvider({ children }: UserProviderProps) {
     const log = (...args: any[]) => {
       // eslint-disable-next-line no-console
       console.info('[auth-init]', ...args)
+    }
+
+    // Handle online/offline events
+    const handleOnline = () => {
+      console.log('[auth] Network back online')
+      // Reload user when we come back online
+      loadUser().catch(err => console.error('[auth] Failed to reload user:', err))
+    }
+
+    const handleOffline = () => {
+      console.warn('[auth] Network went offline')
     }
 
     const loadUser = async () => {
@@ -175,7 +186,6 @@ export function UserProvider({ children }: UserProviderProps) {
 
         // Only logout if we have no user set and no way to get one
         if (!userSet && isMounted) {
-          setUser(null)
           log('no valid session available (user not set)')
         }
       } catch (error) {
@@ -192,9 +202,19 @@ export function UserProvider({ children }: UserProviderProps) {
 
     loadUser()
 
+    // Add online/offline listeners
+    if (typeof window !== 'undefined' && 'addEventListener' in window) {
+      window.addEventListener('online', handleOnline)
+      window.addEventListener('offline', handleOffline)
+    }
+
     return () => {
       isMounted = false
       if (watchdog) clearTimeout(watchdog)
+      if (typeof window !== 'undefined' && 'removeEventListener' in window) {
+        window.removeEventListener('online', handleOnline)
+        window.removeEventListener('offline', handleOffline)
+      }
     }
   }, [])
 
@@ -226,6 +246,12 @@ export function UserProvider({ children }: UserProviderProps) {
   }
 
   const logout = () => {
+    if (process.env.NODE_ENV === 'production') {
+      console.log('[auth] Logging out:', { user, hasTokens: {
+        accessToken: Boolean(safeLocalStorage.getItem('servio_access_token')),
+        refreshToken: Boolean(safeLocalStorage.getItem('servio_refresh_token'))
+      }})
+    }
     setUser(null)
     if (typeof window !== 'undefined') {
       safeLocalStorage.removeItem('servio_user')

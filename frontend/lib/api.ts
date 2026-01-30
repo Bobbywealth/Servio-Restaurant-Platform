@@ -169,6 +169,9 @@ api.interceptors.response.use(
 
     // Handle 401 with retry logic
     if (status === 401 && !originalConfig?._retry) {
+      if (process.env.NODE_ENV === 'production') {
+        console.error('[api] Received 401 - clearing auth tokens')
+      }
       originalConfig._retry = true
       const refreshToken = SLS.getItem('servio_refresh_token')
 
