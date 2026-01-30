@@ -9,6 +9,7 @@ import { UserProvider } from '../contexts/UserContext'
 import { ThemeProvider } from '../contexts/ThemeContext'
 import { Inter } from 'next/font/google'
 import { usePushSubscription } from '../lib/hooks'
+import { safeLocalStorage } from '../lib/utils'
 
 // LOAD INTER FONT VIA NEXT.JS FONT OPTIMIZATION
 const inter = Inter({
@@ -36,13 +37,27 @@ export default function App({ Component, pageProps }: AppProps) {
   const keepSessionAlive = useCallback(async () => {
     if (typeof window === 'undefined') return
 
-    const refreshToken = window.localStorage.getItem('servio_refresh_token')
-    const accessToken = window.localStorage.getItem('servio_access_token')
-
-    // Only refresh if we have tokens
-    if (!refreshToken) return
-
     try {
+      const refreshToken = safeLocalStorage.getItem('servio_refresh_token')
+      const accessToken = safeLocalStorage.getItem('servio_access_token')
+
+      // Only refresh if we have a refresh token
+      if (!refreshToken) return
+
+      // Don't refresh if we have a recent access token (less than 5 minutes old)
+      // Check token expiry by decoding JWT
+      if (accessToken) {
+        try {
+          const tokenData = JSON.parse(atob(accessToken.split('.')[1]))
+          const exp = tokenData.exp * 1000
+          if (Date.now() < exp - 5 * 60 * 1000) {
+            return // Token still valid for at least 5 minutes
+          }
+        } catch {
+          // Invalid token, continue with refresh
+        }
+      }
+
       const baseUrl = process.env.NEXT_PUBLIC_API_URL ||
         process.env.NEXT_PUBLIC_BACKEND_URL ||
         'http://localhost:3002'
@@ -50,18 +65,27 @@ export default function App({ Component, pageProps }: AppProps) {
       const response = await fetch(`${baseUrl}/api/auth/refresh`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refreshToken })
+        body: JSON.stringify({ refreshToken }),
+        credentials: 'include'
       })
 
       if (response.ok) {
         const data = await response.json()
         const newAccessToken = data?.data?.accessToken
         if (newAccessToken) {
-          window.localStorage.setItem('servio_access_token', newAccessToken)
+          safeLocalStorage.setItem('servio_access_token', newAccessToken)
+          console.log('[keep-alive] Session refreshed successfully')
         }
+      } else if (response.status === 401) {
+        // Refresh token is invalid/expired - clear auth
+        console.warn('[keep-alive] Refresh token expired, clearing session')
+        safeLocalStorage.removeItem('servio_access_token')
+        safeLocalStorage.removeItem('servio_refresh_token')
+        safeLocalStorage.removeItem('servio_user')
       }
     } catch (error) {
       // Silent fail - token refresh will happen on next API call if needed
+      console.error('[keep-alive] Refresh failed:', error)
     }
   }, [])
 
