@@ -419,7 +419,7 @@ router.post('/schedule', asyncHandler(async (req: Request, res: Response) => {
       await db.run(`
         INSERT INTO staff_schedules (
           id, restaurant_id, user_id, shift_date, shift_start_time, shift_end_time, position
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ? `
       `, [scheduleId, restaurantId, schedule.userId, schedule.date, startTime, endTime, position]);
 
       created++;
@@ -444,6 +444,6 @@ router.post('/schedule', asyncHandler(async (req: Request, res: Response) => {
       conflictDetails: conflicts
     }
   });
-});
+}));
 
 export default router;
