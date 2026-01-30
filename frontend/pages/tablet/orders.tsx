@@ -24,7 +24,8 @@ import { PrintReceipt } from '../../components/PrintReceipt';
 import { TabletSidebar } from '../../components/tablet/TabletSidebar';
 import type { ReceiptPaperWidth, ReceiptOrder, ReceiptRestaurant } from '../../utils/receiptGenerator';
 import { generateReceiptHtml } from '../../utils/receiptGenerator';
-import { api } from '../../lib/api';
+import { api } from '../../lib/api'
+import { safeLocalStorage } from '../../lib/utils';
 import { generateEscPosReceipt, printViaRawBT, type ReceiptData } from '../../utils/escpos';
 import { useUser } from '../../contexts/UserContext';
 
@@ -295,7 +296,7 @@ const ORDER_CACHE_KEY = 'servio_cached_orders';
 function loadActionQueue(): PendingAction[] {
   if (typeof window === 'undefined') return [];
   try {
-    const raw = window.localStorage.getItem(ACTION_QUEUE_KEY);
+    const raw = safeLocalStorage.getItem(ACTION_QUEUE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
@@ -307,14 +308,14 @@ function loadActionQueue(): PendingAction[] {
 
 function saveActionQueue(next: PendingAction[]) {
   if (typeof window === 'undefined') return;
-  window.localStorage.setItem(ACTION_QUEUE_KEY, JSON.stringify(next));
+  safeLocalStorage.setItem(ACTION_QUEUE_KEY, JSON.stringify(next));
 }
 
 function removeAuthTokens() {
   if (typeof window === 'undefined') return;
-  window.localStorage.removeItem('servio_access_token');
-  window.localStorage.removeItem('servio_refresh_token');
-  window.localStorage.removeItem('servio_user');
+  safeLocalStorage.removeItem('servio_access_token');
+  safeLocalStorage.removeItem('servio_refresh_token');
+  safeLocalStorage.removeItem('servio_user');
 }
 
 export default function TabletOrdersPage() {
@@ -425,7 +426,7 @@ export default function TabletOrdersPage() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const raw = window.localStorage.getItem(ORDER_CACHE_KEY);
+    const raw = safeLocalStorage.getItem(ORDER_CACHE_KEY);
     if (!raw) return;
     try {
       const parsed = JSON.parse(raw);
@@ -495,25 +496,25 @@ export default function TabletOrdersPage() {
   }, [router]);
 
   useEffect(() => {
-    const storedAuto = typeof window !== 'undefined' ? window.localStorage.getItem('servio_auto_print_enabled') : null;
+    const storedAuto = typeof window !== 'undefined' ? safeLocalStorage.getItem('servio_auto_print_enabled') : null;
     const auto = storedAuto === 'true';
     setAutoPrintEnabled(auto);
 
-    const storedPaper = typeof window !== 'undefined' ? window.localStorage.getItem('servio_thermal_paper_width') : null;
+    const storedPaper = typeof window !== 'undefined' ? safeLocalStorage.getItem('servio_thermal_paper_width') : null;
     const paper: ReceiptPaperWidth = storedPaper === '58mm' ? '58mm' : '80mm';
     setPaperWidth(paper);
 
-    const storedMode = typeof window !== 'undefined' ? window.localStorage.getItem('servio_print_mode') : null;
+    const storedMode = typeof window !== 'undefined' ? safeLocalStorage.getItem('servio_print_mode') : null;
     if (storedMode === 'bluetooth' || storedMode === 'bridge' || storedMode === 'system' || storedMode === 'rawbt') {
       setPrintMode(storedMode);
     }
 
-    const storedFontSize = typeof window !== 'undefined' ? window.localStorage.getItem('servio_font_size') : null;
+    const storedFontSize = typeof window !== 'undefined' ? safeLocalStorage.getItem('servio_font_size') : null;
     if (storedFontSize === 'small' || storedFontSize === 'medium' || storedFontSize === 'large' || storedFontSize === 'xlarge') {
       setFontSize(storedFontSize);
     }
 
-    const storedResult = typeof window !== 'undefined' ? window.localStorage.getItem('servio_last_print_result') : null;
+    const storedResult = typeof window !== 'undefined' ? safeLocalStorage.getItem('servio_last_print_result') : null;
     if (storedResult) {
       try {
         setLastPrintResult(JSON.parse(storedResult));
@@ -531,22 +532,22 @@ export default function TabletOrdersPage() {
         if (settings.printer_auto_print_enabled !== undefined) {
           const enabled = Boolean(settings.printer_auto_print_enabled);
           setAutoPrintEnabled(enabled);
-          window.localStorage.setItem('servio_auto_print_enabled', enabled ? 'true' : 'false');
+          safeLocalStorage.setItem('servio_auto_print_enabled', enabled ? 'true' : 'false');
         }
         if (settings.printer_paper_width === '58mm' || settings.printer_paper_width === '80mm') {
           const width = settings.printer_paper_width as ReceiptPaperWidth;
           setPaperWidth(width);
-          window.localStorage.setItem('servio_thermal_paper_width', width);
+          safeLocalStorage.setItem('servio_thermal_paper_width', width);
         }
         if (['system', 'rawbt', 'bluetooth', 'bridge'].includes(settings.printer_mode)) {
           const mode = settings.printer_mode as 'bluetooth' | 'system' | 'bridge' | 'rawbt';
           setPrintMode(mode);
-          window.localStorage.setItem('servio_print_mode', mode);
+          safeLocalStorage.setItem('servio_print_mode', mode);
         }
         if (['small', 'medium', 'large', 'xlarge'].includes(settings.printer_font_size)) {
           const size = settings.printer_font_size;
           setFontSize(size);
-          window.localStorage.setItem('servio_font_size', size);
+          safeLocalStorage.setItem('servio_font_size', size);
         }
       } catch (e) {
         // ignore printer settings load failures
@@ -598,7 +599,7 @@ export default function TabletOrdersPage() {
 
   async function refresh() {
     try {
-      if (typeof window !== 'undefined' && !window.localStorage.getItem('servio_access_token')) {
+      if (typeof window !== 'undefined' && !safeLocalStorage.getItem('servio_access_token')) {
         setLoading(false);
         return;
       }
@@ -607,7 +608,7 @@ export default function TabletOrdersPage() {
       setOrders(list);
       if (typeof window !== 'undefined') {
         const payload = JSON.stringify({ orders: list, cachedAt: new Date().toISOString() });
-        window.localStorage.setItem(ORDER_CACHE_KEY, payload);
+        safeLocalStorage.setItem(ORDER_CACHE_KEY, payload);
         setCachedAt(new Date().toISOString());
       }
       lastRefreshAt.current = Date.now();
@@ -620,7 +621,7 @@ export default function TabletOrdersPage() {
 
   async function fetchRestaurantProfile() {
     try {
-      if (typeof window !== 'undefined' && !window.localStorage.getItem('servio_access_token')) {
+      if (typeof window !== 'undefined' && !safeLocalStorage.getItem('servio_access_token')) {
         return;
       }
       const json = await apiGet<{ success: boolean; data?: any }>('/api/restaurant/profile');
@@ -699,10 +700,10 @@ export default function TabletOrdersPage() {
             });
           }
           setLastPrintResult({ status: 'success' });
-          window.localStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'success' }));
+          safeLocalStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'success' }));
         } else {
           setLastPrintResult({ status: 'error', message: 'RawBT not available. Is the app installed?' });
-          window.localStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'error', message: 'RawBT not available' }));
+          safeLocalStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'error', message: 'RawBT not available' }));
         }
         return;
       }
@@ -731,7 +732,7 @@ export default function TabletOrdersPage() {
           });
         }
         setLastPrintResult({ status: 'success' });
-        window.localStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'success' }));
+        safeLocalStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'success' }));
         return;
       }
 
@@ -740,13 +741,13 @@ export default function TabletOrdersPage() {
         ? 'WebBluetooth mode requires BLE printer. Try RawBT or System Print instead.'
         : 'Print Bridge mode is not configured';
       setLastPrintResult({ status: 'error', message });
-      window.localStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'error', message }));
+      safeLocalStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'error', message }));
 
     } catch (e) {
       console.error('Print failed', e);
       const message = e instanceof Error ? e.message : 'Print failed';
       setLastPrintResult({ status: 'error', message });
-      window.localStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'error', message }));
+      safeLocalStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'error', message }));
     } finally {
       setPrintingOrderId(null);
       // clear receipt after print dialog is opened; also clear onafterprint for some browsers
@@ -812,10 +813,10 @@ export default function TabletOrdersPage() {
         const success = printViaRawBT(escPosData);
         if (success) {
           setLastPrintResult({ status: 'success' });
-          window.localStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'success' }));
+          safeLocalStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'success' }));
         } else {
           setLastPrintResult({ status: 'error', message: 'RawBT not available. Is the app installed?' });
-          window.localStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'error', message: 'RawBT not available' }));
+          safeLocalStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'error', message: 'RawBT not available' }));
         }
         return;
       }
@@ -832,7 +833,7 @@ export default function TabletOrdersPage() {
         await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
         window.print();
         setLastPrintResult({ status: 'success' });
-        window.localStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'success' }));
+        safeLocalStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'success' }));
         return;
       }
 
@@ -840,11 +841,11 @@ export default function TabletOrdersPage() {
         ? 'WebBluetooth mode requires BLE printer. Try RawBT or System Print instead.'
         : 'Print Bridge mode is not configured';
       setLastPrintResult({ status: 'error', message });
-      window.localStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'error', message }));
+      safeLocalStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'error', message }));
     } catch (e) {
       const message = e instanceof Error ? e.message : 'Test print failed';
       setLastPrintResult({ status: 'error', message });
-      window.localStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'error', message }));
+      safeLocalStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'error', message }));
     } finally {
       setPrintingOrderId(null);
       window.setTimeout(() => setReceiptHtml(null), 250);
@@ -1377,7 +1378,7 @@ export default function TabletOrdersPage() {
                 <p className="text-base mt-3 font-medium uppercase tracking-widest">No active orders</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 tablet-orders-responsive">
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-5 tablet-orders-responsive">
                 {/* Left Panel: Order Queue */}
                 <section className="bg-[var(--tablet-surface)] rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.3)] border border-[var(--tablet-border)] flex flex-col min-h-[50vh] md:min-h-[60vh] lg:min-h-[70vh]">
                   <div className="px-4 py-4 border-b border-[var(--tablet-border)] flex items-center justify-between">

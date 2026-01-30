@@ -66,6 +66,17 @@ export function UserProvider({ children }: UserProviderProps) {
       console.info('[auth-init]', ...args)
     }
 
+    // Handle online/offline events
+    const handleOnline = () => {
+      console.log('[auth] Network back online')
+      // Reload user when we come back online
+      loadUser().catch(err => console.error('[auth] Failed to reload user:', err))
+    }
+
+    const handleOffline = () => {
+      console.warn('[auth] Network went offline')
+    }
+
     const loadUser = async () => {
       try {
         if (typeof window === 'undefined') {
@@ -85,9 +96,13 @@ export function UserProvider({ children }: UserProviderProps) {
           hasRefreshToken: Boolean(refreshToken)
         })
 
+        let userSet = false
+
+        // Try to use existing access token first
         if (savedUser && accessToken) {
           if (!isMounted) return
           setUser(JSON.parse(savedUser))
+          userSet = true
           log('hydrated user from localStorage')
         } else if (savedUser && !accessToken && !refreshToken) {
           if (!isMounted) return
@@ -96,7 +111,8 @@ export function UserProvider({ children }: UserProviderProps) {
           log('cleared stale saved user (no tokens)')
         }
 
-        if (accessToken) {
+        // Validate with /api/auth/me if we have an access token
+        if (accessToken && !userSet) {
           try {
             log('calling /api/auth/me')
             const meResp = await api.get('/api/auth/me', { timeout: 15_000 })
@@ -105,52 +121,72 @@ export function UserProvider({ children }: UserProviderProps) {
               setUser(meUser)
               safeLocalStorage.setItem('servio_user', JSON.stringify(meUser))
               loadAvailableAccounts().catch(console.error)
+              userSet = true
               log('/api/auth/me success', { userId: meUser.id, restaurantId: meUser.restaurantId, role: meUser.role })
-              return
+            } else {
+              log('/api/auth/me returned no user payload')
             }
-            log('/api/auth/me returned no user payload')
           } catch (error: any) {
-            log('/api/auth/me failed', {
-              message: error?.message,
-              status: error?.response?.status,
-              code: error?.code
-            })
+            const status = error?.response?.status
+
+            // Only clear auth on 401 Unauthorized
+            if (status === 401) {
+              log('/api/auth/me got 401 - token expired')
+              safeLocalStorage.removeItem('servio_access_token')
+            } else {
+              // Other errors (network, 500, etc.) - don't logout
+              log('/api/auth/me failed (non-fatal)', {
+                message: error?.message,
+                status: status
+              })
+            }
           }
         }
 
-        if (refreshToken) {
+        // Try to refresh if we have a refresh token and haven't set user yet
+        if (refreshToken && !userSet && isMounted) {
           try {
             log('calling /api/auth/refresh')
             const refreshResp = await api.post('/api/auth/refresh', { refreshToken }, { timeout: 15_000 })
             const newAccessToken = refreshResp.data?.data?.accessToken as string | undefined
             const refreshedUser = refreshResp.data?.data?.user as User | undefined
-            if (newAccessToken) safeLocalStorage.setItem('servio_access_token', newAccessToken)
-            if (refreshedUser && isMounted) {
+            if (newAccessToken) {
+              safeLocalStorage.setItem('servio_access_token', newAccessToken)
+            }
+            if (refreshedUser) {
               setUser(refreshedUser)
               safeLocalStorage.setItem('servio_user', JSON.stringify(refreshedUser))
               loadAvailableAccounts().catch(console.error)
+              userSet = true
               log('/api/auth/refresh success', {
                 hasNewAccessToken: Boolean(newAccessToken),
                 userId: refreshedUser.id,
                 restaurantId: refreshedUser.restaurantId,
                 role: refreshedUser.role
               })
-              return
+            } else {
+              log('/api/auth/refresh returned no user payload', { hasNewAccessToken: Boolean(newAccessToken) })
             }
-            log('/api/auth/refresh returned no user payload', { hasNewAccessToken: Boolean(newAccessToken) })
           } catch (error: any) {
-            log('/api/auth/refresh failed', {
-              message: error?.message,
-              status: error?.response?.status,
-              code: error?.code
-            })
+            const status = error?.response?.status
+
+            // Only clear auth on 401 Invalid refresh token
+            if (status === 401) {
+              log('/api/auth/refresh got 401 - refresh token expired')
+              clearAuthStorage()
+            } else {
+              // Other errors - don't logout, user might still have a valid session
+              log('/api/auth/refresh failed (non-fatal)', {
+                message: error?.message,
+                status: status
+              })
+            }
           }
         }
 
-        if (isMounted) {
-          setUser(null)
-          clearAuthStorage()
-          log('no valid session; cleared auth storage')
+        // Only logout if we have no user set and no way to get one
+        if (!userSet && isMounted) {
+          log('no valid session available (user not set)')
         }
       } catch (error) {
         // eslint-disable-next-line no-console
@@ -166,9 +202,19 @@ export function UserProvider({ children }: UserProviderProps) {
 
     loadUser()
 
+    // Add online/offline listeners
+    if (typeof window !== 'undefined' && 'addEventListener' in window) {
+      window.addEventListener('online', handleOnline)
+      window.addEventListener('offline', handleOffline)
+    }
+
     return () => {
       isMounted = false
       if (watchdog) clearTimeout(watchdog)
+      if (typeof window !== 'undefined' && 'removeEventListener' in window) {
+        window.removeEventListener('online', handleOnline)
+        window.removeEventListener('offline', handleOffline)
+      }
     }
   }, [])
 
@@ -200,6 +246,12 @@ export function UserProvider({ children }: UserProviderProps) {
   }
 
   const logout = () => {
+    if (process.env.NODE_ENV === 'production') {
+      console.log('[auth] Logging out:', { user, hasTokens: {
+        accessToken: Boolean(safeLocalStorage.getItem('servio_access_token')),
+        refreshToken: Boolean(safeLocalStorage.getItem('servio_refresh_token'))
+      }})
+    }
     setUser(null)
     if (typeof window !== 'undefined') {
       safeLocalStorage.removeItem('servio_user')
