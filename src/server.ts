@@ -126,6 +126,9 @@ async function initializeServer() {
     const { default: deliveryPlatformsRoutes } = await import('./routes/delivery-platforms');
     const { default: deliveryPlatformsSessionsRoutes } = await import('./routes/delivery-platforms-sessions');
     const { default: staffClockRoutes } = await import('./routes/staff-clock');
+    const { default: staffSchedulingRoutes } = await import('./routes/staff-scheduling');
+    const { default: staffAnalyticsRoutes } = await import('./routes/staff-analytics');
+    const { default: staffBulkRoutes } = await import('./routes/staff-bulk');
 
     // API Routes
     app.use('/api/auth', authRoutes);
@@ -197,6 +200,11 @@ async function initializeServer() {
     app.use('/api/push', requireAuth, pushRoutes);
     app.use('/api/delivery-platforms', requireAuth, deliveryPlatformsRoutes);
     app.use('/api/delivery-platforms-sessions', requireAuth, deliveryPlatformsSessionsRoutes);
+
+    // Staff management routes
+    app.use('/api/staff/scheduling', requireAuth, staffSchedulingRoutes);
+    app.use('/api/staff/analytics', requireAuth, staffAnalyticsRoutes);
+    app.use('/api/staff/bulk', requireAuth, staffBulkRoutes);
 
     // Staff clock-in PWA routes (public - PIN authenticated)
     app.use('/api/staff/clock', staffClockRoutes);
@@ -539,7 +547,10 @@ app.get('/api', (req, res) => {
       timeclock: '/api/timeclock',
       marketing: '/api/marketing',
       restaurant: '/api/restaurant',
-      integrations: '/api/integrations'
+      integrations: '/api/integrations',
+      'staff-scheduling': '/api/staff/scheduling',
+      'staff-analytics': '/api/staff/analytics',
+      'staff-bulk': '/api/staff/bulk'
     }
   });
 });
