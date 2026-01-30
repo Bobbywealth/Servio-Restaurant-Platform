@@ -20,9 +20,7 @@ export const api = axios.create({
   timeout: 60_000,
   headers: {
     'Content-Type': 'application/json'
-  },
-  // Disable automatic retries for now to prevent multiple refresh requests
-  maxRetries: 0
+  }
 })
 
 const refreshClient = axios.create({
