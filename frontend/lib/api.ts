@@ -292,23 +292,3 @@ function isOnline(): boolean {
   if (typeof navigator === 'undefined') return true
   return navigator.onLine !== undefined ? navigator.onLine : true
 }
-  },
-  setItem: (key: string, value: string): void => {
-    try {
-      if (!isLocalStorageAvailable()) return
-      localStorage.setItem(key, value)
-    } catch (error) {
-      if (error instanceof Error && error.name === 'QuotaExceededError') {
-        console.warn('[api] localStorage quota exceeded')
-      }
-    }
-  },
-  removeItem: (key: string): void => {
-    try {
-      if (!isLocalStorageAvailable()) return
-      localStorage.removeItem(key)
-    } catch {
-      // Ignore errors
-    }
-  }
-}
