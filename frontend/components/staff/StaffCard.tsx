@@ -187,10 +187,10 @@ export default function StaffCard({
                       <X className="w-4 h-4" />
                       {staff.is_active ? 'Deactivate' : 'Activate'}
                     </button>
-                  </motion.div>
+                   </motion.div>
                 </>
               )}
-            </div>
+            </AnimatePresence>
           </div>
         </div>
       </div>
