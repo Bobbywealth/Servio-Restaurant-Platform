@@ -167,6 +167,7 @@ api.interceptors.response.use(
       const refreshToken = SLS.getItem('servio_refresh_token')
 
       if (!refreshToken) {
+        // No refresh token available - must logout
         SLS.removeItem('servio_access_token')
         SLS.removeItem('servio_refresh_token')
         SLS.removeItem('servio_user')
@@ -175,6 +176,7 @@ api.interceptors.response.use(
       }
 
       if (!refreshInFlight) {
+        let refreshSuccess = false
         refreshInFlight = refreshClient
           .post('/api/auth/refresh', { refreshToken })
           .then((resp) => {
@@ -182,31 +184,43 @@ api.interceptors.response.use(
             if (!newAccessToken) return null
             SLS.setItem('servio_access_token', newAccessToken)
             lastRefreshTime = Date.now()
+            refreshSuccess = true
             if (process.env.NODE_ENV !== 'production') {
               console.info('[api] refreshed access token')
             }
             return newAccessToken
           })
-          .catch(() => null)
+          .catch((refreshError) => {
+            // Refresh failed - must logout
+            if (process.env.NODE_ENV !== 'production') {
+              console.error('[api] token refresh failed, logging out', refreshError)
+            }
+            return null
+          })
           .finally(() => {
             refreshInFlight = null
           })
+
+        const newToken = await refreshInFlight
+
+        if (newToken) {
+          // Refresh succeeded - retry the original request with new token
+          originalConfig.headers = originalConfig.headers ?? {}
+          originalConfig.headers.Authorization = `Bearer ${newToken}`
+          return api.request(originalConfig)
+        }
+
+        // Refresh failed - logout
+        SLS.removeItem('servio_access_token')
+        SLS.removeItem('servio_refresh_token')
+        SLS.removeItem('servio_user')
+        if (process.env.NODE_ENV !== 'production') {
+          console.warn('[api] refresh failed, redirecting to login')
+        }
+        window.location.href = getLoginUrl()
       }
 
-      const newToken = await refreshInFlight
-      if (newToken) {
-        originalConfig.headers = originalConfig.headers ?? {}
-        originalConfig.headers.Authorization = `Bearer ${newToken}`
-        return api.request(originalConfig)
-      }
-
-      SLS.removeItem('servio_access_token')
-      SLS.removeItem('servio_refresh_token')
-      SLS.removeItem('servio_user')
-      if (process.env.NODE_ENV !== 'production') {
-        console.info('[api] refresh failed, redirecting to login', message)
-      }
-      window.location.href = getLoginUrl()
+      return Promise.reject(error)
     }
 
     return Promise.reject(error)
