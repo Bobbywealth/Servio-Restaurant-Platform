@@ -3,6 +3,7 @@ import { useRouter } from 'next/router';
 import { useEffect, useMemo, useState } from 'react';
 import { PrintReceipt } from '../../../components/PrintReceipt';
 import { api } from '../../../lib/api';
+import { safeLocalStorage } from '../../../lib/utils';
 import type { ReceiptOrder, ReceiptPaperWidth, ReceiptRestaurant } from '../../../utils/receiptGenerator';
 import { generateReceiptHtml } from '../../../utils/receiptGenerator';
 import { generateEscPosReceipt, printViaRawBT, type ReceiptData } from '../../../utils/escpos';
@@ -23,15 +24,15 @@ export default function TabletPrintPage() {
   const [fontSize, setFontSize] = useState<string>('medium');
 
   useEffect(() => {
-    const storedPaper = window.localStorage.getItem('servio_thermal_paper_width');
+    const storedPaper = safeLocalStorage.getItem('servio_thermal_paper_width');
     setPaperWidth(storedPaper === '58mm' ? '58mm' : '80mm');
 
-    const storedMode = window.localStorage.getItem('servio_print_mode');
+    const storedMode = safeLocalStorage.getItem('servio_print_mode');
     if (storedMode === 'bluetooth' || storedMode === 'system' || storedMode === 'bridge' || storedMode === 'rawbt') {
       setPrintMode(storedMode);
     }
 
-    const storedFontSize = window.localStorage.getItem('servio_font_size');
+    const storedFontSize = safeLocalStorage.getItem('servio_font_size');
     if (storedFontSize === 'small' || storedFontSize === 'medium' || storedFontSize === 'large' || storedFontSize === 'xlarge') {
       setFontSize(storedFontSize);
     }
@@ -122,10 +123,10 @@ export default function TabletPrintPage() {
       
       if (success) {
         setPrintStatus('Sent to RawBT!');
-        window.localStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'success' }));
+        safeLocalStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'success' }));
       } else {
         setPrintStatus('RawBT not available. Is the app installed?');
-        window.localStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'error', message: 'RawBT not available' }));
+        safeLocalStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'error', message: 'RawBT not available' }));
       }
       
       setTimeout(() => setPrintStatus(null), 3000);
@@ -134,7 +135,7 @@ export default function TabletPrintPage() {
 
     // System print mode
     window.print();
-    window.localStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'success' }));
+    safeLocalStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'success' }));
   };
 
   return (

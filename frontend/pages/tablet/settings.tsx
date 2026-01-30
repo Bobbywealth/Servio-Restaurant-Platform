@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState, useRef } from 'react';
 import { useRouter } from 'next/router';
 import { ArrowLeft, Bluetooth, CheckCircle2, Printer, XCircle, Loader2 } from 'lucide-react';
 import { TabletSidebar } from '../../components/tablet/TabletSidebar';
+import { safeLocalStorage } from '../../lib/utils';
 
 type PrintMode = 'bluetooth' | 'system' | 'bridge' | 'rawbt';
 type PrintResult = { status: 'success' | 'error'; message?: string } | null;
@@ -29,18 +30,18 @@ export default function TabletSettings() {
   const gattServerRef = useRef<any>(null);
 
   useEffect(() => {
-    const storedAuto = window.localStorage.getItem('servio_auto_print_enabled');
+    const storedAuto = safeLocalStorage.getItem('servio_auto_print_enabled');
     setAutoPrintEnabled(storedAuto === 'true');
 
-    const storedMode = window.localStorage.getItem('servio_print_mode');
+    const storedMode = safeLocalStorage.getItem('servio_print_mode');
     if (storedMode === 'bluetooth' || storedMode === 'system' || storedMode === 'bridge' || storedMode === 'rawbt') {
       setPrintMode(storedMode);
     }
 
-    const storedPaper = window.localStorage.getItem('servio_thermal_paper_width');
+    const storedPaper = safeLocalStorage.getItem('servio_thermal_paper_width');
     setPaperWidth(storedPaper === '58mm' ? '58mm' : '80mm');
 
-    const storedResult = window.localStorage.getItem('servio_last_print_result');
+    const storedResult = safeLocalStorage.getItem('servio_last_print_result');
     if (storedResult) {
       try {
         setLastPrintResult(JSON.parse(storedResult));
@@ -50,7 +51,7 @@ export default function TabletSettings() {
     }
 
     // Load saved printer info
-    const storedPrinter = window.localStorage.getItem('servio_bluetooth_printer');
+    const storedPrinter = safeLocalStorage.getItem('servio_bluetooth_printer');
     if (storedPrinter) {
       try {
         setSavedPrinter(JSON.parse(storedPrinter));
@@ -71,17 +72,17 @@ export default function TabletSettings() {
 
   const saveAutoPrint = (next: boolean) => {
     setAutoPrintEnabled(next);
-    window.localStorage.setItem('servio_auto_print_enabled', String(next));
+    safeLocalStorage.setItem('servio_auto_print_enabled', String(next));
   };
 
   const savePrintMode = (next: PrintMode) => {
     setPrintMode(next);
-    window.localStorage.setItem('servio_print_mode', next);
+    safeLocalStorage.setItem('servio_print_mode', next);
   };
 
   const savePaperWidth = (next: '80mm' | '58mm') => {
     setPaperWidth(next);
-    window.localStorage.setItem('servio_thermal_paper_width', next);
+    safeLocalStorage.setItem('servio_thermal_paper_width', next);
   };
 
   const handlePairBluetooth = async () => {
@@ -110,7 +111,7 @@ export default function TabletSettings() {
         id: device.id
       };
       setSavedPrinter(printerInfo);
-      window.localStorage.setItem('servio_bluetooth_printer', JSON.stringify(printerInfo));
+      safeLocalStorage.setItem('servio_bluetooth_printer', JSON.stringify(printerInfo));
 
       // Store the device reference
       connectedDeviceRef.current = device;
@@ -158,7 +159,7 @@ export default function TabletSettings() {
     setSavedPrinter(null);
     setBluetoothStatus('disconnected');
     setConnectionError(null);
-    window.localStorage.removeItem('servio_bluetooth_printer');
+    safeLocalStorage.removeItem('servio_bluetooth_printer');
   };
 
   return (
