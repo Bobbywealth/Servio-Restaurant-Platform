@@ -32,6 +32,7 @@ interface TimeEntry {
   total_hours: number | null
   position: string | null
   notes: string | null
+  is_break?: boolean
 }
 
 interface Break {
@@ -438,14 +439,28 @@ export function HoursEditorModal({ isOpen, staffMember, onClose, onSave }: Hours
                             return (
                               <div
                                 key={entry.id}
-                                className="bg-gray-50 dark:bg-surface-700 rounded-lg p-2 text-xs group relative"
+                                className={`rounded-lg p-2 text-xs group relative ${
+                                  entry.is_break
+                                    ? 'bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800'
+                                    : 'bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800'
+                                }`}
                               >
                                 <div className="flex items-center justify-between mb-1">
-                                  <span className="font-medium text-surface-700 dark:text-surface-300">
-                                    {formatTime(entry.clock_in_time)}
-                                    {' - '}
-                                    {formatTime(entry.clock_out_time)}
-                                  </span>
+                                  <div className="flex items-center gap-1.5">
+                                    {/* Type Badge */}
+                                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                                      entry.is_break
+                                        ? 'bg-amber-200 dark:bg-amber-800 text-amber-800 dark:text-amber-200'
+                                        : 'bg-emerald-200 dark:bg-emerald-800 text-emerald-800 dark:text-emerald-200'
+                                    }`}>
+                                      {entry.is_break ? 'Break' : 'Working'}
+                                    </span>
+                                    <span className="font-medium text-surface-700 dark:text-surface-300">
+                                      {formatTime(entry.clock_in_time)}
+                                      {' - '}
+                                      {formatTime(entry.clock_out_time)}
+                                    </span>
+                                  </div>
                                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                     <button
                                       onClick={() => setEditingEntry(entry)}
@@ -469,12 +484,21 @@ export function HoursEditorModal({ isOpen, staffMember, onClose, onSave }: Hours
 
                                 {/* Duration */}
                                 <div className="text-surface-500 dark:text-surface-400 mb-1">
-                                  {formatHours(entry.total_hours)}
-                                  {entry.break_minutes > 0 && (
-                                    <span className="ml-1">
-                                      <Coffee className="w-3 h-3 inline" />
-                                      {entry.break_minutes}m
+                                  {entry.is_break ? (
+                                    <span className="flex items-center gap-1">
+                                      <Coffee className="w-3 h-3" />
+                                      {formatHours(entry.total_hours || 0)}
                                     </span>
+                                  ) : (
+                                    <>
+                                      {formatHours(entry.total_hours || 0)}
+                                      {entry.break_minutes > 0 && (
+                                        <span className="ml-1 flex items-center gap-0.5">
+                                          <Coffee className="w-3 h-3" />
+                                          {entry.break_minutes}m break
+                                        </span>
+                                      )}
+                                    </>
                                   )}
                                 </div>
 
@@ -572,6 +596,7 @@ function EditEntryModal({ entry, isNew, onSave, onClose, saving }: EditEntryModa
   const [breakMinutes, setBreakMinutes] = useState(entry.break_minutes?.toString() || '0')
   const [position, setPosition] = useState(entry.position || '')
   const [notes, setNotes] = useState(entry.notes || '')
+  const [isBreak, setIsBreak] = useState(entry.is_break || false)
   const [date, setDate] = useState(
     entry.clock_in_time ? new Date(entry.clock_in_time).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
   )
@@ -597,7 +622,8 @@ function EditEntryModal({ entry, isNew, onSave, onClose, saving }: EditEntryModa
       clock_out_time: clockOutDateTime.toISOString(),
       break_minutes: parseInt(breakMinutes) || 0,
       position: position || null,
-      notes: notes || null
+      notes: notes || null,
+      is_break: isBreak
     })
   }
 
@@ -688,8 +714,28 @@ function EditEntryModal({ entry, isNew, onSave, onClose, saving }: EditEntryModa
                 onChange={(e) => setBreakMinutes(e.target.value)}
                 min="0"
                 step="5"
-                className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-surface-600 bg-white dark:bg-surface-700 text-surface-900 dark:text-surface-100 focus:ring-2 focus:ring-orange-500/30 focus:border-orange-500 transition-all outline-none"
+                disabled={isBreak}
+                className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-surface-600 bg-white dark:bg-surface-700 text-surface-900 dark:text-surface-100 focus:ring-2 focus:ring-orange-500/30 focus:border-orange-500 transition-all outline-none disabled:opacity-50"
               />
+            </div>
+
+            {/* Break Entry Toggle */}
+            <div className="flex items-center gap-3 p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+              <input
+                type="checkbox"
+                id="isBreak"
+                checked={isBreak}
+                onChange={(e) => setIsBreak(e.target.checked)}
+                className="w-5 h-5 text-amber-500 rounded focus:ring-amber-500/30"
+              />
+              <div className="flex-1">
+                <label htmlFor="isBreak" className="block text-sm font-medium text-amber-800 dark:text-amber-200 cursor-pointer">
+                  This is a break entry
+                </label>
+                <p className="text-xs text-amber-600 dark:text-amber-300 mt-0.5">
+                  Check this if the time entry represents break time rather than working hours
+                </p>
+              </div>
             </div>
 
             {/* Position */}
