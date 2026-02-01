@@ -447,46 +447,57 @@ export class AssistantService {
     try {
       // Check if we have any TTS provider configured
       const hasOpenAI = Boolean(process.env.OPENAI_API_KEY);
-      const hasMiniMax = this.miniMax.isConfigured();
+      let useMiniMax = this.miniMax.isConfigured();
 
-      if (!hasOpenAI && !hasMiniMax) {
+      if (!hasOpenAI && !useMiniMax) {
         return '';
       }
 
       // Keep responses bounded for latency/cost.
       const input = text.length > 2000 ? text.slice(0, 2000) : text;
 
-      // Use MiniMax TTS if configured, otherwise fall back to OpenAI
-      if (hasMiniMax) {
-        logger.info('[assistant] Using MiniMax for TTS');
-        const result = await this.miniMax.textToSpeech(input);
-        return result.audioUrl;
+      // Try MiniMax TTS first if configured
+      if (useMiniMax) {
+        try {
+          logger.info('[assistant] Using MiniMax for TTS');
+          const result = await this.miniMax.textToSpeech(input);
+          return result.audioUrl;
+        } catch (miniMaxError) {
+          logger.warn('[assistant] MiniMax TTS failed, falling back to OpenAI', {
+            error: miniMaxError instanceof Error ? miniMaxError.message : String(miniMaxError)
+          });
+          useMiniMax = false;
+        }
       }
 
       // Fallback to OpenAI TTS
-      logger.info('[assistant] Using OpenAI for TTS');
-      const model = process.env.OPENAI_TTS_MODEL || 'tts-1';
-      const voice = (process.env.OPENAI_TTS_VOICE || 'alloy') as any;
+      if (!useMiniMax && hasOpenAI) {
+        logger.info('[assistant] Using OpenAI for TTS');
+        const model = process.env.OPENAI_TTS_MODEL || 'tts-1';
+        const voice = (process.env.OPENAI_TTS_VOICE || 'alloy') as any;
 
-      const speech = await this.openai.audio.speech.create({
-        model,
-        voice,
-        input,
-        response_format: 'mp3'
-      });
+        const speech = await this.openai.audio.speech.create({
+          model,
+          voice,
+          input,
+          response_format: 'mp3'
+        });
 
-      const arrayBuffer = await speech.arrayBuffer();
-      const audioBuffer = Buffer.from(arrayBuffer);
+        const arrayBuffer = await speech.arrayBuffer();
+        const audioBuffer = Buffer.from(arrayBuffer);
 
-      // Use configurable UPLOADS_DIR for Render persistent disk support
-      const ttsDir = await ensureUploadsDir('tts');
+        // Use configurable UPLOADS_DIR for Render persistent disk support
+        const ttsDir = await ensureUploadsDir('tts');
 
-      const fileName = `tts_${Date.now()}_${uuidv4()}.mp3`;
-      const outPath = path.join(ttsDir, fileName);
-      await fs.promises.writeFile(outPath, audioBuffer);
+        const fileName = `tts_${Date.now()}_${uuidv4()}.mp3`;
+        const outPath = path.join(ttsDir, fileName);
+        await fs.promises.writeFile(outPath, audioBuffer);
 
-      // Served by backend static route: /uploads/*
-      return `/uploads/tts/${fileName}`;
+        // Served by backend static route: /uploads/*
+        return `/uploads/tts/${fileName}`;
+      }
+
+      return '';
     } catch (error) {
       logger.error('TTS generation failed:', error);
       return '';
