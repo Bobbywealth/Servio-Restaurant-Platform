@@ -1050,17 +1050,17 @@ router.get('/user-daily-hours', asyncHandler(async (req: Request, res: Response)
  */
 router.post('/manager/clock-in', asyncHandler(async (req: Request, res: Response) => {
   const { userId, position, clockInTime } = req.body;
-  const user = (req as any).user;
+  const authUser = (req as any).user;
 
   // Check if user is authorized (manager, owner, or admin)
-  if (!user || !['manager', 'owner', 'admin'].includes(user.role)) {
+  if (!authUser || !['manager', 'owner', 'admin'].includes(authUser.role)) {
     return res.status(403).json({
       success: false,
       error: { message: 'Only managers, owners, and admins can clock in other staff' }
     });
   }
 
-  const managerId = user.id;
+  const managerId = authUser.id;
 
   if (!userId) {
     return res.status(400).json({
@@ -1154,17 +1154,17 @@ router.post('/manager/clock-in', asyncHandler(async (req: Request, res: Response
  */
 router.post('/manager/clock-out', asyncHandler(async (req: Request, res: Response) => {
   const { userId, notes, clockOutTime } = req.body;
-  const user = (req as any).user;
+  const authUser = (req as any).user;
 
   // Check if user is authorized (manager, owner, or admin)
-  if (!user || !['manager', 'owner', 'admin'].includes(user.role)) {
+  if (!authUser || !['manager', 'owner', 'admin'].includes(authUser.role)) {
     return res.status(403).json({
       success: false,
       error: { message: 'Only managers, owners, and admins can clock out other staff' }
     });
   }
 
-  const managerId = user.id;
+  const managerId = authUser.id;
 
   if (!userId) {
     return res.status(400).json({
@@ -1269,17 +1269,17 @@ router.post('/manager/clock-out', asyncHandler(async (req: Request, res: Respons
  */
 router.post('/manager/reverse-entry', asyncHandler(async (req: Request, res: Response) => {
   const { entryId, reason } = req.body;
-  const user = (req as any).user;
+  const authUser = (req as any).user;
 
   // Check if user is authorized (manager, owner, or admin)
-  if (!user || !['manager', 'owner', 'admin'].includes(user.role)) {
+  if (!authUser || !['manager', 'owner', 'admin'].includes(authUser.role)) {
     return res.status(403).json({
       success: false,
       error: { message: 'Only managers, owners, and admins can reverse time entries' }
     });
   }
 
-  const managerId = user.id;
+  const managerId = authUser.id;
 
   if (!entryId) {
     return res.status(400).json({
