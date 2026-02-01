@@ -145,8 +145,9 @@ If something is unreadable or uncertain, note it in the confidence score.`
       throw new Error('No response from OpenAI Vision API');
     }
 
-    // Parse the JSON response (handle markdown code blocks)
-    let jsonContent = content.trim();
+    try {
+      // Parse the JSON response (handle markdown code blocks)
+      let jsonContent = content.trim();
 
     // Strip markdown code fences (```json or ```)
     jsonContent = jsonContent
@@ -183,44 +184,44 @@ If something is unreadable or uncertain, note it in the confidence score.`
       });
       throw new Error('Could not parse JSON from Vision API response');
     }
-      
-      // Validate and clean up the result
-      const items: ReceiptAnalysisItem[] = (parsed.items || []).map((item: any) => ({
-        name: item.name || 'Unknown Item',
-        description: item.description,
-        quantity: Number(item.quantity) || 1,
-        unit: item.unit || 'each',
-        unitCost: item.unitCost ? Number(item.unitCost) : undefined,
-        totalPrice: item.totalPrice ? Number(item.totalPrice) : undefined,
-        confidence: Math.max(0, Math.min(1, Number(item.confidence) || 0.5)),
-        category: item.category
-      }));
 
-      const resultData: ReceiptAnalysisResult = {
-        id: uuidv4(),
-        supplierName: parsed.supplierName,
-        date: parsed.date,
-        totalAmount: parsed.totalAmount ? Number(parsed.totalAmount) : undefined,
-        currency: parsed.currency || 'USD',
-        items,
-        rawText: parsed.rawText,
-        analyzedAt: new Date().toISOString(),
-        confidence: Math.max(0, Math.min(1, Number(parsed.confidence) || 0.7))
-      };
+    // Validate and clean up the result
+    const items: ReceiptAnalysisItem[] = (parsed.items || []).map((item: any) => ({
+      name: item.name || 'Unknown Item',
+      description: item.description,
+      quantity: Number(item.quantity) || 1,
+      unit: item.unit || 'each',
+      unitCost: item.unitCost ? Number(item.unitCost) : undefined,
+      totalPrice: item.totalPrice ? Number(item.totalPrice) : undefined,
+      confidence: Math.max(0, Math.min(1, Number(item.confidence) || 0.5)),
+      category: item.category
+    }));
 
-      logger.info('Receipt analysis complete', {
-        itemCount: items.length,
-        supplierName: resultData.supplierName,
-        totalAmount: resultData.totalAmount,
-        confidence: resultData.confidence
-      });
+    const resultData: ReceiptAnalysisResult = {
+      id: uuidv4(),
+      supplierName: parsed.supplierName,
+      date: parsed.date,
+      totalAmount: parsed.totalAmount ? Number(parsed.totalAmount) : undefined,
+      currency: parsed.currency || 'USD',
+      items,
+      rawText: parsed.rawText,
+      analyzedAt: new Date().toISOString(),
+      confidence: Math.max(0, Math.min(1, Number(parsed.confidence) || 0.7))
+    };
 
-      return resultData;
-    } catch (parseError) {
-      logger.error('Failed to parse Vision API response', { content: content.substring(0, 500) });
-      throw new Error('Failed to parse receipt analysis result');
-    }
+    logger.info('Receipt analysis complete', {
+      itemCount: items.length,
+      supplierName: resultData.supplierName,
+      totalAmount: resultData.totalAmount,
+      confidence: resultData.confidence
+    });
+
+    return resultData;
+  } catch (error: any) {
+    logger.error('Failed to parse Vision API response', { content: content?.substring?.(0, 500) || 'N/A' });
+    throw new Error('Failed to parse receipt analysis result');
   }
+}
 
   /**
    * Analyze text from OCR to extract line items
