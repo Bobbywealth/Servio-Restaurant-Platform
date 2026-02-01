@@ -17,6 +17,7 @@ import {
   Mail
 } from 'lucide-react'
 import { api } from '../../lib/api'
+import { useUser } from '../../contexts/UserContext'
 
 interface StaffUser {
   id: string
@@ -90,10 +91,14 @@ export function StaffCard({
   className = '',
   showScheduleView = false
 }: StaffCardProps) {
+  const { isManagerOrOwner, isAdmin } = useUser()
   const [openMenu, setOpenMenu] = useState<string | null | boolean>(null)
   const [loading, setLoading] = useState<string | null>(null)
   const [shiftDuration, setShiftDuration] = useState<string>('')
   const [isHovering, setIsHovering] = useState(false)
+
+  // Staff members cannot edit hours - only managers/owners/admins can
+  const canEditHours = isManagerOrOwner || isAdmin
 
   // Calculate real-time shift duration
   useEffect(() => {
@@ -295,7 +300,7 @@ export function StaffCard({
                     <Edit3 className="w-4 h-4" />
                     Edit Staff
                   </button>
-                  {onEditHours && (
+                  {canEditHours && onEditHours && (
                     <button
                       onClick={() => {
                         if (onEditHours) onEditHours(member)

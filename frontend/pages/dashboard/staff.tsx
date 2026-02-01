@@ -26,6 +26,7 @@ import {
 import { api } from '../../lib/api'
 import { StaffCard, HoursEditorModal, QuickTimeActionModal } from '../../components/staff'
 import { showToast } from '../../components/ui/Toast'
+import { useUser } from '../../contexts/UserContext'
 
 const DashboardLayout = dynamic(() => import('../../components/Layout/DashboardLayout'), {
   ssr: true,
@@ -502,6 +503,7 @@ function EditStaffModal({ isOpen, staffMember, onClose, onSuccess }: EditStaffMo
 }
 
 export default function StaffPage() {
+  const { isManagerOrOwner, isAdmin } = useUser()
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedRole, setSelectedRole] = useState('all')
   const [isLoading, setIsLoading] = useState(true)
@@ -851,6 +853,15 @@ export default function StaffPage() {
     }
   }
 
+  // Staff members cannot edit hours - only managers/owners/admins can
+  const canEditHours = isManagerOrOwner || isAdmin
+
+  const handleEditHours = (member: StaffUser) => {
+    if (canEditHours) {
+      setHoursEditorStaff(member)
+    }
+  }
+
   return (
     <>
       <Head>
@@ -1041,7 +1052,7 @@ export default function StaffPage() {
                   weekDates={weekDates}
                   onEditStaff={setEditingStaff}
                   onResetPin={handleResetPin}
-                  onEditHours={setHoursEditorStaff}
+                  onEditHours={canEditHours ? handleEditHours : undefined}
                   onViewHistory={setViewingHistoryStaff}
                   onClockIn={handleClockIn}
                   onClockOut={handleClockOut}
