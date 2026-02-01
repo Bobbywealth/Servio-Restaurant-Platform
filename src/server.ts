@@ -197,7 +197,12 @@ async function initializeServer() {
     }, restaurantsRoutes);
     app.use('/api/integrations', requireAuth, integrationsRoutes);
     app.use('/api/notifications', requireAuth, notificationsRoutes);
-    app.use('/api/push', requireAuth, pushRoutes);
+    // Push routes: /vapid-key is public (needed for push subscription setup), others require auth
+    app.use('/api/push', (req, res, next) => {
+      // VAPID public key is public - it's meant to be shared with clients
+      if (req.path === '/vapid-key') return next();
+      return requireAuth(req, res, next);
+    }, pushRoutes);
     app.use('/api/delivery-platforms', requireAuth, deliveryPlatformsRoutes);
     app.use('/api/delivery-platforms-sessions', requireAuth, deliveryPlatformsSessionsRoutes);
 

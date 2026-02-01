@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef } from 'react';
+import { api } from './api';
 
 // Helper function to convert base64 VAPID key to Uint8Array
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
@@ -268,16 +269,11 @@ export function usePushSubscription() {
       });
       console.log('[Push] Subscription created successfully');
 
-      // Send subscription to server
-      const response = await fetch('/api/push/subscribe', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ subscription }),
-      });
+      // Send subscription to server (uses api client with auth interceptor)
+      const response = await api.post('/api/push/subscribe', { subscription });
 
-      const data = await response.json();
-      if (!data.success) {
-        throw new Error(data.error || 'Failed to register subscription');
+      if (!response.data.success) {
+        throw new Error(response.data.error || 'Failed to register subscription');
       }
 
       setState(prev => ({
@@ -313,11 +309,9 @@ export function usePushSubscription() {
       // Unsubscribe from push manager
       await state.subscription.unsubscribe();
 
-      // Notify server
-      await fetch('/api/push/unsubscribe', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ subscriptionId: null }),
+      // Notify server (uses api client with auth interceptor)
+      await api.delete('/api/push/unsubscribe', {
+        data: { subscriptionId: null },
       });
 
       setState(prev => ({
