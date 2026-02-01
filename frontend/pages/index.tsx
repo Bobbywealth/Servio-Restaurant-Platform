@@ -670,6 +670,138 @@ export default function HomePage() {
           </div>
         </section>
 
+        {/* Testimonials Section */}
+        <section className="py-20 md:py-32 bg-gray-900/50 relative">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <motion.div
+              className="text-center mb-16"
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+            >
+              <h2 className="text-4xl sm:text-5xl font-bold text-white mb-6">Trusted by restaurants</h2>
+              <p className="text-xl text-gray-400 max-w-3xl mx-auto">
+                See what restaurant owners and managers are saying about Servio
+              </p>
+            </motion.div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {[
+                {
+                  quote: "Servio's voice assistant has transformed how we handle phone orders. We've never missed a call during rush hour.",
+                  author: "Maria Rodriguez",
+                  role: "Owner, Taco Loco",
+                  rating: 5,
+                  location: "Austin, TX"
+                },
+                {
+                  quote: "The AI actually understands modifiers and dietary restrictions. It's like having a trained manager on the phone 24/7.",
+                  author: "James Chen",
+                  role: "General Manager, Dragon Palace",
+                  rating: 5,
+                  location: "San Francisco, CA"
+                },
+                {
+                  quote: "Finally, a system that works as fast as we do. Menu updates, inventory alerts, staff scheduling - all in one place.",
+                  author: "Sarah Williams",
+                  role: "Owner, The Burger Joint",
+                  rating: 5,
+                  location: "Denver, CO"
+                }
+              ].map((testimonial, idx) => (
+                <motion.div
+                  key={idx}
+                  className="bg-gray-800/50 backdrop-blur-sm border border-gray-700/50 rounded-2xl p-8"
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: idx * 0.1 }}
+                >
+                  <div className="flex items-center gap-1 mb-4">
+                    {[...Array(testimonial.rating)].map((_, i) => (
+                      <Star key={i} className="w-5 h-5 text-yellow-400 fill-yellow-400" />
+                    ))}
+                  </div>
+                  <p className="text-gray-300 text-lg mb-6 leading-relaxed">"{testimonial.quote}"</p>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-white font-semibold">{testimonial.author}</p>
+                      <p className="text-gray-500 text-sm">{testimonial.role}</p>
+                      <p className="text-gray-600 text-xs">{testimonial.location}</p>
+                    </div>
+                    <div className="w-12 h-12 bg-gradient-to-br from-primary-500 to-servio-orange-500 rounded-full flex items-center justify-center">
+                      <span className="text-white font-bold text-lg">{testimonial.author.charAt(0)}</span>
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Integration Partners Section */}
+        <section className="py-16 md:py-24 bg-gray-900 relative">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <motion.div
+              className="text-center mb-12"
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+            >
+              <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4">Works with your tools</h2>
+              <p className="text-gray-400">Seamlessly integrates with the platforms you already use</p>
+            </motion.div>
+
+            <div className="flex flex-wrap justify-center items-center gap-8 md:gap-16">
+              {[
+                { name: 'Toast', color: 'bg-red-500' },
+                { name: 'Square', color: 'bg-black' },
+                { name: 'DoorDash', color: 'bg-red-600' },
+                { name: 'Uber Eats', color: 'bg-green-500' },
+                { name: 'Grubhub', color: 'bg-orange-500' },
+                { name: ' Clover', color: 'bg-gray-700' }
+              ].map((partner, idx) => (
+                <motion.div
+                  key={idx}
+                  className="flex items-center gap-2 px-4 py-2 bg-gray-800/50 rounded-lg border border-gray-700/50"
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  whileInView={{ opacity: 1, scale: 1 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: idx * 0.1 }}
+                >
+                  <div className={`w-6 h-6 ${partner.color} rounded-md flex items-center justify-center`}>
+                    <span className="text-white text-xs font-bold">{partner.name.charAt(0)}</span>
+                  </div>
+                  <span className="text-gray-400 font-medium">{partner.name}</span>
+                </motion.div>
+              ))}
+            </div>
+
+            <motion.div
+              className="mt-12 text-center"
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+            >
+              <p className="text-gray-500 text-sm mb-4">SOC 2 Compliant • HIPAA Ready • GDPR Compliant</p>
+              <div className="flex justify-center items-center gap-4">
+                <div className="flex items-center gap-2 px-3 py-1 bg-gray-800 rounded-lg border border-gray-700">
+                  <Shield className="w-4 h-4 text-green-400" />
+                  <span className="text-gray-400 text-sm">Enterprise Security</span>
+                </div>
+                <div className="flex items-center gap-2 px-3 py-1 bg-gray-800 rounded-lg border border-gray-700">
+                  <Zap className="w-4 h-4 text-amber-400" />
+                  <span className="text-gray-400 text-sm">99.9% Uptime</span>
+                </div>
+                <div className="flex items-center gap-2 px-3 py-1 bg-gray-800 rounded-lg border border-gray-700">
+                  <RefreshCw className="w-4 h-4 text-blue-400" />
+                  <span className="text-gray-400 text-sm">Real-time Sync</span>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        </section>
+
         {/* Features Grid Section */}
         <section id="features" className="py-20 md:py-32 bg-gray-900 relative">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

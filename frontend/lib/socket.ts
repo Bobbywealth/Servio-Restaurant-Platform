@@ -24,6 +24,12 @@ export interface SocketEvents {
   'staff:clock_out': (data: { userId: string; timestamp: Date }) => void
   'staff:break_start': (data: { userId: string; timestamp: Date }) => void
   'staff:break_end': (data: { userId: string; timestamp: Date }) => void
+  'staff.schedule_created': (data: any) => void
+  'staff.schedule_updated': (data: any) => void
+  'staff.schedule_deleted': (data: any) => void
+  'staff.schedule_published': (data: any) => void
+  'staff.time_entry_created': (data: any) => void
+  'staff.time_entry_updated': (data: any) => void
 
   // Task events
   'task:assigned': (data: { taskId: string; assignedTo: string }) => void

@@ -2,7 +2,7 @@ import React, { useState, useCallback, useEffect, useRef } from 'react'
 import { StopCircle, RotateCcw, Trash2, Minimize2, Maximize2, Volume2, VolumeX, Download, Copy, RefreshCw, Sparkles } from 'lucide-react'
 import RealisticAvatar from '../../components/Assistant/RealisticAvatar'
 import MicrophoneButton from '../../components/Assistant/MicrophoneButton'
-import TranscriptFeed, { TranscriptMessage } from '../../components/Assistant/TranscriptFeed'
+import TranscriptFeed, { TranscriptMessage, MessageStatus } from '../../components/Assistant/TranscriptFeed'
 import QuickCommands from '../../components/Assistant/QuickCommands'
 import ChatInput, { QuickSuggestions } from '../../components/Assistant/ChatInput'
 import { useUser } from '../../contexts/UserContext'
@@ -167,7 +167,8 @@ export default function AssistantPanel({ showHeader = true, className }: Assista
   const handleQuickCommandRef = useRef<((command: string) => Promise<void>) | null>(null)
   const startRecordingRef = useRef<(() => void) | null>(null)
   const stopRecordingRef = useRef<(() => void) | null>(null)
-  const addMessageRef = useRef<((message: Omit<TranscriptMessage, 'id' | 'timestamp'>) => void) | null>(null)
+  const addMessageRef = useRef<((message: Omit<TranscriptMessage, 'id' | 'timestamp'>, status?: MessageStatus) => void) | null>(null)
+  const updateMessageStatusRef = useRef<((messageId: string, status: MessageStatus, error?: string) => void) | null>(null)
   
   const stateRef = useRef(state)
   useEffect(() => {
@@ -344,10 +345,11 @@ export default function AssistantPanel({ showHeader = true, className }: Assista
     rafRef.current = requestAnimationFrame(tick)
   }, [resolveAudioUrl, stopAudio])
 
-  const addMessage = useCallback((message: Omit<TranscriptMessage, 'id' | 'timestamp'>) => {
+  const addMessage = useCallback((message: Omit<TranscriptMessage, 'id' | 'timestamp'>, status?: MessageStatus) => {
     const newMessage: TranscriptMessage = {
       id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       timestamp: new Date(),
+      status: status || 'delivered',
       ...message
     }
 
@@ -357,10 +359,27 @@ export default function AssistantPanel({ showHeader = true, className }: Assista
     }))
   }, [])
 
+  // Update message status helper
+  const updateMessageStatus = useCallback((messageId: string, status: MessageStatus, error?: string) => {
+    setState(prev => ({
+      ...prev,
+      messages: prev.messages.map(msg =>
+        msg.id === messageId
+          ? { ...msg, status, error }
+          : msg
+      )
+    }))
+  }, [])
+
   // Update addMessageRef
   useEffect(() => {
     addMessageRef.current = addMessage
   }, [addMessage])
+
+  // Update updateMessageStatusRef
+  useEffect(() => {
+    updateMessageStatusRef.current = updateMessageStatus
+  }, [updateMessageStatus])
 
   const processRecording = useCallback(async () => {
     console.log('Processing recording, chunks count:', audioChunksRef.current.length);
@@ -471,15 +490,34 @@ export default function AssistantPanel({ showHeader = true, className }: Assista
         }
       }
 
-      // Add user message (transcript)
+      // Add user message (transcript) with sending status
+      let userMessageId: string | null = null
       if (transcript) {
-        addMessage({
-          type: 'user',
+        const userMessage = {
+          type: 'user' as const,
           content: transcript,
           metadata: {
             confidence: payload.confidence || 0.9
           }
-        })
+        }
+        // Create message with sending status
+        const newMessage: TranscriptMessage = {
+          id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          timestamp: new Date(),
+          status: 'sending',
+          ...userMessage
+        }
+        userMessageId = newMessage.id
+
+        setState(prev => ({
+          ...prev,
+          messages: [...prev.messages, newMessage]
+        }))
+
+        // After a brief delay, mark as delivered
+        setTimeout(() => {
+          updateMessageStatus(newMessage.id, 'delivered')
+        }, 500)
       }
 
       // Add assistant response
@@ -527,7 +565,12 @@ export default function AssistantPanel({ showHeader = true, className }: Assista
     } catch (error) {
       console.error('Failed to process recording:', error)
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-      
+
+      // Mark any pending user message as failed using ref
+      if (userMessageId && updateMessageStatusRef.current) {
+        updateMessageStatusRef.current(userMessageId, 'failed', errorMessage)
+      }
+
       addMessage({
         type: 'system',
         content: `🎤 Failed to process audio: ${errorMessage}. Try speaking more clearly or use text input instead.`,
@@ -538,7 +581,7 @@ export default function AssistantPanel({ showHeader = true, className }: Assista
             details: errorMessage
           }
         }
-      })
+      }, 'delivered')
     } finally {
       setState(prev => ({
         ...prev,
@@ -716,14 +759,27 @@ export default function AssistantPanel({ showHeader = true, className }: Assista
 
   const handleQuickCommand = useCallback(async (command: string) => {
     console.log('Handling quick command:', command);
-    // Add user message immediately
-    addMessage({
-      type: 'user',
-      content: command
-    })
 
-    // Process the text command with streaming
-    setState(prev => ({ ...prev, isProcessing: true }))
+    // Add user message with sending status
+    const userMessageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    const userMessage: TranscriptMessage = {
+      id: userMessageId,
+      type: 'user',
+      content: command,
+      timestamp: new Date(),
+      status: 'sending'
+    }
+
+    setState(prev => ({
+      ...prev,
+      messages: [...prev.messages, userMessage],
+      isProcessing: true
+    }))
+
+    // After a brief delay, mark as delivered
+    setTimeout(() => {
+      updateMessageStatus(userMessageId, 'delivered')
+    }, 500)
 
     // Variables for streaming
     let streamingMessageId: string | null = null;
@@ -867,11 +923,16 @@ export default function AssistantPanel({ showHeader = true, className }: Assista
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
       const isNetworkError = errorMessage.includes('network') || errorMessage.includes('fetch')
       const isTimeoutError = errorMessage.includes('timeout')
-      
+
+      // Mark user message as failed using ref
+      if (updateMessageStatusRef.current) {
+        updateMessageStatusRef.current(userMessageId, 'failed', isNetworkError ? 'Network error - please check your connection' : errorMessage)
+      }
+
       addMessage({
         type: 'system',
-        content: isNetworkError 
-          ? '🔌 Network error. Please check your connection and try again.' 
+        content: isNetworkError
+          ? '🔌 Network error. Please check your connection and try again.'
           : isTimeoutError
           ? '⏱️ Request timed out. The server might be busy. Please try again.'
           : `❌ Error: ${errorMessage}. Please try rephrasing your command.`,
@@ -882,7 +943,7 @@ export default function AssistantPanel({ showHeader = true, className }: Assista
             details: errorMessage
           }
         }
-      })
+      }, 'delivered')
     } finally {
       setState(prev => ({ ...prev, isProcessing: false }))
       

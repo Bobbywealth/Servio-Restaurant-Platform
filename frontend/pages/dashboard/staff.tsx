@@ -24,6 +24,7 @@ import {
   History
 } from 'lucide-react'
 import { api } from '../../lib/api'
+import { socketManager } from '../../lib/socket'
 import { StaffCard, HoursEditorModal, QuickTimeActionModal } from '../../components/staff'
 import { showToast } from '../../components/ui/Toast'
 import { useUser } from '../../contexts/UserContext'
@@ -611,6 +612,91 @@ export default function StaffPage() {
       isMounted = false
     }
   }, [])
+
+  // Socket listeners for real-time updates
+  useEffect(() => {
+    const handleTimeEntryCreated = (data: { userId: string; entry?: any }) => {
+      console.log('Time entry created:', data)
+      showToast.success('Staff clock in recorded')
+      // Refresh current staff and hours
+      refreshStaffData()
+    }
+
+    const handleTimeEntryUpdated = (data: { userId: string; entry?: any }) => {
+      console.log('Time entry updated:', data)
+      // Refresh hours data
+      refreshHoursData()
+    }
+
+    const handleScheduleUpdated = () => {
+      console.log('Schedule updated')
+      showToast.info('Schedule has been updated')
+      refreshStaffData()
+    }
+
+    const handleBreakStarted = (data: { userId: string }) => {
+      console.log('Break started:', data)
+      showToast.success('Break started')
+      refreshStaffData()
+    }
+
+    const handleBreakEnded = (data: { userId: string }) => {
+      console.log('Break ended:', data)
+      showToast.success('Break ended')
+      refreshStaffData()
+    }
+
+    // Connect and listen
+    if (!socketManager.connected) {
+      socketManager.connect()
+    }
+
+    socketManager.on('staff:clock_in', handleTimeEntryCreated)
+    socketManager.on('staff:clock_out', handleTimeEntryUpdated)
+    socketManager.on('staff.schedule_updated', handleScheduleUpdated)
+    socketManager.on('staff:break_start', handleBreakStarted)
+    socketManager.on('staff:break_end', handleBreakEnded)
+
+    return () => {
+      socketManager.off('staff:clock_in', handleTimeEntryCreated)
+      socketManager.off('staff:clock_out', handleTimeEntryUpdated)
+      socketManager.off('staff.schedule_updated', handleScheduleUpdated)
+      socketManager.off('staff:break_start', handleBreakStarted)
+      socketManager.off('staff:break_end', handleBreakEnded)
+    }
+  }, [])
+
+  // Helper functions to refresh data
+  const refreshStaffData = async () => {
+    try {
+      const currentResp = await api.get('/api/timeclock/current-staff')
+      setCurrentStaff(currentResp.data?.data?.currentStaff || [])
+    } catch (e) {
+      console.error('Failed to refresh current staff:', e)
+    }
+  }
+
+  const refreshHoursData = async () => {
+    try {
+      const statsResp = await api.get('/api/timeclock/stats')
+      const userStats = (statsResp.data?.data?.userStats || []) as Array<{ user_id: string; total_hours: number }>
+      const hoursMap: Record<string, number> = {}
+      for (const s of userStats) {
+        hoursMap[s.user_id] = Number(s.total_hours || 0)
+      }
+      setHoursByUserId(hoursMap)
+
+      const todayResp = await api.get('/api/timeclock/staff-hours')
+      const todayHours = (todayResp.data?.data?.staffHours || []) as Array<{ userId: string; todayHours: number }>
+      const todayHoursMap: Record<string, number> = {}
+      for (const s of todayHours) {
+        todayHoursMap[s.userId] = s.todayHours
+      }
+      setTodayHoursByUserId(todayHoursMap)
+    } catch (e) {
+      console.error('Failed to refresh hours:', e)
+    }
+  }
 
   const handleStaffCreated = () => {
     // Reload staff data

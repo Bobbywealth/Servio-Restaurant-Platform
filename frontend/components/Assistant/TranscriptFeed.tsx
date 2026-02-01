@@ -1,12 +1,16 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { User, Bot, Zap, AlertCircle, CheckCircle, Clock, Copy, RotateCw } from 'lucide-react'
+import { User, Bot, Zap, AlertCircle, CheckCircle, Clock, Copy, RotateCw, ChevronDown, Check, X } from 'lucide-react'
+
+export type MessageStatus = 'sending' | 'delivered' | 'failed' | 'read'
 
 export interface TranscriptMessage {
   id: string
   type: 'user' | 'assistant' | 'system' | 'action'
   content: string
   timestamp: Date
+  status?: MessageStatus
+  error?: string
   metadata?: {
     confidence?: number
     duration?: number
@@ -34,15 +38,36 @@ export default function TranscriptFeed({
   onRetryMessage
 }: TranscriptFeedProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
   const [hoveredMessageId, setHoveredMessageId] = useState<string | null>(null)
+  const [showScrollButton, setShowScrollButton] = useState(false)
+  const [isNearBottom, setIsNearBottom] = useState(true)
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
+    messagesEndRef.current?.scrollIntoView({ behavior })
+  }
+
+  const handleScroll = () => {
+    if (!containerRef.current) return
+
+    const { scrollTop, scrollHeight, clientHeight } = containerRef.current
+    const distanceFromBottom = scrollHeight - scrollTop - clientHeight
+
+    setIsNearBottom(distanceFromBottom < 100)
+    setShowScrollButton(distanceFromBottom > 150)
   }
 
   useEffect(() => {
     scrollToBottom()
   }, [messages])
+
+  useEffect(() => {
+    const container = containerRef.current
+    if (container) {
+      container.addEventListener('scroll', handleScroll, { passive: true })
+      return () => container.removeEventListener('scroll', handleScroll)
+    }
+  }, [])
 
   const getMessageIcon = (message: TranscriptMessage) => {
     switch (message.type) {
@@ -110,10 +135,80 @@ export default function TranscriptFeed({
     return dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   }
 
+  const getStatusIcon = (status: MessageStatus | undefined) => {
+    switch (status) {
+      case 'sending':
+        return (
+          <div className="flex items-center gap-1">
+            <motion.div
+              className="w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full"
+              animate={{ rotate: 360 }}
+              transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+            />
+          </div>
+        )
+      case 'delivered':
+        return <Check className="w-3.5 h-3.5 text-blue-500" />
+      case 'read':
+        return (
+          <div className="flex items-center gap-0.5">
+            <Check className="w-3.5 h-3.5 text-blue-500" />
+            <Check className="w-3.5 h-3.5 text-blue-500 -ml-1.5" />
+          </div>
+        )
+      case 'failed':
+        return <X className="w-3.5 h-3.5 text-red-500" />
+      default:
+        return null
+    }
+  }
+
+  const getStatusStyles = (status: MessageStatus | undefined) => {
+    switch (status) {
+      case 'sending':
+        return {
+          bg: 'bg-blue-50 dark:bg-blue-950/20',
+          border: 'border-blue-200/50 dark:border-blue-800/30',
+          iconColor: 'text-blue-600 dark:text-blue-400'
+        }
+      case 'failed':
+        return {
+          bg: 'bg-red-50 dark:bg-red-950/20',
+          border: 'border-red-200/50 dark:border-red-800/30',
+          iconColor: 'text-red-600 dark:text-red-400'
+        }
+      default:
+        return null
+    }
+  }
+
   return (
     <div className={`flex flex-col h-full ${className}`}>
+      {/* Scroll to Bottom Button */}
+      <AnimatePresence>
+        {showScrollButton && (
+          <motion.div
+            initial={{ opacity: 0, y: 10, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 10, scale: 0.9 }}
+            className="absolute bottom-4 right-4 z-10"
+          >
+            <button
+              onClick={() => scrollToBottom()}
+              className="flex items-center gap-2 px-4 py-2.5 bg-violet-600 hover:bg-violet-700 text-white rounded-full shadow-lg shadow-violet-500/30 transition-all duration-200 hover:scale-105 active:scale-95"
+            >
+              <ChevronDown className="w-4 h-4" />
+              <span className="text-sm font-medium">New messages</span>
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Messages Container */}
-      <div className="flex-1 overflow-y-auto py-4 space-y-3 px-1">
+      <div
+        ref={containerRef}
+        className="flex-1 overflow-y-auto py-4 space-y-3 px-1 scroll-smooth"
+      >
         {messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center p-8">
             <div className="relative mb-6">
@@ -138,6 +233,11 @@ export default function TranscriptFeed({
               const isHovered = hoveredMessageId === message.id
               const showActions = (message.type === 'user' || message.type === 'assistant') && (onCopyMessage || onRetryMessage)
 
+              const statusStyles = getStatusStyles(message.status)
+              const containerStyle = statusStyles
+                ? `${statusStyles.bg} ${statusStyles.border} border`
+                : `${styles.containerBg} ${styles.borderColor} border`
+
               return (
                 <motion.div
                   key={message.id}
@@ -147,7 +247,7 @@ export default function TranscriptFeed({
                   transition={{ duration: 0.3, delay: Math.min(index * 0.05, 0.3) }}
                   onMouseEnter={() => setHoveredMessageId(message.id)}
                   onMouseLeave={() => setHoveredMessageId(null)}
-                  className={`group relative flex space-x-3 ${styles.containerBg} ${styles.borderColor} border rounded-2xl p-4 shadow-sm hover:shadow-md transition-all duration-200`}
+                  className={`group relative flex space-x-3 ${containerStyle} rounded-2xl p-4 shadow-sm hover:shadow-md transition-all duration-200`}
                 >
                   {/* Icon */}
                   <div className={`flex-shrink-0 ${styles.iconBg} ${styles.iconColor} w-10 h-10 rounded-xl flex items-center justify-center shadow-sm`}>
@@ -156,13 +256,19 @@ export default function TranscriptFeed({
 
                   {/* Content */}
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center space-x-2 mb-2">
+                    <div className="flex items-center flex-wrap gap-2 mb-2">
                       <span className="text-sm font-semibold text-gray-900 dark:text-gray-100 capitalize">
                         {message.type === 'assistant' ? 'Servio AI' : message.type}
                       </span>
                       <span className="text-xs text-gray-500 dark:text-gray-400">
                         {formatTime(message.timestamp)}
                       </span>
+                      {/* Message Status Indicator */}
+                      {message.type === 'user' && message.status && (
+                        <span className="inline-flex items-center gap-1 text-xs">
+                          {getStatusIcon(message.status)}
+                        </span>
+                      )}
                       {message.metadata?.confidence && message.metadata.confidence < 0.95 && (
                         <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300">
                           {Math.round(message.metadata.confidence * 100)}%
@@ -209,7 +315,7 @@ export default function TranscriptFeed({
 
                     {/* Message Actions */}
                     {showActions && (
-                      <div className={`mt-3 flex items-center gap-2 transition-opacity duration-200 ${isHovered ? 'opacity-100' : 'opacity-0'}`}>
+                      <div className={`mt-3 flex items-center gap-2 transition-opacity duration-200 ${isHovered || message.status === 'failed' ? 'opacity-100' : 'opacity-0'}`}>
                         {onCopyMessage && (
                           <button
                             onClick={() => onCopyMessage(message.content)}
@@ -220,16 +326,37 @@ export default function TranscriptFeed({
                             Copy
                           </button>
                         )}
-                        {onRetryMessage && message.type === 'user' && (
+                        {/* Failed message retry UI */}
+                        {message.status === 'failed' && onRetryMessage && (
                           <button
                             onClick={() => onRetryMessage(message.content)}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 border border-gray-200 dark:border-gray-700 shadow-sm transition-colors"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded-lg hover:bg-red-200 dark:hover:bg-red-900/50 border border-red-200 dark:border-red-800 shadow-sm transition-colors"
                             title="Retry command"
                           >
                             <RotateCw className="w-3 h-3" />
                             Retry
                           </button>
                         )}
+                        {/* Retry for non-user messages if retry is supported */}
+                        {message.status === 'failed' && message.type !== 'user' && onRetryMessage && (
+                          <button
+                            onClick={() => onRetryMessage(message.content)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded-lg hover:bg-red-200 dark:hover:bg-red-900/50 border border-red-200 dark:border-red-800 shadow-sm transition-colors"
+                            title="Retry"
+                          >
+                            <RotateCw className="w-3 h-3" />
+                            Retry
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Error Message Display */}
+                    {message.status === 'failed' && message.error && (
+                      <div className="mt-2 p-2 bg-red-100 dark:bg-red-900/30 rounded-lg border border-red-200 dark:border-red-800">
+                        <p className="text-xs text-red-700 dark:text-red-300">
+                          <span className="font-semibold">Error:</span> {message.error}
+                        </p>
                       </div>
                     )}
                   </div>
