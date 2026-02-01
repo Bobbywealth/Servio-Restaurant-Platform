@@ -428,8 +428,26 @@ export function HoursEditorModal({ isOpen, staffMember, onClose, onSave }: Hours
                         {/* Entries */}
                         <div className="p-2 space-y-2">
                           {dayEntries.length === 0 && !isFuture && (
+                            <button
+                              onClick={() => {
+                                const newEntry: Partial<TimeEntry> = {
+                                  clock_in_time: new Date(date.setHours(9, 0, 0, 0)).toISOString(),
+                                  clock_out_time: new Date(date.setHours(17, 0, 0, 0)).toISOString(),
+                                  position: null,
+                                  notes: null,
+                                  is_break: false
+                                }
+                                setEditingEntry(newEntry as TimeEntry)
+                              }}
+                              className="w-full py-3 text-xs text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg transition-colors flex items-center justify-center gap-1"
+                            >
+                              <Plus className="w-4 h-4" />
+                              Add Time Entry
+                            </button>
+                          )}
+                          {dayEntries.length === 0 && isFuture && (
                             <div className="text-center py-4 text-xs text-surface-400">
-                              No entries
+                              No entries scheduled
                             </div>
                           )}
                           {dayEntries.map((entry) => {
@@ -521,7 +539,7 @@ export function HoursEditorModal({ isOpen, staffMember, onClose, onSave }: Hours
                           })}
 
                           {/* Add entry button for past days */}
-                          {!isFuture && dayEntries.length > 0 && dayEntries.every(e => e.clock_out_time) && (
+                          {!isFuture && (dayEntries.length === 0 || dayEntries.every(e => e.clock_out_time)) && (
                             <button
                               onClick={() => {
                                 // Pre-fill with default times
@@ -529,7 +547,8 @@ export function HoursEditorModal({ isOpen, staffMember, onClose, onSave }: Hours
                                   clock_in_time: new Date(date.setHours(9, 0, 0, 0)).toISOString(),
                                   clock_out_time: new Date(date.setHours(17, 0, 0, 0)).toISOString(),
                                   position: null,
-                                  notes: null
+                                  notes: null,
+                                  is_break: false
                                 }
                                 setEditingEntry(newEntry as TimeEntry)
                               }}
