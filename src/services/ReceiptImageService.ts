@@ -145,14 +145,44 @@ If something is unreadable or uncertain, note it in the confidence score.`
       throw new Error('No response from OpenAI Vision API');
     }
 
-    // Parse the JSON response
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      throw new Error('Could not parse JSON from Vision API response');
+    // Parse the JSON response (handle markdown code blocks)
+    let jsonContent = content.trim();
+
+    // Strip markdown code fences (```json or ```)
+    jsonContent = jsonContent
+      .replace(/^```json\s*/i, '')
+      .replace(/\s*```$/gm, '')
+      .replace(/^```\s*/i, '')
+      .replace(/\s*```$/gm, '');
+
+    // Try to extract JSON using multiple strategies
+    let parsed: any;
+    let parseError: Error | null = null;
+
+    // Strategy 1: Direct parse (if already clean JSON)
+    try {
+      parsed = JSON.parse(jsonContent);
+    } catch (e) {
+      parseError = e as Error;
+      // Strategy 2: Extract first JSON object/array from content
+      const jsonMatch = jsonContent.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        try {
+          parsed = JSON.parse(jsonMatch[0]);
+          parseError = null;
+        } catch (e2) {
+          parseError = e2 as Error;
+        }
+      }
     }
 
-    try {
-      const parsed = JSON.parse(jsonMatch[0]);
+    if (parseError || !parsed) {
+      logger.error('Failed to parse Vision API response', {
+        contentPreview: content.substring(0, 500),
+        error: parseError?.message || 'No JSON found'
+      });
+      throw new Error('Could not parse JSON from Vision API response');
+    }
       
       // Validate and clean up the result
       const items: ReceiptAnalysisItem[] = (parsed.items || []).map((item: any) => ({
