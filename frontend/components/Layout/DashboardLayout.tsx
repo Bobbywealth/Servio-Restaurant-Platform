@@ -50,8 +50,8 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
   // Drawer animation variants with spring physics
   const drawerVariants = {
-    open: { x: 0, transition: { type: 'spring', stiffness: 300, damping: 30 } },
-    closed: { x: '-100%', transition: { type: 'spring', stiffness: 300, damping: 30 } }
+    open: { x: 0, transition: { type: 'spring' as const, stiffness: 300, damping: 30 } },
+    closed: { x: '-100%', transition: { type: 'spring' as const, stiffness: 300, damping: 30 } }
   };
 
   // Drag constraints (w-72 = 288px)

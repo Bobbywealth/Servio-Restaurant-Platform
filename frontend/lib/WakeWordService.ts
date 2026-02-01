@@ -91,6 +91,12 @@ export class WakeWordService {
   async initialize(): Promise<boolean> {
     console.log('Initializing WakeWordService...');
     try {
+      // Check if we're in a browser environment
+      if (typeof window === 'undefined' || typeof navigator === 'undefined') {
+        console.error('WakeWordService requires browser environment');
+        throw new Error('WakeWordService requires browser environment');
+      }
+
       // Check if SpeechRecognition is supported
       const SpeechRecognition = window.SpeechRecognition || (window as any).webkitSpeechRecognition;
       

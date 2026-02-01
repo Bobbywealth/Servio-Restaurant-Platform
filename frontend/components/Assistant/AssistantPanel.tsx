@@ -206,7 +206,7 @@ export default function AssistantPanel({ showHeader = true, className }: Assista
   const resolveAudioUrl = useCallback((audioUrl: string) => {
     // Backend returns /uploads/...; make it absolute for the browser.
     if (audioUrl.startsWith('http://') || audioUrl.startsWith('https://')) return audioUrl
-    const backendUrl = process.env.BACKEND_URL || 'http://localhost:3002'
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
     if (audioUrl.startsWith('/')) return `${backendUrl}${audioUrl}`
     return `${backendUrl}/${audioUrl}`
   }, [])
@@ -734,7 +734,7 @@ export default function AssistantPanel({ showHeader = true, className }: Assista
 
       // Get auth token
       const token = localStorage.getItem('token');
-      const backendUrl = process.env.BACKEND_URL || 'http://localhost:3002';
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002';
 
       const response = await fetch(`${backendUrl}/api/assistant/process-text-stream`, {
         method: 'POST',
@@ -1062,7 +1062,7 @@ export default function AssistantPanel({ showHeader = true, className }: Assista
     const fetchAiModel = async () => {
       try {
         setIsLoadingModel(true);
-        const backendUrl = process.env.BACKEND_URL || 'http://localhost:3002';
+        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002';
         const response = await fetch(`${backendUrl}/api/assistant/status`);
         if (response.ok) {
           const data = await response.json();
