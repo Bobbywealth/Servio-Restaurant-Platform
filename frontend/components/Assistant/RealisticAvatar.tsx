@@ -11,7 +11,47 @@ interface RealisticAvatarProps {
   gender?: 'female' | 'male';
   name?: string;
   audioLevel?: number; // 0-100 for speech visualization
+  viseme?: string; // Viseme shape for lip sync (free optimization)
 }
+
+// Free viseme mapping for lip sync (maps phonemes to mouth shapes)
+const VISEME_MAP: Record<string, string> = {
+  'i': 'closed_round',    // see, she
+  'e': 'open',            // say, bed
+  'a': 'open_wide',       // far, father
+  'o': 'rounded',         // go, no
+  'u': 'closed_round',    // too, blue
+  'm': 'closed',          // m, b, p
+  'f': 'teeth_on_lip',    // f, v
+  't': 'tongue_teeth',    // t, d, n, l
+  's': 'tongue_teeth',    // s, z
+  'r': 'rounded',         // r
+  'ch': 'tongue_teeth',   // ch, j, sh
+  'k': 'tongue_teeth',    // k, g, ng
+  'w': 'rounded',         // w
+  'jh': 'tongue_teeth',   // j
+  'zh': 'tongue_teeth',   // measure
+  'iy': 'closed_round',   // happy
+  'ey': 'open',           // say
+  'ay': 'open_wide',      // my
+  'oy': 'rounded',        // boy
+  'aw': 'open_wide',      // how
+  'ow': 'rounded',        // go
+  'ah': 'open_wide',      // but
+  'uh': 'closed_round',   // could
+  'er': 'open',           // bird
+};
+
+// Viseme to CSS shape configuration
+const VISEME_CONFIG: Record<string, { width: number; height: number; borderRadius: string; teeth: boolean }> = {
+  'closed': { width: 14, height: 4, borderRadius: '50%', teeth: false },
+  'closed_round': { width: 16, height: 5, borderRadius: '50%', teeth: false },
+  'open': { width: 18, height: 8, borderRadius: '40%', teeth: true },
+  'open_wide': { width: 22, height: 12, borderRadius: '50%', teeth: true },
+  'rounded': { width: 16, height: 10, borderRadius: '50%', teeth: true },
+  'teeth_on_lip': { width: 18, height: 6, borderRadius: '30%', teeth: true },
+  'tongue_teeth': { width: 18, height: 7, borderRadius: '35%', teeth: true },
+};
 
 export default function RealisticAvatar({
   isListening = false,
@@ -21,13 +61,16 @@ export default function RealisticAvatar({
   className = '',
   gender = 'female',
   name = 'Servio Assistant',
-  audioLevel = 0
+  audioLevel = 0,
+  viseme // Viseme input for lip sync (free optimization)
 }: RealisticAvatarProps) {
   const [currentExpression, setCurrentExpression] = useState<'neutral' | 'listening' | 'speaking' | 'thinking'>('neutral');
   const [speechWaveHeight, setSpeechWaveHeight] = useState<number[]>([4, 8, 12, 16, 12, 8, 4]);
   const [eyePosition, setEyePosition] = useState({ x: 0, y: 0 });
   const [isBlinking, setIsBlinking] = useState(false);
   const [headTilt, setHeadTilt] = useState(0);
+  const [currentViseme, setCurrentViseme] = useState('closed');
+  const [visemeHistory, setVisemeHistory] = useState<string[]>([]);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const avatarRef = useRef<HTMLDivElement>(null);
 
@@ -65,6 +108,40 @@ export default function RealisticAvatar({
 
     return () => clearInterval(interval);
   }, [isTalking, audioLevel]);
+
+  // Viseme animation for lip sync (free optimization)
+  useEffect(() => {
+    if (!isTalking || !viseme) {
+      // Return to closed position when not talking
+      if (isTalking) {
+        const timer = setTimeout(() => {
+          setCurrentViseme('closed');
+        }, 200);
+        return () => clearTimeout(timer);
+      }
+      return;
+    }
+
+    // Map incoming viseme to our supported set
+    const mappedViseme = VISEME_MAP[viseme.toLowerCase()] || VISEME_MAP[viseme.charAt(0).toLowerCase()] || 'open';
+
+    // Add to history for smooth transitions
+    setVisemeHistory(prev => [...prev.slice(-2), mappedViseme]);
+    setCurrentViseme(mappedViseme);
+  }, [isTalking, viseme]);
+
+  // Get current viseme config
+  const getVisemeConfig = () => {
+    if (!isTalking) {
+      return VISEME_CONFIG['closed'];
+    }
+
+    // Use the last viseme from history for smooth transitions
+    const targetViseme = visemeHistory[visemeHistory.length - 1] || 'open';
+    return VISEME_CONFIG[targetViseme] || VISEME_CONFIG['open'];
+  };
+
+  const visemeConfig = getVisemeConfig();
 
   // Eye tracking - eyes follow mouse cursor
   useEffect(() => {
@@ -341,28 +418,37 @@ export default function RealisticAvatar({
               }}
             />
 
-            {/* Mouth with more realistic movement */}
+            {/* Mouth with viseme-based lip sync (free optimization) */}
             <motion.div
               className="absolute bg-gradient-to-b from-red-300 to-red-400 shadow-inner"
               style={{
                 bottom: '30%',
                 left: '50%',
                 transform: 'translateX(-50%)',
-                borderRadius: isTalking ? '50% 50% 50% 50%' : '50%'
+                borderRadius: visemeConfig.borderRadius
               }}
               animate={{
-                width: isTalking ? [14, 22, 14] : 14,
-                height: isTalking ? [5, 10, 5] : 5,
+                width: visemeConfig.width,
+                height: visemeConfig.height,
               }}
-              transition={{ duration: 0.25, repeat: isTalking ? Infinity : 0 }}
+              transition={{ duration: 0.08, ease: 'easeOut' }}
             >
               {/* Teeth for more realism when talking */}
-              {isTalking && (
+              {isTalking && visemeConfig.teeth && (
                 <motion.div
                   className="absolute top-0 left-1/2 transform -translate-x-1/2 w-full h-1 bg-white/80"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: [0, 0.8, 0] }}
-                  transition={{ duration: 0.25, repeat: Infinity }}
+                  transition={{ duration: 0.15, repeat: Infinity }}
+                />
+              )}
+              {/* Tongue for certain visemes */}
+              {isTalking && (currentViseme === 'tongue_teeth' || currentViseme === 'open') && (
+                <motion.div
+                  className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-2 h-2 bg-pink-400 rounded-full"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: [0, 0.6, 0] }}
+                  transition={{ duration: 0.2, repeat: Infinity }}
                 />
               )}
             </motion.div>

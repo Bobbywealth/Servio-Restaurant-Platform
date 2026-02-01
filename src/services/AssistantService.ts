@@ -32,12 +32,111 @@ interface StreamChunk {
   processingTime?: number;
 }
 
+// Free emotion detection types
+type Sentiment = 'neutral' | 'urgent' | 'frustrated' | 'happy';
+
+// Free in-memory conversation context
+interface ConversationContext {
+  sessionId: string;
+  userId: string;
+  messages: Array<{role: 'user' | 'assistant', content: string, timestamp: number}>;
+  recentOrders: Array<{itemId: string, quantity: number}>;
+  preferences: Record<string, any>;
+  lastActivity: number;
+}
+
+// In-memory conversation storage (resets on server restart, but free!)
+const conversationContexts = new Map<string, ConversationContext>();
+const CONVERSATION_MAX_MESSAGES = 10; // Keep last 10 messages
+const CONVERSATION_TTL = 300000; // 5 minutes inactivity timeout
 
 
 export class AssistantService {
   private openai: OpenAI;
   private miniMax: MiniMaxService;
   private _db: any = null;
+
+  // Free keyword-based emotion detection
+  private detectSentiment(text: string): Sentiment {
+    const urgentKeywords = ['urgent', 'asap', 'now', 'hurry', 'fast', 'quickly', 'emergency', 'immediately', 'right away'];
+    const frustratedKeywords = ['wrong', 'bad', 'terrible', 'issue', 'problem', 'disappointed', 'frustrated', 'angry', 'annoyed', 'worst', 'horrible', 'useless', 'broken'];
+    const happyKeywords = ['great', 'thanks', 'love', 'perfect', 'awesome', 'excellent', 'amazing', 'wonderful', 'fantastic', 'good', 'nice'];
+
+    const lowerText = text.toLowerCase();
+
+    if (urgentKeywords.some(k => lowerText.includes(k))) return 'urgent';
+    if (frustratedKeywords.some(k => lowerText.includes(k))) return 'frustrated';
+    if (happyKeywords.some(k => lowerText.includes(k))) return 'happy';
+    return 'neutral';
+  }
+
+  // Get voice parameters based on sentiment (free optimization)
+  private getVoiceParamsForSentiment(sentiment: Sentiment): { voice: string; rate: number; pitch: string } {
+    const voiceMap: Record<Sentiment, { voice: string; rate: number; pitch: string }> = {
+      neutral: { voice: 'alloy', rate: 1.0, pitch: '0st' },
+      urgent: { voice: 'onyx', rate: 1.15, pitch: '+1st' }, // Faster, higher for urgency
+      frustrated: { voice: 'nova', rate: 0.9, pitch: '-0.5st' }, // Slower, lower for reassurance
+      happy: { voice: 'shimmer', rate: 1.0, pitch: '+0.5st' } // Slightly higher for positivity
+    };
+    return voiceMap[sentiment];
+  }
+
+  // Wrap text with SSML for natural prosody (free optimization)
+  private wrapWithSSML(text: string, sentiment: Sentiment = 'neutral'): string {
+    const { rate, pitch } = this.getVoiceParamsForSentiment(sentiment);
+    return `<speak>
+      <prosody rate="${rate}" pitch="${pitch}" volume="medium">
+        ${text}
+        <break time="300ms"/>
+      </prosody>
+    </speak>`;
+  }
+
+  // Free in-memory conversation context management
+  private getConversationContext(sessionId: string, userId: string): ConversationContext {
+    const now = Date.now();
+
+    // Clean up expired conversations
+    for (const [key, ctx] of conversationContexts.entries()) {
+      if (now - ctx.lastActivity > CONVERSATION_TTL) {
+        conversationContexts.delete(key);
+      }
+    }
+
+    if (!conversationContexts.has(sessionId)) {
+      const ctx: ConversationContext = {
+        sessionId,
+        userId,
+        messages: [],
+        recentOrders: [],
+        preferences: {},
+        lastActivity: now
+      };
+      conversationContexts.set(sessionId, ctx);
+    }
+
+    const context = conversationContexts.get(sessionId)!;
+    context.lastActivity = now;
+    return context;
+  }
+
+  private addMessageToContext(sessionId: string, userId: string, role: 'user' | 'assistant', content: string): void {
+    const ctx = this.getConversationContext(sessionId, userId);
+    ctx.messages.push({ role, content, timestamp: Date.now() });
+
+    // Keep only last N messages
+    if (ctx.messages.length > CONVERSATION_MAX_MESSAGES) {
+      ctx.messages = ctx.messages.slice(-CONVERSATION_MAX_MESSAGES);
+    }
+  }
+
+  private getConversationHistory(sessionId: string, userId: string): string {
+    const ctx = this.getConversationContext(sessionId, userId);
+    if (ctx.messages.length === 0) return '';
+
+    return '\n\nRECENT CONVERSATION HISTORY:\n' +
+      ctx.messages.map(m => `${m.role === 'user' ? 'Customer' : 'Assistant'}: ${m.content}`).join('\n');
+  }
 
   constructor() {
     this.openai = new OpenAI({
@@ -93,13 +192,21 @@ export class AssistantService {
     }
   }
 
-  async processText(text: string, userId: string): Promise<Omit<AssistantResponse, 'transcript'>> {
+  async processText(text: string, userId: string, sessionId: string = 'default'): Promise<Omit<AssistantResponse, 'transcript'>> {
     const startTime = Date.now();
 
     try {
-      logger.info('[assistant] processText start', { userId, textPreview: text?.slice?.(0, 200) });
+      logger.info('[assistant] processText start', { userId, sessionId, textPreview: text?.slice?.(0, 200) });
+
+      // Detect sentiment for voice adaptation (free optimization)
+      const sentiment = this.detectSentiment(text);
+      logger.info('[assistant] detected sentiment', { sentiment, textPreview: text?.slice?.(50) });
+
+      // Get conversation context (free optimization)
+      const conversationHistory = this.getConversationHistory(sessionId, userId);
+
       // Get system prompt with current context
-      const systemPrompt = await this.getSystemPrompt(userId);
+      const systemPrompt = await this.getSystemPrompt(userId) + conversationHistory;
 
       let response = "I understand, let me help with that.";
       const actions: AssistantResponse['actions'] = [];
@@ -183,8 +290,12 @@ export class AssistantService {
         }
       }
 
-      // Generate TTS audio
-      const audioUrl = await this.generateSpeech(response);
+      // Add messages to conversation context (free optimization)
+      this.addMessageToContext(sessionId, userId, 'user', text);
+      this.addMessageToContext(sessionId, userId, 'assistant', response);
+
+      // Generate TTS audio with sentiment-based voice (free optimization)
+      const audioUrl = await this.generateSpeech(response, sentiment);
 
       return {
         response,
@@ -443,7 +554,7 @@ export class AssistantService {
     }
   }
 
-  private async generateSpeech(text: string): Promise<string> {
+  private async generateSpeech(text: string, sentiment: Sentiment = 'neutral'): Promise<string> {
     try {
       // Check if we have any TTS provider configured
       const hasOpenAI = Boolean(process.env.OPENAI_API_KEY);
@@ -454,12 +565,19 @@ export class AssistantService {
       }
 
       // Keep responses bounded for latency/cost.
-      const input = text.length > 2000 ? text.slice(0, 2000) : text;
+      const plainText = text.length > 2000 ? text.slice(0, 2000) : text;
+
+      // Wrap with SSML for natural prosody (free optimization)
+      const ssmlInput = this.wrapWithSSML(plainText, sentiment);
+      const input = plainText; // OpenAI doesn't fully support SSML yet, but we keep the structure for future
+
+      // Get voice parameters based on sentiment (free optimization)
+      const { voice } = this.getVoiceParamsForSentiment(sentiment);
 
       // Try MiniMax TTS first if configured
       if (useMiniMax) {
         try {
-          logger.info('[assistant] Using MiniMax for TTS');
+          logger.info('[assistant] Using MiniMax for TTS', { sentiment });
           const result = await this.miniMax.textToSpeech(input);
           return result.audioUrl;
         } catch (miniMaxError) {
@@ -472,13 +590,13 @@ export class AssistantService {
 
       // Fallback to OpenAI TTS
       if (!useMiniMax && hasOpenAI) {
-        logger.info('[assistant] Using OpenAI for TTS');
+        logger.info('[assistant] Using OpenAI for TTS', { sentiment, voice });
         const model = process.env.OPENAI_TTS_MODEL || 'tts-1';
-        const voice = (process.env.OPENAI_TTS_VOICE || 'alloy') as any;
+        const selectedVoice = (process.env.OPENAI_TTS_VOICE || voice) as any;
 
         const speech = await this.openai.audio.speech.create({
           model,
-          voice,
+          voice: selectedVoice,
           input,
           response_format: 'mp3'
         });

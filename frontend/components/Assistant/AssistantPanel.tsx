@@ -78,7 +78,91 @@ export default function AssistantPanel({ showHeader = true, className }: Assista
   const conversationWindowRef = useRef<NodeJS.Timeout | null>(null)
   const inConversationWindowRef = useRef(false)
   const CONVERSATION_WINDOW_DURATION = 30000 // 30 seconds
-  
+
+  // Ambient sound manager (free optimization - restaurant ambience)
+  const ambientSoundRef = useRef<{
+    audioContext: AudioContext | null;
+    ambientGain: GainNode | null;
+    source: AudioBufferSourceNode | null;
+    isPlaying: boolean;
+  }>({
+    audioContext: null,
+    ambientGain: null,
+    source: null,
+    isPlaying: false
+  });
+
+  // Load and play ambient sound (free optimization)
+  const loadAmbientSound = useCallback(async () => {
+    if (typeof window === 'undefined') return;
+
+    try {
+      const AudioContextImpl = (window as any).AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContextImpl) return;
+
+      const audioContext = new AudioContextImpl();
+      ambientSoundRef.current.audioContext = audioContext;
+
+      // Create gain node for ambient volume control
+      const ambientGain = audioContext.createGain();
+      ambientGain.gain.value = 0.15; // Low volume (15%) - subtle ambience
+      ambientGain.connect(audioContext.destination);
+      ambientSoundRef.current.ambientGain = ambientGain;
+
+      // Try to load a free ambient sound (kitchen/restaurant noise)
+      // For demo, we'll generate brown noise which sounds like distant activity
+      const bufferSize = audioContext.sampleRate * 2; // 2 seconds of brown noise
+      const buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
+      const data = buffer.getChannelData(0);
+
+      let lastOut = 0;
+      for (let i = 0; i < bufferSize; i++) {
+        const white = Math.random() * 2 - 1;
+        data[i] = (lastOut + (0.02 * white)) / 1.02;
+        lastOut = data[i];
+        data[i] *= 3.5; // Compensate for gain loss
+      }
+
+      const source = audioContext.createBufferSource();
+      source.buffer = buffer;
+      source.loop = true;
+      source.connect(ambientGain);
+      ambientSoundRef.current.source = source;
+
+      console.log('📀 Ambient sound initialized (brown noise for restaurant ambience)');
+    } catch (error) {
+      console.warn('Failed to initialize ambient sound:', error);
+    }
+  }, []);
+
+  // Start/stop ambient sound based on assistant activity
+  const toggleAmbientSound = useCallback((play: boolean) => {
+    if (!ambientSoundRef.current.audioContext) {
+      if (play) loadAmbientSound();
+      return;
+    }
+
+    const ctx = ambientSoundRef.current;
+    if (play && !ctx.isPlaying) {
+      try {
+        ctx.source?.start();
+        ctx.isPlaying = true;
+        console.log('🔊 Ambient sound started');
+      } catch (e) {
+        // Source already started
+        ctx.isPlaying = true;
+      }
+    } else if (!play && ctx.isPlaying) {
+      try {
+        ctx.source?.stop();
+        ctx.isPlaying = false;
+        console.log('🔇 Ambient sound stopped');
+      } catch (e) {
+        ctx.isPlaying = false;
+      }
+    }
+  }, [loadAmbientSound]);
+
   // Create refs for callbacks to avoid re-initializing services when they change
   const handleQuickCommandRef = useRef<((command: string) => Promise<void>) | null>(null)
   const startRecordingRef = useRef<(() => void) | null>(null)
@@ -1252,6 +1336,18 @@ export default function AssistantPanel({ showHeader = true, className }: Assista
 
             {/* Audio & Control Buttons */}
             <div className="flex flex-wrap items-center gap-2 mt-4">
+              {/* Ambient Sound Toggle (free optimization) */}
+              <button
+                onClick={() => toggleAmbientSound(!ambientSoundRef.current.isPlaying)}
+                className="inline-flex items-center gap-2 px-3 py-2 bg-surface-100 dark:bg-surface-800 text-surface-600 dark:text-surface-400 rounded-lg text-sm font-medium hover:bg-surface-200 dark:hover:bg-surface-700 transition-colors"
+                title="Toggle restaurant ambience"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+                </svg>
+                <span className="hidden sm:inline">Ambience</span>
+              </button>
+
               {/* Audio Controls */}
               {(state.isSpeaking || state.currentAudioUrl) && (
                 <div className="flex items-center gap-2 px-4 py-2 bg-surface-100 dark:bg-surface-800 rounded-lg">
