@@ -176,10 +176,13 @@ export function HoursEditorModal({ isOpen, staffMember, onClose, onSave }: Hours
 
     try {
       if (editingEntry) {
-        // Update existing entry
+        // Update existing entry - convert snake_case to camelCase for backend
         await api.put(`/api/timeclock/entries/${editingEntry.id}`, {
-          ...entryData,
-          editedBy: 'manager'
+          clockInTime: entryData.clock_in_time,
+          clockOutTime: entryData.clock_out_time,
+          breakMinutes: entryData.break_minutes,
+          position: entryData.position,
+          notes: entryData.notes
         })
       } else {
         // Create new entry - need to use manager clock-in with custom time
@@ -187,8 +190,7 @@ export function HoursEditorModal({ isOpen, staffMember, onClose, onSave }: Hours
         await api.post('/api/timeclock/manager/clock-in', {
           userId: staffMember.id,
           clockInTime: entryData.clock_in_time,
-          position: entryData.position,
-          managerId: 'current-user'
+          position: entryData.position
         })
 
         // Then update with clock-out time
@@ -201,11 +203,9 @@ export function HoursEditorModal({ isOpen, staffMember, onClose, onSave }: Hours
         })
 
         if (activeEntries.data?.data?.entries?.length > 0) {
-          const activeEntry = activeEntries.data.data.entries[0]
           await api.post('/api/timeclock/manager/clock-out', {
             userId: staffMember.id,
             clockOutTime: entryData.clock_out_time,
-            managerId: 'current-user',
             notes: entryData.notes
           })
         }
@@ -238,8 +238,7 @@ export function HoursEditorModal({ isOpen, staffMember, onClose, onSave }: Hours
     try {
       await api.post('/api/timeclock/manager/reverse-entry', {
         entryId,
-        reason: 'Deleted from hours editor',
-        managerId: 'current-user'
+        reason: 'Deleted from hours editor'
       })
 
       // Refresh entries
