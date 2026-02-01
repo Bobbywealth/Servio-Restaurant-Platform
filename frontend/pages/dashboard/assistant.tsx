@@ -1112,7 +1112,7 @@ export default function AssistantPage() {
             {/* Right Panel - Conversation */}
             <div className="lg:col-span-3 space-y-4">
               {/* Conversation History */}
-              <div className="relative bg-white/80 dark:bg-surface-800/80 backdrop-blur-xl rounded-2xl p-4 shadow-xl border border-white/50 dark:border-surface-700/50 flex-1 flex flex-col min-h-0">
+              <div className="relative bg-white/80 dark:bg-surface-800/80 backdrop-blur-xl rounded-2xl p-4 shadow-xl border border-white/50 dark:border-surface-700/50 flex-1 flex flex-col min-h-0 max-h-[calc(100vh-280px)]">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-lg font-bold text-surface-900 dark:text-white">
                     Conversation
