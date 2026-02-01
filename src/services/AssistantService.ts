@@ -4,6 +4,7 @@ import path from 'path';
 import os from 'os';
 import { DatabaseService } from './DatabaseService';
 import { MiniMaxService } from './MiniMaxService';
+import { VoiceConversationService } from './VoiceConversationService';
 import { logger } from '../utils/logger';
 import { ensureUploadsDir } from '../utils/uploads';
 import { v4 as uuidv4 } from 'uuid';
@@ -35,20 +36,25 @@ interface StreamChunk {
 // Free emotion detection types
 type Sentiment = 'neutral' | 'urgent' | 'frustrated' | 'happy';
 
-// Free in-memory conversation context
+// Free in-memory conversation context (cache for performance)
 interface ConversationContext {
   sessionId: string;
   userId: string;
-  messages: Array<{role: 'user' | 'assistant', content: string, timestamp: number}>;
+  conversationId?: string; // Database conversation ID
+  messages: Array<{role: 'user' | 'assistant' | 'system', content: string, timestamp: number}>;
   recentOrders: Array<{itemId: string, quantity: number}>;
   preferences: Record<string, any>;
   lastActivity: number;
+  dbSynced: boolean; // Whether this conversation exists in the database
 }
 
-// In-memory conversation storage (resets on server restart, but free!)
+// In-memory cache for active conversations (resets on server restart, but conversations are persisted to DB)
 const conversationContexts = new Map<string, ConversationContext>();
-const CONVERSATION_MAX_MESSAGES = 10; // Keep last 10 messages
+const CONVERSATION_MAX_MESSAGES = 10; // Keep last 10 messages in memory
 const CONVERSATION_TTL = 300000; // 5 minutes inactivity timeout
+
+// VoiceConversationService instance
+const voiceConversationService = VoiceConversationService.getInstance();
 
 
 export class AssistantService {
@@ -92,26 +98,68 @@ export class AssistantService {
     </speak>`;
   }
 
-  // Free in-memory conversation context management
-  private getConversationContext(sessionId: string, userId: string): ConversationContext {
+  // Free in-memory conversation context management with database persistence
+  private async getConversationContext(sessionId: string, userId: string): Promise<ConversationContext> {
     const now = Date.now();
 
-    // Clean up expired conversations
+    // Clean up expired conversations from memory only
     for (const [key, ctx] of conversationContexts.entries()) {
       if (now - ctx.lastActivity > CONVERSATION_TTL) {
+        // Mark as abandoned in database before removing from memory
+        if (ctx.dbSynced && ctx.conversationId) {
+          try {
+            await voiceConversationService.updateConversationStatus(ctx.conversationId, 'abandoned');
+          } catch (error) {
+            logger.warn('Failed to mark conversation as abandoned:', error);
+          }
+        }
         conversationContexts.delete(key);
       }
     }
 
     if (!conversationContexts.has(sessionId)) {
+      // Try to find existing conversation in database
+      let conversationId: string | undefined;
+      let existingConversation = false;
+
+      try {
+        const restaurantId = await this.resolveRestaurantId(userId);
+        const existing = await voiceConversationService.getConversationBySessionId(sessionId, restaurantId);
+        if (existing) {
+          conversationId = existing.id;
+          existingConversation = true;
+          logger.info('[assistant] Found existing conversation in database', { sessionId, conversationId });
+        }
+      } catch (error) {
+        logger.warn('[assistant] Failed to check for existing conversation:', error);
+      }
+
       const ctx: ConversationContext = {
         sessionId,
         userId,
+        conversationId,
         messages: [],
         recentOrders: [],
         preferences: {},
-        lastActivity: now
+        lastActivity: now,
+        dbSynced: !!conversationId
       };
+
+      // If we found an existing conversation, load its messages
+      if (conversationId) {
+        try {
+          const messages = await voiceConversationService.getLastMessages(conversationId, CONVERSATION_MAX_MESSAGES);
+          ctx.messages = messages.map(m => ({
+            role: m.role,
+            content: m.content,
+            timestamp: new Date(m.created_at).getTime()
+          }));
+          logger.info('[assistant] Loaded messages from database', { sessionId, messageCount: messages.length });
+        } catch (error) {
+          logger.warn('[assistant] Failed to load messages from database:', error);
+        }
+      }
+
       conversationContexts.set(sessionId, ctx);
     }
 
@@ -120,18 +168,49 @@ export class AssistantService {
     return context;
   }
 
-  private addMessageToContext(sessionId: string, userId: string, role: 'user' | 'assistant', content: string): void {
-    const ctx = this.getConversationContext(sessionId, userId);
+  private async addMessageToContext(sessionId: string, userId: string, role: 'user' | 'assistant', content: string): Promise<void> {
+    const ctx = await this.getConversationContext(sessionId, userId);
     ctx.messages.push({ role, content, timestamp: Date.now() });
 
-    // Keep only last N messages
+    // Keep only last N messages in memory
     if (ctx.messages.length > CONVERSATION_MAX_MESSAGES) {
       ctx.messages = ctx.messages.slice(-CONVERSATION_MAX_MESSAGES);
     }
+
+    // Ensure conversation exists in database
+    if (!ctx.dbSynced) {
+      try {
+        const restaurantId = await this.resolveRestaurantId(userId);
+        const conversation = await voiceConversationService.createConversation({
+          restaurantId,
+          sessionId,
+          metadata: { userId }
+        });
+        ctx.conversationId = conversation.id;
+        ctx.dbSynced = true;
+        logger.info('[assistant] Created new conversation in database', { sessionId, conversationId: conversation.id });
+      } catch (error) {
+        logger.warn('[assistant] Failed to create conversation in database:', error);
+      }
+    }
+
+    // Persist message to database
+    if (ctx.dbSynced && ctx.conversationId) {
+      try {
+        await voiceConversationService.addMessage({
+          conversationId: ctx.conversationId,
+          role,
+          content,
+          metadata: { userId }
+        });
+      } catch (error) {
+        logger.warn('[assistant] Failed to persist message to database:', error);
+      }
+    }
   }
 
-  private getConversationHistory(sessionId: string, userId: string): string {
-    const ctx = this.getConversationContext(sessionId, userId);
+  private async getConversationHistory(sessionId: string, userId: string): Promise<string> {
+    const ctx = await this.getConversationContext(sessionId, userId);
     if (ctx.messages.length === 0) return '';
 
     return '\n\nRECENT CONVERSATION HISTORY:\n' +
@@ -202,8 +281,8 @@ export class AssistantService {
       const sentiment = this.detectSentiment(text);
       logger.info('[assistant] detected sentiment', { sentiment, textPreview: text?.slice?.(50) });
 
-      // Get conversation context (free optimization)
-      const conversationHistory = this.getConversationHistory(sessionId, userId);
+      // Get conversation context with database persistence (free optimization)
+      const conversationHistory = await this.getConversationHistory(sessionId, userId);
 
       // Get system prompt with current context
       const systemPrompt = await this.getSystemPrompt(userId) + conversationHistory;
@@ -290,9 +369,9 @@ export class AssistantService {
         }
       }
 
-      // Add messages to conversation context (free optimization)
-      this.addMessageToContext(sessionId, userId, 'user', text);
-      this.addMessageToContext(sessionId, userId, 'assistant', response);
+      // Add messages to conversation context with database persistence (free optimization)
+      await this.addMessageToContext(sessionId, userId, 'user', text);
+      await this.addMessageToContext(sessionId, userId, 'assistant', response);
 
       // Generate TTS audio with sentiment-based voice (free optimization)
       const audioUrl = await this.generateSpeech(response, sentiment);

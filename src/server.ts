@@ -129,6 +129,7 @@ async function initializeServer() {
     const { default: staffSchedulingRoutes } = await import('./routes/staff-scheduling');
     const { default: staffAnalyticsRoutes } = await import('./routes/staff-analytics');
     const { default: staffBulkRoutes } = await import('./routes/staff-bulk');
+    const { default: voiceConversationsRoutes } = await import('./routes/voice-conversations');
 
     // API Routes
     app.use('/api/auth', authRoutes);
@@ -137,6 +138,7 @@ async function initializeServer() {
     app.use('/api/vapi', vapiRoutes);
     app.use('/api/voice', voiceRoutes);
     app.use('/api/voice-hub', voiceHubRoutes);
+    app.use('/api/voice-conversations', requireAuth, voiceConversationsRoutes);
     
     // Protected routes
     app.use('/api/assistant', requireAuth, assistantRoutes);
