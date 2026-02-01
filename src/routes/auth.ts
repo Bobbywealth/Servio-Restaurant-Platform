@@ -129,8 +129,8 @@ router.post(
       const refreshToken = uuidv4();
       const refreshTokenHash = await bcrypt.hash(refreshToken, 10);
       
-      // If stayLoggedIn is true, set TTL to 24 hours, otherwise use default
-      const daysUntilExpiry = stayLoggedIn ? 1 : REFRESH_TOKEN_TTL_DAYS;
+      // If stayLoggedIn is true, use full 30-day TTL; otherwise use shorter 1-day TTL
+      const daysUntilExpiry = stayLoggedIn ? REFRESH_TOKEN_TTL_DAYS : 1;
       const expiresAt = new Date(Date.now() + daysUntilExpiry * 24 * 60 * 60 * 1000).toISOString();
 
       logger.info(`[auth.login] before_db_insert_session ${JSON.stringify({ requestId, sessionId, daysUntilExpiry })}`);

@@ -181,9 +181,9 @@ async function handleAPIRequest(request) {
     })
   }
 
-  // Use network with fast timeout for other API calls
+  // Use network with reasonable timeout for mobile networks
   const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), 3000) // 3s timeout
+  const timeoutId = setTimeout(() => controller.abort(), 10000) // 10s timeout for slow mobile connections
 
   try {
     const response = await fetch(authRequest, { signal: controller.signal })

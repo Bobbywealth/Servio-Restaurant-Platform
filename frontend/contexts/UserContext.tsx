@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react'
-import { api } from '../lib/api'
+import { api, syncTokenToServiceWorker } from '../lib/api'
 import { safeLocalStorage } from '../lib/utils'
 
 export interface User {
@@ -102,6 +102,8 @@ export function UserProvider({ children }: UserProviderProps) {
         if (savedUser && accessToken) {
           if (!isMounted) return
           setUser(JSON.parse(savedUser))
+          // Sync existing token to service worker on app load
+          syncTokenToServiceWorker(accessToken)
           userSet = true
           log('hydrated user from localStorage')
         } else if (savedUser && !accessToken && !refreshToken) {
@@ -232,12 +234,16 @@ export function UserProvider({ children }: UserProviderProps) {
       const refreshToken = resp.data?.data?.refreshToken as string
 
       if (typeof window !== 'undefined') {
-        if (accessToken) safeLocalStorage.setItem('servio_access_token', accessToken)
+        if (accessToken) {
+          safeLocalStorage.setItem('servio_access_token', accessToken)
+          // Sync new token to service worker for PWA support
+          syncTokenToServiceWorker(accessToken)
+        }
         if (refreshToken) safeLocalStorage.setItem('servio_refresh_token', refreshToken)
         safeLocalStorage.setItem('servio_user', JSON.stringify(userData))
       }
       setUser(userData)
-      
+
       // Load available accounts for switching
       loadAvailableAccounts().catch(console.error)
     } finally {
@@ -258,6 +264,8 @@ export function UserProvider({ children }: UserProviderProps) {
       const refreshToken = safeLocalStorage.getItem('servio_refresh_token')
       safeLocalStorage.removeItem('servio_access_token')
       safeLocalStorage.removeItem('servio_refresh_token')
+      // Clear token from service worker
+      syncTokenToServiceWorker(null)
       if (refreshToken) {
         api.post('/api/auth/logout', { refreshToken }).catch(() => {})
       }
@@ -318,7 +326,11 @@ export function UserProvider({ children }: UserProviderProps) {
       const refreshToken = response.data?.data?.refreshToken as string
 
       if (typeof window !== 'undefined') {
-        if (accessToken) safeLocalStorage.setItem('servio_access_token', accessToken)
+        if (accessToken) {
+          safeLocalStorage.setItem('servio_access_token', accessToken)
+          // Sync new token to service worker for PWA support
+          syncTokenToServiceWorker(accessToken)
+        }
         if (refreshToken) safeLocalStorage.setItem('servio_refresh_token', refreshToken)
         safeLocalStorage.setItem('servio_user', JSON.stringify(userData))
       }
