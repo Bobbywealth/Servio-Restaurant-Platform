@@ -176,7 +176,7 @@ export function HoursEditorModal({ isOpen, staffMember, onClose, onSave }: Hours
     setError(null)
 
     try {
-      if (editingEntry) {
+      if (editingEntry && editingEntry.id) {
         // Update existing entry - convert snake_case to camelCase for backend
         await api.put(`/api/timeclock/entries/${editingEntry.id}`, {
           clockInTime: entryData.clock_in_time,
