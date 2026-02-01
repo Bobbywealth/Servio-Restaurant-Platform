@@ -222,18 +222,99 @@ async function getTokenFromIndexedDB() {
     try {
       const request = indexedDB.open('servioAuth', 1)
 
-      request.onerror = () => resolve(null)
+      request.onerror = () => {
+        console.warn('SW: Failed to open IndexedDB')
+        resolve(null)
+      }
+
       request.onsuccess = () => {
         const db = request.result
-        const tx = db.transaction('tokens', 'readonly')
-        const store = tx.objectStore('tokens')
-        const getRequest = store.get('accessToken')
 
-        getRequest.onsuccess = () => {
-          const result = getRequest.result
-          resolve(result?.value || null)
+        // Check if object store exists before accessing
+        if (!db.objectStoreNames.contains('tokens')) {
+          console.warn('SW: tokens object store not found')
+          resolve(null)
+          return
         }
-        getRequest.onerror = () => resolve(null)
+
+        try {
+          const tx = db.transaction('tokens', 'readonly')
+          const store = tx.objectStore('tokens')
+          const getRequest = store.get('accessToken')
+
+          getRequest.onsuccess = () => {
+            const result = getRequest.result
+            resolve(result?.value || null)
+          }
+
+          getRequest.onerror = () => {
+            console.warn('SW: Failed to get token from IndexedDB')
+            resolve(null)
+          }
+
+          tx.onerror = () => {
+            console.warn('SW: Transaction failed')
+            resolve(null)
+          }
+        } catch (txError) {
+          console.warn('SW: Transaction error:', txError)
+          resolve(null)
+        }
+      }
+
+      request.onupgradeneeded = (event) => {
+        const db = event.target.result
+        console.log('SW: Creating/upgrading servioAuth database')
+        if (!db.objectStoreNames.contains('tokens')) {
+          db.createObjectStore('tokens', { keyPath: 'id' })
+          console.log('SW: Created tokens object store')
+        }
+      }
+    } catch (e) {
+      console.warn('SW: IndexedDB error:', e)
+      resolve(null)
+    }
+  })
+}
+
+async function saveTokenToIndexedDB(token) {
+  return new Promise((resolve) => {
+    try {
+      const request = indexedDB.open('servioAuth', 1)
+
+      request.onerror = () => {
+        console.warn('SW: Failed to open IndexedDB for save')
+        resolve(false)
+      }
+
+      request.onsuccess = () => {
+        const db = request.result
+
+        // Check if object store exists
+        if (!db.objectStoreNames.contains('tokens')) {
+          console.warn('SW: Cannot save token - tokens object store not found')
+          resolve(false)
+          return
+        }
+
+        try {
+          const tx = db.transaction('tokens', 'readwrite')
+          const store = tx.objectStore('tokens')
+          store.put({ id: 'accessToken', value: token, timestamp: Date.now() })
+
+          tx.oncomplete = () => {
+            console.log('SW: Token saved to IndexedDB')
+            resolve(true)
+          }
+
+          tx.onerror = () => {
+            console.warn('SW: Failed to save token')
+            resolve(false)
+          }
+        } catch (txError) {
+          console.warn('SW: Transaction error on save:', txError)
+          resolve(false)
+        }
       }
 
       request.onupgradeneeded = (event) => {
@@ -243,24 +324,10 @@ async function getTokenFromIndexedDB() {
         }
       }
     } catch (e) {
-      resolve(null)
+      console.warn('SW: IndexedDB save error:', e)
+      resolve(false)
     }
   })
-}
-
-async function saveTokenToIndexedDB(token) {
-  try {
-    const request = indexedDB.open('servioAuth', 1)
-
-    request.onsuccess = () => {
-      const db = request.result
-      const tx = db.transaction('tokens', 'readwrite')
-      const store = tx.objectStore('tokens')
-      store.put({ id: 'accessToken', value: token, timestamp: Date.now() })
-    }
-  } catch (e) {
-    // Ignore IndexedDB errors
-  }
 }
 
 // FONT HANDLER - Aggressive cache first (fonts rarely change)

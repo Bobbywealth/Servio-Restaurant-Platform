@@ -2,6 +2,17 @@
 
 import React, { useEffect, useRef } from 'react';
 
+// Helper function to convert base64 VAPID key to Uint8Array
+function urlBase64ToUint8Array(base64String: string): Uint8Array {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding)
+    .replace(/-/g, '+')
+    .replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  // Use Array.from to create a proper Uint8Array with the correct buffer type
+  return Uint8Array.from(rawData, (char) => char.charCodeAt(0));
+}
+
 export function usePerformanceMonitor() {
   const initialized = useRef(false);
 
@@ -249,10 +260,13 @@ export function usePushSubscription() {
       const registration = await navigator.serviceWorker.ready;
 
       // Subscribe to push
+      console.log('[Push] Subscribing with VAPID key length:', state.vapidKey?.length);
       const subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: new TextEncoder().encode(state.vapidKey),
+        // Use type assertion to handle the Uint8Array buffer type mismatch
+        applicationServerKey: urlBase64ToUint8Array(state.vapidKey) as unknown as BufferSource,
       });
+      console.log('[Push] Subscription created successfully');
 
       // Send subscription to server
       const response = await fetch('/api/push/subscribe', {
@@ -277,6 +291,10 @@ export function usePushSubscription() {
       return subscription;
     } catch (error) {
       console.error('[Push] Subscribe failed:', error);
+      if (error instanceof Error) {
+        console.error('[Push] Error name:', error.name);
+        console.error('[Push] Error message:', error.message);
+      }
       setState(prev => ({
         ...prev,
         error: error instanceof Error ? error.message : 'Failed to subscribe'
