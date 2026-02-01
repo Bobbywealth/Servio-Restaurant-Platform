@@ -38,7 +38,54 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const { user, logout, isLoading } = useUser();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [mounted, setMounted] = React.useState(false);
+  const [edgeSwipeActive, setEdgeSwipeActive] = useState(false);
   const router = useRouter();
+
+  // Haptic feedback function for native feel
+  const triggerHaptic = React.useCallback(() => {
+    if (typeof navigator !== 'undefined' && navigator.vibrate) {
+      navigator.vibrate(35);
+    }
+  }, []);
+
+  // Drawer animation variants with spring physics
+  const drawerVariants = {
+    open: { x: 0, transition: { type: 'spring', stiffness: 300, damping: 30 } },
+    closed: { x: '-100%', transition: { type: 'spring', stiffness: 300, damping: 30 } }
+  };
+
+  // Drag constraints (w-72 = 288px)
+  const dragConstraints = { left: 0, right: 288 };
+  const dragElastic = 0.1;
+
+  // Handle drag end for snap-to-open/close
+  const handleDragEnd = (_: Event, info: { offset: { x: number }; velocity: { x: number } }) => {
+    const { offset, velocity } = info;
+    const threshold = 100;
+
+    // Determine if we should open or close based on drag direction and velocity
+    if (offset.x > threshold || velocity.x > 500) {
+      setSidebarOpen(true);
+      triggerHaptic();
+    } else {
+      setSidebarOpen(false);
+      triggerHaptic();
+    }
+  };
+
+  // Handle edge swipe touch start
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (!sidebarOpen && e.touches[0].clientX <= 20) {
+      setEdgeSwipeActive(true);
+    }
+  };
+
+  // Reset edge swipe when drawer opens
+  React.useEffect(() => {
+    if (sidebarOpen) {
+      setEdgeSwipeActive(false);
+    }
+  }, [sidebarOpen]);
 
   React.useEffect(() => {
     setMounted(true);
@@ -230,24 +277,33 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const closeSidebar = () => setSidebarOpen(false);
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white" onTouchStart={handleTouchStart}>
       <AnimatePresence>
         {sidebarOpen && (
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-40 bg-surface-900/50 backdrop-blur-sm lg:hidden"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-40 bg-surface-900/60 backdrop-blur-md lg:hidden"
             onClick={closeSidebar}
           />
         )}
       </AnimatePresence>
 
       <motion.div
-        className={`fixed inset-y-0 left-0 z-50 w-72 bg-white dark:bg-gray-800 transform transition-transform duration-300 ease-out lg:translate-x-0 border-r border-gray-200 dark:border-gray-700 ${
+        className={`fixed inset-y-0 left-0 z-50 w-72 bg-white dark:bg-gray-800 lg:translate-x-0 border-r border-gray-200 dark:border-gray-700 shadow-2xl shadow-black/20 gpu-accelerated will-change-transform ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
         initial={false}
+        animate={sidebarOpen ? 'open' : 'closed'}
+        variants={drawerVariants}
+        drag={edgeSwipeActive || sidebarOpen ? 'x' : false}
+        dragConstraints={dragConstraints}
+        dragElastic={dragElastic}
+        dragSnapToOrigin={true}
+        onDragEnd={handleDragEnd}
+        whileDrag={{ scale: 0.98 }}
       >
         <div className="flex items-center justify-between h-16 px-6 border-b border-gray-200 dark:border-gray-700">
           <motion.div className="flex items-center" whileHover={{ scale: 1.02 }}>
@@ -348,7 +404,10 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
             <div className="flex justify-between items-center h-16">
               <div className="flex items-center space-x-3">
                 <button
-                  onClick={() => setSidebarOpen(true)}
+                  onClick={() => {
+                    setSidebarOpen(true);
+                    triggerHaptic();
+                  }}
                   className="lg:hidden btn-icon"
                   aria-label="Open menu"
                 >
@@ -383,7 +442,10 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
               return (
                 <button
                   key={item.name}
-                  onClick={() => setSidebarOpen(true)}
+                  onClick={() => {
+                    setSidebarOpen(true);
+                    triggerHaptic();
+                  }}
                   className={`flex flex-col items-center justify-center py-2 rounded-lg text-xs font-medium ${
                     isActive ? 'text-primary-700 dark:text-primary-300' : 'text-gray-500 dark:text-surface-400'
                   } hover:text-primary-700 dark:hover:text-primary-300 transition-colors`}
