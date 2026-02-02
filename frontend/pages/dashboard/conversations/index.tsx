@@ -207,12 +207,10 @@ export default function ConversationsPage() {
     }
 
     socketManager.on('voice:command_received', handleNewConversation)
-    socketManager.on('voice:action_completed', handleNewConversation)
     socketManager.on('call:ended', handleCallEnded)
 
     return () => {
       socketManager.off('voice:command_received', handleNewConversation)
-      socketManager.off('voice:action_completed', handleNewConversation)
       socketManager.off('call:ended', handleCallEnded)
     }
   }, [user])
