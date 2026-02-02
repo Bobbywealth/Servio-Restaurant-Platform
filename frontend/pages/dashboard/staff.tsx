@@ -752,7 +752,7 @@ export default function StaffPage() {
   }
 
   // Schedule-related functions
-  const loadSchedules = async () => {
+  const loadSchedules = async (showError = false) => {
     try {
       const endDate = new Date(selectedWeekStart)
       endDate.setDate(selectedWeekStart.getDate() + 6)
@@ -769,8 +769,13 @@ export default function StaffPage() {
 
       setSchedules(schedulesResp.data?.data?.schedules || [])
       setTemplates(templatesResp.data?.data?.templates || [])
+      return schedulesResp.data?.data?.schedules || []
     } catch (error) {
       console.warn('Failed to load schedules:', error)
+      if (showError) {
+        showToast.error('Failed to load schedules')
+      }
+      return []
     }
   }
 
@@ -808,8 +813,13 @@ export default function StaffPage() {
         await api.post('/api/staff/scheduling/schedules', scheduleData)
         showToast.success('Shift created successfully')
       }
-      await loadSchedules()
+      // Refresh schedules and verify
+      const refreshedSchedules = await loadSchedules(true)
+      if (!refreshedSchedules || refreshedSchedules.length === 0) {
+        showToast.error('Schedule saved but failed to refresh the view')
+      }
     } catch (error: any) {
+      showToast.error(error.response?.data?.error?.message || 'Failed to save shift')
       throw error
     }
   }

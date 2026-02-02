@@ -70,9 +70,16 @@ export function ScheduleCalendar({
 }: ScheduleCalendarProps) {
   const [openMenu, setOpenMenu] = useState<string | null>(null)
   const [hoveredDay, setHoveredDay] = useState<string | null>(null)
+  const [isClient, setIsClient] = useState(false)
+
+  // Ensure client-side only rendering for dates to avoid hydration mismatch
+  useEffect(() => {
+    setIsClient(true)
+  }, [])
 
   // Get week dates
   const weekDates = useMemo(() => {
+    if (!isClient || !selectedWeekStart) return []
     const dates: Date[] = []
     const start = new Date(selectedWeekStart)
     for (let i = 0; i < 7; i++) {
@@ -81,7 +88,7 @@ export function ScheduleCalendar({
       dates.push(date)
     }
     return dates
-  }, [selectedWeekStart])
+  }, [selectedWeekStart, isClient])
 
   const formatDate = (date: Date) => date.toISOString().split('T')[0]
   const formatTime = (time: string) => {
