@@ -3,6 +3,7 @@ import jwt, { JsonWebTokenError, TokenExpiredError } from 'jsonwebtoken';
 import { DatabaseService } from '../services/DatabaseService';
 import { UnauthorizedError, ForbiddenError } from './errorHandler';
 import type { AccessTokenPayload, AuthUser } from '../types/auth';
+import { logger } from '../utils/logger';
 
 const getJwtSecret = () => {
   const secret = process.env.JWT_SECRET;
