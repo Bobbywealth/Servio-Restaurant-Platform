@@ -1416,6 +1416,7 @@ export default function AssistantPage() {
             </div>
           </div>
         </div>
+        </div>
       </DashboardLayout>
     </>
   )
