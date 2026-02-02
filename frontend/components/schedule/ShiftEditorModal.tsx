@@ -118,13 +118,19 @@ export function ShiftEditorModal({
     e.preventDefault()
     setError(null)
 
-    if (!formData.user_id) {
+    // Validate form data
+    if (!formData.user_id || formData.user_id.trim() === '') {
       setError('Please select a staff member')
       return
     }
 
-    if (!formData.shift_date) {
+    if (!formData.shift_date || formData.shift_date.trim() === '') {
       setError('Please select a date')
+      return
+    }
+
+    if (!formData.shift_start_time || !formData.shift_end_time) {
+      setError('Please select start and end times')
       return
     }
 
@@ -229,12 +235,11 @@ export function ShiftEditorModal({
             {/* Staff Selection */}
             <div>
               <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-2">
-                Staff Member *
+                Staff Member
               </label>
               <select
                 value={formData.user_id}
                 onChange={(e) => setFormData({ ...formData, user_id: e.target.value })}
-                required
                 className="w-full px-4 py-3 rounded-xl border border-surface-200 dark:border-surface-600 bg-white dark:bg-surface-700 text-surface-900 dark:text-surface-100 focus:ring-2 focus:ring-orange-500/30 focus:border-orange-500 transition-all outline-none"
               >
                 <option value="">Select staff member...</option>
@@ -249,7 +254,7 @@ export function ShiftEditorModal({
             {/* Date Selection */}
             <div>
               <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-2">
-                Date *
+                Date
               </label>
               <div className="relative">
                 <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-surface-400" />
@@ -257,7 +262,6 @@ export function ShiftEditorModal({
                   type="date"
                   value={formData.shift_date}
                   onChange={(e) => setFormData({ ...formData, shift_date: e.target.value })}
-                  required
                   className="w-full pl-10 pr-4 py-3 rounded-xl border border-surface-200 dark:border-surface-600 bg-white dark:bg-surface-700 text-surface-900 dark:text-surface-100 focus:ring-2 focus:ring-orange-500/30 focus:border-orange-500 transition-all outline-none"
                 />
               </div>
