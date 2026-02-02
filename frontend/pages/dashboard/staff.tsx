@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState, useCallback } from 'react'
 import Head from 'next/head'
 import { motion, AnimatePresence } from 'framer-motion'
 import dynamic from 'next/dynamic'
@@ -21,11 +21,17 @@ import {
   CheckCircle,
   AlertCircle,
   RefreshCw,
-  History
+  History,
+  CalendarDays,
+  Copy,
+  Eye,
+  EyeOff,
+  Trash2
 } from 'lucide-react'
 import { api } from '../../lib/api'
 import { socketManager } from '../../lib/socket'
 import { StaffCard, HoursEditorModal, QuickTimeActionModal } from '../../components/staff'
+import { ScheduleCalendar, ShiftEditorModal, ShiftTemplatesManager, ScheduleViewToggle } from '../../components/schedule'
 import { showToast } from '../../components/ui/Toast'
 import { useUser } from '../../contexts/UserContext'
 
@@ -63,6 +69,30 @@ interface DailyHours {
   userDailyHours: Record<string, Record<string, number>>
   userCurrentHours: Record<string, number>
   weekStartDate: string
+}
+
+// Schedule types
+interface Schedule {
+  id: string
+  user_id: string
+  user_name: string
+  shift_date: string
+  shift_start_time: string
+  shift_end_time: string
+  position?: string
+  notes?: string
+  is_published: boolean
+}
+
+interface ShiftTemplate {
+  id: string
+  name: string
+  start_time: string
+  end_time: string
+  break_minutes: number
+  position?: string
+  color?: string
+  is_active: boolean
 }
 
 // Add Staff Modal
@@ -522,6 +552,24 @@ export default function StaffPage() {
   const [quickActionType, setQuickActionType] = useState<'clock-in' | 'clock-out' | 'start-break' | 'end-break'>('clock-in')
   const [openMenu, setOpenMenu] = useState<string | null>(null)
 
+  // Schedule state
+  const [scheduleView, setScheduleView] = useState<'cards' | 'calendar'>('cards')
+  const [schedules, setSchedules] = useState<Schedule[]>([])
+  const [templates, setTemplates] = useState<ShiftTemplate[]>([])
+  const [selectedWeekStart, setSelectedWeekStart] = useState<Date>(() => {
+    const now = new Date()
+    const dayOfWeek = now.getDay()
+    const monday = new Date(now)
+    monday.setDate(now.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1))
+    return monday
+  })
+  const [editingSchedule, setEditingSchedule] = useState<Schedule | null>(null)
+  const [showShiftModal, setShowShiftModal] = useState(false)
+  const [showTemplatesModal, setShowTemplatesModal] = useState(false)
+  const [shiftModalDate, setShiftModalDate] = useState<string>('')
+  const [shiftModalTime, setShiftModalTime] = useState<string | undefined>(undefined)
+  const [scheduleLoading, setScheduleLoading] = useState(false)
+
   // Get week dates for the bar chart
   const getWeekDates = () => {
     const now = new Date()
@@ -594,6 +642,11 @@ export default function StaffPage() {
           if (isMounted) setDailyHours(dailyResp.data?.data || null)
         } catch (dailyError) {
           console.warn('Failed to load daily hours:', dailyError)
+        }
+
+        // Fetch schedules for the current week
+        if (isMounted) {
+          await loadSchedules()
         }
       } catch (e: any) {
         if (!isMounted) return
@@ -697,6 +750,155 @@ export default function StaffPage() {
       console.error('Failed to refresh hours:', e)
     }
   }
+
+  // Schedule-related functions
+  const loadSchedules = async () => {
+    try {
+      const endDate = new Date(selectedWeekStart)
+      endDate.setDate(selectedWeekStart.getDate() + 6)
+
+      const [schedulesResp, templatesResp] = await Promise.all([
+        api.get('/api/staff/scheduling/schedules', {
+          params: {
+            startDate: selectedWeekStart.toISOString().split('T')[0],
+            endDate: endDate.toISOString().split('T')[0]
+          }
+        }),
+        api.get('/api/staff/scheduling/templates')
+      ])
+
+      setSchedules(schedulesResp.data?.data?.schedules || [])
+      setTemplates(templatesResp.data?.data?.templates || [])
+    } catch (error) {
+      console.warn('Failed to load schedules:', error)
+    }
+  }
+
+  const loadTemplates = async () => {
+    try {
+      const resp = await api.get('/api/staff/scheduling/templates')
+      setTemplates(resp.data?.data?.templates || [])
+    } catch (error) {
+      console.warn('Failed to load templates:', error)
+    }
+  }
+
+  const handleCreateShift = (date: string, time?: string) => {
+    setShiftModalDate(date)
+    setShiftModalTime(time)
+    setEditingSchedule(null)
+    setShowShiftModal(true)
+  }
+
+  const handleEditShift = (schedule: Schedule) => {
+    setEditingSchedule(schedule)
+    setShiftModalDate(schedule.shift_date)
+    setShiftModalTime(undefined)
+    setShowShiftModal(true)
+  }
+
+  const handleSaveShift = async (scheduleData: any) => {
+    try {
+      if (editingSchedule?.id) {
+        // Update existing schedule
+        await api.put(`/api/staff/scheduling/schedules/${editingSchedule.id}`, scheduleData)
+        showToast.success('Shift updated successfully')
+      } else {
+        // Create new schedule
+        await api.post('/api/staff/scheduling/schedules', scheduleData)
+        showToast.success('Shift created successfully')
+      }
+      await loadSchedules()
+    } catch (error: any) {
+      throw error
+    }
+  }
+
+  const handleDeleteShift = async (scheduleId: string) => {
+    try {
+      await api.delete(`/api/staff/scheduling/schedules/${scheduleId}`)
+      showToast.success('Shift deleted successfully')
+      await loadSchedules()
+    } catch (error: any) {
+      showToast.error(error.response?.data?.error?.message || 'Failed to delete shift')
+      throw error
+    }
+  }
+
+  const handleTogglePublish = async (scheduleId: string, isPublished: boolean) => {
+    try {
+      await api.put(`/api/staff/scheduling/schedules/${scheduleId}`, { is_published: isPublished })
+      showToast.success(isPublished ? 'Schedule published' : 'Schedule unpublished')
+      await loadSchedules()
+    } catch (error: any) {
+      showToast.error('Failed to update schedule')
+    }
+  }
+
+  const handleCopyShift = async (schedule: Schedule) => {
+    // Open the shift modal with copied data
+    setEditingSchedule(null)
+    setShiftModalDate(schedule.shift_date)
+    setShiftModalTime(schedule.shift_start_time)
+    setShowShiftModal(true)
+  }
+
+  const handleCreateTemplate = async (template: Omit<ShiftTemplate, 'id' | 'is_active'>) => {
+    await api.post('/api/staff/scheduling/templates', template)
+    showToast.success('Template created')
+    await loadTemplates()
+  }
+
+  const handleUpdateTemplate = async (id: string, template: Partial<ShiftTemplate>) => {
+    await api.put(`/api/staff/scheduling/templates/${id}`, template)
+    showToast.success('Template updated')
+    await loadTemplates()
+  }
+
+  const handleDeleteTemplate = async (id: string) => {
+    await api.delete(`/api/staff/scheduling/templates/${id}`)
+    showToast.success('Template deleted')
+    await loadTemplates()
+  }
+
+  const handleApplyTemplate = async (templateId: string, weekStartDate: string) => {
+    const template = templates.find(t => t.id === templateId)
+    if (!template) return
+
+    // Get the week dates
+    const dates: string[] = []
+    for (let i = 0; i < 7; i++) {
+      const date = new Date(weekStartDate)
+      date.setDate(date.getDate() + i)
+      dates.push(date.toISOString().split('T')[0])
+    }
+
+    // Create schedules for each day of the week
+    const schedules: any[] = []
+    for (const date of dates) {
+      schedules.push({
+        user_id: staff[0]?.id, // Default to first staff member - user will need to edit
+        shift_date: date,
+        shift_start_time: template.start_time,
+        shift_end_time: template.end_time,
+        position: template.position,
+        notes: `From template: ${template.name}`
+      })
+    }
+
+    try {
+      const resp = await api.post('/api/staff/scheduling/schedules/bulk', { schedules })
+      showToast.success(`Created ${resp.data.data.created} shifts from template`)
+      await loadSchedules()
+    } catch (error: any) {
+      showToast.error('Failed to apply template')
+    }
+  }
+
+  const handleWeekChange = useCallback(async (date: Date) => {
+    setSelectedWeekStart(date)
+    await loadSchedules()
+  }, [])
 
   const handleStaffCreated = () => {
     // Reload staff data
@@ -984,6 +1186,27 @@ export default function StaffPage() {
           onClose={() => setQuickActionStaff(null)}
         />
 
+        <ShiftEditorModal
+          isOpen={showShiftModal}
+          onClose={() => setShowShiftModal(false)}
+          onSave={handleSaveShift}
+          onDelete={editingSchedule?.id ? handleDeleteShift : undefined}
+          schedule={editingSchedule}
+          staff={staff.filter(s => s.is_active)}
+          initialDate={shiftModalDate}
+          initialTime={shiftModalTime}
+        />
+
+        <ShiftTemplatesManager
+          isOpen={showTemplatesModal}
+          onClose={() => setShowTemplatesModal(false)}
+          templates={templates}
+          onCreateTemplate={handleCreateTemplate}
+          onUpdateTemplate={handleUpdateTemplate}
+          onDeleteTemplate={handleDeleteTemplate}
+          onApplyTemplate={handleApplyTemplate}
+        />
+
         <div className="space-y-6">
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -996,6 +1219,22 @@ export default function StaffPage() {
               </p>
             </div>
             <div className="flex items-center gap-3">
+              <ScheduleViewToggle
+                view={scheduleView}
+                onViewChange={setScheduleView}
+                scheduledCount={schedules.length}
+              />
+              {scheduleView === 'calendar' && canEditHours && (
+                <motion.button
+                  className="btn-secondary inline-flex items-center space-x-2"
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => setShowTemplatesModal(true)}
+                >
+                  <CalendarDays className="w-4 h-4" />
+                  <span>Templates</span>
+                </motion.button>
+              )}
               <a
                 href="/staff/clock"
                 target="_blank"
@@ -1003,7 +1242,7 @@ export default function StaffPage() {
                 className="btn-secondary inline-flex items-center space-x-2"
               >
                 <Smartphone className="w-4 h-4" />
-                <span>Staff Clock-In PWA</span>
+                <span>Staff Clock-In</span>
               </a>
               <motion.button
                 className="btn-primary inline-flex items-center space-x-2"
@@ -1012,7 +1251,7 @@ export default function StaffPage() {
                 onClick={() => setShowAddModal(true)}
               >
                 <UserPlus className="w-4 h-4" />
-                <span>Add Staff Member</span>
+                <span>Add Staff</span>
               </motion.button>
             </div>
           </div>
@@ -1089,84 +1328,101 @@ export default function StaffPage() {
             </motion.div>
           </div>
 
-          {/* Search and Filters */}
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-surface-400 w-4 h-4" />
-              <input
-                type="text"
-                placeholder="Search staff members..."
-                className="input-field pl-10"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
-            <div className="flex items-center space-x-2">
-              <Filter className="w-4 h-4 text-surface-500" />
-              <select
-                className="input-field"
-                value={selectedRole}
-                onChange={(e) => setSelectedRole(e.target.value)}
-              >
-                {roles.map(role => (
-                  <option key={role} value={role}>
-                    {role === 'all' ? 'All Roles' : role}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
+          {/* Conditional View: Calendar or Staff Cards */}
+          {scheduleView === 'calendar' ? (
+            <ScheduleCalendar
+              schedules={schedules}
+              staff={staff.filter(s => s.is_active).map(s => ({ id: s.id, name: s.name, role: s.role }))}
+              selectedWeekStart={selectedWeekStart}
+              onWeekChange={handleWeekChange}
+              onCreateShift={handleCreateShift}
+              onEditShift={handleEditShift}
+              onDeleteShift={handleDeleteShift}
+              onTogglePublish={handleTogglePublish}
+              onCopyShift={handleCopyShift}
+            />
+          ) : (
+            <>
+              {/* Search and Filters */}
+              <div className="flex flex-col sm:flex-row gap-4">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-surface-400 w-4 h-4" />
+                  <input
+                    type="text"
+                    placeholder="Search staff members..."
+                    className="input-field pl-10"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Filter className="w-4 h-4 text-surface-500" />
+                  <select
+                    className="input-field"
+                    value={selectedRole}
+                    onChange={(e) => setSelectedRole(e.target.value)}
+                  >
+                    {roles.map(role => (
+                      <option key={role} value={role}>
+                        {role === 'all' ? 'All Roles' : role}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
 
-          {/* Staff Cards Grid - Using enhanced StaffCard component */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-            {(isLoading ? [] : filteredStaff).map((member, index) => {
-              const status = getStatus(member.id)
-              const activeShift = currentByUserId.get(member.id)
-              const shiftLabel = activeShift ? `${formatTime(activeShift.clock_in_time)} - Now` : '—'
-              const hoursThisWeek = hoursByUserId[member.id] ?? 0
-              const hoursToday = todayHoursByUserId[member.id] ?? 0
+              {/* Staff Cards Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+                {(isLoading ? [] : filteredStaff).map((member, index) => {
+                  const status = getStatus(member.id)
+                  const activeShift = currentByUserId.get(member.id)
+                  const shiftLabel = activeShift ? `${formatTime(activeShift.clock_in_time)} - Now` : '—'
+                  const hoursThisWeek = hoursByUserId[member.id] ?? 0
+                  const hoursToday = todayHoursByUserId[member.id] ?? 0
 
-              return (
-                <StaffCard
-                  key={member.id}
-                  member={member}
-                  status={status as 'on-shift' | 'on-break' | 'off-shift'}
-                  activeShift={activeShift}
-                  hoursThisWeek={hoursThisWeek}
-                  hoursToday={hoursToday}
-                  dailyHours={dailyHours || undefined}
-                  weekDates={weekDates}
-                  onEditStaff={setEditingStaff}
-                  onResetPin={handleResetPin}
-                  onEditHours={canEditHours ? handleEditHours : undefined}
-                  onViewHistory={setViewingHistoryStaff}
-                  onClockIn={handleClockIn}
-                  onClockOut={handleClockOut}
-                  onStartBreak={handleStartBreak}
-                  onEndBreak={handleEndBreak}
-                />
-              )
-            })}
-          </div>
+                  return (
+                    <StaffCard
+                      key={member.id}
+                      member={member}
+                      status={status as 'on-shift' | 'on-break' | 'off-shift'}
+                      activeShift={activeShift}
+                      hoursThisWeek={hoursThisWeek}
+                      hoursToday={hoursToday}
+                      dailyHours={dailyHours || undefined}
+                      weekDates={weekDates}
+                      onEditStaff={setEditingStaff}
+                      onResetPin={handleResetPin}
+                      onEditHours={canEditHours ? handleEditHours : undefined}
+                      onViewHistory={setViewingHistoryStaff}
+                      onClockIn={handleClockIn}
+                      onClockOut={handleClockOut}
+                      onStartBreak={handleStartBreak}
+                      onEndBreak={handleEndBreak}
+                    />
+                  )
+                })}
+              </div>
 
-          {isLoading && (
-            <div className="text-center py-12 text-surface-500">Loading staff…</div>
-          )}
+              {isLoading && (
+                <div className="text-center py-12 text-surface-500">Loading staff...</div>
+              )}
 
-          {!isLoading && filteredStaff.length === 0 && (
-            <motion.div
-              className="text-center py-12"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-            >
-              <Users className="w-12 h-12 text-surface-400 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-surface-900 dark:text-surface-100 mb-2">
-                No staff members found
-              </h3>
-              <p className="text-surface-600 dark:text-surface-400">
-                Try adjusting your search or filter criteria
-              </p>
-            </motion.div>
+              {!isLoading && filteredStaff.length === 0 && (
+                <motion.div
+                  className="text-center py-12"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                >
+                  <Users className="w-12 h-12 text-surface-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-surface-900 dark:text-surface-100 mb-2">
+                    No staff members found
+                  </h3>
+                  <p className="text-surface-600 dark:text-surface-400">
+                    Try adjusting your search or filter criteria
+                  </p>
+                </motion.div>
+              )}
+            </>
           )}
         </div>
       </DashboardLayout>
