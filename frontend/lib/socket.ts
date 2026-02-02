@@ -35,10 +35,12 @@ export interface SocketEvents {
   'task:assigned': (data: { taskId: string; assignedTo: string }) => void
   'task:completed': (data: { taskId: string; completedBy: string; timestamp: Date }) => void
   'task:overdue': (data: { taskId: string; dueDate: Date }) => void
+  'task:updated': (data: { taskId: string; task?: any; action: string }) => void
 
   // Voice/Assistant events
   'voice:command_received': (data: { transcript: string; confidence: number }) => void
   'voice:action_completed': (data: { action: string; result: any }) => void
+  'call:ended': (data: { sessionId: string }) => void
 
   // System events
   'notifications.new': (data: { notification: any }) => void

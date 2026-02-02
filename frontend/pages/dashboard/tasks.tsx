@@ -609,7 +609,7 @@ function KanbanColumn({
   getPriorityBadgeClass
 }: {
   title: string
-  status: string
+  status: 'pending' | 'in_progress' | 'completed'
   tasks: Task[]
   count: number
   color: string
@@ -618,7 +618,7 @@ function KanbanColumn({
   onDragStart: (e: React.DragEvent, task: Task) => void
   onDragOver: (e: React.DragEvent, status: string) => void
   onDragLeave: () => void
-  onDrop: (e: React.DragEvent, status: string) => void
+  onDrop: (e: React.DragEvent, status: 'pending' | 'in_progress' | 'completed') => void
   canUpdate: boolean
   onStatusUpdate: (taskId: string, newStatus: Task['status']) => void
   onDelete?: (taskId: string) => void
