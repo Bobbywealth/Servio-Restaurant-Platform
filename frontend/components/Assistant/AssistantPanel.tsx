@@ -394,6 +394,9 @@ export default function AssistantPanel({ showHeader = true, className }: Assista
       return
     }
 
+    // Declare userMessageId outside try block so it's accessible in catch
+    let userMessageId: string | null = null
+
     try {
       const mimeType = recorderMimeTypeRef.current || 'audio/webm;codecs=opus'
       const extension = mimeType.includes('mp4') ? 'mp4' : 'webm'
@@ -491,7 +494,6 @@ export default function AssistantPanel({ showHeader = true, className }: Assista
       }
 
       // Add user message (transcript) with sending status
-      let userMessageId: string | null = null
       if (transcript) {
         const userMessage = {
           type: 'user' as const,
