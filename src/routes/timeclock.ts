@@ -583,27 +583,6 @@ router.get('/entries', asyncHandler(async (req: Request, res: Response) => {
  * This endpoint is used by the HoursEditorModal to create completed entries
  */
 router.post('/entries', asyncHandler(async (req: Request, res: Response) => {
-  // #region agent log - Hypothesis A, C, D
-  const fs = require('fs');
-  fs.appendFileSync('/Users/bobbyc/Servio Restaurant Platform/.cursor/debug.log', JSON.stringify({
-    location: 'timeclock.ts:585',
-    message: 'POST /entries endpoint called',
-    data: {
-      body: {
-        userId: req.body.userId,
-        clockInTime: req.body.clockInTime,
-        clockOutTime: req.body.clockOutTime,
-        breakMinutes: req.body.breakMinutes
-      },
-      authUserId: (req as any).user?.id,
-      authUserRole: (req as any).user?.role
-    },
-    timestamp: Date.now(),
-    sessionId: 'debug-session',
-    hypothesisId: 'A'
-  }) + '\n');
-  // #endregion
-
   const {
     userId,
     clockInTime,
