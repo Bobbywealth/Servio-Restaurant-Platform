@@ -318,6 +318,10 @@ router.put('/schedules/:id', asyncHandler(async (req: Request, res: Response) =>
     updates.push('notes = ?');
     params.push(data.notes);
   }
+  if (data.is_published !== undefined) {
+    updates.push('is_published = ?');
+    params.push(data.is_published ? 1 : 0);
+  }
 
   if (updates.length === 0) {
     return res.json({

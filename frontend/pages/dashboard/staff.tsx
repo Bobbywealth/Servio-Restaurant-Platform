@@ -570,6 +570,14 @@ export default function StaffPage() {
   const [shiftModalTime, setShiftModalTime] = useState<string | undefined>(undefined)
   const [scheduleLoading, setScheduleLoading] = useState(false)
 
+  // Format date as YYYY-MM-DD using local timezone (not UTC)
+  const formatLocalDate = (date: Date): string => {
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+  }
+
   // Get week dates for the bar chart
   const getWeekDates = () => {
     const now = new Date()
@@ -581,7 +589,7 @@ export default function StaffPage() {
     for (let i = 0; i < 7; i++) {
       const date = new Date(monday)
       date.setDate(monday.getDate() + i)
-      dates.push(date.toISOString().split('T')[0])
+      dates.push(formatLocalDate(date))
     }
     return dates
   }
@@ -760,8 +768,8 @@ export default function StaffPage() {
       const [schedulesResp, templatesResp] = await Promise.all([
         api.get('/api/staff/scheduling/schedules', {
           params: {
-            startDate: selectedWeekStart.toISOString().split('T')[0],
-            endDate: endDate.toISOString().split('T')[0]
+            startDate: formatLocalDate(selectedWeekStart),
+            endDate: formatLocalDate(endDate)
           }
         }),
         api.get('/api/staff/scheduling/templates')
