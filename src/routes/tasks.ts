@@ -558,10 +558,7 @@ Do not include any other text, markdown formatting, or explanations. Just the JS
         role: 'user',
         content: prompt
       }
-    ], {
-      model: 'abab6.5s-chat',
-      temperature: 0.3
-    });
+    ], undefined, 0.3);
 
     let extractedTasks: any[] = [];
 
