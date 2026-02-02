@@ -168,6 +168,18 @@ export function ScheduleCalendar({
     }
   }
 
+  const weekRangeLabel =
+    isClient && weekDates.length === 7
+      ? `${weekDates[0].toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric'
+        })} - ${weekDates[6].toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric'
+        })}`
+      : 'Loading...'
+
   return (
     <div className="bg-white dark:bg-surface-800 rounded-2xl shadow-sm border border-surface-200 dark:border-surface-700 overflow-hidden">
       {/* Calendar Header */}
@@ -199,7 +211,7 @@ export function ScheduleCalendar({
         </div>
         <div className="flex items-center gap-2">
           <span className="text-sm text-surface-600 dark:text-surface-400">
-            {weekDates[0].toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - {weekDates[6].toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+            {weekRangeLabel}
           </span>
         </div>
       </div>
