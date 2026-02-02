@@ -75,8 +75,11 @@ class SocketManager {
   private resolveBackendUrl(): string {
     const rawBackendUrl =
       process.env.NEXT_PUBLIC_API_URL ||
-      process.env.NEXT_PUBLIC_BACKEND_URL ||
-      'http://localhost:3002'
+      process.env.NEXT_PUBLIC_BACKEND_URL
+
+    if (!rawBackendUrl) {
+      throw new Error('NEXT_PUBLIC_API_URL or NEXT_PUBLIC_BACKEND_URL environment variable is required')
+    }
 
     if (rawBackendUrl.startsWith('http')) {
       return rawBackendUrl
