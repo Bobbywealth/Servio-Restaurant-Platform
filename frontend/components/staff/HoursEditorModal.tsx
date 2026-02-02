@@ -170,13 +170,56 @@ export function HoursEditorModal({ isOpen, staffMember, onClose, onSave }: Hours
 
   // Handle save entry
   const handleSaveEntry = async (entryData: Partial<TimeEntry>) => {
+    // #region agent log - Hypothesis A, B, D, E
+    fetch('http://127.0.0.1:7245/ingest/736b35ed-f7bd-4b4f-b5c9-370964b02fb5', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        location: 'HoursEditorModal.tsx:172',
+        message: 'handleSaveEntry called',
+        data: {
+          staffMemberId: staffMember?.id,
+          editingEntryId: editingEntry?.id,
+          entryData: {
+            clock_in_time: entryData.clock_in_time,
+            clock_out_time: entryData.clock_out_time,
+            break_minutes: entryData.break_minutes,
+            is_new: !editingEntry?.id
+          },
+          weekStartDate,
+          weekEndDateStr
+        },
+        timestamp: Date.now(),
+        sessionId: 'debug-session',
+        hypothesisId: 'A'
+      })
+    }).catch(() => {});
+    // #endregion
+
     if (!staffMember) return
 
     setSaving(true)
     setError(null)
 
     try {
+      let savedEntryId = null
+
       if (editingEntry && editingEntry.id) {
+        // #region agent log - Hypothesis A, E
+        fetch('http://127.0.0.1:7245/ingest/736b35ed-f7bd-4b4f-b5c9-370964b02fb5', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            location: 'HoursEditorModal.tsx:188',
+            message: 'Updating existing entry',
+            data: { entryId: editingEntry.id },
+            timestamp: Date.now(),
+            sessionId: 'debug-session',
+            hypothesisId: 'A'
+          })
+        }).catch(() => {});
+        // #endregion
+
         // Update existing entry
         await api.put(`/api/timeclock/entries/${editingEntry.id}`, {
           clockInTime: entryData.clock_in_time,
@@ -185,19 +228,87 @@ export function HoursEditorModal({ isOpen, staffMember, onClose, onSave }: Hours
           position: entryData.position,
           notes: entryData.notes
         })
+        savedEntryId = editingEntry.id
       } else {
+        // #region agent log - Hypothesis A, B, C, D, E
+        fetch('http://127.0.0.1:7245/ingest/736b35ed-f7bd-4b4f-b5c9-370964b02fb5', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            location: 'HoursEditorModal.tsx:199',
+            message: 'Creating new entry',
+            data: {
+              requestBody: {
+                userId: staffMember.id,
+                clockInTime: entryData.clock_in_time,
+                clockOutTime: entryData.clock_out_time,
+                breakMinutes: entryData.break_minutes
+              }
+            },
+            timestamp: Date.now(),
+            sessionId: 'debug-session',
+            hypothesisId: 'A'
+          })
+        }).catch(() => {});
+        // #endregion
+
         // Create new entry with both clock-in and clock-out times
-        await api.post('/api/timeclock/entries', {
+        const createResponse = await api.post('/api/timeclock/entries', {
           userId: staffMember.id,
           clockInTime: entryData.clock_in_time,
           clockOutTime: entryData.clock_out_time,
           breakMinutes: entryData.break_minutes,
-          position: entryData.position,
           notes: entryData.notes
         })
+
+        // #region agent log - Hypothesis D, E
+        fetch('http://127.0.0.1:7245/ingest/736b35ed-f7bd-4b4f-b5c9-370964b02fb5', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            location: 'HoursEditorModal.tsx:216',
+            message: 'Create response received',
+            data: {
+              success: createResponse.data?.success,
+              responseData: createResponse.data?.data,
+              hasId: !!createResponse.data?.data?.id,
+              hasClockInTime: !!createResponse.data?.data?.clockInTime,
+              hasClockOutTime: !!createResponse.data?.data?.clockOutTime
+            },
+            timestamp: Date.now(),
+            sessionId: 'debug-session',
+            hypothesisId: 'D'
+          })
+        }).catch(() => {});
+        // #endregion
+
+        savedEntryId = createResponse.data?.data?.id
       }
 
       // Refresh entries
+      // #region agent log - Hypothesis B, C, E
+      fetch('http://127.0.0.1:7245/ingest/736b35ed-f7bd-4b4f-b5c9-370964b02fb5', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          location: 'HoursEditorModal.tsx:220',
+          message: 'Refreshing entries',
+          data: {
+            savedEntryId,
+            filterParams: {
+              userId: staffMember.id,
+              startDate: weekStartDate,
+              endDate: weekEndDateStr,
+              status: 'all'
+            }
+          },
+          timestamp: Date.now(),
+          sessionId: 'debug-session',
+          hypothesisId: 'B'
+        })
+      }).catch(() => {});
+      // #endregion
+
       const response = await api.get('/api/timeclock/entries', {
         params: {
           userId: staffMember.id,
@@ -207,9 +318,48 @@ export function HoursEditorModal({ isOpen, staffMember, onClose, onSave }: Hours
           limit: 100
         }
       })
+
+      // #region agent log - Hypothesis B, D, E
+      fetch('http://127.0.0.1:7245/ingest/736b35ed-f7bd-4b4f-b5c9-370964b02fb5', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          location: 'HoursEditorModal.tsx:237',
+          message: 'Refresh response received',
+          data: {
+            entriesCount: response.data?.data?.entries?.length,
+            savedEntryInList: response.data?.data?.entries?.some((e: any) => e.id === savedEntryId),
+            sampleEntry: response.data?.data?.entries?.[0],
+            weekStartDate,
+            weekEndDateStr
+          },
+          timestamp: Date.now(),
+          sessionId: 'debug-session',
+          hypothesisId: 'B'
+        })
+      }).catch(() => {});
+      // #endregion
+
       setEntries(response.data?.data?.entries || [])
       setEditingEntry(null)
     } catch (err: any) {
+      // #region agent log
+      fetch('http://127.0.0.1:7245/ingest/736b35ed-f7bd-4b4f-b5c9-370964b02fb5', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          location: 'HoursEditorModal.tsx:250',
+          message: 'Error saving entry',
+          data: {
+            error: err.message,
+            response: err.response?.data
+          },
+          timestamp: Date.now(),
+          sessionId: 'debug-session',
+          hypothesisId: 'A'
+        })
+      }).catch(() => {});
+      // #endregion
       setError(err.response?.data?.error?.message || 'Failed to save entry')
     } finally {
       setSaving(false)

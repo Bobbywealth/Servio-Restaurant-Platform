@@ -583,12 +583,32 @@ router.get('/entries', asyncHandler(async (req: Request, res: Response) => {
  * This endpoint is used by the HoursEditorModal to create completed entries
  */
 router.post('/entries', asyncHandler(async (req: Request, res: Response) => {
+  // #region agent log - Hypothesis A, C, D
+  const fs = require('fs');
+  fs.appendFileSync('/Users/bobbyc/Servio Restaurant Platform/.cursor/debug.log', JSON.stringify({
+    location: 'timeclock.ts:585',
+    message: 'POST /entries endpoint called',
+    data: {
+      body: {
+        userId: req.body.userId,
+        clockInTime: req.body.clockInTime,
+        clockOutTime: req.body.clockOutTime,
+        breakMinutes: req.body.breakMinutes
+      },
+      authUserId: (req as any).user?.id,
+      authUserRole: (req as any).user?.role
+    },
+    timestamp: Date.now(),
+    sessionId: 'debug-session',
+    hypothesisId: 'A'
+  }) + '\n');
+  // #endregion
+
   const {
     userId,
     clockInTime,
     clockOutTime,
     breakMinutes,
-    position,
     notes
   } = req.body;
   const authUser = (req as any).user;
@@ -634,8 +654,8 @@ router.post('/entries', asyncHandler(async (req: Request, res: Response) => {
   await db.run(`
     INSERT INTO time_entries (
       id, restaurant_id, user_id, clock_in_time, clock_out_time,
-      break_minutes, total_hours, position, notes, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      break_minutes, total_hours, notes, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
   `, [
     entryId,
     user.restaurant_id,
@@ -644,7 +664,6 @@ router.post('/entries', asyncHandler(async (req: Request, res: Response) => {
     clockOutTime,
     breakMinutes || 0,
     totalHours.toFixed(2),
-    position || null,
     notes || null
   ]);
 
@@ -661,7 +680,6 @@ router.post('/entries', asyncHandler(async (req: Request, res: Response) => {
       clockOutTime,
       breakMinutes: breakMinutes || 0,
       totalHours: totalHours.toFixed(2),
-      position,
       notes
     }
   );
@@ -693,7 +711,6 @@ router.post('/entries', asyncHandler(async (req: Request, res: Response) => {
       clockOutTime,
       breakMinutes: breakMinutes || 0,
       totalHours: parseFloat(totalHours.toFixed(2)),
-      position: position || null,
       notes: notes || null
     }
   });
