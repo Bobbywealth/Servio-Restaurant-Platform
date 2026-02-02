@@ -14,6 +14,7 @@ interface ScheduleData {
   shift_end_time: string;
   position?: string;
   notes?: string;
+  is_published?: boolean;
 }
 
 interface AvailabilityData {
