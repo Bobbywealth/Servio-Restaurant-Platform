@@ -58,6 +58,11 @@ const TIME_SLOTS = Array.from({ length: 48 }, (_, i) => {
   return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`
 })
 
+const normalizeDate = (value?: string) => {
+  if (!value) return value
+  return value.split('T')[0]
+}
+
 export function ShiftEditorModal({
   isOpen,
   onClose,
@@ -90,7 +95,7 @@ export function ShiftEditorModal({
         setFormData({
           id: schedule.id,
           user_id: schedule.user_id,
-          shift_date: schedule.shift_date,
+          shift_date: normalizeDate(schedule.shift_date) || schedule.shift_date,
           shift_start_time: schedule.shift_start_time,
           shift_end_time: schedule.shift_end_time,
           position: schedule.position || '',
