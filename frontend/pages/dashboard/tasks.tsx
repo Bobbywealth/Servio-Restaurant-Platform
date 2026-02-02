@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react'
 import Head from 'next/head'
-import { CheckCircle, Plus, Filter, Clock, User, Calendar, Trash2, Edit, LayoutList, LayoutGrid, GripVertical } from 'lucide-react'
+import { CheckCircle, Plus, Filter, Clock, User, Calendar, Trash2, Edit, LayoutList, LayoutGrid, GripVertical, Sparkles, FileText, X, Upload, Wand2 } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 import DashboardLayout from '../../components/Layout/DashboardLayout'
 import { useUser } from '../../contexts/UserContext'
@@ -31,6 +31,13 @@ interface StaffMember {
   created_at: string
 }
 
+interface AIGeneratedTask {
+  title: string
+  description: string
+  priority: 'low' | 'medium' | 'high'
+  suggestedAssignee: string
+}
+
 export default function TasksPage() {
   const { user, hasPermission, isManagerOrOwner } = useUser()
   const [tasks, setTasks] = useState<Task[]>([])
@@ -41,6 +48,7 @@ export default function TasksPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showCreateModal, setShowCreateModal] = useState(false)
+  const [showAIGeneratorModal, setShowAIGeneratorModal] = useState(false)
   const [editingTask, setEditingTask] = useState<Task | null>(null)
   const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list')
   const [draggedTask, setDraggedTask] = useState<Task | null>(null)
@@ -256,13 +264,22 @@ export default function TasksPage() {
             </div>
 
             {canCreateTasks && (
-              <button
-                onClick={() => setShowCreateModal(true)}
-                className="btn-primary inline-flex items-center justify-center w-full sm:w-auto"
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Create Task
-              </button>
+              <div className="flex gap-2 w-full sm:w-auto">
+                <button
+                  onClick={() => setShowAIGeneratorModal(true)}
+                  className="btn-secondary inline-flex items-center justify-center w-full sm:w-auto"
+                >
+                  <Sparkles className="w-4 h-4 mr-2" />
+                  AI Generate
+                </button>
+                <button
+                  onClick={() => setShowCreateModal(true)}
+                  className="btn-primary inline-flex items-center justify-center w-full sm:w-auto"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Create Task
+                </button>
+              </div>
             )}
           </div>
 
@@ -581,6 +598,18 @@ export default function TasksPage() {
             onClose={() => setShowCreateModal(false)}
             onSuccess={() => {
               setShowCreateModal(false)
+              fetchTasks()
+            }}
+          />
+        )}
+
+        {/* AI Task Generator Modal */}
+        {showAIGeneratorModal && (
+          <TaskAIGeneratorModal
+            staff={staff}
+            onClose={() => setShowAIGeneratorModal(false)}
+            onSuccess={() => {
+              setShowAIGeneratorModal(false)
               fetchTasks()
             }}
           />
@@ -924,6 +953,392 @@ function TaskFormModal({ staff, onClose, onSuccess }: { staff: StaffMember[]; on
               </button>
             </div>
           </form>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// AI Task Generator Modal Component
+function TaskAIGeneratorModal({
+  staff,
+  onClose,
+  onSuccess
+}: {
+  staff: StaffMember[]
+  onClose: () => void
+  onSuccess: () => void
+}) {
+  const [textInput, setTextInput] = useState('')
+  const [generatedTasks, setGeneratedTasks] = useState<AIGeneratedTask[]>([])
+  const [selectedTasks, setSelectedTasks] = useState<Set<number>>(new Set())
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [isImporting, setIsImporting] = useState(false)
+  const [maxTasks, setMaxTasks] = useState(10)
+  const [fileContent, setFileContent] = useState<string | null>(null)
+  const [dragActive, setDragActive] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleGenerate = async () => {
+    const content = textInput.trim() || fileContent
+    if (!content || content.length < 10) {
+      toast.error('Please enter at least 10 characters of text')
+      return
+    }
+
+    setIsGenerating(true)
+    try {
+      const res = await api.post('/api/tasks/generate-from-text', {
+        text: content,
+        options: { maxTasks }
+      })
+
+      if (res.data.success) {
+        setGeneratedTasks(res.data.data.tasks)
+        // Auto-select all tasks
+        setSelectedTasks(new Set(res.data.data.tasks.map((_: any, i: number) => i)))
+        toast.success(`Generated ${res.data.data.count} task suggestions`)
+      } else {
+        toast.error(res.data.error?.message || 'Failed to generate tasks')
+      }
+    } catch (e: any) {
+      toast.error(e?.response?.data?.error?.message || 'Failed to generate tasks')
+    } finally {
+      setIsGenerating(false)
+    }
+  }
+
+  const handleImport = async () => {
+    if (selectedTasks.size === 0) {
+      toast.error('Please select at least one task to import')
+      return
+    }
+
+    setIsImporting(true)
+    try {
+      const tasksToImport = generatedTasks
+        .filter((_, index) => selectedTasks.has(index))
+        .map(task => ({
+          title: task.title,
+          description: task.description,
+          priority: task.priority,
+          status: 'pending' as const,
+          type: 'one_time' as const
+        }))
+
+      const res = await api.post('/api/tasks/bulk-create', { tasks: tasksToImport })
+
+      if (res.data.success) {
+        toast.success(`Successfully created ${res.data.data.summary.created} tasks`)
+        onSuccess()
+      } else {
+        toast.error(res.data.error?.message || 'Failed to import tasks')
+      }
+    } catch (e: any) {
+      toast.error(e?.response?.data?.error?.message || 'Failed to import tasks')
+    } finally {
+      setIsImporting(false)
+    }
+  }
+
+  const toggleTaskSelection = (index: number) => {
+    const newSelected = new Set(selectedTasks)
+    if (newSelected.has(index)) {
+      newSelected.delete(index)
+    } else {
+      newSelected.add(index)
+    }
+    setSelectedTasks(newSelected)
+  }
+
+  const selectAllTasks = () => {
+    setSelectedTasks(new Set(generatedTasks.map((_, i) => i)))
+  }
+
+  const deselectAllTasks = () => {
+    setSelectedTasks(new Set())
+  }
+
+  const handleDrag = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (e.type === 'dragenter' || e.type === 'dragover') {
+      setDragActive(true)
+    } else if (e.type === 'dragleave') {
+      setDragActive(false)
+    }
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setDragActive(false)
+
+    const files = e.dataTransfer.files
+    if (files && files[0]) {
+      const file = files[0]
+      if (file.type === 'text/plain' || file.name.endsWith('.md') || file.name.endsWith('.txt') || file.name.endsWith('.json')) {
+        const reader = new FileReader()
+        reader.onload = (event) => {
+          setFileContent(event.target?.result as string)
+          setTextInput('')
+        }
+        reader.readAsText(file)
+      } else {
+        toast.error('Please upload a text, markdown, or JSON file')
+      }
+    }
+  }
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (files && files[0]) {
+      const file = files[0]
+      const reader = new FileReader()
+      reader.onload = (event) => {
+        setFileContent(event.target?.result as string)
+        setTextInput('')
+      }
+      reader.readAsText(file)
+    }
+  }
+
+  const clearFile = () => {
+    setFileContent(null)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+      <div
+        className="bg-white dark:bg-surface-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto my-8"
+        style={{ maxHeight: 'calc(100vh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px))' }}
+      >
+        <div className="p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-bold text-surface-900 dark:text-surface-100 flex items-center">
+              <Sparkles className="w-5 h-5 mr-2 text-primary-600" />
+              AI Task Generator
+            </h2>
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-surface-100 dark:hover:bg-surface-700 rounded-lg transition-colors"
+            >
+              <X className="w-5 h-5 text-surface-500" />
+            </button>
+          </div>
+
+          <p className="text-sm text-surface-600 dark:text-surface-400 mb-4">
+            Paste text from meetings, emails, or documents. AI will extract actionable tasks for you.
+          </p>
+
+          {/* Options */}
+          <div className="mb-4 p-4 bg-surface-50 dark:bg-surface-900 rounded-lg">
+            <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-2">
+              Maximum tasks to generate
+            </label>
+            <select
+              className="input-field w-full max-w-[200px]"
+              value={maxTasks}
+              onChange={(e) => setMaxTasks(Number(e.target.value))}
+            >
+              <option value={5}>5 tasks</option>
+              <option value={10}>10 tasks</option>
+              <option value={15}>15 tasks</option>
+              <option value={20}>20 tasks</option>
+              <option value={30}>30 tasks</option>
+            </select>
+          </div>
+
+          {/* Text Input */}
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-2">
+              Text Content
+            </label>
+            <textarea
+              className="input-field w-full scroll-mt-24"
+              rows={6}
+              value={textInput}
+              onChange={(e) => {
+                setTextInput(e.target.value)
+                if (e.target.value && fileContent) {
+                  setFileContent(null)
+                }
+              }}
+              placeholder="Paste your text here...&#10;&#10;Example: Meeting notes, email content, SOP documentation, or any text containing actionable items."
+              disabled={!!fileContent}
+            />
+            {fileContent && (
+              <div className="mt-2 p-3 bg-surface-100 dark:bg-surface-900 rounded-lg">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-surface-700 dark:text-surface-300 flex items-center">
+                    <FileText className="w-4 h-4 mr-2" />
+                    File loaded
+                  </span>
+                  <button
+                    onClick={clearFile}
+                    className="text-sm text-servio-red-600 hover:text-servio-red-700"
+                  >
+                    Remove
+                  </button>
+                </div>
+                <p className="text-xs text-surface-500 dark:text-surface-400">
+                  {fileContent.length} characters
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* File Upload */}
+          <div
+            className={`mb-6 border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
+              dragActive
+                ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
+                : 'border-surface-300 dark:border-surface-600 hover:border-surface-400 dark:hover:border-surface-500'
+            }`}
+            onDragEnter={handleDrag}
+            onDragLeave={handleDrag}
+            onDragOver={handleDrag}
+            onDrop={handleDrop}
+          >
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".txt,.md,.json,text/plain,text/markdown,application/json"
+              onChange={handleFileSelect}
+              className="hidden"
+              id="file-upload"
+            />
+            <label htmlFor="file-upload" className="cursor-pointer">
+              <Upload className="w-8 h-8 mx-auto text-surface-400 mb-2" />
+              <p className="text-sm text-surface-600 dark:text-surface-400">
+                Drag and drop a file, or{' '}
+                <span className="text-primary-600 dark:text-primary-400 font-medium">
+                  browse
+                </span>
+              </p>
+              <p className="text-xs text-surface-500 dark:text-surface-500 mt-1">
+                Supports .txt, .md, .json files
+              </p>
+            </label>
+          </div>
+
+          {/* Generate Button */}
+          <button
+            onClick={handleGenerate}
+            disabled={isGenerating || (!textInput.trim() && !fileContent)}
+            className="btn-primary w-full mb-6 min-h-[44px]"
+          >
+            {isGenerating ? (
+              <>
+                <div className="inline-block animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent mr-2" />
+                Analyzing text...
+              </>
+            ) : (
+              <>
+                <Wand2 className="w-4 h-4 mr-2" />
+                Generate Tasks
+              </>
+            )}
+          </button>
+
+          {/* Generated Tasks Preview */}
+          {generatedTasks.length > 0 && (
+            <div className="border-t border-surface-200 dark:border-surface-700 pt-4">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-surface-900 dark:text-surface-100">
+                  Generated Tasks ({selectedTasks.size}/{generatedTasks.length} selected)
+                </h3>
+                <div className="flex gap-2">
+                  <button
+                    onClick={selectAllTasks}
+                    className="text-sm text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300"
+                  >
+                    Select All
+                  </button>
+                  <span className="text-surface-300 dark:text-surface-600">|</span>
+                  <button
+                    onClick={deselectAllTasks}
+                    className="text-sm text-surface-500 hover:text-surface-700 dark:hover:text-surface-300"
+                  >
+                    Deselect All
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-3 max-h-[300px] overflow-y-auto mb-4">
+                {generatedTasks.map((task, index) => (
+                  <div
+                    key={index}
+                    className={`p-3 rounded-lg border cursor-pointer transition-colors ${
+                      selectedTasks.has(index)
+                        ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
+                        : 'border-surface-200 dark:border-surface-700 hover:border-surface-300 dark:hover:border-surface-600'
+                    }`}
+                    onClick={() => toggleTaskSelection(index)}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 mt-0.5 ${
+                        selectedTasks.has(index)
+                          ? 'border-primary-500 bg-primary-500 text-white'
+                          : 'border-surface-300 dark:border-surface-600'
+                      }`}>
+                        {selectedTasks.has(index) && (
+                          <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 12 12">
+                            <path d="M10.28 2.28a.75.75 0 0 1 1.061 1.06l-5.5 5.5a.75.75 0 0 1-1.06 0l-2.5-2.5a.75.75 0 0 1 1.06-1.06l2.12 2.122 5.15-5.15a.75.75 0 0 1 1.06 0z" />
+                          </svg>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className={`badge ${
+                            task.priority === 'high' ? 'badge-error' :
+                            task.priority === 'medium' ? 'badge-warning' : 'badge-success'
+                          }`}>
+                            {task.priority}
+                          </span>
+                          {task.suggestedAssignee && (
+                            <span className="text-xs text-surface-500 dark:text-surface-400">
+                              Suggested: {task.suggestedAssignee}
+                            </span>
+                          )}
+                        </div>
+                        <h4 className="font-medium text-surface-900 dark:text-surface-100 text-sm">
+                          {task.title}
+                        </h4>
+                        {task.description && (
+                          <p className="text-xs text-surface-600 dark:text-surface-400 mt-1 line-clamp-2">
+                            {task.description}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Import Button */}
+              <button
+                onClick={handleImport}
+                disabled={isImporting || selectedTasks.size === 0}
+                className="btn-primary w-full min-h-[44px]"
+              >
+                {isImporting ? (
+                  <>
+                    <div className="inline-block animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent mr-2" />
+                    Importing {selectedTasks.size} tasks...
+                  </>
+                ) : (
+                  <>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Import {selectedTasks.size} Selected Task{selectedTasks.size !== 1 ? 's' : ''}
+                  </>
+                )}
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>

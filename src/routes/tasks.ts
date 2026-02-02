@@ -498,4 +498,226 @@ router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
   });
 }));
 
+/**
+ * POST /api/tasks/generate-from-text
+ * Generate tasks from text using AI
+ */
+router.post('/generate-from-text', asyncHandler(async (req: Request, res: Response) => {
+  const { text, options } = req.body;
+
+  if (!text || typeof text !== 'string') {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'Text content is required' }
+    });
+  }
+
+  if (text.length < 10) {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'Text content is too short. Please provide at least 10 characters.' }
+    });
+  }
+
+  if (text.length > 50000) {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'Text content is too long. Maximum 50,000 characters allowed.' }
+    });
+  }
+
+  try {
+    const { MiniMaxService } = await import('../services/MiniMaxService');
+    const miniMax = new MiniMaxService();
+
+    const maxTasks = Math.min(Math.max(options?.maxTasks || 10, 1), 50);
+
+    const prompt = `Analyze the following text and extract all actionable tasks. For each task, provide:
+- Task title (clear, concise action item, max 100 characters)
+- Task description (additional context or details, max 500 characters)
+- Suggested priority (high/medium/low based on urgency and importance)
+- Suggested assignee name (if mentioned in text, otherwise leave empty)
+
+Text to analyze:
+${text}
+
+Return ONLY a valid JSON array with this structure:
+[
+  {
+    "title": "Task title here",
+    "description": "Optional description here",
+    "priority": "high|medium|low",
+    "assignee": "Name of person if mentioned"
+  }
+]
+
+Do not include any other text, markdown formatting, or explanations. Just the JSON array.`;
+
+    const response = await miniMax.chat([
+      {
+        role: 'user',
+        content: prompt
+      }
+    ], {
+      model: 'abab6.5s-chat',
+      temperature: 0.3
+    });
+
+    let extractedTasks: any[] = [];
+
+    try {
+      // Try to parse the response as JSON
+      const content = response.choices[0]?.message?.content || '';
+      // Clean up the response to extract just the JSON array
+      const jsonMatch = content.match(/\[[\s\S]*\]/);
+      if (jsonMatch) {
+        extractedTasks = JSON.parse(jsonMatch[0]);
+      }
+
+      // Validate and clean up the tasks
+      extractedTasks = extractedTasks
+        .filter(task => task.title && typeof task.title === 'string')
+        .map(task => ({
+          title: task.title.trim().substring(0, 100),
+          description: (task.description || '').trim().substring(0, 500),
+          priority: ['high', 'medium', 'low'].includes(task.priority?.toLowerCase())
+            ? task.priority.toLowerCase()
+            : 'medium',
+          suggestedAssignee: (task.assignee || '').trim()
+        }))
+        .slice(0, maxTasks);
+
+    } catch (parseError) {
+      logger.error('Failed to parse AI response:', parseError);
+      return res.status(500).json({
+        success: false,
+        error: { message: 'Failed to parse AI response. Please try again.' }
+      });
+    }
+
+    if (extractedTasks.length === 0) {
+      return res.status(500).json({
+        success: false,
+        error: { message: 'Could not extract any tasks from the text. Please try a different input.' }
+      });
+    }
+
+    logger.info(`AI generated ${extractedTasks.length} tasks from text`);
+
+    res.json({
+      success: true,
+      data: {
+        tasks: extractedTasks,
+        count: extractedTasks.length,
+        sourceTextLength: text.length
+      }
+    });
+  } catch (error: any) {
+    logger.error('AI task generation failed:', error);
+    res.status(500).json({
+      success: false,
+      error: { message: 'Failed to generate tasks. Please try again.' }
+    });
+  }
+}));
+
+/**
+ * POST /api/tasks/bulk-create
+ * Create multiple tasks at once
+ */
+router.post('/bulk-create', asyncHandler(async (req: Request, res: Response) => {
+  const { tasks } = req.body;
+
+  if (!tasks || !Array.isArray(tasks) || tasks.length === 0) {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'Tasks array is required' }
+    });
+  }
+
+  if (tasks.length > 100) {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'Maximum 100 tasks can be created at once' }
+    });
+  }
+
+  const db = DatabaseService.getInstance().getDatabase();
+  const restaurantId = req.user?.restaurantId;
+  const createdTasks: any[] = [];
+  const errors: any[] = [];
+
+  for (let i = 0; i < tasks.length; i++) {
+    const task = tasks[i];
+    const taskId = `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+    try {
+      const title = task.title?.trim();
+      if (!title) {
+        errors.push({ index: i, error: 'Title is required' });
+        continue;
+      }
+
+      const priority = ['low', 'medium', 'high'].includes(task.priority?.toLowerCase())
+        ? task.priority.toLowerCase()
+        : 'medium';
+      const status = ['pending', 'in_progress', 'completed'].includes(task.status?.toLowerCase())
+        ? task.status.toLowerCase()
+        : 'pending';
+      const type = ['daily', 'weekly', 'monthly', 'one_time'].includes(task.type?.toLowerCase())
+        ? task.type.toLowerCase()
+        : 'one_time';
+
+      await db.run(`
+        INSERT INTO tasks (
+          id, restaurant_id, title, description, type, assigned_to, due_date, status, priority
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [
+        taskId,
+        restaurantId,
+        title,
+        task.description?.trim() || null,
+        type,
+        task.assignedTo || null,
+        task.dueDate || null,
+        status,
+        priority
+      ]);
+
+      createdTasks.push({
+        taskId,
+        title,
+        priority,
+        status
+      });
+    } catch (err: any) {
+      errors.push({ index: i, error: err.message });
+    }
+  }
+
+  await DatabaseService.getInstance().logAudit(
+    restaurantId!,
+    req.user?.id || 'system',
+    'bulk_create_tasks',
+    'tasks',
+    'bulk',
+    { totalRequested: tasks.length, created: createdTasks.length, errors: errors.length }
+  );
+
+  logger.info(`Bulk created ${createdTasks.length} tasks`);
+
+  res.status(201).json({
+    success: true,
+    data: {
+      created: createdTasks,
+      errors: errors.length > 0 ? errors : undefined,
+      summary: {
+        total: tasks.length,
+        created: createdTasks.length,
+        failed: errors.length
+      }
+    }
+  });
+}));
+
 export default router;
