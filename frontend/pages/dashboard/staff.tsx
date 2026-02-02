@@ -578,6 +578,11 @@ export default function StaffPage() {
     return `${year}-${month}-${day}`
   }
 
+  const normalizeScheduleDate = (value?: string) => {
+    if (!value) return value
+    return value.split('T')[0]
+  }
+
   // Get week dates for the bar chart
   const getWeekDates = () => {
     const now = new Date()
@@ -780,6 +785,10 @@ export default function StaffPage() {
       ])
 
       const schedules = schedulesResp.data?.data?.schedules || []
+      const normalizedSchedules = schedules.map((schedule: Schedule) => ({
+        ...schedule,
+        shift_date: normalizeScheduleDate(schedule.shift_date) || schedule.shift_date
+      }))
       console.log('[SCHEDULING-FRONTEND] Received', schedules.length, 'schedules');
       if (schedules.length > 0) {
         console.log('[SCHEDULING-FRONTEND] Sample schedules:', schedules.slice(0, 3).map((s: Schedule) => ({
@@ -789,9 +798,9 @@ export default function StaffPage() {
         })));
       }
 
-      setSchedules(schedules)
+      setSchedules(normalizedSchedules)
       setTemplates(templatesResp.data?.data?.templates || [])
-      return schedules
+      return normalizedSchedules
     } catch (error) {
       console.warn('Failed to load schedules:', error)
       if (showError) {
