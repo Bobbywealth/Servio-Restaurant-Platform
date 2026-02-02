@@ -295,16 +295,27 @@ router.post('/schedules', asyncHandler(async (req: Request, res: Response) => {
   console.log('[DEBUG] Schedule created successfully:', {
     scheduleId,
     restaurantId,
-    shift_date: data.shift_date,
-    user_id: data.user_id
+    shift_date: data.shift_date,  // THIS IS THE KEY - WHAT DATE WAS IT CREATED FOR?
+    user_id: data.user_id,
+    shift_start_time: data.shift_start_time,
+    shift_end_time: data.shift_end_time
   });
+
+  // Also query all schedules for this restaurant/date to verify
+  const verification = await db.all(`
+    SELECT * FROM staff_schedules
+    WHERE id = ?
+  `, [scheduleId]);
+
+  console.log('[DEBUG] Verification - Schedule in DB:', verification);
+
   // #region agent log - Hypothesis Testing
   fetch('http://127.0.0.1:7245/ingest/736b35ed-f7bd-4b4f-b5c9-370964b02fb5', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      location: 'staff-scheduling.ts:220',
-      message: 'POST schedules - schedule created successfully',
+      location: 'staff-scheduling.ts:294',
+      message: 'POST schedules - schedule created successfully with shift_date',
       data: {
         scheduleId,
         restaurantId,
@@ -312,7 +323,7 @@ router.post('/schedules', asyncHandler(async (req: Request, res: Response) => {
         user_id: data.user_id,
         is_published: false
       },
-      hypothesisId: 'H1',
+      hypothesisId: 'H2',
       timestamp: Date.now(),
       sessionId: 'debug-session'
     })
