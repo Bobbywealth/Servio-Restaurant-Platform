@@ -41,7 +41,16 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const [edgeSwipeActive, setEdgeSwipeActive] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [isDesktop, setIsDesktop] = useState(false);
   const router = useRouter();
+
+  // Detect desktop screen size (lg breakpoint = 1024px)
+  React.useEffect(() => {
+    const checkIsDesktop = () => setIsDesktop(window.innerWidth >= 1024);
+    checkIsDesktop();
+    window.addEventListener('resize', checkIsDesktop);
+    return () => window.removeEventListener('resize', checkIsDesktop);
+  }, []);
 
   // Haptic feedback function for native feel
   const triggerHaptic = React.useCallback(() => {
@@ -294,18 +303,18 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       </AnimatePresence>
 
       <motion.div
-        className={`fixed inset-y-0 left-0 z-50 w-72 bg-white dark:bg-gray-800 lg:translate-x-0 border-r border-gray-200 dark:border-gray-700 shadow-2xl shadow-black/20 gpu-accelerated will-change-transform ${
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        className={`fixed inset-y-0 left-0 z-50 w-72 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 shadow-2xl shadow-black/20 gpu-accelerated will-change-transform ${
+          isDesktop ? '' : (sidebarOpen ? 'translate-x-0' : '-translate-x-full')
         }`}
         initial={false}
-        animate={sidebarOpen ? 'open' : 'closed'}
-        variants={drawerVariants}
-        drag={edgeSwipeActive || sidebarOpen ? 'x' : false}
+        animate={isDesktop ? undefined : (sidebarOpen ? 'open' : 'closed')}
+        variants={isDesktop ? undefined : drawerVariants}
+        drag={!isDesktop && (edgeSwipeActive || sidebarOpen) ? 'x' : false}
         dragConstraints={dragConstraints}
         dragElastic={dragElastic}
         dragSnapToOrigin={true}
         onDragEnd={handleDragEnd}
-        whileDrag={{ scale: 0.98 }}
+        whileDrag={!isDesktop ? { scale: 0.98 } : undefined}
       >
         <div className="flex items-center justify-between h-16 px-6 border-b border-gray-200 dark:border-gray-700">
           <motion.div className="flex items-center" whileHover={{ scale: 1.02 }}>
