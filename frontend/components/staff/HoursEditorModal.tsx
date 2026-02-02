@@ -49,6 +49,23 @@ interface HoursEditorModalProps {
   onSave: () => void
 }
 
+const formatLocalDate = (date: Date) => {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+const formatLocalDateTime = (dateString: string, timeString: string) => {
+  return `${dateString}T${timeString}:00`
+}
+
+const addDays = (dateString: string, days: number) => {
+  const base = new Date(`${dateString}T00:00:00`)
+  base.setDate(base.getDate() + days)
+  return formatLocalDate(base)
+}
+
 export function HoursEditorModal({ isOpen, staffMember, onClose, onSave }: HoursEditorModalProps) {
   const [currentWeekStart, setCurrentWeekStart] = useState<Date>(getWeekStart(new Date()))
   const [entries, setEntries] = useState<TimeEntry[]>([])
@@ -81,9 +98,9 @@ export function HoursEditorModal({ isOpen, staffMember, onClose, onSave }: Hours
   }
 
   const weekDates = getWeekDates(currentWeekStart)
-  const weekStartDate = currentWeekStart.toISOString().split('T')[0]
+  const weekStartDate = formatLocalDate(currentWeekStart)
   const weekEndDate = new Date(currentWeekStart).setDate(currentWeekStart.getDate() + 6)
-  const weekEndDateStr = new Date(weekEndDate).toISOString().split('T')[0]
+  const weekEndDateStr = formatLocalDate(new Date(weekEndDate))
 
   // Fetch entries for the current week
   useEffect(() => {
@@ -125,9 +142,9 @@ export function HoursEditorModal({ isOpen, staffMember, onClose, onSave }: Hours
 
   // Get entries for a specific date
   const getEntriesForDate = (date: Date): TimeEntry[] => {
-    const dateStr = date.toISOString().split('T')[0]
+    const dateStr = formatLocalDate(date)
     return entries.filter(entry => {
-      const entryDate = new Date(entry.clock_in_time).toISOString().split('T')[0]
+      const entryDate = formatLocalDate(new Date(entry.clock_in_time))
       return entryDate === dateStr
     })
   }
@@ -253,9 +270,9 @@ export function HoursEditorModal({ isOpen, staffMember, onClose, onSave }: Hours
 
   // Get day total hours
   const getDayTotal = (date: Date): number => {
-    const dateStr = date.toISOString().split('T')[0]
+    const dateStr = formatLocalDate(date)
     const dayEntries = entries.filter(entry => {
-      const entryDate = new Date(entry.clock_in_time).toISOString().split('T')[0]
+      const entryDate = formatLocalDate(new Date(entry.clock_in_time))
       return entryDate === dateStr && entry.clock_out_time !== null
     })
     return dayEntries.reduce((sum, entry) => sum + (entry.total_hours || 0), 0)
@@ -421,9 +438,11 @@ export function HoursEditorModal({ isOpen, staffMember, onClose, onSave }: Hours
                             {dayEntries.length === 0 && !isFuture && (
                               <button
                                 onClick={() => {
+                                  const entryDate = new Date(date)
+                                  const dateStr = formatLocalDate(entryDate)
                                   const newEntry: Partial<TimeEntry> = {
-                                    clock_in_time: new Date(date.setHours(9, 0, 0, 0)).toISOString(),
-                                    clock_out_time: new Date(date.setHours(17, 0, 0, 0)).toISOString(),
+                                    clock_in_time: formatLocalDateTime(dateStr, '09:00'),
+                                    clock_out_time: formatLocalDateTime(dateStr, '17:00'),
                                     position: null,
                                     notes: null,
                                     is_break: false
@@ -534,9 +553,11 @@ export function HoursEditorModal({ isOpen, staffMember, onClose, onSave }: Hours
                               <button
                                 onClick={() => {
                                   // Pre-fill with default times
+                                  const entryDate = new Date(date)
+                                  const dateStr = formatLocalDate(entryDate)
                                   const newEntry: Partial<TimeEntry> = {
-                                    clock_in_time: new Date(date.setHours(9, 0, 0, 0)).toISOString(),
-                                    clock_out_time: new Date(date.setHours(17, 0, 0, 0)).toISOString(),
+                                    clock_in_time: formatLocalDateTime(dateStr, '09:00'),
+                                    clock_out_time: formatLocalDateTime(dateStr, '17:00'),
                                     position: null,
                                     notes: null,
                                     is_break: false
@@ -609,28 +630,23 @@ function EditEntryModal({ entry, isNew, onSave, onClose, saving }: EditEntryModa
   const [notes, setNotes] = useState(entry.notes || '')
   const [isBreak, setIsBreak] = useState(entry.is_break || false)
   const [date, setDate] = useState(
-    entry.clock_in_time ? new Date(entry.clock_in_time).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
+    entry.clock_in_time ? formatLocalDate(new Date(entry.clock_in_time)) : formatLocalDate(new Date())
   )
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
 
-    const clockInDateTime = new Date(date)
     const [hours, mins] = clockInTime.split(':').map(Number)
-    clockInDateTime.setHours(hours, mins, 0, 0)
-
-    const clockOutDateTime = new Date(date)
     const [outHours, outMins] = clockOutTime.split(':').map(Number)
-    clockOutDateTime.setHours(outHours, outMins, 0, 0)
+    const clockInDate = date
+    const clockOutDate = clockOutTime <= clockInTime ? addDays(date, 1) : date
 
-    // Handle overnight shifts
-    if (clockOutDateTime <= clockInDateTime) {
-      clockOutDateTime.setDate(clockOutDateTime.getDate() + 1)
-    }
+    const clockInDateTime = formatLocalDateTime(clockInDate, `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`)
+    const clockOutDateTime = formatLocalDateTime(clockOutDate, `${outHours.toString().padStart(2, '0')}:${outMins.toString().padStart(2, '0')}`)
 
     onSave({
-      clock_in_time: clockInDateTime.toISOString(),
-      clock_out_time: clockOutDateTime.toISOString(),
+      clock_in_time: clockInDateTime,
+      clock_out_time: clockOutDateTime,
       break_minutes: parseInt(breakMinutes) || 0,
       position: position || null,
       notes: notes || null,
