@@ -40,7 +40,7 @@ interface ShiftTemplateData {
  */
 router.get('/schedules', asyncHandler(async (req: Request, res: Response) => {
   const { userId, startDate, endDate, published } = req.query;
-  const restaurantId = (req as any).restaurantId;
+  const restaurantId = (req as any).user?.restaurantId;
 
   const db = DatabaseService.getInstance().getDatabase();
 
@@ -92,7 +92,7 @@ router.get('/schedules', asyncHandler(async (req: Request, res: Response) => {
  */
 router.get('/schedules/:id', asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
-  const restaurantId = (req as any).restaurantId;
+  const restaurantId = (req as any).user?.restaurantId;
 
   const db = DatabaseService.getInstance().getDatabase();
 
@@ -126,8 +126,16 @@ router.get('/schedules/:id', asyncHandler(async (req: Request, res: Response) =>
  */
 router.post('/schedules', asyncHandler(async (req: Request, res: Response) => {
   const data: ScheduleData = req.body;
-  const restaurantId = (req as any).restaurantId;
-  const userId = (req as any).userId;
+  const user = (req as any).user;
+  const restaurantId = user?.restaurantId;
+  const userId = user?.id;
+
+  if (!restaurantId) {
+    return res.status(401).json({
+      success: false,
+      error: { message: 'Restaurant context not found' }
+    });
+  }
 
   if (!data.user_id || !data.shift_date || !data.shift_start_time || !data.shift_end_time) {
     return res.status(400).json({
@@ -215,8 +223,8 @@ router.post('/schedules', asyncHandler(async (req: Request, res: Response) => {
 router.put('/schedules/:id', asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
   const data: Partial<ScheduleData> = req.body;
-  const restaurantId = (req as any).restaurantId;
-  const userId = (req as any).userId;
+  const restaurantId = (req as any).user?.restaurantId;
+  const userId = (req as any).user?.id;
 
   const db = DatabaseService.getInstance().getDatabase();
 
@@ -327,8 +335,8 @@ router.put('/schedules/:id', asyncHandler(async (req: Request, res: Response) =>
  */
 router.delete('/schedules/:id', asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
-  const restaurantId = (req as any).restaurantId;
-  const userId = (req as any).userId;
+  const restaurantId = (req as any).user?.restaurantId;
+  const userId = (req as any).user?.id;
 
   const db = DatabaseService.getInstance().getDatabase();
 
@@ -372,8 +380,8 @@ router.delete('/schedules/:id', asyncHandler(async (req: Request, res: Response)
  */
 router.post('/schedules/bulk', asyncHandler(async (req: Request, res: Response) => {
   const { schedules }: { schedules: ScheduleData[] } = req.body;
-  const restaurantId = (req as any).restaurantId;
-  const userId = (req as any).userId;
+  const restaurantId = (req as any).user?.restaurantId;
+  const userId = (req as any).user?.id;
 
   if (!Array.isArray(schedules) || schedules.length === 0) {
     return res.status(400).json({
@@ -452,8 +460,8 @@ router.post('/schedules/bulk', asyncHandler(async (req: Request, res: Response) 
  */
 router.post('/publish', asyncHandler(async (req: Request, res: Response) => {
   const { startDate, endDate } = req.body;
-  const restaurantId = (req as any).restaurantId;
-  const userId = (req as any).userId;
+  const restaurantId = (req as any).user?.restaurantId;
+  const userId = (req as any).user?.id;
 
   if (!startDate || !endDate) {
     return res.status(400).json({
@@ -498,7 +506,7 @@ router.post('/publish', asyncHandler(async (req: Request, res: Response) => {
  */
 router.get('/availability/:userId', asyncHandler(async (req: Request, res: Response) => {
   const { userId } = req.params;
-  const restaurantId = (req as any).restaurantId;
+  const restaurantId = (req as any).user?.restaurantId;
 
   const db = DatabaseService.getInstance().getDatabase();
 
@@ -531,8 +539,8 @@ router.get('/availability/:userId', asyncHandler(async (req: Request, res: Respo
 router.put('/availability/:userId', asyncHandler(async (req: Request, res: Response) => {
   const { userId } = req.params;
   const data: AvailabilityData = req.body;
-  const restaurantId = (req as any).restaurantId;
-  const currentUserId = (req as any).userId;
+  const restaurantId = (req as any).user?.restaurantId;
+  const currentUserId = (req as any).user?.id;
 
   const db = DatabaseService.getInstance().getDatabase();
 
@@ -583,7 +591,7 @@ router.put('/availability/:userId', asyncHandler(async (req: Request, res: Respo
  */
 router.get('/templates', asyncHandler(async (req: Request, res: Response) => {
   const { active } = req.query;
-  const restaurantId = (req as any).restaurantId;
+  const restaurantId = (req as any).user?.restaurantId;
 
   const db = DatabaseService.getInstance().getDatabase();
 
@@ -611,8 +619,8 @@ router.get('/templates', asyncHandler(async (req: Request, res: Response) => {
  */
 router.post('/templates', asyncHandler(async (req: Request, res: Response) => {
   const data: ShiftTemplateData = req.body;
-  const restaurantId = (req as any).restaurantId;
-  const userId = (req as any).userId;
+  const restaurantId = (req as any).user?.restaurantId;
+  const userId = (req as any).user?.id;
 
   if (!data.name || !data.start_time || !data.end_time) {
     return res.status(400).json({
@@ -655,7 +663,7 @@ router.post('/templates', asyncHandler(async (req: Request, res: Response) => {
 router.put('/templates/:id', asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
   const data: Partial<ShiftTemplateData> = req.body;
-  const restaurantId = (req as any).restaurantId;
+  const restaurantId = (req as any).user?.restaurantId;
 
   const db = DatabaseService.getInstance().getDatabase();
 
@@ -721,7 +729,7 @@ router.put('/templates/:id', asyncHandler(async (req: Request, res: Response) =>
  */
 router.delete('/templates/:id', asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
-  const restaurantId = (req as any).restaurantId;
+  const restaurantId = (req as any).user?.restaurantId;
 
   const db = DatabaseService.getInstance().getDatabase();
 
@@ -748,7 +756,7 @@ router.delete('/templates/:id', asyncHandler(async (req: Request, res: Response)
  */
 router.get('/summary', asyncHandler(async (req: Request, res: Response) => {
   const { startDate, endDate } = req.query;
-  const restaurantId = (req as any).restaurantId;
+  const restaurantId = (req as any).user?.restaurantId;
 
   if (!startDate || !endDate) {
     return res.status(400).json({
