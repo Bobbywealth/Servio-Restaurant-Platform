@@ -146,7 +146,8 @@ router.post('/schedules', asyncHandler(async (req: Request, res: Response) => {
   if (!data.user_id || !data.shift_date || !data.shift_start_time || !data.shift_end_time) {
     return res.status(400).json({
       success: false,
-      error: { message: 'Missing required fields' })
+      error: { message: 'Missing required fields' }
+    });
   }
 
   const db = DatabaseService.getInstance().getDatabase();
