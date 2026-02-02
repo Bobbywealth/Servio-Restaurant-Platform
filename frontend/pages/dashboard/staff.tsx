@@ -782,7 +782,7 @@ export default function StaffPage() {
       const schedules = schedulesResp.data?.data?.schedules || []
       console.log('[SCHEDULING-FRONTEND] Received', schedules.length, 'schedules');
       if (schedules.length > 0) {
-        console.log('[SCHEDULING-FRONTEND] Sample schedules:', schedules.slice(0, 3).map(s => ({
+        console.log('[SCHEDULING-FRONTEND] Sample schedules:', schedules.slice(0, 3).map((s: Schedule) => ({
           id: s.id?.slice(0, 8),
           date: s.shift_date,
           user: s.user_name
