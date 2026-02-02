@@ -43,6 +43,26 @@ router.get('/schedules', asyncHandler(async (req: Request, res: Response) => {
   const { userId, startDate, endDate, published } = req.query;
   const restaurantId = (req as any).user?.restaurantId;
 
+  console.log('[DEBUG] GET /schedules - Query params:', { userId, startDate, endDate, published, restaurantId });
+  // #region agent log - Hypothesis Testing
+  fetch('http://127.0.0.1:7245/ingest/736b35ed-f7bd-4b4f-b5c9-370964b02fb5', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      location: 'staff-scheduling.ts:45',
+      message: 'GET schedules - checking filters and restaurant context',
+      data: {
+        queryParams: { userId, startDate, endDate, published },
+        restaurantId,
+        sessionUserId: (req as any).user?.id
+      },
+      hypothesisId: 'H1,H2,H3',
+      timestamp: Date.now(),
+      sessionId: 'debug-session'
+    })
+  }).catch(() => {});
+  // #endregion
+
   const db = DatabaseService.getInstance().getDatabase();
 
   let query = `
@@ -80,6 +100,32 @@ router.get('/schedules', asyncHandler(async (req: Request, res: Response) => {
   query += ` ORDER BY s.shift_date, s.shift_start_time, u.name`;
 
   const schedules = await db.all(query, params);
+
+  console.log('[DEBUG] GET /schedules - Found', schedules.length, 'schedules in date range', startDate, 'to', endDate);
+  // #region agent log - Hypothesis Testing
+  fetch('http://127.0.0.1:7245/ingest/736b35ed-f7bd-4b4f-b5c9-370964b02fb5', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      location: 'staff-scheduling.ts:85',
+      message: 'GET schedules - result count',
+      data: {
+        restaurantId,
+        requestedDateRange: { startDate, endDate },
+        resultCount: schedules.length,
+        sampleSchedules: schedules.slice(0, 3).map(s => ({
+          id: s.id,
+          shift_date: s.shift_date,
+          user_id: s.user_id,
+          restaurant_id: s.restaurant_id
+        }))
+      },
+      hypothesisId: 'H1,H2,H3',
+      timestamp: Date.now(),
+      sessionId: 'debug-session'
+    })
+  }).catch(() => {});
+  // #endregion
 
   res.json({
     success: true,
@@ -131,9 +177,29 @@ router.post('/schedules', asyncHandler(async (req: Request, res: Response) => {
   const restaurantId = user?.restaurantId;
   const userId = user?.id;
 
+  console.log('[DEBUG] POST /schedules - Restaurant context:', { restaurantId, userId, data });
+  // #region agent log - Hypothesis Testing
+  fetch('http://127.0.0.1:7245/ingest/736b35ed-f7bd-4b4f-b5c9-370964b02fb5', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      location: 'staff-scheduling.ts:130',
+      message: 'POST schedules - checking restaurant context',
+      data: {
+        requestBody: { ...data, user_id: data.user_id, shift_date: data.shift_date },
+        sessionRestaurantId: restaurantId,
+        sessionUserId: userId
+      },
+      hypothesisId: 'H1',
+      timestamp: Date.now(),
+      sessionId: 'debug-session'
+    })
+  }).catch(() => {});
+  // #endregion
+
   // Validate restaurant context is present
   if (!restaurantId || restaurantId === 'null' || restaurantId === 'undefined') {
-    logger.error('Schedule creation failed: restaurantId is missing or invalid', {
+    console.error('[ERROR] Schedule creation failed: restaurantId is missing or invalid', {
       restaurantId,
       userId,
       userRestaurantId: user?.restaurantId
@@ -145,6 +211,7 @@ router.post('/schedules', asyncHandler(async (req: Request, res: Response) => {
   }
 
   if (!data.user_id || !data.shift_date || !data.shift_start_time || !data.shift_end_time) {
+    console.error('[ERROR] Missing required fields:', data);
     return res.status(400).json({
       success: false,
       error: { message: 'Missing required fields' }
@@ -160,6 +227,7 @@ router.post('/schedules', asyncHandler(async (req: Request, res: Response) => {
   );
 
   if (!targetUser) {
+    console.error('[ERROR] Staff member not found:', data.user_id);
     return res.status(404).json({
       success: false,
       error: { message: 'Staff member not found' }
@@ -168,6 +236,10 @@ router.post('/schedules', asyncHandler(async (req: Request, res: Response) => {
 
   // Verify the target user belongs to the same restaurant
   if (targetUser.restaurant_id !== restaurantId) {
+    console.error('[ERROR] Staff member does not belong to your restaurant', {
+      targetRestaurantId: targetUser.restaurant_id,
+      sessionRestaurantId: restaurantId
+    });
     return res.status(403).json({
       success: false,
       error: { message: 'Staff member does not belong to your restaurant' }
@@ -195,6 +267,7 @@ router.post('/schedules', asyncHandler(async (req: Request, res: Response) => {
   ]);
 
   if (conflict) {
+    console.warn('[WARN] Schedule conflict detected:', conflict);
     return res.status(409).json({
       success: false,
       error: { message: 'Schedule conflict exists for this user' }
@@ -218,6 +291,33 @@ router.post('/schedules', asyncHandler(async (req: Request, res: Response) => {
     data.position || null,
     data.notes || null
   ]);
+
+  console.log('[DEBUG] Schedule created successfully:', {
+    scheduleId,
+    restaurantId,
+    shift_date: data.shift_date,
+    user_id: data.user_id
+  });
+  // #region agent log - Hypothesis Testing
+  fetch('http://127.0.0.1:7245/ingest/736b35ed-f7bd-4b4f-b5c9-370964b02fb5', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      location: 'staff-scheduling.ts:220',
+      message: 'POST schedules - schedule created successfully',
+      data: {
+        scheduleId,
+        restaurantId,
+        shift_date: data.shift_date,
+        user_id: data.user_id,
+        is_published: false
+      },
+      hypothesisId: 'H1',
+      timestamp: Date.now(),
+      sessionId: 'debug-session'
+    })
+  }).catch(() => {});
+  // #endregion
 
   await DatabaseService.getInstance().logAudit(
     restaurantId,
