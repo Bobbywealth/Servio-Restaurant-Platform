@@ -578,6 +578,128 @@ router.get('/entries', asyncHandler(async (req: Request, res: Response) => {
 }));
 
 /**
+ * POST /api/timeclock/entries
+ * Create a new time entry with both clock-in and clock-out times (manager only)
+ * This endpoint is used by the HoursEditorModal to create completed entries
+ */
+router.post('/entries', asyncHandler(async (req: Request, res: Response) => {
+  const {
+    userId,
+    clockInTime,
+    clockOutTime,
+    breakMinutes,
+    position,
+    notes
+  } = req.body;
+  const authUser = (req as any).user;
+
+  // Check if user is authorized (manager, owner, or admin)
+  if (!authUser || !['manager', 'owner', 'admin'].includes(authUser.role)) {
+    return res.status(403).json({
+      success: false,
+      error: { message: 'Only managers, owners, and admins can create time entries' }
+    });
+  }
+
+  const createdBy = authUser.id;
+
+  if (!userId || !clockInTime || !clockOutTime) {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'userId, clockInTime, and clockOutTime are required' }
+    });
+  }
+
+  const db = DatabaseService.getInstance().getDatabase();
+
+  // Get the target user
+  const user = await db.get('SELECT * FROM users WHERE id = ? AND is_active = TRUE', [userId]);
+
+  if (!user) {
+    return res.status(404).json({
+      success: false,
+      error: { message: 'User not found or inactive' }
+    });
+  }
+
+  // Create new time entry
+  const entryId = uuidv4();
+  const clockIn = new Date(clockInTime);
+  const clockOut = new Date(clockOutTime);
+
+  // Calculate total hours (excluding breaks)
+  const totalMinutes = Math.floor((clockOut.getTime() - clockIn.getTime()) / (1000 * 60));
+  const totalHours = Math.max(0, (totalMinutes - (breakMinutes || 0)) / 60);
+
+  await db.run(`
+    INSERT INTO time_entries (
+      id, restaurant_id, user_id, clock_in_time, clock_out_time,
+      break_minutes, total_hours, position, notes, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+  `, [
+    entryId,
+    user.restaurant_id,
+    user.id,
+    clockInTime,
+    clockOutTime,
+    breakMinutes || 0,
+    totalHours.toFixed(2),
+    position || null,
+    notes || null
+  ]);
+
+  // Log the action
+  await DatabaseService.getInstance().logAudit(
+    user.restaurant_id,
+    createdBy,
+    'create_time_entry',
+    'time_entry',
+    entryId,
+    {
+      userId,
+      clockInTime,
+      clockOutTime,
+      breakMinutes: breakMinutes || 0,
+      totalHours: totalHours.toFixed(2),
+      position,
+      notes
+    }
+  );
+
+  await eventBus.emit('staff.time_entry_created', {
+    restaurantId: user.restaurant_id,
+    type: 'staff.time_entry_created',
+    actor: { actorType: 'user', actorId: createdBy },
+    payload: {
+      timeEntryId: entryId,
+      staffId: user.id,
+      staffName: user.name,
+      clockInTime,
+      clockOutTime,
+      totalHours: Number(totalHours.toFixed(2))
+    },
+    occurredAt: new Date().toISOString()
+  });
+
+  logger.info(`Manager created time entry ${entryId} for user ${user.name} (${clockInTime} to ${clockOutTime})`);
+
+  res.status(201).json({
+    success: true,
+    data: {
+      id: entryId,
+      userId: user.id,
+      userName: user.name,
+      clockInTime,
+      clockOutTime,
+      breakMinutes: breakMinutes || 0,
+      totalHours: parseFloat(totalHours.toFixed(2)),
+      position: position || null,
+      notes: notes || null
+    }
+  });
+}));
+
+/**
  * PUT /api/timeclock/entries/:id
  * Edit a time entry (manager only)
  */

@@ -177,7 +177,7 @@ export function HoursEditorModal({ isOpen, staffMember, onClose, onSave }: Hours
 
     try {
       if (editingEntry && editingEntry.id) {
-        // Update existing entry - convert snake_case to camelCase for backend
+        // Update existing entry
         await api.put(`/api/timeclock/entries/${editingEntry.id}`, {
           clockInTime: entryData.clock_in_time,
           clockOutTime: entryData.clock_out_time,
@@ -186,30 +186,15 @@ export function HoursEditorModal({ isOpen, staffMember, onClose, onSave }: Hours
           notes: entryData.notes
         })
       } else {
-        // Create new entry - need to use manager clock-in with custom time
-        // This is a simplified version; in production you'd want a proper create endpoint
-        await api.post('/api/timeclock/manager/clock-in', {
+        // Create new entry with both clock-in and clock-out times
+        await api.post('/api/timeclock/entries', {
           userId: staffMember.id,
           clockInTime: entryData.clock_in_time,
-          position: entryData.position
+          clockOutTime: entryData.clock_out_time,
+          breakMinutes: entryData.break_minutes,
+          position: entryData.position,
+          notes: entryData.notes
         })
-
-        // Then update with clock-out time
-        const activeEntries = await api.get('/api/timeclock/entries', {
-          params: {
-            userId: staffMember.id,
-            status: 'active',
-            limit: 1
-          }
-        })
-
-        if (activeEntries.data?.data?.entries?.length > 0) {
-          await api.post('/api/timeclock/manager/clock-out', {
-            userId: staffMember.id,
-            clockOutTime: entryData.clock_out_time,
-            notes: entryData.notes
-          })
-        }
       }
 
       // Refresh entries
@@ -362,15 +347,15 @@ export function HoursEditorModal({ isOpen, staffMember, onClose, onSave }: Hours
           </div>
 
           {/* Calendar Grid */}
-          <div className="flex-1 overflow-auto p-6">
+          <div className="flex-1 overflow-auto p-4 sm:p-6">
             {loading ? (
               <div className="flex items-center justify-center py-12">
                 <div className="w-8 h-8 border-2 border-primary-500/30 border-t-primary-500 rounded-full animate-spin" />
               </div>
             ) : (
               <div className="space-y-4">
-                {/* Day headers */}
-                <div className="grid grid-cols-7 gap-2">
+                {/* Day headers - responsive grid */}
+                <div className="grid grid-cols-7 gap-2 min-w-[800px]">
                   {weekDates.map((date, idx) => {
                     const dayName = date.toLocaleDateString('en-US', { weekday: 'long' })
                     const isToday = date.toDateString() === new Date().toDateString()
@@ -383,10 +368,10 @@ export function HoursEditorModal({ isOpen, staffMember, onClose, onSave }: Hours
                             : 'bg-gray-50 dark:bg-surface-700'
                         }`}
                       >
-                        <div className="text-xs font-medium text-surface-600 dark:text-surface-400">
+                        <div className="text-xs sm:text-sm font-medium text-surface-600 dark:text-surface-400">
                           {dayName.slice(0, 3)}
                         </div>
-                        <div className={`text-sm font-bold ${
+                        <div className={`text-sm sm:text-base font-bold mt-1 ${
                           isToday
                             ? 'text-primary-600 dark:text-primary-400'
                             : 'text-surface-900 dark:text-surface-100'
@@ -398,170 +383,172 @@ export function HoursEditorModal({ isOpen, staffMember, onClose, onSave }: Hours
                   })}
                 </div>
 
-                {/* Day rows */}
-                <div className="grid grid-cols-7 gap-2">
-                  {weekDates.map((date, idx) => {
-                    const dayEntries = getEntriesForDate(date)
-                    const dayTotal = getDayTotal(date)
-                    const isToday = date.toDateString() === new Date().toDateString()
-                    const isFuture = date > new Date()
-                    const isWeekend = idx >= 5
+                {/* Day rows - scrollable on mobile */}
+                <div className="overflow-x-auto min-w-[800px]">
+                  <div className="grid grid-cols-7 gap-2 min-w-full">
+                    {weekDates.map((date, idx) => {
+                      const dayEntries = getEntriesForDate(date)
+                      const dayTotal = getDayTotal(date)
+                      const isToday = date.toDateString() === new Date().toDateString()
+                      const isFuture = date > new Date()
+                      const isWeekend = idx >= 5
 
-                    return (
-                      <div
-                        key={idx}
-                        className={`min-h-[200px] rounded-lg border ${
-                          isToday
-                            ? 'border-primary-300 dark:border-primary-700 bg-primary-50/50 dark:bg-primary-900/10'
-                            : 'border-gray-200 dark:border-surface-700 bg-white dark:bg-surface-800'
-                        } ${isFuture ? 'opacity-50' : ''}`}
-                      >
-                        {/* Day total */}
-                        <div className={`px-2 py-1 text-xs font-medium border-b ${
-                          isToday
-                            ? 'border-primary-200 dark:border-primary-800 text-primary-700 dark:text-primary-300'
-                            : 'border-gray-200 dark:border-surface-700 text-surface-600 dark:text-surface-400'
-                        }`}>
-                          {dayTotal > 0 ? formatHours(dayTotal) : '--'}
-                        </div>
+                      return (
+                        <div
+                          key={idx}
+                          className={`min-h-[220px] sm:min-h-[200px] rounded-lg border ${
+                            isToday
+                              ? 'border-primary-300 dark:border-primary-700 bg-primary-50/50 dark:bg-primary-900/10'
+                              : 'border-gray-200 dark:border-surface-700 bg-white dark:bg-surface-800'
+                          } ${isFuture ? 'opacity-50' : ''}`}
+                        >
+                          {/* Day total */}
+                          <div className={`px-2 py-1.5 text-xs sm:text-sm font-medium border-b ${
+                            isToday
+                              ? 'border-primary-200 dark:border-primary-800 text-primary-700 dark:text-primary-300'
+                              : 'border-gray-200 dark:border-surface-700 text-surface-600 dark:text-surface-400'
+                          }`}>
+                            {dayTotal > 0 ? formatHours(dayTotal) : '--'}
+                          </div>
 
-                        {/* Entries */}
-                        <div className="p-2 space-y-2">
-                          {dayEntries.length === 0 && !isFuture && (
-                            <button
-                              onClick={() => {
-                                const newEntry: Partial<TimeEntry> = {
-                                  clock_in_time: new Date(date.setHours(9, 0, 0, 0)).toISOString(),
-                                  clock_out_time: new Date(date.setHours(17, 0, 0, 0)).toISOString(),
-                                  position: null,
-                                  notes: null,
-                                  is_break: false
-                                }
-                                setEditingEntry(newEntry as TimeEntry)
-                              }}
-                              className="w-full py-3 text-xs text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg transition-colors flex items-center justify-center gap-1"
-                            >
-                              <Plus className="w-4 h-4" />
-                              Add Time Entry
-                            </button>
-                          )}
-                          {dayEntries.length === 0 && isFuture && (
-                            <div className="text-center py-4 text-xs text-surface-400">
-                              No entries scheduled
-                            </div>
-                          )}
-                          {dayEntries.map((entry) => {
-                            const entryBreaks = breaks[entry.id] || []
-                            const activeBreak = entryBreaks.find(b => !b.break_end)
-
-                            return (
-                              <div
-                                key={entry.id}
-                                className={`rounded-lg p-2 text-xs group relative ${
-                                  entry.is_break
-                                    ? 'bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800'
-                                    : 'bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800'
-                                }`}
+                          {/* Entries */}
+                          <div className="p-2 space-y-2">
+                            {dayEntries.length === 0 && !isFuture && (
+                              <button
+                                onClick={() => {
+                                  const newEntry: Partial<TimeEntry> = {
+                                    clock_in_time: new Date(date.setHours(9, 0, 0, 0)).toISOString(),
+                                    clock_out_time: new Date(date.setHours(17, 0, 0, 0)).toISOString(),
+                                    position: null,
+                                    notes: null,
+                                    is_break: false
+                                  }
+                                  setEditingEntry(newEntry as TimeEntry)
+                                }}
+                                className="w-full py-3 sm:py-2 text-xs sm:text-sm text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg transition-colors flex items-center justify-center gap-1.5 touch-manipulation"
                               >
-                                <div className="flex items-center justify-between mb-1">
-                                  <div className="flex items-center gap-1.5">
-                                    {/* Type Badge */}
-                                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
-                                      entry.is_break
-                                        ? 'bg-amber-200 dark:bg-amber-800 text-amber-800 dark:text-amber-200'
-                                        : 'bg-emerald-200 dark:bg-emerald-800 text-emerald-800 dark:text-emerald-200'
-                                    }`}>
-                                      {entry.is_break ? 'Break' : 'Working'}
-                                    </span>
-                                    <span className="font-medium text-surface-700 dark:text-surface-300">
-                                      {formatTime(entry.clock_in_time)}
-                                      {' - '}
-                                      {formatTime(entry.clock_out_time)}
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <button
-                                      onClick={() => setEditingEntry(entry)}
-                                      className="p-1 hover:bg-gray-200 dark:hover:bg-surface-600 rounded"
-                                    >
-                                      <Edit3 className="w-3 h-3" />
-                                    </button>
-                                    <button
-                                      onClick={() => handleDeleteEntry(entry.id)}
-                                      disabled={deletingEntry === entry.id}
-                                      className="p-1 hover:bg-red-100 dark:hover:bg-red-900/30 text-red-500 rounded"
-                                    >
-                                      {deletingEntry === entry.id ? (
-                                        <div className="w-3 h-3 border-2 border-red-500/30 border-t-red-500 rounded-full animate-spin" />
-                                      ) : (
-                                        <Trash2 className="w-3 h-3" />
-                                      )}
-                                    </button>
-                                  </div>
-                                </div>
+                                <Plus className="w-4 h-4 sm:w-3 sm:h-3" />
+                                Add Time Entry
+                              </button>
+                            )}
+                            {dayEntries.length === 0 && isFuture && (
+                              <div className="text-center py-4 sm:py-3 text-xs sm:text-sm text-surface-400">
+                                No entries scheduled
+                              </div>
+                            )}
+                            {dayEntries.map((entry) => {
+                              const entryBreaks = breaks[entry.id] || []
+                              const activeBreak = entryBreaks.find(b => !b.break_end)
 
-                                {/* Duration */}
-                                <div className="text-surface-500 dark:text-surface-400 mb-1">
-                                  {entry.is_break ? (
-                                    <span className="flex items-center gap-1">
+                              return (
+                                <div
+                                  key={entry.id}
+                                  className={`rounded-lg p-2 sm:p-1.5 text-xs group relative ${
+                                    entry.is_break
+                                      ? 'bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800'
+                                      : 'bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800'
+                                  }`}
+                                >
+                                  <div className="flex items-center justify-between mb-1">
+                                    <div className="flex items-center gap-1.5">
+                                      {/* Type Badge */}
+                                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                                        entry.is_break
+                                          ? 'bg-amber-200 dark:bg-amber-800 text-amber-800 dark:text-amber-200'
+                                          : 'bg-emerald-200 dark:bg-emerald-800 text-emerald-800 dark:text-emerald-200'
+                                      }`}>
+                                        {entry.is_break ? 'Break' : 'Working'}
+                                      </span>
+                                      <span className="font-medium text-surface-700 dark:text-surface-300 text-[10px] sm:text-xs">
+                                        {formatTime(entry.clock_in_time)}
+                                        {' - '}
+                                        {formatTime(entry.clock_out_time)}
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                      <button
+                                        onClick={() => setEditingEntry(entry)}
+                                        className="p-1.5 hover:bg-gray-200 dark:hover:bg-surface-600 rounded touch-manipulation"
+                                      >
+                                        <Edit3 className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
+                                      </button>
+                                      <button
+                                        onClick={() => handleDeleteEntry(entry.id)}
+                                        disabled={deletingEntry === entry.id}
+                                        className="p-1.5 hover:bg-red-100 dark:hover:bg-red-900/30 text-red-500 rounded touch-manipulation"
+                                      >
+                                        {deletingEntry === entry.id ? (
+                                          <div className="w-3.5 h-3.5 sm:w-3 sm:h-3 border-2 border-red-500/30 border-t-red-500 rounded-full animate-spin" />
+                                        ) : (
+                                          <Trash2 className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
+                                        )}
+                                      </button>
+                                    </div>
+                                  </div>
+
+                                  {/* Duration */}
+                                  <div className="text-surface-500 dark:text-surface-400 mb-1 text-[10px] sm:text-xs">
+                                    {entry.is_break ? (
+                                      <span className="flex items-center gap-1">
+                                        <Coffee className="w-3 h-3 sm:w-2.5 sm:h-2.5" />
+                                        {formatHours(entry.total_hours || 0)}
+                                      </span>
+                                    ) : (
+                                      <>
+                                        {formatHours(entry.total_hours || 0)}
+                                        {entry.break_minutes > 0 && (
+                                          <span className="ml-1 flex items-center gap-0.5">
+                                            <Coffee className="w-3 h-3 sm:w-2.5 sm:h-2.5" />
+                                            {entry.break_minutes}m break
+                                          </span>
+                                        )}
+                                      </>
+                                    )}
+                                  </div>
+
+                                  {/* Position */}
+                                  {entry.position && (
+                                    <div className="text-surface-500 dark:text-surface-400 text-[10px]">
+                                      {entry.position}
+                                    </div>
+                                  )}
+
+                                  {/* Active break indicator */}
+                                  {activeBreak && (
+                                    <div className="mt-1 px-1.5 py-0.5 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 rounded text-[10px] font-medium inline-flex items-center gap-1">
                                       <Coffee className="w-3 h-3" />
-                                      {formatHours(entry.total_hours || 0)}
-                                    </span>
-                                  ) : (
-                                    <>
-                                      {formatHours(entry.total_hours || 0)}
-                                      {entry.break_minutes > 0 && (
-                                        <span className="ml-1 flex items-center gap-0.5">
-                                          <Coffee className="w-3 h-3" />
-                                          {entry.break_minutes}m break
-                                        </span>
-                                      )}
-                                    </>
+                                      On Break
+                                    </div>
                                   )}
                                 </div>
+                              )
+                            })}
 
-                                {/* Position */}
-                                {entry.position && (
-                                  <div className="text-surface-500 dark:text-surface-400">
-                                    {entry.position}
-                                  </div>
-                                )}
-
-                                {/* Active break indicator */}
-                                {activeBreak && (
-                                  <div className="mt-1 px-1.5 py-0.5 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 rounded text-[10px] font-medium inline-flex items-center gap-1">
-                                    <Coffee className="w-3 h-3" />
-                                    On Break
-                                  </div>
-                                )}
-                              </div>
-                            )
-                          })}
-
-                          {/* Add entry button for past days */}
-                          {!isFuture && (dayEntries.length === 0 || dayEntries.every(e => e.clock_out_time)) && (
-                            <button
-                              onClick={() => {
-                                // Pre-fill with default times
-                                const newEntry: Partial<TimeEntry> = {
-                                  clock_in_time: new Date(date.setHours(9, 0, 0, 0)).toISOString(),
-                                  clock_out_time: new Date(date.setHours(17, 0, 0, 0)).toISOString(),
-                                  position: null,
-                                  notes: null,
-                                  is_break: false
-                                }
-                                setEditingEntry(newEntry as TimeEntry)
-                              }}
-                              className="w-full py-1 text-xs text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg transition-colors flex items-center justify-center gap-1"
-                            >
-                              <Plus className="w-3 h-3" />
-                              Add Entry
-                            </button>
-                          )}
+                            {/* Add entry button for past days */}
+                            {!isFuture && (dayEntries.length === 0 || dayEntries.every(e => e.clock_out_time)) && (
+                              <button
+                                onClick={() => {
+                                  // Pre-fill with default times
+                                  const newEntry: Partial<TimeEntry> = {
+                                    clock_in_time: new Date(date.setHours(9, 0, 0, 0)).toISOString(),
+                                    clock_out_time: new Date(date.setHours(17, 0, 0, 0)).toISOString(),
+                                    position: null,
+                                    notes: null,
+                                    is_break: false
+                                  }
+                                  setEditingEntry(newEntry as TimeEntry)
+                                }}
+                                className="w-full py-2 sm:py-1 text-xs text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg transition-colors flex items-center justify-center gap-1 touch-manipulation"
+                              >
+                                <Plus className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
+                                Add Entry
+                              </button>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    )
-                  })}
+                      )
+                    })}
+                  </div>
                 </div>
               </div>
             )}
