@@ -216,17 +216,6 @@ export function HoursEditorModal({ isOpen, staffMember, onClose, onSave }: Hours
       setEditingEntry(null)
     } catch (err: any) {
       setError(err.response?.data?.error?.message || 'Failed to save entry')
-          data: {
-            error: err.message,
-            response: err.response?.data
-          },
-          timestamp: Date.now(),
-          sessionId: 'debug-session',
-          hypothesisId: 'A'
-        })
-      }).catch(() => {});
-      // #endregion
-      setError(err.response?.data?.error?.message || 'Failed to save entry')
     } finally {
       setSaving(false)
     }
