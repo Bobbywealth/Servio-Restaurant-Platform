@@ -130,21 +130,47 @@ router.post('/schedules', asyncHandler(async (req: Request, res: Response) => {
   const restaurantId = user?.restaurantId;
   const userId = user?.id;
 
-  if (!restaurantId) {
+  // Validate restaurant context is present
+  if (!restaurantId || restaurantId === 'null' || restaurantId === 'undefined') {
+    logger.error('Schedule creation failed: restaurantId is missing or invalid', {
+      restaurantId,
+      userId,
+      userRestaurantId: user?.restaurantId
+    });
     return res.status(401).json({
       success: false,
-      error: { message: 'Restaurant context not found' }
+      error: { message: 'Restaurant context not found. Please log out and log in again.' }
     });
   }
 
   if (!data.user_id || !data.shift_date || !data.shift_start_time || !data.shift_end_time) {
     return res.status(400).json({
       success: false,
-      error: { message: 'Missing required fields' }
-    });
+      error: { message: 'Missing required fields' })
   }
 
   const db = DatabaseService.getInstance().getDatabase();
+
+  // Verify the user belongs to the restaurant
+  const targetUser = await db.get(
+    'SELECT id, restaurant_id FROM users WHERE id = ? AND is_active = TRUE',
+    [data.user_id]
+  );
+
+  if (!targetUser) {
+    return res.status(404).json({
+      success: false,
+      error: { message: 'Staff member not found' }
+    });
+  }
+
+  // Verify the target user belongs to the same restaurant
+  if (targetUser.restaurant_id !== restaurantId) {
+    return res.status(403).json({
+      success: false,
+      error: { message: 'Staff member does not belong to your restaurant' }
+    });
+  }
 
   // Check for scheduling conflicts
   const conflict = await db.get(`
@@ -383,6 +409,18 @@ router.post('/schedules/bulk', asyncHandler(async (req: Request, res: Response) 
   const restaurantId = (req as any).user?.restaurantId;
   const userId = (req as any).user?.id;
 
+  // Validate restaurant context is present
+  if (!restaurantId || restaurantId === 'null' || restaurantId === 'undefined') {
+    logger.error('Bulk schedule creation failed: restaurantId is missing or invalid', {
+      restaurantId,
+      userId
+    });
+    return res.status(401).json({
+      success: false,
+      error: { message: 'Restaurant context not found. Please log out and log in again.' }
+    });
+  }
+
   if (!Array.isArray(schedules) || schedules.length === 0) {
     return res.status(400).json({
       success: false,
@@ -395,6 +433,22 @@ router.post('/schedules/bulk', asyncHandler(async (req: Request, res: Response) 
   const conflicts: string[] = [];
 
   for (const schedule of schedules) {
+    // Skip schedules without user_id
+    if (!schedule.user_id) {
+      continue;
+    }
+
+    // Verify the user belongs to the restaurant
+    const targetUser = await db.get(
+      'SELECT id, restaurant_id FROM users WHERE id = ? AND is_active = TRUE',
+      [schedule.user_id]
+    );
+
+    if (!targetUser || targetUser.restaurant_id !== restaurantId) {
+      // Skip users not in this restaurant
+      continue;
+    }
+
     const conflict = await db.get(`
       SELECT * FROM staff_schedules
       WHERE user_id = ? AND shift_date = ? AND restaurant_id = ?

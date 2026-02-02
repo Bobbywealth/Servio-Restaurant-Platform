@@ -64,6 +64,12 @@ export async function requireAuth(req: Request, _res: Response, next: NextFuncti
     const userRow = await db.get<any>('SELECT * FROM users WHERE id = ? AND is_active = TRUE', [userId]);
     if (!userRow) throw new UnauthorizedError('User not found or inactive');
 
+    // Verify user has a valid restaurant_id
+    if (!userRow.restaurant_id) {
+      logger.error('User found but has null restaurant_id', { userId, userRow });
+      throw new UnauthorizedError('User account is not associated with a restaurant. Please contact support.');
+    }
+
     const user: AuthUser = {
       id: userRow.id,
       restaurantId: String(userRow.restaurant_id),
