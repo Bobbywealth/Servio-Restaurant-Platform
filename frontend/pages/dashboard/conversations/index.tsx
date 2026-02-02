@@ -179,7 +179,7 @@ export default function ConversationsPage() {
 
   // Socket listeners for real-time updates
   useEffect(() => {
-    const handleNewConversation = (data: { sessionId: string; session?: ConversationSession }) => {
+    const handleNewConversation = (data: { sessionId?: string; session?: ConversationSession; transcript?: string; confidence?: number }) => {
       console.log('New conversation received:', data)
 
       // Show notification
