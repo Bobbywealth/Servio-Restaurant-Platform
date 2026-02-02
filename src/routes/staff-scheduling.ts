@@ -43,26 +43,6 @@ router.get('/schedules', asyncHandler(async (req: Request, res: Response) => {
   const { userId, startDate, endDate, published } = req.query;
   const restaurantId = (req as any).user?.restaurantId;
 
-  console.log('[DEBUG] GET /schedules - Query params:', { userId, startDate, endDate, published, restaurantId });
-  // #region agent log - Hypothesis Testing
-  fetch('http://127.0.0.1:7245/ingest/736b35ed-f7bd-4b4f-b5c9-370964b02fb5', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      location: 'staff-scheduling.ts:45',
-      message: 'GET schedules - checking filters and restaurant context',
-      data: {
-        queryParams: { userId, startDate, endDate, published },
-        restaurantId,
-        sessionUserId: (req as any).user?.id
-      },
-      hypothesisId: 'H1,H2,H3',
-      timestamp: Date.now(),
-      sessionId: 'debug-session'
-    })
-  }).catch(() => {});
-  // #endregion
-
   const db = DatabaseService.getInstance().getDatabase();
 
   let query = `
@@ -101,31 +81,10 @@ router.get('/schedules', asyncHandler(async (req: Request, res: Response) => {
 
   const schedules = await db.all(query, params);
 
-  console.log('[DEBUG] GET /schedules - Found', schedules.length, 'schedules in date range', startDate, 'to', endDate);
-  // #region agent log - Hypothesis Testing
-  fetch('http://127.0.0.1:7245/ingest/736b35ed-f7bd-4b4f-b5c9-370964b02fb5', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      location: 'staff-scheduling.ts:85',
-      message: 'GET schedules - result count',
-      data: {
-        restaurantId,
-        requestedDateRange: { startDate, endDate },
-        resultCount: schedules.length,
-        sampleSchedules: schedules.slice(0, 3).map(s => ({
-          id: s.id,
-          shift_date: s.shift_date,
-          user_id: s.user_id,
-          restaurant_id: s.restaurant_id
-        }))
-      },
-      hypothesisId: 'H1,H2,H3',
-      timestamp: Date.now(),
-      sessionId: 'debug-session'
-    })
-  }).catch(() => {});
-  // #endregion
+  console.log('[SCHEDULING-GET] Restaurant:', restaurantId, '| Date range:', startDate, 'to', endDate, '| Found:', schedules.length, 'schedules');
+  if (schedules.length > 0) {
+    console.log('[SCHEDULING-GET] Sample schedules:', schedules.slice(0, 3).map(s => ({ id: s.id?.slice(0, 8), date: s.shift_date, user: s.user_id?.slice(0, 8) })));
+  }
 
   res.json({
     success: true,
@@ -177,33 +136,18 @@ router.post('/schedules', asyncHandler(async (req: Request, res: Response) => {
   const restaurantId = user?.restaurantId;
   const userId = user?.id;
 
-  console.log('[DEBUG] POST /schedules - Restaurant context:', { restaurantId, userId, data });
-  // #region agent log - Hypothesis Testing
-  fetch('http://127.0.0.1:7245/ingest/736b35ed-f7bd-4b4f-b5c9-370964b02fb5', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      location: 'staff-scheduling.ts:130',
-      message: 'POST schedules - checking restaurant context',
-      data: {
-        requestBody: { ...data, user_id: data.user_id, shift_date: data.shift_date },
-        sessionRestaurantId: restaurantId,
-        sessionUserId: userId
-      },
-      hypothesisId: 'H1',
-      timestamp: Date.now(),
-      sessionId: 'debug-session'
-    })
-  }).catch(() => {});
-  // #endregion
+  console.log('[SCHEDULING-POST] Creating schedule:', {
+    restaurantId,
+    userId,
+    user_id: data.user_id,
+    shift_date: data.shift_date,
+    shift_start_time: data.shift_start_time,
+    shift_end_time: data.shift_end_time
+  });
 
   // Validate restaurant context is present
   if (!restaurantId || restaurantId === 'null' || restaurantId === 'undefined') {
-    console.error('[ERROR] Schedule creation failed: restaurantId is missing or invalid', {
-      restaurantId,
-      userId,
-      userRestaurantId: user?.restaurantId
-    });
+    console.error('[SCHEDULING-POST] ERROR: Missing restaurant context');
     return res.status(401).json({
       success: false,
       error: { message: 'Restaurant context not found. Please log out and log in again.' }
@@ -211,7 +155,7 @@ router.post('/schedules', asyncHandler(async (req: Request, res: Response) => {
   }
 
   if (!data.user_id || !data.shift_date || !data.shift_start_time || !data.shift_end_time) {
-    console.error('[ERROR] Missing required fields:', data);
+    console.error('[SCHEDULING-POST] ERROR: Missing required fields');
     return res.status(400).json({
       success: false,
       error: { message: 'Missing required fields' }
@@ -227,7 +171,7 @@ router.post('/schedules', asyncHandler(async (req: Request, res: Response) => {
   );
 
   if (!targetUser) {
-    console.error('[ERROR] Staff member not found:', data.user_id);
+    console.error('[SCHEDULING-POST] ERROR: Staff member not found:', data.user_id);
     return res.status(404).json({
       success: false,
       error: { message: 'Staff member not found' }
@@ -236,10 +180,7 @@ router.post('/schedules', asyncHandler(async (req: Request, res: Response) => {
 
   // Verify the target user belongs to the same restaurant
   if (targetUser.restaurant_id !== restaurantId) {
-    console.error('[ERROR] Staff member does not belong to your restaurant', {
-      targetRestaurantId: targetUser.restaurant_id,
-      sessionRestaurantId: restaurantId
-    });
+    console.error('[SCHEDULING-POST] ERROR: Staff member does not belong to this restaurant');
     return res.status(403).json({
       success: false,
       error: { message: 'Staff member does not belong to your restaurant' }
@@ -267,7 +208,7 @@ router.post('/schedules', asyncHandler(async (req: Request, res: Response) => {
   ]);
 
   if (conflict) {
-    console.warn('[WARN] Schedule conflict detected:', conflict);
+    console.warn('[SCHEDULING-POST] CONFLICT: Schedule already exists for this user on this date');
     return res.status(409).json({
       success: false,
       error: { message: 'Schedule conflict exists for this user' }
@@ -292,43 +233,7 @@ router.post('/schedules', asyncHandler(async (req: Request, res: Response) => {
     data.notes || null
   ]);
 
-  console.log('[DEBUG] Schedule created successfully:', {
-    scheduleId,
-    restaurantId,
-    shift_date: data.shift_date,  // THIS IS THE KEY - WHAT DATE WAS IT CREATED FOR?
-    user_id: data.user_id,
-    shift_start_time: data.shift_start_time,
-    shift_end_time: data.shift_end_time
-  });
-
-  // Also query all schedules for this restaurant/date to verify
-  const verification = await db.all(`
-    SELECT * FROM staff_schedules
-    WHERE id = ?
-  `, [scheduleId]);
-
-  console.log('[DEBUG] Verification - Schedule in DB:', verification);
-
-  // #region agent log - Hypothesis Testing
-  fetch('http://127.0.0.1:7245/ingest/736b35ed-f7bd-4b4f-b5c9-370964b02fb5', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      location: 'staff-scheduling.ts:294',
-      message: 'POST schedules - schedule created successfully with shift_date',
-      data: {
-        scheduleId,
-        restaurantId,
-        shift_date: data.shift_date,
-        user_id: data.user_id,
-        is_published: false
-      },
-      hypothesisId: 'H2',
-      timestamp: Date.now(),
-      sessionId: 'debug-session'
-    })
-  }).catch(() => {});
-  // #endregion
+  console.log('[SCHEDULING-POST] SUCCESS: Created schedule', scheduleId.slice(0, 8), 'for date:', data.shift_date);
 
   await DatabaseService.getInstance().logAudit(
     restaurantId,
@@ -346,8 +251,6 @@ router.post('/schedules', asyncHandler(async (req: Request, res: Response) => {
     payload: { scheduleId, userId: data.user_id },
     occurredAt: new Date().toISOString()
   });
-
-  logger.info(`Schedule created: ${scheduleId} for user ${data.user_id}`);
 
   res.status(201).json({
     success: true,

@@ -760,76 +760,38 @@ export default function StaffPage() {
   }
 
   const loadSchedules = async (showError = false) => {
-    // #region agent log - Hypothesis Testing
-    fetch('http://127.0.0.1:7245/ingest/736b35ed-f7bd-4b4f-b5c9-370964b02fb5', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        location: 'staff.tsx:760',
-        message: 'Frontend loadSchedules - querying with date range',
-        data: {
-          selectedWeekStart: selectedWeekStart.toISOString(),
-          selectedWeekStartDate: selectedWeekStart.toISOString().split('T')[0],
-          endDate: new Date(selectedWeekStart.getTime() + 6 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
-        },
-        hypothesisId: 'H2,H3',
-        timestamp: Date.now(),
-        sessionId: 'debug-session'
-      })
-    }).catch(() => {});
-    // #endregion
-
     try {
       const endDate = new Date(selectedWeekStart)
       endDate.setDate(selectedWeekStart.getDate() + 6)
 
-      console.log('[DEBUG] Frontend requesting schedules for date range:', {
-        startDate: selectedWeekStart.toISOString().split('T')[0],
-        endDate: endDate.toISOString().split('T')[0]
-      });
+      const startDateStr = formatLocalDate(selectedWeekStart)
+      const endDateStr = formatLocalDate(endDate)
+
+      console.log('[SCHEDULING-FRONTEND] Fetching schedules for date range:', startDateStr, 'to', endDateStr);
 
       const [schedulesResp, templatesResp] = await Promise.all([
         api.get('/api/staff/scheduling/schedules', {
           params: {
-            startDate: formatLocalDate(selectedWeekStart),
-            endDate: formatLocalDate(endDate)
+            startDate: startDateStr,
+            endDate: endDateStr
           }
         }),
         api.get('/api/staff/scheduling/templates')
       ])
 
-      console.log('[DEBUG] Frontend received schedules:', {
-        count: (schedulesResp.data?.data?.schedules || []).length,
-        schedules: schedulesResp.data?.data?.schedules || []
-      });
+      const schedules = schedulesResp.data?.data?.schedules || []
+      console.log('[SCHEDULING-FRONTEND] Received', schedules.length, 'schedules');
+      if (schedules.length > 0) {
+        console.log('[SCHEDULING-FRONTEND] Sample schedules:', schedules.slice(0, 3).map(s => ({
+          id: s.id?.slice(0, 8),
+          date: s.shift_date,
+          user: s.user_name
+        })));
+      }
 
-      // #region agent log - Hypothesis Testing
-      fetch('http://127.0.0.1:7245/ingest/736b35ed-f7bd-4b4f-b5c9-370964b02fb5', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          location: 'staff.tsx:775',
-          message: 'Frontend loadSchedules - received schedules from API',
-          data: {
-            scheduleCount: (schedulesResp.data?.data?.schedules || []).length,
-            sampleSchedules: (schedulesResp.data?.data?.schedules || []).slice(0, 3).map((s: any) => ({
-              id: s.id,
-              shift_date: s.shift_date,
-              user_id: s.user_id,
-              user_name: s.user_name
-            }))
-          },
-          hypothesisId: 'H2,H3',
-          timestamp: Date.now(),
-          sessionId: 'debug-session'
-        })
-      }).catch(() => {});
-      // #endregion
-
-      setSchedules(schedulesResp.data?.data?.schedules || [])
+      setSchedules(schedules)
       setTemplates(templatesResp.data?.data?.templates || [])
-      return schedulesResp.data?.data?.schedules || []
+      return schedules
     } catch (error) {
       console.warn('Failed to load schedules:', error)
       if (showError) {
@@ -863,25 +825,13 @@ export default function StaffPage() {
   }
 
   const handleSaveShift = async (scheduleData: any) => {
-    console.log('[DEBUG] handleSaveShift called with:', scheduleData);
-    // #region agent log - Hypothesis Testing
-    fetch('http://127.0.0.1:7245/ingest/736b35ed-f7bd-4b4f-b5c9-370964b02fb5', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        location: 'staff.tsx:810',
-        message: 'Frontend handleSaveShift - creating new schedule',
-        data: {
-          scheduleData,
-          editingScheduleId: editingSchedule?.id,
-          currentWeekStart: selectedWeekStart.toISOString()
-        },
-        hypothesisId: 'H4',
-        timestamp: Date.now(),
-        sessionId: 'debug-session'
-      })
-    }).catch(() => {});
-    // #endregion
+    console.log('[SCHEDULING-FRONTEND] Saving shift:', {
+      user_id: scheduleData.user_id,
+      shift_date: scheduleData.shift_date,
+      shift_start_time: scheduleData.shift_start_time,
+      shift_end_time: scheduleData.shift_end_time,
+      isEdit: !!editingSchedule?.id
+    });
 
     try {
       if (editingSchedule?.id) {
@@ -895,12 +845,12 @@ export default function StaffPage() {
       }
       // Refresh schedules and verify
       const refreshedSchedules = await loadSchedules(true)
-      console.log('[DEBUG] After save, refreshed schedules:', refreshedSchedules);
+      console.log('[SCHEDULING-FRONTEND] After save, loaded', refreshedSchedules.length, 'schedules');
       if (!refreshedSchedules || refreshedSchedules.length === 0) {
         showToast.error('Schedule saved but failed to refresh the view')
       }
     } catch (error: any) {
-      console.error('[ERROR] Failed to save shift:', error);
+      console.error('[SCHEDULING-FRONTEND] ERROR saving shift:', error.response?.data?.error?.message || error.message);
       showToast.error(error.response?.data?.error?.message || 'Failed to save shift')
       throw error
     }
