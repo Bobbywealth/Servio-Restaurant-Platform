@@ -738,12 +738,22 @@ router.get('/templates', asyncHandler(async (req: Request, res: Response) => {
 
 /**
  * POST /api/staff/scheduling/templates
- * Create a shift template
+ * Create a shift template (managers/owners/admins only)
  */
 router.post('/templates', asyncHandler(async (req: Request, res: Response) => {
   const data: ShiftTemplateData = req.body;
-  const restaurantId = (req as any).user?.restaurantId;
-  const userId = (req as any).user?.id;
+  const user = (req as any).user;
+  const restaurantId = user?.restaurantId;
+  const userId = user?.id;
+  const userRole = user?.role;
+
+  // Permission check - only managers, owners, admins can create templates
+  if (!['manager', 'owner', 'admin', 'platform-admin'].includes(userRole)) {
+    return res.status(403).json({
+      success: false,
+      error: { message: 'You do not have permission to create templates' }
+    });
+  }
 
   if (!data.name || !data.start_time || !data.end_time) {
     return res.status(400).json({
