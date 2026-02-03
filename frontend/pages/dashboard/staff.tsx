@@ -30,6 +30,7 @@ import {
 } from 'lucide-react'
 import { api } from '../../lib/api'
 import { useUser } from '../../contexts/UserContext'
+import { showToast } from '../../components/ui/Toast'
 import EditStaffHoursModal from '../../components/staff/EditStaffHoursModal'
 
 const DashboardLayout = dynamic(() => import('../../components/Layout/DashboardLayout'), {
