@@ -128,13 +128,22 @@ router.get('/schedules/:id', asyncHandler(async (req: Request, res: Response) =>
 
 /**
  * POST /api/staff/scheduling/schedules
- * Create a new schedule
+ * Create a new schedule (managers/owners/admins only)
  */
 router.post('/schedules', asyncHandler(async (req: Request, res: Response) => {
   const data: ScheduleData = req.body;
   const user = (req as any).user;
   const restaurantId = user?.restaurantId;
   const userId = user?.id;
+  const userRole = user?.role;
+
+  // Permission check - only managers, owners, admins can create schedules
+  if (!['manager', 'owner', 'admin', 'platform-admin'].includes(userRole)) {
+    return res.status(403).json({
+      success: false,
+      error: { message: 'You do not have permission to create schedules' }
+    });
+  }
 
   console.log('[SCHEDULING-POST] Creating schedule:', {
     restaurantId,
@@ -260,13 +269,23 @@ router.post('/schedules', asyncHandler(async (req: Request, res: Response) => {
 
 /**
  * PUT /api/staff/scheduling/schedules/:id
- * Update a schedule
+ * Update a schedule (managers/owners/admins only)
  */
 router.put('/schedules/:id', asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
   const data: Partial<ScheduleData> = req.body;
-  const restaurantId = (req as any).user?.restaurantId;
-  const userId = (req as any).user?.id;
+  const user = (req as any).user;
+  const restaurantId = user?.restaurantId;
+  const userId = user?.id;
+  const userRole = user?.role;
+
+  // Permission check - only managers, owners, admins can update schedules
+  if (!['manager', 'owner', 'admin', 'platform-admin'].includes(userRole)) {
+    return res.status(403).json({
+      success: false,
+      error: { message: 'You do not have permission to update schedules' }
+    });
+  }
 
   const db = DatabaseService.getInstance().getDatabase();
 
@@ -377,12 +396,22 @@ router.put('/schedules/:id', asyncHandler(async (req: Request, res: Response) =>
 
 /**
  * DELETE /api/staff/scheduling/schedules/:id
- * Delete a schedule
+ * Delete a schedule (managers/owners/admins only)
  */
 router.delete('/schedules/:id', asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
-  const restaurantId = (req as any).user?.restaurantId;
-  const userId = (req as any).user?.id;
+  const user = (req as any).user;
+  const restaurantId = user?.restaurantId;
+  const userId = user?.id;
+  const userRole = user?.role;
+
+  // Permission check - only managers, owners, admins can delete schedules
+  if (!['manager', 'owner', 'admin', 'platform-admin'].includes(userRole)) {
+    return res.status(403).json({
+      success: false,
+      error: { message: 'You do not have permission to delete schedules' }
+    });
+  }
 
   const db = DatabaseService.getInstance().getDatabase();
 
@@ -422,12 +451,22 @@ router.delete('/schedules/:id', asyncHandler(async (req: Request, res: Response)
 
 /**
  * POST /api/staff/scheduling/schedules/bulk
- * Create multiple schedules at once
+ * Create multiple schedules at once (managers/owners/admins only)
  */
 router.post('/schedules/bulk', asyncHandler(async (req: Request, res: Response) => {
   const { schedules }: { schedules: ScheduleData[] } = req.body;
-  const restaurantId = (req as any).user?.restaurantId;
-  const userId = (req as any).user?.id;
+  const user = (req as any).user;
+  const restaurantId = user?.restaurantId;
+  const userId = user?.id;
+  const userRole = user?.role;
+
+  // Permission check - only managers, owners, admins can bulk create schedules
+  if (!['manager', 'owner', 'admin', 'platform-admin'].includes(userRole)) {
+    return res.status(403).json({
+      success: false,
+      error: { message: 'You do not have permission to create schedules' }
+    });
+  }
 
   // Validate restaurant context is present
   if (!restaurantId || restaurantId === 'null' || restaurantId === 'undefined') {
@@ -530,12 +569,22 @@ router.post('/schedules/bulk', asyncHandler(async (req: Request, res: Response) 
 
 /**
  * POST /api/staff/scheduling/publish
- * Publish all schedules for a date range
+ * Publish all schedules for a date range (managers/owners/admins only)
  */
 router.post('/publish', asyncHandler(async (req: Request, res: Response) => {
   const { startDate, endDate } = req.body;
-  const restaurantId = (req as any).user?.restaurantId;
-  const userId = (req as any).user?.id;
+  const user = (req as any).user;
+  const restaurantId = user?.restaurantId;
+  const userId = user?.id;
+  const userRole = user?.role;
+
+  // Permission check - only managers, owners, admins can publish schedules
+  if (!['manager', 'owner', 'admin', 'platform-admin'].includes(userRole)) {
+    return res.status(403).json({
+      success: false,
+      error: { message: 'You do not have permission to publish schedules' }
+    });
+  }
 
   if (!startDate || !endDate) {
     return res.status(400).json({
