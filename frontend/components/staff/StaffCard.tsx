@@ -300,18 +300,6 @@ export function StaffCard({
                     <Edit3 className="w-4 h-4" />
                     Edit Staff
                   </button>
-                  {canEditHours && onEditHours && (
-                    <button
-                      onClick={() => {
-                        if (onEditHours) onEditHours(member)
-                        setOpenMenu(null)
-                      }}
-                      className="w-full px-4 py-3 text-left text-sm text-surface-700 dark:text-surface-200 hover:bg-gray-100 dark:hover:bg-surface-700 flex items-center gap-2"
-                    >
-                      <Clock className="w-4 h-4" />
-                      Edit Hours
-                    </button>
-                  )}
                   {onViewHistory && (
                     <button
                       onClick={() => {
@@ -459,85 +447,11 @@ export function StaffCard({
           </div>
         )}
 
-        {/* Hours Summary */}
-        <div className="mb-4">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-medium text-surface-600 dark:text-surface-400">
-              This Week
-            </span>
-            <span className="text-sm font-bold text-surface-900 dark:text-surface-100">
-              {hoursThisWeek > 0 ? `${hoursThisWeek.toFixed(1)}h` : '0h'}
-            </span>
-          </div>
-          {/* Daily breakdown bar chart */}
-          {weekDates.length > 0 && (
-            <div className="flex gap-1">
-              {weekDates.map((date) => {
-                const dayHours = dailyHours?.userDailyHours?.[member.id]?.[date] || 0
-                const isToday = date === new Date().toISOString().split('T')[0]
-                const isFuture = new Date(date) > new Date()
-                const maxHours = 12
-                const heightPercent = Math.min((dayHours / maxHours) * 100, 100)
-                const dayName = new Date(date).toLocaleDateString('en-US', { weekday: 'short' }).charAt(0)
-                const isOvertime = dayHours > 8
-
-                return (
-                  <div key={date} className="flex-1 flex flex-col items-center group relative">
-                    <div className="absolute bottom-full mb-2 hidden group-hover:block z-20">
-                      <div className="bg-surface-900 dark:bg-surface-700 text-white text-xs rounded-lg px-2 py-1 whitespace-nowrap">
-                        {dayHours > 0 ? `${dayHours.toFixed(1)}h` : 'No hours'}
-                      </div>
-                    </div>
-                    <div className="relative w-full h-12 flex items-end">
-                      {dayHours > 0 && (
-                        <div className="absolute -top-5 left-1/2 transform -translate-x-1/2 text-[10px] font-medium text-surface-600 dark:text-surface-400 whitespace-nowrap">
-                          {dayHours.toFixed(1)}h
-                        </div>
-                      )}
-                      <div
-                        className={`w-full rounded-t-sm transition-all ${
-                          isFuture
-                            ? 'bg-gray-100 dark:bg-surface-700'
-                            : dayHours > 0
-                              ? isOvertime
-                                ? 'bg-red-500'
-                                : 'bg-primary-500'
-                              : 'bg-gray-200 dark:bg-surface-600'
-                        }`}
-                        style={{ height: isFuture ? '4px' : `${Math.max(heightPercent, 4)}%` }}
-                      />
-                      {isOvertime && !isFuture && (
-                        <div className="absolute -top-1 left-1/2 transform -translate-x-1/2">
-                          <AlertTriangle className="w-3 h-3 text-red-500" />
-                        </div>
-                      )}
-                    </div>
-                    <span className={`text-[10px] mt-1 ${
-                      isToday
-                        ? 'font-bold text-primary-500'
-                        : 'text-surface-400 dark:text-surface-500'
-                    }`}>
-                      {dayName}
-                    </span>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </div>
-
         {/* Contact Info */}
         <div className="flex items-center space-x-2 text-sm text-surface-600 dark:text-surface-400">
           <Mail className="w-4 h-4" />
           <span>{member.email || '—'}</span>
         </div>
-
-        {/* Today's Hours */}
-        {hoursToday > 0 && (
-          <div className="text-xs text-surface-500 dark:text-surface-400 mt-2">
-            Today: <span className="font-medium text-surface-700 dark:text-surface-200">{hoursToday.toFixed(1)}h</span>
-          </div>
-        )}
 
         {/* PIN and Clock In link */}
         {member.pin && (

@@ -19,5 +19,24 @@ module.exports = {
     '/dist/',
     '/frontend/',
   ],
+
+  // Test setup files
+  setupFilesAfterEnv: ['<rootDir>/src/__tests__/setup.ts'],
+
+  // Coverage configuration
+  collectCoverageFrom: [
+    'src/**/*.ts',
+    '!src/__tests__/**',
+    '!src/**/*.d.ts',
+    '!src/database/migrations/**',
+  ],
+  coverageThreshold: {
+    global: {
+      branches: 50,
+      functions: 50,
+      lines: 50,
+      statements: 50
+    }
+  }
 };
 

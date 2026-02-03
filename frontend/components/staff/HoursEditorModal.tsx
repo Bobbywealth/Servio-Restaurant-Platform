@@ -262,7 +262,12 @@ export function HoursEditorModal({ isOpen, staffMember, onClose, onSave }: Hours
       })
       setEntries(response.data?.data?.entries || [])
     } catch (err: any) {
-      setError(err.response?.data?.error?.message || 'Failed to delete entry')
+      console.error('Delete entry error:', err)
+      const errorMessage = err.response?.data?.error?.message || 
+                          err.response?.data?.message || 
+                          err.message || 
+                          'Failed to delete entry'
+      setError(errorMessage)
     } finally {
       setDeletingEntry(null)
     }

@@ -1,0 +1,50 @@
+name: Dependency Check
+
+on:
+  schedule:
+    - cron: 'weekly'
+  push:
+    paths:
+      - 'package.json'
+      - 'frontend/package.json'
+
+jobs:
+  audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Audit backend dependencies
+        run: npm audit --audit-level=high
+
+      - name: Audit frontend dependencies
+        run: cd frontend && npm audit --audit-level=high
+
+  outdated:
+    name: Check for Outdated Packages
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Check backend outdated packages
+        run: |
+          npm outdated --long || true
+
+      - name: Check frontend outdated packages
+        run: |
+          cd frontend && npm outdated --long || true
