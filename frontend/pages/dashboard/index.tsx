@@ -97,13 +97,15 @@ const DashboardIndex = memo(() => {
   const [isFetching, setIsFetching] = useState(true)
   const [restaurantTimezone, setRestaurantTimezone] = useState('America/New_York')
   const [isOpen, setIsOpen] = useState(true)
+  const [restaurantName, setRestaurantName] = useState<string>('')
 
   const fetchStats = async () => {
     setIsFetching(true)
     try {
-      const [ordersRes, summaryRes] = await Promise.all([
+      const [ordersRes, summaryRes, profileRes] = await Promise.all([
         api.get('/api/orders', { params: { limit: 5 } }),
         api.get('/api/orders/stats/summary'),
+        api.get('/api/restaurant/profile'),
       ])
 
       setRecentOrders(ordersRes.data.data.orders)
@@ -113,7 +115,12 @@ const DashboardIndex = memo(() => {
       setPendingOrders(summaryRes.data.data.pendingOrders || 0)
       setTodayOrderCount(summaryRes.data.data.todayOrders || summaryRes.data.data.totalOrders || 0)
 
-      // Restaurant timezone uses default (America/New_York) - settings endpoint not available
+      // Set restaurant name and timezone from profile
+      const profileData = profileRes.data?.data
+      if (profileData) {
+        setRestaurantName(profileData.name || '')
+        setRestaurantTimezone(profileData.timezone || 'America/New_York')
+      }
 
       // Determine if restaurant is open (simplified - can be enhanced)
       const hours = new Date().getHours()
@@ -240,7 +247,7 @@ const DashboardIndex = memo(() => {
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: 0.2 }}
                 >
-                  Welcome back, <span className="text-gradient">{user?.name?.split(' ')[0] || 'Team'}</span>
+                  Welcome back, <span className="text-gradient">{restaurantName || user?.name?.split(' ')[0] || 'Team'}</span>
                 </motion.h1>
               </div>
 

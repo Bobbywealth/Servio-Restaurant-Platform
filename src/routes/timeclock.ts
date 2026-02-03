@@ -578,6 +578,124 @@ router.get('/entries', asyncHandler(async (req: Request, res: Response) => {
 }));
 
 /**
+ * POST /api/timeclock/entries
+ * Create a new time entry with both clock-in and clock-out times (manager only)
+ * This endpoint is used by the HoursEditorModal to create completed entries
+ */
+router.post('/entries', asyncHandler(async (req: Request, res: Response) => {
+  const {
+    userId,
+    clockInTime,
+    clockOutTime,
+    breakMinutes,
+    notes
+  } = req.body;
+  const authUser = (req as any).user;
+
+  // Check if user is authorized (manager, owner, or admin)
+  if (!authUser || !['manager', 'owner', 'admin'].includes(authUser.role)) {
+    return res.status(403).json({
+      success: false,
+      error: { message: 'Only managers, owners, and admins can create time entries' }
+    });
+  }
+
+  const createdBy = authUser.id;
+
+  if (!userId || !clockInTime || !clockOutTime) {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'userId, clockInTime, and clockOutTime are required' }
+    });
+  }
+
+  const db = DatabaseService.getInstance().getDatabase();
+
+  // Get the target user
+  const user = await db.get('SELECT * FROM users WHERE id = ? AND is_active = TRUE', [userId]);
+
+  if (!user) {
+    return res.status(404).json({
+      success: false,
+      error: { message: 'User not found or inactive' }
+    });
+  }
+
+  // Create new time entry
+  const entryId = uuidv4();
+  const clockIn = new Date(clockInTime);
+  const clockOut = new Date(clockOutTime);
+
+  // Calculate total hours (excluding breaks)
+  const totalMinutes = Math.floor((clockOut.getTime() - clockIn.getTime()) / (1000 * 60));
+  const totalHours = Math.max(0, (totalMinutes - (breakMinutes || 0)) / 60);
+
+  await db.run(`
+    INSERT INTO time_entries (
+      id, restaurant_id, user_id, clock_in_time, clock_out_time,
+      break_minutes, total_hours, notes, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+  `, [
+    entryId,
+    user.restaurant_id,
+    user.id,
+    clockInTime,
+    clockOutTime,
+    breakMinutes || 0,
+    totalHours.toFixed(2),
+    notes || null
+  ]);
+
+  // Log the action
+  await DatabaseService.getInstance().logAudit(
+    user.restaurant_id,
+    createdBy,
+    'create_time_entry',
+    'time_entry',
+    entryId,
+    {
+      userId,
+      clockInTime,
+      clockOutTime,
+      breakMinutes: breakMinutes || 0,
+      totalHours: totalHours.toFixed(2),
+      notes
+    }
+  );
+
+  await eventBus.emit('staff.time_entry_created', {
+    restaurantId: user.restaurant_id,
+    type: 'staff.time_entry_created',
+    actor: { actorType: 'user', actorId: createdBy },
+    payload: {
+      timeEntryId: entryId,
+      staffId: user.id,
+      staffName: user.name,
+      clockInTime,
+      clockOutTime,
+      totalHours: Number(totalHours.toFixed(2))
+    },
+    occurredAt: new Date().toISOString()
+  });
+
+  logger.info(`Manager created time entry ${entryId} for user ${user.name} (${clockInTime} to ${clockOutTime})`);
+
+  res.status(201).json({
+    success: true,
+    data: {
+      id: entryId,
+      userId: user.id,
+      userName: user.name,
+      clockInTime,
+      clockOutTime,
+      breakMinutes: breakMinutes || 0,
+      totalHours: parseFloat(totalHours.toFixed(2)),
+      notes: notes || null
+    }
+  });
+}));
+
+/**
  * PUT /api/timeclock/entries/:id
  * Edit a time entry (manager only)
  */
@@ -588,10 +706,19 @@ router.put('/entries/:id', asyncHandler(async (req: Request, res: Response) => {
     clockOutTime,
     breakMinutes,
     position,
-    notes,
-    editedBy
+    notes
   } = req.body;
+  const user = (req as any).user;
 
+  // Check if user is authorized (manager, owner, or admin)
+  if (!user || !['manager', 'owner', 'admin'].includes(user.role)) {
+    return res.status(403).json({
+      success: false,
+      error: { message: 'Only managers, owners, and admins can edit time entries' }
+    });
+  }
+
+  const editedBy = user.id;
   const db = DatabaseService.getInstance().getDatabase();
 
   // Get existing entry
@@ -638,7 +765,7 @@ router.put('/entries/:id', asyncHandler(async (req: Request, res: Response) => {
   // Log the edit
   await DatabaseService.getInstance().logAudit(
     existingEntry.restaurant_id,
-    editedBy || 'system',
+    editedBy,
     'edit_time_entry',
     'time_entry',
     id,
@@ -1040,7 +1167,18 @@ router.get('/user-daily-hours', asyncHandler(async (req: Request, res: Response)
  * Requires manager authentication
  */
 router.post('/manager/clock-in', asyncHandler(async (req: Request, res: Response) => {
-  const { userId, position, clockInTime, managerId } = req.body;
+  const { userId, position, clockInTime } = req.body;
+  const authUser = (req as any).user;
+
+  // Check if user is authorized (manager, owner, or admin)
+  if (!authUser || !['manager', 'owner', 'admin'].includes(authUser.role)) {
+    return res.status(403).json({
+      success: false,
+      error: { message: 'Only managers, owners, and admins can clock in other staff' }
+    });
+  }
+
+  const managerId = authUser.id;
 
   if (!userId) {
     return res.status(400).json({
@@ -1092,11 +1230,11 @@ router.post('/manager/clock-in', asyncHandler(async (req: Request, res: Response
   // Log the action
   await DatabaseService.getInstance().logAudit(
     user.restaurant_id,
-    managerId || 'manager',
+    managerId,
     'manager_clock_in',
     'time_entry',
     entryId,
-    { position, clockInTime: actualClockInTime, managerId }
+    { position, clockInTime: actualClockInTime, targetUserId: userId }
   );
 
   await eventBus.emit('staff.clock_in', {
@@ -1133,7 +1271,18 @@ router.post('/manager/clock-in', asyncHandler(async (req: Request, res: Response
  * Requires manager authentication
  */
 router.post('/manager/clock-out', asyncHandler(async (req: Request, res: Response) => {
-  const { userId, notes, clockOutTime, managerId } = req.body;
+  const { userId, notes, clockOutTime } = req.body;
+  const authUser = (req as any).user;
+
+  // Check if user is authorized (manager, owner, or admin)
+  if (!authUser || !['manager', 'owner', 'admin'].includes(authUser.role)) {
+    return res.status(403).json({
+      success: false,
+      error: { message: 'Only managers, owners, and admins can clock out other staff' }
+    });
+  }
+
+  const managerId = authUser.id;
 
   if (!userId) {
     return res.status(400).json({
@@ -1187,7 +1336,7 @@ router.post('/manager/clock-out', asyncHandler(async (req: Request, res: Respons
   // Log the action
   await DatabaseService.getInstance().logAudit(
     user.restaurant_id,
-    managerId || 'manager',
+    managerId,
     'manager_clock_out',
     'time_entry',
     timeEntry.id,
@@ -1196,14 +1345,14 @@ router.post('/manager/clock-out', asyncHandler(async (req: Request, res: Respons
       totalHours: totalHours.toFixed(2),
       breakMinutes: timeEntry.break_minutes,
       notes,
-      managerId
+      targetUserId: userId
     }
   );
 
   await eventBus.emit('staff.clock_out', {
     restaurantId: user.restaurant_id,
     type: 'staff.clock_out',
-    actor: { actorType: 'user', actorId: managerId || 'manager' },
+    actor: { actorType: 'user', actorId: managerId },
     payload: {
       staffId: user.id,
       staffName: user.name,
@@ -1237,7 +1386,18 @@ router.post('/manager/clock-out', asyncHandler(async (req: Request, res: Respons
  * Requires manager authentication
  */
 router.post('/manager/reverse-entry', asyncHandler(async (req: Request, res: Response) => {
-  const { entryId, reason, managerId } = req.body;
+  const { entryId, reason } = req.body;
+  const authUser = (req as any).user;
+
+  // Check if user is authorized (manager, owner, or admin)
+  if (!authUser || !['manager', 'owner', 'admin'].includes(authUser.role)) {
+    return res.status(403).json({
+      success: false,
+      error: { message: 'Only managers, owners, and admins can reverse time entries' }
+    });
+  }
+
+  const managerId = authUser.id;
 
   if (!entryId) {
     return res.status(400).json({
@@ -1268,7 +1428,7 @@ router.post('/manager/reverse-entry', asyncHandler(async (req: Request, res: Res
   // Log the action
   await DatabaseService.getInstance().logAudit(
     existingEntry.restaurant_id,
-    managerId || 'manager',
+    managerId,
     'reverse_time_entry',
     'time_entry',
     entryId,
@@ -1277,14 +1437,14 @@ router.post('/manager/reverse-entry', asyncHandler(async (req: Request, res: Res
       deletedUserId: existingEntry.user_id,
       deletedUserName: user?.name,
       reason,
-      managerId
+      targetEntryId: entryId
     }
   );
 
   await eventBus.emit('staff.time_entry_reversed', {
     restaurantId: existingEntry.restaurant_id,
     type: 'staff.time_entry_reversed',
-    actor: { actorType: 'user', actorId: managerId || 'manager' },
+    actor: { actorType: 'user', actorId: managerId },
     payload: {
       timeEntryId: entryId,
       staffId: existingEntry.user_id,
@@ -1365,6 +1525,34 @@ router.get('/manager/all-staff', asyncHandler(async (req: Request, res: Response
       })),
       totalStaff: staff.length,
       clockedInCount: staff.filter(s => s.is_clocked_in).length
+    }
+  });
+}));
+
+/**
+ * GET /api/timeclock/entry-breaks/:entryId
+ * Get all breaks for a specific time entry
+ */
+router.get('/entry-breaks/:entryId', asyncHandler(async (req: Request, res: Response) => {
+  const entryId = Array.isArray(req.params.entryId) ? req.params.entryId[0] : req.params.entryId;
+
+  const db = DatabaseService.getInstance().getDatabase();
+
+  const breaks = await db.all(`
+    SELECT * FROM time_entry_breaks
+    WHERE time_entry_id = ?
+    ORDER BY break_start DESC
+  `, [entryId]);
+
+  res.json({
+    success: true,
+    data: {
+      breaks: breaks.map(b => ({
+        id: b.id,
+        break_start: b.break_start,
+        break_end: b.break_end,
+        duration_minutes: b.duration_minutes
+      }))
     }
   });
 }));

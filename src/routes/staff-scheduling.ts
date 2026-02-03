@@ -14,6 +14,7 @@ interface ScheduleData {
   shift_end_time: string;
   position?: string;
   notes?: string;
+  is_published?: boolean;
 }
 
 interface AvailabilityData {
@@ -40,7 +41,7 @@ interface ShiftTemplateData {
  */
 router.get('/schedules', asyncHandler(async (req: Request, res: Response) => {
   const { userId, startDate, endDate, published } = req.query;
-  const restaurantId = (req as any).restaurantId;
+  const restaurantId = (req as any).user?.restaurantId;
 
   const db = DatabaseService.getInstance().getDatabase();
 
@@ -80,6 +81,11 @@ router.get('/schedules', asyncHandler(async (req: Request, res: Response) => {
 
   const schedules = await db.all(query, params);
 
+  console.log('[SCHEDULING-GET] Restaurant:', restaurantId, '| Date range:', startDate, 'to', endDate, '| Found:', schedules.length, 'schedules');
+  if (schedules.length > 0) {
+    console.log('[SCHEDULING-GET] Sample schedules:', schedules.slice(0, 3).map(s => ({ id: s.id?.slice(0, 8), date: s.shift_date, user: s.user_id?.slice(0, 8) })));
+  }
+
   res.json({
     success: true,
     data: { schedules }
@@ -92,7 +98,7 @@ router.get('/schedules', asyncHandler(async (req: Request, res: Response) => {
  */
 router.get('/schedules/:id', asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
-  const restaurantId = (req as any).restaurantId;
+  const restaurantId = (req as any).user?.restaurantId;
 
   const db = DatabaseService.getInstance().getDatabase();
 
@@ -122,14 +128,43 @@ router.get('/schedules/:id', asyncHandler(async (req: Request, res: Response) =>
 
 /**
  * POST /api/staff/scheduling/schedules
- * Create a new schedule
+ * Create a new schedule (managers/owners/admins only)
  */
 router.post('/schedules', asyncHandler(async (req: Request, res: Response) => {
   const data: ScheduleData = req.body;
-  const restaurantId = (req as any).restaurantId;
-  const userId = (req as any).userId;
+  const user = (req as any).user;
+  const restaurantId = user?.restaurantId;
+  const userId = user?.id;
+  const userRole = user?.role;
+
+  // Permission check - only managers, owners, admins can create schedules
+  if (!['manager', 'owner', 'admin', 'platform-admin'].includes(userRole)) {
+    return res.status(403).json({
+      success: false,
+      error: { message: 'You do not have permission to create schedules' }
+    });
+  }
+
+  console.log('[SCHEDULING-POST] Creating schedule:', {
+    restaurantId,
+    userId,
+    user_id: data.user_id,
+    shift_date: data.shift_date,
+    shift_start_time: data.shift_start_time,
+    shift_end_time: data.shift_end_time
+  });
+
+  // Validate restaurant context is present
+  if (!restaurantId || restaurantId === 'null' || restaurantId === 'undefined') {
+    console.error('[SCHEDULING-POST] ERROR: Missing restaurant context');
+    return res.status(401).json({
+      success: false,
+      error: { message: 'Restaurant context not found. Please log out and log in again.' }
+    });
+  }
 
   if (!data.user_id || !data.shift_date || !data.shift_start_time || !data.shift_end_time) {
+    console.error('[SCHEDULING-POST] ERROR: Missing required fields');
     return res.status(400).json({
       success: false,
       error: { message: 'Missing required fields' }
@@ -137,6 +172,29 @@ router.post('/schedules', asyncHandler(async (req: Request, res: Response) => {
   }
 
   const db = DatabaseService.getInstance().getDatabase();
+
+  // Verify the user belongs to the restaurant
+  const targetUser = await db.get(
+    'SELECT id, restaurant_id FROM users WHERE id = ? AND is_active = TRUE',
+    [data.user_id]
+  );
+
+  if (!targetUser) {
+    console.error('[SCHEDULING-POST] ERROR: Staff member not found:', data.user_id);
+    return res.status(404).json({
+      success: false,
+      error: { message: 'Staff member not found' }
+    });
+  }
+
+  // Verify the target user belongs to the same restaurant
+  if (targetUser.restaurant_id !== restaurantId) {
+    console.error('[SCHEDULING-POST] ERROR: Staff member does not belong to this restaurant');
+    return res.status(403).json({
+      success: false,
+      error: { message: 'Staff member does not belong to your restaurant' }
+    });
+  }
 
   // Check for scheduling conflicts
   const conflict = await db.get(`
@@ -159,6 +217,7 @@ router.post('/schedules', asyncHandler(async (req: Request, res: Response) => {
   ]);
 
   if (conflict) {
+    console.warn('[SCHEDULING-POST] CONFLICT: Schedule already exists for this user on this date');
     return res.status(409).json({
       success: false,
       error: { message: 'Schedule conflict exists for this user' }
@@ -183,6 +242,8 @@ router.post('/schedules', asyncHandler(async (req: Request, res: Response) => {
     data.notes || null
   ]);
 
+  console.log('[SCHEDULING-POST] SUCCESS: Created schedule', scheduleId.slice(0, 8), 'for date:', data.shift_date);
+
   await DatabaseService.getInstance().logAudit(
     restaurantId,
     userId,
@@ -200,8 +261,6 @@ router.post('/schedules', asyncHandler(async (req: Request, res: Response) => {
     occurredAt: new Date().toISOString()
   });
 
-  logger.info(`Schedule created: ${scheduleId} for user ${data.user_id}`);
-
   res.status(201).json({
     success: true,
     data: { id: scheduleId, ...data }
@@ -210,13 +269,23 @@ router.post('/schedules', asyncHandler(async (req: Request, res: Response) => {
 
 /**
  * PUT /api/staff/scheduling/schedules/:id
- * Update a schedule
+ * Update a schedule (managers/owners/admins only)
  */
 router.put('/schedules/:id', asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
   const data: Partial<ScheduleData> = req.body;
-  const restaurantId = (req as any).restaurantId;
-  const userId = (req as any).userId;
+  const user = (req as any).user;
+  const restaurantId = user?.restaurantId;
+  const userId = user?.id;
+  const userRole = user?.role;
+
+  // Permission check - only managers, owners, admins can update schedules
+  if (!['manager', 'owner', 'admin', 'platform-admin'].includes(userRole)) {
+    return res.status(403).json({
+      success: false,
+      error: { message: 'You do not have permission to update schedules' }
+    });
+  }
 
   const db = DatabaseService.getInstance().getDatabase();
 
@@ -283,6 +352,10 @@ router.put('/schedules/:id', asyncHandler(async (req: Request, res: Response) =>
     updates.push('notes = ?');
     params.push(data.notes);
   }
+  if (data.is_published !== undefined) {
+    updates.push('is_published = ?');
+    params.push(data.is_published ? 1 : 0);
+  }
 
   if (updates.length === 0) {
     return res.json({
@@ -323,12 +396,22 @@ router.put('/schedules/:id', asyncHandler(async (req: Request, res: Response) =>
 
 /**
  * DELETE /api/staff/scheduling/schedules/:id
- * Delete a schedule
+ * Delete a schedule (managers/owners/admins only)
  */
 router.delete('/schedules/:id', asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
-  const restaurantId = (req as any).restaurantId;
-  const userId = (req as any).userId;
+  const user = (req as any).user;
+  const restaurantId = user?.restaurantId;
+  const userId = user?.id;
+  const userRole = user?.role;
+
+  // Permission check - only managers, owners, admins can delete schedules
+  if (!['manager', 'owner', 'admin', 'platform-admin'].includes(userRole)) {
+    return res.status(403).json({
+      success: false,
+      error: { message: 'You do not have permission to delete schedules' }
+    });
+  }
 
   const db = DatabaseService.getInstance().getDatabase();
 
@@ -368,12 +451,34 @@ router.delete('/schedules/:id', asyncHandler(async (req: Request, res: Response)
 
 /**
  * POST /api/staff/scheduling/schedules/bulk
- * Create multiple schedules at once
+ * Create multiple schedules at once (managers/owners/admins only)
  */
 router.post('/schedules/bulk', asyncHandler(async (req: Request, res: Response) => {
   const { schedules }: { schedules: ScheduleData[] } = req.body;
-  const restaurantId = (req as any).restaurantId;
-  const userId = (req as any).userId;
+  const user = (req as any).user;
+  const restaurantId = user?.restaurantId;
+  const userId = user?.id;
+  const userRole = user?.role;
+
+  // Permission check - only managers, owners, admins can bulk create schedules
+  if (!['manager', 'owner', 'admin', 'platform-admin'].includes(userRole)) {
+    return res.status(403).json({
+      success: false,
+      error: { message: 'You do not have permission to create schedules' }
+    });
+  }
+
+  // Validate restaurant context is present
+  if (!restaurantId || restaurantId === 'null' || restaurantId === 'undefined') {
+    logger.error('Bulk schedule creation failed: restaurantId is missing or invalid', {
+      restaurantId,
+      userId
+    });
+    return res.status(401).json({
+      success: false,
+      error: { message: 'Restaurant context not found. Please log out and log in again.' }
+    });
+  }
 
   if (!Array.isArray(schedules) || schedules.length === 0) {
     return res.status(400).json({
@@ -387,6 +492,22 @@ router.post('/schedules/bulk', asyncHandler(async (req: Request, res: Response) 
   const conflicts: string[] = [];
 
   for (const schedule of schedules) {
+    // Skip schedules without user_id
+    if (!schedule.user_id) {
+      continue;
+    }
+
+    // Verify the user belongs to the restaurant
+    const targetUser = await db.get(
+      'SELECT id, restaurant_id FROM users WHERE id = ? AND is_active = TRUE',
+      [schedule.user_id]
+    );
+
+    if (!targetUser || targetUser.restaurant_id !== restaurantId) {
+      // Skip users not in this restaurant
+      continue;
+    }
+
     const conflict = await db.get(`
       SELECT * FROM staff_schedules
       WHERE user_id = ? AND shift_date = ? AND restaurant_id = ?
@@ -448,12 +569,22 @@ router.post('/schedules/bulk', asyncHandler(async (req: Request, res: Response) 
 
 /**
  * POST /api/staff/scheduling/publish
- * Publish all schedules for a date range
+ * Publish all schedules for a date range (managers/owners/admins only)
  */
 router.post('/publish', asyncHandler(async (req: Request, res: Response) => {
   const { startDate, endDate } = req.body;
-  const restaurantId = (req as any).restaurantId;
-  const userId = (req as any).userId;
+  const user = (req as any).user;
+  const restaurantId = user?.restaurantId;
+  const userId = user?.id;
+  const userRole = user?.role;
+
+  // Permission check - only managers, owners, admins can publish schedules
+  if (!['manager', 'owner', 'admin', 'platform-admin'].includes(userRole)) {
+    return res.status(403).json({
+      success: false,
+      error: { message: 'You do not have permission to publish schedules' }
+    });
+  }
 
   if (!startDate || !endDate) {
     return res.status(400).json({
@@ -498,7 +629,7 @@ router.post('/publish', asyncHandler(async (req: Request, res: Response) => {
  */
 router.get('/availability/:userId', asyncHandler(async (req: Request, res: Response) => {
   const { userId } = req.params;
-  const restaurantId = (req as any).restaurantId;
+  const restaurantId = (req as any).user?.restaurantId;
 
   const db = DatabaseService.getInstance().getDatabase();
 
@@ -531,8 +662,8 @@ router.get('/availability/:userId', asyncHandler(async (req: Request, res: Respo
 router.put('/availability/:userId', asyncHandler(async (req: Request, res: Response) => {
   const { userId } = req.params;
   const data: AvailabilityData = req.body;
-  const restaurantId = (req as any).restaurantId;
-  const currentUserId = (req as any).userId;
+  const restaurantId = (req as any).user?.restaurantId;
+  const currentUserId = (req as any).user?.id;
 
   const db = DatabaseService.getInstance().getDatabase();
 
@@ -583,7 +714,7 @@ router.put('/availability/:userId', asyncHandler(async (req: Request, res: Respo
  */
 router.get('/templates', asyncHandler(async (req: Request, res: Response) => {
   const { active } = req.query;
-  const restaurantId = (req as any).restaurantId;
+  const restaurantId = (req as any).user?.restaurantId;
 
   const db = DatabaseService.getInstance().getDatabase();
 
@@ -607,12 +738,22 @@ router.get('/templates', asyncHandler(async (req: Request, res: Response) => {
 
 /**
  * POST /api/staff/scheduling/templates
- * Create a shift template
+ * Create a shift template (managers/owners/admins only)
  */
 router.post('/templates', asyncHandler(async (req: Request, res: Response) => {
   const data: ShiftTemplateData = req.body;
-  const restaurantId = (req as any).restaurantId;
-  const userId = (req as any).userId;
+  const user = (req as any).user;
+  const restaurantId = user?.restaurantId;
+  const userId = user?.id;
+  const userRole = user?.role;
+
+  // Permission check - only managers, owners, admins can create templates
+  if (!['manager', 'owner', 'admin', 'platform-admin'].includes(userRole)) {
+    return res.status(403).json({
+      success: false,
+      error: { message: 'You do not have permission to create templates' }
+    });
+  }
 
   if (!data.name || !data.start_time || !data.end_time) {
     return res.status(400).json({
@@ -650,12 +791,22 @@ router.post('/templates', asyncHandler(async (req: Request, res: Response) => {
 
 /**
  * PUT /api/staff/scheduling/templates/:id
- * Update a shift template
+ * Update a shift template (managers/owners/admins only)
  */
 router.put('/templates/:id', asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
   const data: Partial<ShiftTemplateData> = req.body;
-  const restaurantId = (req as any).restaurantId;
+  const user = (req as any).user;
+  const restaurantId = user?.restaurantId;
+  const userRole = user?.role;
+
+  // Permission check - only managers, owners, admins can update templates
+  if (!['manager', 'owner', 'admin', 'platform-admin'].includes(userRole)) {
+    return res.status(403).json({
+      success: false,
+      error: { message: 'You do not have permission to update templates' }
+    });
+  }
 
   const db = DatabaseService.getInstance().getDatabase();
 
@@ -717,11 +868,21 @@ router.put('/templates/:id', asyncHandler(async (req: Request, res: Response) =>
 
 /**
  * DELETE /api/staff/scheduling/templates/:id
- * Delete a shift template
+ * Delete a shift template (managers/owners/admins only)
  */
 router.delete('/templates/:id', asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
-  const restaurantId = (req as any).restaurantId;
+  const user = (req as any).user;
+  const restaurantId = user?.restaurantId;
+  const userRole = user?.role;
+
+  // Permission check - only managers, owners, admins can delete templates
+  if (!['manager', 'owner', 'admin', 'platform-admin'].includes(userRole)) {
+    return res.status(403).json({
+      success: false,
+      error: { message: 'You do not have permission to delete templates' }
+    });
+  }
 
   const db = DatabaseService.getInstance().getDatabase();
 
@@ -748,7 +909,7 @@ router.delete('/templates/:id', asyncHandler(async (req: Request, res: Response)
  */
 router.get('/summary', asyncHandler(async (req: Request, res: Response) => {
   const { startDate, endDate } = req.query;
-  const restaurantId = (req as any).restaurantId;
+  const restaurantId = (req as any).user?.restaurantId;
 
   if (!startDate || !endDate) {
     return res.status(400).json({

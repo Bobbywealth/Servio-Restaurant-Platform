@@ -129,6 +129,7 @@ async function initializeServer() {
     const { default: staffSchedulingRoutes } = await import('./routes/staff-scheduling');
     const { default: staffAnalyticsRoutes } = await import('./routes/staff-analytics');
     const { default: staffBulkRoutes } = await import('./routes/staff-bulk');
+    const { default: voiceConversationsRoutes } = await import('./routes/voice-conversations');
 
     // API Routes
     app.use('/api/auth', authRoutes);
@@ -137,6 +138,7 @@ async function initializeServer() {
     app.use('/api/vapi', vapiRoutes);
     app.use('/api/voice', voiceRoutes);
     app.use('/api/voice-hub', voiceHubRoutes);
+    app.use('/api/voice-conversations', requireAuth, voiceConversationsRoutes);
     
     // Protected routes
     app.use('/api/assistant', requireAuth, assistantRoutes);
@@ -197,7 +199,12 @@ async function initializeServer() {
     }, restaurantsRoutes);
     app.use('/api/integrations', requireAuth, integrationsRoutes);
     app.use('/api/notifications', requireAuth, notificationsRoutes);
-    app.use('/api/push', requireAuth, pushRoutes);
+    // Push routes: /vapid-key is public (needed for push subscription setup), others require auth
+    app.use('/api/push', (req, res, next) => {
+      // VAPID public key is public - it's meant to be shared with clients
+      if (req.path === '/vapid-key') return next();
+      return requireAuth(req, res, next);
+    }, pushRoutes);
     app.use('/api/delivery-platforms', requireAuth, deliveryPlatformsRoutes);
     app.use('/api/delivery-platforms-sessions', requireAuth, deliveryPlatformsSessionsRoutes);
 

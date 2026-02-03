@@ -24,15 +24,23 @@ export interface SocketEvents {
   'staff:clock_out': (data: { userId: string; timestamp: Date }) => void
   'staff:break_start': (data: { userId: string; timestamp: Date }) => void
   'staff:break_end': (data: { userId: string; timestamp: Date }) => void
+  'staff.schedule_created': (data: any) => void
+  'staff.schedule_updated': (data: any) => void
+  'staff.schedule_deleted': (data: any) => void
+  'staff.schedule_published': (data: any) => void
+  'staff.time_entry_created': (data: any) => void
+  'staff.time_entry_updated': (data: any) => void
 
   // Task events
   'task:assigned': (data: { taskId: string; assignedTo: string }) => void
   'task:completed': (data: { taskId: string; completedBy: string; timestamp: Date }) => void
   'task:overdue': (data: { taskId: string; dueDate: Date }) => void
+  'task:updated': (data: { taskId: string; task?: any; action: string }) => void
 
   // Voice/Assistant events
   'voice:command_received': (data: { transcript: string; confidence: number }) => void
   'voice:action_completed': (data: { action: string; result: any }) => void
+  'call:ended': (data: { sessionId: string }) => void
 
   // System events
   'notifications.new': (data: { notification: any }) => void
@@ -67,8 +75,11 @@ class SocketManager {
   private resolveBackendUrl(): string {
     const rawBackendUrl =
       process.env.NEXT_PUBLIC_API_URL ||
-      process.env.NEXT_PUBLIC_BACKEND_URL ||
-      'http://localhost:3002'
+      process.env.NEXT_PUBLIC_BACKEND_URL
+
+    if (!rawBackendUrl) {
+      throw new Error('NEXT_PUBLIC_API_URL or NEXT_PUBLIC_BACKEND_URL environment variable is required')
+    }
 
     if (rawBackendUrl.startsWith('http')) {
       return rawBackendUrl

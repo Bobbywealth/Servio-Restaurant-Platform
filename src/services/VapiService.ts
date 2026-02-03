@@ -160,13 +160,14 @@ export class VapiService {
 
     // Use existing assistant service but with phone-specific context
     const userId = this.getPhoneUserId(message.call?.customer?.number);
-    
+    const sessionId = `phone_${message.call?.id || Date.now()}`;
+
     try {
-      const result = await this.assistantService.processText(message.transcript, userId);
-      
+      const result = await this.assistantService.processText(message.transcript, userId, sessionId);
+
       // Format response for voice (remove visual references)
       const phoneResponse = this.formatForVoice(result.response);
-      
+
       return {
         result: phoneResponse
       };
@@ -1142,6 +1143,15 @@ export class VapiService {
        - Ask for their full name
        - Ask for their phone number (we'll store it for future orders)
        - Optionally ask for email address
+
+    NATURAL CONVERSATION STYLE (BACKCHANNELING):
+    - Use natural fillers to acknowledge customer speech: "Mm-hmm", "Right", "Got it", "Sure", "Absolutely", "You got it", "Perfect", "I hear you"
+    - Vary your acknowledgments - don't repeat the same phrases
+    - Pause briefly (300-500ms) after customer speaks before responding
+    - Don't interrupt - let customer finish speaking before your response
+    - Mirror back items when confirming orders: "So that's two Jerk Chicken with extra rice and a large Festival..."
+    - For affirmations, use varied responses: "Absolutely", "You got it", "Perfect", "I hear you", "Right away"
+    - When customer asks something, acknowledge first: "Great question", "Sure thing", "Let me check that for you"
 
     YOUR CALL FLOW:
     1. Greet the customer (use their name if recognized).

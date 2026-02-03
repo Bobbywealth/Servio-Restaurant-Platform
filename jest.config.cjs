@@ -1,23 +1,28 @@
-/** @type {import('jest').Config} */
+/**
+ * Jest Test Configuration
+ * Configured to only run tests when explicitly executed with npm run test
+ */
+
 module.exports = {
-  // IMPORTANT: This repo contains Playwright E2E specs under frontend/e2e.
-  // Jest must not attempt to load/transform those.
   roots: ['<rootDir>/src'],
   testMatch: ['**/?(*.)+(spec|test).ts'],
   testEnvironment: 'node',
-
-  // TypeScript transform
   transform: {
     '^.+\\.(t|j)sx?$': ['@swc/jest'],
   },
-
-  // Avoid Jest transform cache issues (was failing with onExit not a function)
-  cache: false,
-
   testPathIgnorePatterns: [
     '/node_modules/',
     '/dist/',
     '/frontend/',
+    '/src/__tests__/setup.ts',
   ],
+  collectCoverageFrom: [
+    'src/**/*.ts',
+    '!src/__tests__/**',
+    '!src/**/*.d.ts',
+    '!src/database/migrations/**',
+  ],
+  moduleNameMapper: {
+    '^(\\.{1,2}/.*)\\.js$': '$1',
+  },
 };
-

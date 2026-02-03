@@ -22,6 +22,18 @@ interface AssistantState {
   micToggleMode: boolean // Toggle mode vs hold-to-talk mode
   alwaysListening: boolean // Continuous listening mode
   inConversationWindow: boolean // Active conversation window (30s after saying "Servio")
+  // Conversation history state
+  showHistory: boolean
+  conversations: Array<{
+    id: string
+    sessionId: string
+    status: string
+    startedAt: string
+    lastActivityAt: string
+    messageCount: number
+  }>
+  selectedConversation: string | null
+  loadingHistory: boolean
 }
 
 export default function AssistantPage() {
@@ -37,7 +49,11 @@ export default function AssistantPage() {
     wakeWordSupported: false, // Will be updated on client-side
     micToggleMode: true, // Default to toggle mode for easier testing
     alwaysListening: false, // Continuous listening mode
-    inConversationWindow: false // Active conversation window
+    inConversationWindow: false, // Active conversation window
+    showHistory: false,
+    conversations: [],
+    selectedConversation: null,
+    loadingHistory: false
   })
 
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null)
@@ -942,6 +958,63 @@ export default function AssistantPage() {
     }
   }, [state.wakeWordSupported, initializeWakeWordService]);
 
+  // Fetch conversation history when showing history panel
+  const loadConversationHistory = useCallback(async () => {
+    if (!state.showHistory) return;
+
+    setState(prev => ({ ...prev, loadingHistory: true }));
+    try {
+      const response = await api.get('/api/voice-conversations');
+      const { conversations } = response.data?.data || { conversations: [] };
+      setState(prev => ({
+        ...prev,
+        conversations,
+        loadingHistory: false
+      }));
+    } catch (error) {
+      console.error('Failed to load conversation history:', error);
+      setState(prev => ({ ...prev, loadingHistory: false }));
+    }
+  }, [state.showHistory]);
+
+  // Load conversation details when a conversation is selected
+  const loadConversationDetails = useCallback(async (conversationId: string) => {
+    try {
+      const response = await api.get(`/api/voice-conversations/${conversationId}`);
+      const { messages } = response.data?.data || { messages: [] };
+
+      // Convert historical messages to transcript format
+      const historicalMessages: TranscriptMessage[] = messages.map((msg: any, index: number) => ({
+        id: `hist_${msg.id}_${index}`,
+        timestamp: new Date(msg.createdAt),
+        type: msg.role === 'user' ? 'user' : msg.role === 'assistant' ? 'assistant' : 'system',
+        content: msg.content,
+        metadata: msg.audioUrl ? { audioUrl: msg.audioUrl } : {}
+      }));
+
+      // Replace current messages with historical conversation
+      setState(prev => ({
+        ...prev,
+        messages: historicalMessages,
+        selectedConversation: conversationId
+      }));
+    } catch (error) {
+      console.error('Failed to load conversation details:', error);
+    }
+  }, []);
+
+  // Fetch history when panel is opened
+  useEffect(() => {
+    if (state.showHistory) {
+      loadConversationHistory();
+    }
+  }, [state.showHistory, loadConversationHistory]);
+
+  // Toggle history panel
+  const toggleHistory = useCallback(() => {
+    setState(prev => ({ ...prev, showHistory: !prev.showHistory }));
+  }, []);
+
   return (
     <>
       <Head>
@@ -968,6 +1041,20 @@ export default function AssistantPage() {
               
               {/* Status Pills */}
               <div className="flex flex-wrap items-center gap-2">
+                {/* History Toggle Button */}
+                <button
+                  onClick={toggleHistory}
+                  className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
+                    state.showHistory
+                      ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                      : 'bg-surface-100 dark:bg-surface-800 text-surface-600 dark:text-surface-400 hover:bg-surface-200 dark:hover:bg-surface-700'
+                  }`}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  History
+                </button>
                 {state.isRecording && (
                   <span className="inline-flex items-center gap-2 px-3 py-1 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded-full text-xs font-semibold">
                     <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
@@ -1002,7 +1089,100 @@ export default function AssistantPage() {
             </div>
           </div>
 
-          <div className="flex-1 grid grid-cols-1 md:grid-cols-4 gap-4 min-h-0">
+          <div className="flex-1 grid grid-cols-1 md:grid-cols-5 gap-4 min-h-0">
+            {/* Conversation History Panel */}
+            {state.showHistory && (
+              <div className="md:col-span-1 bg-white/80 dark:bg-surface-800/80 backdrop-blur-xl rounded-2xl shadow-xl border border-white/50 dark:border-surface-700/50 flex flex-col max-h-[calc(100vh-200px)]">
+                <div className="p-4 border-b border-surface-200/50 dark:border-surface-700/50">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="font-bold text-surface-900 dark:text-white">Conversation History</h3>
+                    <button
+                      onClick={() => setState(prev => ({ ...prev, selectedConversation: null, messages: [] }))}
+                      className="text-xs text-surface-500 hover:text-surface-700 dark:text-surface-400 dark:hover:text-surface-200"
+                      title="Clear current view"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                  <p className="text-xs text-surface-500 dark:text-surface-400">
+                    {state.selectedConversation ? 'Viewing a past conversation' : 'Select a conversation to view'}
+                  </p>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-2">
+                  {state.loadingHistory ? (
+                    <div className="flex items-center justify-center py-8">
+                      <div className="w-6 h-6 border-2 border-surface-300 border-t-blue-500 rounded-full animate-spin" />
+                    </div>
+                  ) : state.conversations.length === 0 ? (
+                    <div className="text-center py-8 text-surface-500 dark:text-surface-400 text-sm">
+                      No conversations yet
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {state.conversations.map((conv) => (
+                        <button
+                          key={conv.id}
+                          onClick={() => loadConversationDetails(conv.id)}
+                          className={`w-full text-left p-3 rounded-xl transition-colors ${
+                            state.selectedConversation === conv.id
+                              ? 'bg-blue-100 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700'
+                              : 'bg-surface-100/50 dark:bg-surface-700/50 hover:bg-surface-200/50 dark:hover:bg-surface-600/50 border border-transparent'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between mb-1">
+                            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                              conv.status === 'active'
+                                ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300'
+                                : conv.status === 'completed'
+                                ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                                : 'bg-surface-200 dark:bg-surface-600 text-surface-600 dark:text-surface-300'
+                            }`}>
+                              {conv.status}
+                            </span>
+                            <span className="text-xs text-surface-400">
+                              {new Date(conv.lastActivityAt).toLocaleDateString()}
+                            </span>
+                          </div>
+                          <p className="text-xs text-surface-600 dark:text-surface-300 truncate">
+                            {conv.messageCount || 0} messages
+                          </p>
+                          <p className="text-xs text-surface-400 mt-1">
+                            {new Date(conv.startedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </p>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Active Conversations */}
+                {state.conversations.some(c => c.status === 'active') && (
+                  <div className="p-3 border-t border-surface-200/50 dark:border-surface-700/50">
+                    <p className="text-xs font-semibold text-surface-500 dark:text-surface-400 mb-2 uppercase tracking-wider">
+                      Active Now
+                    </p>
+                    {state.conversations.filter(c => c.status === 'active').map((conv) => (
+                      <button
+                        key={conv.id}
+                        onClick={() => loadConversationDetails(conv.id)}
+                        className="w-full text-left p-2 rounded-lg bg-emerald-100/50 dark:bg-emerald-900/20 hover:bg-emerald-200/50 dark:hover:bg-emerald-800/30 transition-colors mb-1"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+                          <span className="text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                            Live conversation
+                          </span>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Main Content - Adjust grid columns based on history visibility */}
+            <div className={`${state.showHistory ? 'md:col-span-4' : 'md:col-span-4'} space-y-4`}>
             {/* Left Panel - Controls */}
             <div className="md:col-span-1 space-y-3 overflow-y-auto">
               {/* Avatar Card */}
@@ -1112,7 +1292,7 @@ export default function AssistantPage() {
             {/* Right Panel - Conversation */}
             <div className="lg:col-span-3 space-y-4">
               {/* Conversation History */}
-              <div className="relative bg-white/80 dark:bg-surface-800/80 backdrop-blur-xl rounded-2xl p-4 shadow-xl border border-white/50 dark:border-surface-700/50 flex-1 flex flex-col min-h-0">
+              <div className="relative bg-white/80 dark:bg-surface-800/80 backdrop-blur-xl rounded-2xl p-4 shadow-xl border border-white/50 dark:border-surface-700/50 flex-1 flex flex-col min-h-0 max-h-[calc(100vh-280px)]">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-lg font-bold text-surface-900 dark:text-white">
                     Conversation
@@ -1235,6 +1415,7 @@ export default function AssistantPage() {
               </div>
             </div>
           </div>
+        </div>
         </div>
       </DashboardLayout>
     </>

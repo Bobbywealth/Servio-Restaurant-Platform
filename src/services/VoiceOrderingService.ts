@@ -115,91 +115,15 @@ export class VoiceOrderingService {
     restaurantId: string,
     providedModifiers: Record<string, any> | null | undefined
   ): Promise<{ valid: boolean; priceDelta: number; missingModifiers: Array<{ groupId: string; groupName: string; required: boolean }> }> {
-    // #region agent log - hypothesis A, B
-    fetch('http://127.0.0.1:7245/ingest/736b35ed-f7bd-4b4f-b5c9-370964b02fb5', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        location: 'VoiceOrderingService.ts:113',
-        message: 'validateItemModifiers ENTRY',
-        data: { itemId, restaurantId, providedModifiers },
-        timestamp: Date.now(),
-        sessionId: 'debug-session',
-        hypothesisId: 'A'
-      })
-    }).catch(() => {});
-    // #endregion
-
     const groups = await this.getModifierGroupsForItem(itemId, restaurantId);
 
-    // #region agent log - hypothesis A, C
-    fetch('http://127.0.0.1:7245/ingest/736b35ed-f7bd-4b4f-b5c9-370964b02fb5', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        location: 'VoiceOrderingService.ts:119',
-        message: 'modifierGroups fetched for item',
-        data: {
-          itemId,
-          groupCount: groups?.length,
-          groups: groups?.map((g: any) => ({
-            id: g.id,
-            name: g.name,
-            required: g.required,
-            minSelect: g.minSelect,
-            optionsCount: g.options?.length
-          }))
-        },
-        timestamp: Date.now(),
-        sessionId: 'debug-session',
-        hypothesisId: 'A'
-      })
-    }).catch(() => {});
-    // #endregion
-
     if (!groups || groups.length === 0) {
-      // #region agent log
-      fetch('http://127.0.0.1:7245/ingest/736b35ed-f7bd-4b4f-b5c9-370964b02fb5', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          location: 'VoiceOrderingService.ts:122',
-          message: 'no modifier groups - returning valid',
-          data: { itemId },
-          timestamp: Date.now(),
-          sessionId: 'debug-session',
-          hypothesisId: 'A'
-        })
-      }).catch(() => {});
-      // #endregion
       return { valid: true, priceDelta: 0, missingModifiers: [] };
     }
 
     const modifiers = providedModifiers || {};
     const missingModifiers: Array<{ groupId: string; groupName: string; required: boolean }> = [];
     let priceDelta = 0;
-
-    // #region agent log - hypothesis B
-    fetch('http://127.0.0.1:7245/ingest/736b35ed-f7bd-4b4f-b5c9-370964b02fb5', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        location: 'VoiceOrderingService.ts:127',
-        message: 'checking each modifier group',
-        data: {
-          itemId,
-          totalGroups: groups.length,
-          modifiersIsArray: Array.isArray(modifiers),
-          modifiersRaw: modifiers,
-          groupNames: groups.map((g: any) => g.name),
-          groupIds: groups.map((g: any) => g.id)
-        },
-        timestamp: Date.now(),
-        sessionId: 'debug-session',
-        hypothesisId: 'B'
-      })
-    }).catch(() => {});
-    // #endregion
 
     for (const group of groups) {
       let selection: any;
@@ -218,33 +142,6 @@ export class VoiceOrderingService {
 
       const hasSelection = selection !== undefined && selection !== null && selection !== '' &&
         !(Array.isArray(selection) && selection.length === 0);
-
-      // #region agent log - hypothesis A, B
-      fetch('http://127.0.0.1:7245/ingest/736b35ed-f7bd-4b4f-b5c9-370964b02fb5', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          location: 'VoiceOrderingService.ts:131',
-          message: 'modifier group evaluation',
-          data: {
-            groupName: group.name,
-            groupRequired: group.required,
-            selectionValue: selection,
-            hasSelection,
-            willAddToMissing: group.required && !hasSelection,
-            groupId: group.id,
-            availableOptions: group.options.map((opt: any) => ({
-              id: opt.id,
-              name: opt.name,
-              isPreselected: opt.isPreselected
-            }))
-          },
-          timestamp: Date.now(),
-          sessionId: 'debug-session',
-          hypothesisId: 'A'
-        })
-      }).catch(() => {});
-    // #endregion
 
       if (group.required && !hasSelection) {
         missingModifiers.push({
@@ -265,27 +162,6 @@ export class VoiceOrderingService {
         }
       }
     }
-
-    // #region agent log - hypothesis A, B
-    fetch('http://127.0.0.1:7245/ingest/736b35ed-f7bd-4b4f-b5c9-370964b02fb5', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        location: 'VoiceOrderingService.ts:154',
-        message: 'validateItemModifiers EXIT',
-        data: {
-          itemId,
-          valid: missingModifiers.length === 0,
-          missingModifierCount: missingModifiers.length,
-          missingModifiers,
-          priceDelta
-        },
-        timestamp: Date.now(),
-        sessionId: 'debug-session',
-        hypothesisId: 'A'
-      })
-    }).catch(() => {});
-    // #endregion
 
     return {
       valid: missingModifiers.length === 0,
@@ -817,54 +693,11 @@ export class VoiceOrderingService {
   }
 
   public async validateQuote(input: any) {
-    // #region agent log - all hypotheses
-    fetch('http://127.0.0.1:7245/ingest/736b35ed-f7bd-4b4f-b5c9-370964b02fb5', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        location: 'VoiceOrderingService.ts:683',
-        message: 'validateQuote ENTRY - full input',
-        data: {
-          orderType: input?.orderType,
-          restaurantId: input?.restaurantId,
-          restaurantSlug: input?.restaurantSlug,
-          itemCount: input?.items?.length,
-          items: input?.items?.map((item: any) => ({
-            itemId: item.itemId,
-            id: item.id,
-            name: item.name,
-            itemName: item.itemName,
-            qty: item.qty,
-            quantity: item.quantity,
-            modifiers: item.modifiers
-          }))
-        },
-        timestamp: Date.now(),
-        sessionId: 'debug-session',
-        hypothesisId: 'ALL'
-      })
-    }).catch(() => {});
-    // #endregion
-
     // ADD COMPREHENSIVE LOGGING FIRST
     console.log('🛒 [validateQuote] RAW input received:', JSON.stringify(input, null, 2));
 
     const orderType = String(input?.orderType || 'pickup').toLowerCase();
     if (!VoiceOrderingService.ALLOWED_ORDER_TYPES.has(orderType)) {
-      // #region agent log
-      fetch('http://127.0.0.1:7245/ingest/736b35ed-f7bd-4b4f-b5c9-370964b02fb5', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          location: 'VoiceOrderingService.ts:688',
-          message: 'invalid orderType',
-          data: { orderType },
-          timestamp: Date.now(),
-          sessionId: 'debug-session',
-          hypothesisId: 'D'
-        })
-      }).catch(() => {});
-      // #endregion
       return {
         valid: false,
         subtotal: 0,
@@ -889,26 +722,6 @@ export class VoiceOrderingService {
           qty: item.qty || item.quantity,
           modifiers: item.modifiers
         });
-        // #region agent log - hypothesis E
-        fetch('http://127.0.0.1:7245/ingest/736b35ed-f7bd-4b4f-b5c9-370964b02fb5', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            location: 'VoiceOrderingService.ts:704',
-            message: 'item being processed',
-            data: {
-              index,
-              itemId: item.itemId || item.id,
-              name: item.name || item.itemName,
-              qty: item.qty || item.quantity,
-              modifiers: item.modifiers
-            },
-            timestamp: Date.now(),
-            sessionId: 'debug-session',
-            hypothesisId: 'E'
-          })
-        }).catch(() => {});
-        // #endregion
       });
     }
 
@@ -916,42 +729,8 @@ export class VoiceOrderingService {
       input.restaurantId || input.restaurantSlug || process.env.VAPI_RESTAURANT_ID
     );
 
-    // #region agent log - hypothesis D
-    fetch('http://127.0.0.1:7245/ingest/736b35ed-f7bd-4b4f-b5c9-370964b02fb5', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        location: 'VoiceOrderingService.ts:715',
-        message: 'restaurantId resolution',
-        data: {
-          inputRestaurantId: input.restaurantId,
-          inputRestaurantSlug: input.restaurantSlug,
-          envVapiRestaurantId: process.env.VAPI_RESTAURANT_ID,
-          resolvedRestaurantId: restaurantId
-        },
-        timestamp: Date.now(),
-        sessionId: 'debug-session',
-        hypothesisId: 'D'
-      })
-    }).catch(() => {});
-    // #endregion
-
     if (!restaurantId) {
       console.error('❌ [validateQuote] Restaurant ID is required');
-      // #region agent log
-      fetch('http://127.0.0.1:7245/ingest/736b35ed-f7bd-4b4f-b5c9-370964b02fb5', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          location: 'VoiceOrderingService.ts:720',
-          message: 'restaurantId is required but missing',
-          data: {},
-          timestamp: Date.now(),
-          sessionId: 'debug-session',
-          hypothesisId: 'D'
-        })
-      }).catch(() => {});
-      // #endregion
       return {
         valid: false,
         subtotal: 0,
@@ -1022,26 +801,6 @@ export class VoiceOrderingService {
       const itemName = menuItem.name.toLowerCase();
       const itemIdLower = menuItem.id.toLowerCase();
 
-      // #region agent log - hypothesis A, B, C
-      fetch('http://127.0.0.1:7245/ingest/736b35ed-f7bd-4b4f-b5c9-370964b02fb5', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          location: 'VoiceOrderingService.ts:1006',
-          message: 'calling validateItemModifiers',
-          data: {
-            menuItemId: menuItem.id,
-            menuItemName: menuItem.name,
-            restaurantId,
-            passedModifiers: inputItem.modifiers
-          },
-          timestamp: Date.now(),
-          sessionId: 'debug-session',
-          hypothesisId: 'A'
-        })
-      }).catch(() => {});
-      // #endregion
-
       // DATABASE-DRIVEN MODIFIER VALIDATION
       // Validate required modifiers from Menu Management configuration
       const modifierValidation = await this.validateItemModifiers(
@@ -1050,28 +809,6 @@ export class VoiceOrderingService {
         inputItem.modifiers
       );
 
-      // #region agent log - hypothesis A, B, C, E
-      fetch('http://127.0.0.1:7245/ingest/736b35ed-f7bd-4b4f-b5c9-370964b02fb5', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          location: 'VoiceOrderingService.ts:1100',
-          message: 'modifierValidation result',
-          data: {
-            menuItemName: menuItem.name,
-            menuItemId: menuItem.id,
-            isValid: modifierValidation.valid,
-            missingModifiers: modifierValidation.missingModifiers,
-            priceDelta: modifierValidation.priceDelta,
-            inputModifiers: inputItem.modifiers
-          },
-          timestamp: Date.now(),
-          sessionId: 'debug-session',
-          hypothesisId: 'A'
-        })
-      }).catch(() => {});
-      // #endregion
-
       // Add modifier price delta to item price
       itemPrice += modifierValidation.priceDelta;
 
@@ -1079,27 +816,6 @@ export class VoiceOrderingService {
       if (!modifierValidation.valid && modifierValidation.missingModifiers.length > 0) {
         const missingNames = modifierValidation.missingModifiers.map(m => m.groupName).join(', ');
         console.log(`⚠️ [validateQuote] ${menuItem.name} missing required modifiers: ${missingNames}`);
-
-        // #region agent log - hypothesis A
-        fetch('http://127.0.0.1:7245/ingest/736b35ed-f7bd-4b4f-b5c9-370964b02fb5', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            location: 'VoiceOrderingService.ts:1020',
-            message: 'adding errors for missing modifiers',
-            data: {
-              menuItemName: menuItem.name,
-              missingModifiers: modifierValidation.missingModifiers,
-              errorsToAdd: modifierValidation.missingModifiers.map((m: any) =>
-                `${menuItem.name}: Missing required modifier "${m.groupName}". Please ask customer for their ${m.groupName.toLowerCase()} choice.`
-              )
-            },
-            timestamp: Date.now(),
-            sessionId: 'debug-session',
-            hypothesisId: 'A'
-          })
-        }).catch(() => {});
-        // #endregion
 
         // Add errors for missing required modifiers (blocking)
         for (const missing of modifierValidation.missingModifiers) {
@@ -1157,31 +873,6 @@ export class VoiceOrderingService {
       errors,
       missingModifiersCount: allMissingModifiers.length
     });
-
-    // #region agent log - all hypotheses
-    fetch('http://127.0.0.1:7245/ingest/736b35ed-f7bd-4b4f-b5c9-370964b02fb5', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        location: 'VoiceOrderingService.ts:1067',
-        message: 'validateQuote EXIT - final result',
-        data: {
-          isValid: errors.length === 0,
-          subtotal: parseFloat(subtotal.toFixed(2)),
-          tax: parseFloat(tax.toFixed(2)),
-          total: parseFloat(total.toFixed(2)),
-          errorCount: errors.length,
-          errors,
-          missingModifiersCount: allMissingModifiers.length,
-          missingModifiers: allMissingModifiers,
-          validatedItemCount: validItems.length
-        },
-        timestamp: Date.now(),
-        sessionId: 'debug-session',
-        hypothesisId: 'ALL'
-      })
-    }).catch(() => {});
-    // #endregion
 
     return {
       valid: errors.length === 0,

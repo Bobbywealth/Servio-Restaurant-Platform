@@ -2,7 +2,7 @@ import React, { useState, useCallback, useEffect, useRef } from 'react'
 import { StopCircle, RotateCcw, Trash2, Minimize2, Maximize2, Volume2, VolumeX, Download, Copy, RefreshCw, Sparkles } from 'lucide-react'
 import RealisticAvatar from '../../components/Assistant/RealisticAvatar'
 import MicrophoneButton from '../../components/Assistant/MicrophoneButton'
-import TranscriptFeed, { TranscriptMessage } from '../../components/Assistant/TranscriptFeed'
+import TranscriptFeed, { TranscriptMessage, MessageStatus } from '../../components/Assistant/TranscriptFeed'
 import QuickCommands from '../../components/Assistant/QuickCommands'
 import ChatInput, { QuickSuggestions } from '../../components/Assistant/ChatInput'
 import { useUser } from '../../contexts/UserContext'
@@ -78,12 +78,97 @@ export default function AssistantPanel({ showHeader = true, className }: Assista
   const conversationWindowRef = useRef<NodeJS.Timeout | null>(null)
   const inConversationWindowRef = useRef(false)
   const CONVERSATION_WINDOW_DURATION = 30000 // 30 seconds
-  
+
+  // Ambient sound manager (free optimization - restaurant ambience)
+  const ambientSoundRef = useRef<{
+    audioContext: AudioContext | null;
+    ambientGain: GainNode | null;
+    source: AudioBufferSourceNode | null;
+    isPlaying: boolean;
+  }>({
+    audioContext: null,
+    ambientGain: null,
+    source: null,
+    isPlaying: false
+  });
+
+  // Load and play ambient sound (free optimization)
+  const loadAmbientSound = useCallback(async () => {
+    if (typeof window === 'undefined') return;
+
+    try {
+      const AudioContextImpl = (window as any).AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContextImpl) return;
+
+      const audioContext = new AudioContextImpl();
+      ambientSoundRef.current.audioContext = audioContext;
+
+      // Create gain node for ambient volume control
+      const ambientGain = audioContext.createGain();
+      ambientGain.gain.value = 0.15; // Low volume (15%) - subtle ambience
+      ambientGain.connect(audioContext.destination);
+      ambientSoundRef.current.ambientGain = ambientGain;
+
+      // Try to load a free ambient sound (kitchen/restaurant noise)
+      // For demo, we'll generate brown noise which sounds like distant activity
+      const bufferSize = audioContext.sampleRate * 2; // 2 seconds of brown noise
+      const buffer = audioContext.createBuffer(1, bufferSize, audioContext.sampleRate);
+      const data = buffer.getChannelData(0);
+
+      let lastOut = 0;
+      for (let i = 0; i < bufferSize; i++) {
+        const white = Math.random() * 2 - 1;
+        data[i] = (lastOut + (0.02 * white)) / 1.02;
+        lastOut = data[i];
+        data[i] *= 3.5; // Compensate for gain loss
+      }
+
+      const source = audioContext.createBufferSource();
+      source.buffer = buffer;
+      source.loop = true;
+      source.connect(ambientGain);
+      ambientSoundRef.current.source = source;
+
+      console.log('📀 Ambient sound initialized (brown noise for restaurant ambience)');
+    } catch (error) {
+      console.warn('Failed to initialize ambient sound:', error);
+    }
+  }, []);
+
+  // Start/stop ambient sound based on assistant activity
+  const toggleAmbientSound = useCallback((play: boolean) => {
+    if (!ambientSoundRef.current.audioContext) {
+      if (play) loadAmbientSound();
+      return;
+    }
+
+    const ctx = ambientSoundRef.current;
+    if (play && !ctx.isPlaying) {
+      try {
+        ctx.source?.start();
+        ctx.isPlaying = true;
+        console.log('🔊 Ambient sound started');
+      } catch (e) {
+        // Source already started
+        ctx.isPlaying = true;
+      }
+    } else if (!play && ctx.isPlaying) {
+      try {
+        ctx.source?.stop();
+        ctx.isPlaying = false;
+        console.log('🔇 Ambient sound stopped');
+      } catch (e) {
+        ctx.isPlaying = false;
+      }
+    }
+  }, [loadAmbientSound]);
+
   // Create refs for callbacks to avoid re-initializing services when they change
   const handleQuickCommandRef = useRef<((command: string) => Promise<void>) | null>(null)
   const startRecordingRef = useRef<(() => void) | null>(null)
   const stopRecordingRef = useRef<(() => void) | null>(null)
-  const addMessageRef = useRef<((message: Omit<TranscriptMessage, 'id' | 'timestamp'>) => void) | null>(null)
+  const addMessageRef = useRef<((message: Omit<TranscriptMessage, 'id' | 'timestamp'>, status?: MessageStatus) => void) | null>(null)
+  const updateMessageStatusRef = useRef<((messageId: string, status: MessageStatus, error?: string) => void) | null>(null)
   
   const stateRef = useRef(state)
   useEffect(() => {
@@ -122,7 +207,7 @@ export default function AssistantPanel({ showHeader = true, className }: Assista
   const resolveAudioUrl = useCallback((audioUrl: string) => {
     // Backend returns /uploads/...; make it absolute for the browser.
     if (audioUrl.startsWith('http://') || audioUrl.startsWith('https://')) return audioUrl
-    const backendUrl = process.env.BACKEND_URL || 'http://localhost:3002'
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'
     if (audioUrl.startsWith('/')) return `${backendUrl}${audioUrl}`
     return `${backendUrl}/${audioUrl}`
   }, [])
@@ -260,10 +345,11 @@ export default function AssistantPanel({ showHeader = true, className }: Assista
     rafRef.current = requestAnimationFrame(tick)
   }, [resolveAudioUrl, stopAudio])
 
-  const addMessage = useCallback((message: Omit<TranscriptMessage, 'id' | 'timestamp'>) => {
+  const addMessage = useCallback((message: Omit<TranscriptMessage, 'id' | 'timestamp'>, status?: MessageStatus) => {
     const newMessage: TranscriptMessage = {
       id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       timestamp: new Date(),
+      status: status || 'delivered',
       ...message
     }
 
@@ -273,10 +359,27 @@ export default function AssistantPanel({ showHeader = true, className }: Assista
     }))
   }, [])
 
+  // Update message status helper
+  const updateMessageStatus = useCallback((messageId: string, status: MessageStatus, error?: string) => {
+    setState(prev => ({
+      ...prev,
+      messages: prev.messages.map(msg =>
+        msg.id === messageId
+          ? { ...msg, status, error }
+          : msg
+      )
+    }))
+  }, [])
+
   // Update addMessageRef
   useEffect(() => {
     addMessageRef.current = addMessage
   }, [addMessage])
+
+  // Update updateMessageStatusRef
+  useEffect(() => {
+    updateMessageStatusRef.current = updateMessageStatus
+  }, [updateMessageStatus])
 
   const processRecording = useCallback(async () => {
     console.log('Processing recording, chunks count:', audioChunksRef.current.length);
@@ -290,6 +393,9 @@ export default function AssistantPanel({ showHeader = true, className }: Assista
       }
       return
     }
+
+    // Declare userMessageId outside try block so it's accessible in catch
+    let userMessageId: string | null = null
 
     try {
       const mimeType = recorderMimeTypeRef.current || 'audio/webm;codecs=opus'
@@ -387,15 +493,33 @@ export default function AssistantPanel({ showHeader = true, className }: Assista
         }
       }
 
-      // Add user message (transcript)
+      // Add user message (transcript) with sending status
       if (transcript) {
-        addMessage({
-          type: 'user',
+        const userMessage = {
+          type: 'user' as const,
           content: transcript,
           metadata: {
             confidence: payload.confidence || 0.9
           }
-        })
+        }
+        // Create message with sending status
+        const newMessage: TranscriptMessage = {
+          id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          timestamp: new Date(),
+          status: 'sending',
+          ...userMessage
+        }
+        userMessageId = newMessage.id
+
+        setState(prev => ({
+          ...prev,
+          messages: [...prev.messages, newMessage]
+        }))
+
+        // After a brief delay, mark as delivered
+        setTimeout(() => {
+          updateMessageStatus(newMessage.id, 'delivered')
+        }, 500)
       }
 
       // Add assistant response
@@ -443,7 +567,12 @@ export default function AssistantPanel({ showHeader = true, className }: Assista
     } catch (error) {
       console.error('Failed to process recording:', error)
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-      
+
+      // Mark any pending user message as failed using ref
+      if (userMessageId && updateMessageStatusRef.current) {
+        updateMessageStatusRef.current(userMessageId, 'failed', errorMessage)
+      }
+
       addMessage({
         type: 'system',
         content: `🎤 Failed to process audio: ${errorMessage}. Try speaking more clearly or use text input instead.`,
@@ -454,7 +583,7 @@ export default function AssistantPanel({ showHeader = true, className }: Assista
             details: errorMessage
           }
         }
-      })
+      }, 'delivered')
     } finally {
       setState(prev => ({
         ...prev,
@@ -632,14 +761,27 @@ export default function AssistantPanel({ showHeader = true, className }: Assista
 
   const handleQuickCommand = useCallback(async (command: string) => {
     console.log('Handling quick command:', command);
-    // Add user message immediately
-    addMessage({
-      type: 'user',
-      content: command
-    })
 
-    // Process the text command with streaming
-    setState(prev => ({ ...prev, isProcessing: true }))
+    // Add user message with sending status
+    const userMessageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    const userMessage: TranscriptMessage = {
+      id: userMessageId,
+      type: 'user',
+      content: command,
+      timestamp: new Date(),
+      status: 'sending'
+    }
+
+    setState(prev => ({
+      ...prev,
+      messages: [...prev.messages, userMessage],
+      isProcessing: true
+    }))
+
+    // After a brief delay, mark as delivered
+    setTimeout(() => {
+      updateMessageStatus(userMessageId, 'delivered')
+    }, 500)
 
     // Variables for streaming
     let streamingMessageId: string | null = null;
@@ -650,7 +792,7 @@ export default function AssistantPanel({ showHeader = true, className }: Assista
 
       // Get auth token
       const token = localStorage.getItem('token');
-      const backendUrl = process.env.BACKEND_URL || 'http://localhost:3002';
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002';
 
       const response = await fetch(`${backendUrl}/api/assistant/process-text-stream`, {
         method: 'POST',
@@ -783,11 +925,16 @@ export default function AssistantPanel({ showHeader = true, className }: Assista
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
       const isNetworkError = errorMessage.includes('network') || errorMessage.includes('fetch')
       const isTimeoutError = errorMessage.includes('timeout')
-      
+
+      // Mark user message as failed using ref
+      if (updateMessageStatusRef.current) {
+        updateMessageStatusRef.current(userMessageId, 'failed', isNetworkError ? 'Network error - please check your connection' : errorMessage)
+      }
+
       addMessage({
         type: 'system',
-        content: isNetworkError 
-          ? '🔌 Network error. Please check your connection and try again.' 
+        content: isNetworkError
+          ? '🔌 Network error. Please check your connection and try again.'
           : isTimeoutError
           ? '⏱️ Request timed out. The server might be busy. Please try again.'
           : `❌ Error: ${errorMessage}. Please try rephrasing your command.`,
@@ -798,7 +945,7 @@ export default function AssistantPanel({ showHeader = true, className }: Assista
             details: errorMessage
           }
         }
-      })
+      }, 'delivered')
     } finally {
       setState(prev => ({ ...prev, isProcessing: false }))
       
@@ -978,7 +1125,7 @@ export default function AssistantPanel({ showHeader = true, className }: Assista
     const fetchAiModel = async () => {
       try {
         setIsLoadingModel(true);
-        const backendUrl = process.env.BACKEND_URL || 'http://localhost:3002';
+        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002';
         const response = await fetch(`${backendUrl}/api/assistant/status`);
         if (response.ok) {
           const data = await response.json();
@@ -1252,6 +1399,18 @@ export default function AssistantPanel({ showHeader = true, className }: Assista
 
             {/* Audio & Control Buttons */}
             <div className="flex flex-wrap items-center gap-2 mt-4">
+              {/* Ambient Sound Toggle (free optimization) */}
+              <button
+                onClick={() => toggleAmbientSound(!ambientSoundRef.current.isPlaying)}
+                className="inline-flex items-center gap-2 px-3 py-2 bg-surface-100 dark:bg-surface-800 text-surface-600 dark:text-surface-400 rounded-lg text-sm font-medium hover:bg-surface-200 dark:hover:bg-surface-700 transition-colors"
+                title="Toggle restaurant ambience"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+                </svg>
+                <span className="hidden sm:inline">Ambience</span>
+              </button>
+
               {/* Audio Controls */}
               {(state.isSpeaking || state.currentAudioUrl) && (
                 <div className="flex items-center gap-2 px-4 py-2 bg-surface-100 dark:bg-surface-800 rounded-lg">

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState, useCallback } from 'react'
 import Head from 'next/head'
 import { motion, AnimatePresence } from 'framer-motion'
 import dynamic from 'next/dynamic'
@@ -20,7 +20,13 @@ import {
   Loader2,
   CheckCircle,
   AlertCircle,
-  RefreshCw
+  RefreshCw,
+  History,
+  CalendarDays,
+  Copy,
+  Eye,
+  EyeOff,
+  Trash2
 } from 'lucide-react'
 import { api } from '../../lib/api'
 import { useUser } from '../../contexts/UserContext'
@@ -62,7 +68,29 @@ interface DailyHours {
   weekStartDate: string
 }
 
-// Add today's hours tracking
+// Schedule types
+interface Schedule {
+  id: string
+  user_id: string
+  user_name: string
+  shift_date: string
+  shift_start_time: string
+  shift_end_time: string
+  position?: string
+  notes?: string
+  is_published: boolean
+}
+
+interface ShiftTemplate {
+  id: string
+  name: string
+  start_time: string
+  end_time: string
+  break_minutes: number
+  position?: string
+  color?: string
+  is_active: boolean
+}
 
 // Add Staff Modal
 interface AddStaffModalProps {
@@ -520,6 +548,55 @@ export default function StaffPage() {
   const [editingHoursStaff, setEditingHoursStaff] = useState<StaffUser | null>(null)
   const [openMenu, setOpenMenu] = useState<string | null>(null)
 
+  // Schedule state
+  const [scheduleView, setScheduleView] = useState<'cards' | 'calendar'>('cards')
+  const [schedules, setSchedules] = useState<Schedule[]>([])
+  const [templates, setTemplates] = useState<ShiftTemplate[]>([])
+  const [selectedWeekStart, setSelectedWeekStart] = useState<Date>(() => {
+    const now = new Date()
+    const dayOfWeek = now.getDay()
+    const monday = new Date(now)
+    monday.setDate(now.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1))
+    return monday
+  })
+  const [editingSchedule, setEditingSchedule] = useState<Schedule | null>(null)
+  const [showShiftModal, setShowShiftModal] = useState(false)
+  const [showTemplatesModal, setShowTemplatesModal] = useState(false)
+  const [shiftModalDate, setShiftModalDate] = useState<string>('')
+  const [shiftModalTime, setShiftModalTime] = useState<string | undefined>(undefined)
+  const [scheduleLoading, setScheduleLoading] = useState(false)
+
+  // Format date as YYYY-MM-DD using local timezone (not UTC)
+  const formatLocalDate = (date: Date): string => {
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+  }
+
+  const normalizeScheduleDate = (value?: string) => {
+    if (!value) return value
+    return value.split('T')[0]
+  }
+
+  // Get week dates for the bar chart
+  const getWeekDates = () => {
+    const now = new Date()
+    const dayOfWeek = now.getDay()
+    const monday = new Date(now)
+    monday.setDate(now.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1))
+
+    const dates: string[] = []
+    for (let i = 0; i < 7; i++) {
+      const date = new Date(monday)
+      date.setDate(monday.getDate() + i)
+      dates.push(formatLocalDate(date))
+    }
+    return dates
+  }
+
+  const weekDates = getWeekDates()
+
   useEffect(() => {
     let isMounted = true
 
@@ -575,6 +652,11 @@ export default function StaffPage() {
         } catch (dailyError) {
           console.warn('Failed to load daily hours:', dailyError)
         }
+
+        // Fetch schedules for the current week
+        if (isMounted) {
+          await loadSchedules()
+        }
       } catch (e: any) {
         if (!isMounted) return
         const message =
@@ -593,6 +675,287 @@ export default function StaffPage() {
     }
   }, [])
 
+  // Socket listeners for real-time updates
+  useEffect(() => {
+    const handleTimeEntryCreated = (data: { userId: string; entry?: any }) => {
+      console.log('Time entry created:', data)
+      showToast.success('Staff clock in recorded')
+      // Refresh current staff and hours
+      refreshStaffData()
+    }
+
+    const handleTimeEntryUpdated = (data: { userId: string; entry?: any }) => {
+      console.log('Time entry updated:', data)
+      // Refresh hours data
+      refreshHoursData()
+    }
+
+    const handleScheduleUpdated = () => {
+      console.log('Schedule updated')
+      showToast.info('Schedule has been updated')
+      refreshStaffData()
+    }
+
+    const handleBreakStarted = (data: { userId: string }) => {
+      console.log('Break started:', data)
+      showToast.success('Break started')
+      refreshStaffData()
+    }
+
+    const handleBreakEnded = (data: { userId: string }) => {
+      console.log('Break ended:', data)
+      showToast.success('Break ended')
+      refreshStaffData()
+    }
+
+    // Connect and listen
+    if (!socketManager.connected) {
+      socketManager.connect()
+    }
+
+    socketManager.on('staff:clock_in', handleTimeEntryCreated)
+    socketManager.on('staff:clock_out', handleTimeEntryUpdated)
+    socketManager.on('staff.schedule_updated', handleScheduleUpdated)
+    socketManager.on('staff:break_start', handleBreakStarted)
+    socketManager.on('staff:break_end', handleBreakEnded)
+
+    return () => {
+      socketManager.off('staff:clock_in', handleTimeEntryCreated)
+      socketManager.off('staff:clock_out', handleTimeEntryUpdated)
+      socketManager.off('staff.schedule_updated', handleScheduleUpdated)
+      socketManager.off('staff:break_start', handleBreakStarted)
+      socketManager.off('staff:break_end', handleBreakEnded)
+    }
+  }, [])
+
+  // Helper functions to refresh data
+  const refreshStaffData = async () => {
+    try {
+      const currentResp = await api.get('/api/timeclock/current-staff')
+      setCurrentStaff(currentResp.data?.data?.currentStaff || [])
+    } catch (e) {
+      console.error('Failed to refresh current staff:', e)
+    }
+  }
+
+  const refreshHoursData = async () => {
+    try {
+      const statsResp = await api.get('/api/timeclock/stats')
+      const userStats = (statsResp.data?.data?.userStats || []) as Array<{ user_id: string; total_hours: number }>
+      const hoursMap: Record<string, number> = {}
+      for (const s of userStats) {
+        hoursMap[s.user_id] = Number(s.total_hours || 0)
+      }
+      setHoursByUserId(hoursMap)
+
+      const todayResp = await api.get('/api/timeclock/staff-hours')
+      const todayHours = (todayResp.data?.data?.staffHours || []) as Array<{ userId: string; todayHours: number }>
+      const todayHoursMap: Record<string, number> = {}
+      for (const s of todayHours) {
+        todayHoursMap[s.userId] = s.todayHours
+      }
+      setTodayHoursByUserId(todayHoursMap)
+    } catch (e) {
+      console.error('Failed to refresh hours:', e)
+    }
+  }
+
+  const loadSchedules = async (showError = false) => {
+    try {
+      const endDate = new Date(selectedWeekStart)
+      endDate.setDate(selectedWeekStart.getDate() + 6)
+
+      const startDateStr = formatLocalDate(selectedWeekStart)
+      const endDateStr = formatLocalDate(endDate)
+
+      console.log('[SCHEDULING-FRONTEND] Fetching schedules for date range:', startDateStr, 'to', endDateStr);
+
+      const [schedulesResp, templatesResp] = await Promise.all([
+        api.get('/api/staff/scheduling/schedules', {
+          params: {
+            startDate: startDateStr,
+            endDate: endDateStr
+          }
+        }),
+        api.get('/api/staff/scheduling/templates')
+      ])
+
+      const schedules = schedulesResp.data?.data?.schedules || []
+      const normalizedSchedules = schedules.map((schedule: Schedule) => ({
+        ...schedule,
+        shift_date: normalizeScheduleDate(schedule.shift_date) || schedule.shift_date
+      }))
+      console.log('[SCHEDULING-FRONTEND] Received', schedules.length, 'schedules');
+      if (schedules.length > 0) {
+        console.log('[SCHEDULING-FRONTEND] Sample schedules:', schedules.slice(0, 3).map((s: Schedule) => ({
+          id: s.id?.slice(0, 8),
+          date: s.shift_date,
+          user: s.user_name
+        })));
+      }
+
+      setSchedules(normalizedSchedules)
+      setTemplates(templatesResp.data?.data?.templates || [])
+      return normalizedSchedules
+    } catch (error) {
+      console.warn('Failed to load schedules:', error)
+      if (showError) {
+        showToast.error('Failed to load schedules')
+      }
+      return []
+    }
+  }
+
+  const loadTemplates = async () => {
+    try {
+      const resp = await api.get('/api/staff/scheduling/templates')
+      setTemplates(resp.data?.data?.templates || [])
+    } catch (error) {
+      console.warn('Failed to load templates:', error)
+    }
+  }
+
+  const handleCreateShift = (date: string, time?: string) => {
+    setShiftModalDate(date)
+    setShiftModalTime(time)
+    setEditingSchedule(null)
+    setShowShiftModal(true)
+  }
+
+  const handleEditShift = (schedule: Schedule) => {
+    setEditingSchedule(schedule)
+    setShiftModalDate(schedule.shift_date)
+    setShiftModalTime(undefined)
+    setShowShiftModal(true)
+  }
+
+  const handleSaveShift = async (scheduleData: any) => {
+    console.log('[SCHEDULING-FRONTEND] Saving shift:', {
+      user_id: scheduleData.user_id,
+      shift_date: scheduleData.shift_date,
+      shift_start_time: scheduleData.shift_start_time,
+      shift_end_time: scheduleData.shift_end_time,
+      isEdit: !!editingSchedule?.id
+    });
+
+    try {
+      if (editingSchedule?.id) {
+        // Update existing schedule
+        await api.put(`/api/staff/scheduling/schedules/${editingSchedule.id}`, scheduleData)
+        showToast.success('Shift updated successfully')
+      } else {
+        // Create new schedule
+        await api.post('/api/staff/scheduling/schedules', scheduleData)
+        showToast.success('Shift created successfully')
+      }
+      // Refresh schedules and verify
+      const refreshedSchedules = await loadSchedules(true)
+      console.log('[SCHEDULING-FRONTEND] After save, loaded', refreshedSchedules.length, 'schedules');
+      if (!refreshedSchedules || refreshedSchedules.length === 0) {
+        showToast.error('Schedule saved but failed to refresh the view')
+      }
+    } catch (error: any) {
+      console.error('[SCHEDULING-FRONTEND] ERROR saving shift:', error.response?.data?.error?.message || error.message);
+      if (error.response?.status === 403) {
+        showToast.error('You do not have permission to modify schedules')
+      } else {
+        showToast.error(error.response?.data?.error?.message || 'Failed to save shift')
+      }
+      throw error
+    }
+  }
+
+  const handleDeleteShift = async (scheduleId: string) => {
+    try {
+      await api.delete(`/api/staff/scheduling/schedules/${scheduleId}`)
+      showToast.success('Shift deleted successfully')
+      await loadSchedules()
+    } catch (error: any) {
+      console.error('Failed to delete shift:', error)
+      if (error.response?.status === 403) {
+        showToast.error('You do not have permission to delete schedules')
+      } else {
+        showToast.error(error.response?.data?.error?.message || 'Failed to delete shift')
+      }
+      throw error
+    }
+  }
+
+  const handleTogglePublish = async (scheduleId: string, isPublished: boolean) => {
+    try {
+      await api.put(`/api/staff/scheduling/schedules/${scheduleId}`, { is_published: isPublished })
+      showToast.success(isPublished ? 'Schedule published' : 'Schedule unpublished')
+      await loadSchedules()
+    } catch (error: any) {
+      showToast.error('Failed to update schedule')
+    }
+  }
+
+  const handleCopyShift = async (schedule: Schedule) => {
+    // Open the shift modal with copied data
+    setEditingSchedule(null)
+    setShiftModalDate(schedule.shift_date)
+    setShiftModalTime(schedule.shift_start_time)
+    setShowShiftModal(true)
+  }
+
+  const handleCreateTemplate = async (template: Omit<ShiftTemplate, 'id' | 'is_active'>) => {
+    await api.post('/api/staff/scheduling/templates', template)
+    showToast.success('Template created')
+    await loadTemplates()
+  }
+
+  const handleUpdateTemplate = async (id: string, template: Partial<ShiftTemplate>) => {
+    await api.put(`/api/staff/scheduling/templates/${id}`, template)
+    showToast.success('Template updated')
+    await loadTemplates()
+  }
+
+  const handleDeleteTemplate = async (id: string) => {
+    await api.delete(`/api/staff/scheduling/templates/${id}`)
+    showToast.success('Template deleted')
+    await loadTemplates()
+  }
+
+  const handleApplyTemplate = async (templateId: string, weekStartDate: string) => {
+    const template = templates.find(t => t.id === templateId)
+    if (!template) return
+
+    // Get the week dates
+    const dates: string[] = []
+    for (let i = 0; i < 7; i++) {
+      const date = new Date(weekStartDate)
+      date.setDate(date.getDate() + i)
+      dates.push(date.toISOString().split('T')[0])
+    }
+
+    // Create schedules for each day of the week
+    const schedules: any[] = []
+    for (const date of dates) {
+      schedules.push({
+        user_id: staff[0]?.id, // Default to first staff member - user will need to edit
+        shift_date: date,
+        shift_start_time: template.start_time,
+        shift_end_time: template.end_time,
+        position: template.position,
+        notes: `From template: ${template.name}`
+      })
+    }
+
+    try {
+      const resp = await api.post('/api/staff/scheduling/schedules/bulk', { schedules })
+      showToast.success(`Created ${resp.data.data.created} shifts from template`)
+      await loadSchedules()
+    } catch (error: any) {
+      showToast.error('Failed to apply template')
+    }
+  }
+
+  const handleWeekChange = useCallback(async (date: Date) => {
+    setSelectedWeekStart(date)
+    await loadSchedules()
+  }, [])
+
   const handleStaffCreated = () => {
     // Reload staff data
     const load = async () => {
@@ -604,6 +967,167 @@ export default function StaffPage() {
       }
     }
     load()
+  }
+
+  // Clock action handlers
+  const handleClockIn = async (userId: string) => {
+    try {
+      const response = await api.post('/api/timeclock/manager/clock-in', {
+        userId,
+        managerId: 'current-user'
+      })
+
+      if (response.data.success) {
+        // Refresh current staff data
+        const currentResp = await api.get('/api/timeclock/current-staff')
+        setCurrentStaff(currentResp.data?.data?.currentStaff || [])
+        showToast.success(`${response.data.data.userName} clocked in successfully`)
+      }
+    } catch (err: any) {
+      console.error('Failed to clock in:', err)
+      showToast.error(err.response?.data?.error?.message || 'Failed to clock in staff member')
+      throw err
+    }
+  }
+
+  const handleClockOut = async (userId: string) => {
+    try {
+      const response = await api.post('/api/timeclock/manager/clock-out', {
+        userId,
+        managerId: 'current-user'
+      })
+
+      if (response.data.success) {
+        // Refresh current staff data
+        const currentResp = await api.get('/api/timeclock/current-staff')
+        setCurrentStaff(currentResp.data?.data?.currentStaff || [])
+
+        // Refresh today's hours
+        const todayResp = await api.get('/api/timeclock/staff-hours')
+        const todayHours = (todayResp.data?.data?.staffHours || []) as Array<{ userId: string; todayHours: number }>
+        const todayHoursMap: Record<string, number> = {}
+        for (const s of todayHours) {
+          todayHoursMap[s.userId] = s.todayHours
+        }
+        setTodayHoursByUserId(todayHoursMap)
+
+        // Refresh weekly stats
+        const statsResp = await api.get('/api/timeclock/stats')
+        const userStats = (statsResp.data?.data?.userStats || []) as Array<{ user_id: string; total_hours: number }>
+        const hoursMap: Record<string, number> = {}
+        for (const s of userStats) {
+          hoursMap[s.user_id] = Number(s.total_hours || 0)
+        }
+        setHoursByUserId(hoursMap)
+
+        showToast.success(`${response.data.data.userName} clocked out successfully`)
+      }
+    } catch (err: any) {
+      console.error('Failed to clock out:', err)
+      showToast.error(err.response?.data?.error?.message || 'Failed to clock out staff member')
+      throw err
+    }
+  }
+
+  const handleStartBreak = async (userId: string) => {
+    try {
+      const response = await api.post('/api/timeclock/start-break', {
+        userId
+      })
+
+      if (response.data.success) {
+        // Refresh current staff data
+        const currentResp = await api.get('/api/timeclock/current-staff')
+        setCurrentStaff(currentResp.data?.data?.currentStaff || [])
+        showToast.success('Break started successfully')
+      }
+    } catch (err: any) {
+      console.error('Failed to start break:', err)
+      showToast.error(err.response?.data?.error?.message || 'Failed to start break')
+      throw err
+    }
+  }
+
+  const handleEndBreak = async (userId: string) => {
+    try {
+      const response = await api.post('/api/timeclock/end-break', {
+        userId
+      })
+
+      if (response.data.success) {
+        // Refresh current staff data
+        const currentResp = await api.get('/api/timeclock/current-staff')
+        setCurrentStaff(currentResp.data?.data?.currentStaff || [])
+        showToast.success('Break ended successfully')
+      }
+    } catch (err: any) {
+      console.error('Failed to end break:', err)
+      showToast.error(err.response?.data?.error?.message || 'Failed to end break')
+      throw err
+    }
+  }
+
+  const handleQuickAction = async (userId: string, time: Date, reason?: string) => {
+    // This is called from QuickTimeActionModal for backdated actions
+    switch (quickActionType) {
+      case 'clock-in':
+        await api.post('/api/timeclock/manager/clock-in', {
+          userId,
+          clockInTime: time.toISOString(),
+          managerId: 'current-user',
+          reason
+        })
+        break
+      case 'clock-out':
+        await api.post('/api/timeclock/manager/clock-out', {
+          userId,
+          clockOutTime: time.toISOString(),
+          managerId: 'current-user',
+          notes: reason
+        })
+        break
+    }
+
+    // Refresh all data
+    const [currentResp, todayResp, statsResp, dailyResp] = await Promise.all([
+      api.get('/api/timeclock/current-staff'),
+      api.get('/api/timeclock/staff-hours'),
+      api.get('/api/timeclock/stats'),
+      api.get('/api/timeclock/user-daily-hours')
+    ])
+
+    setCurrentStaff(currentResp.data?.data?.currentStaff || [])
+
+    const todayHours = (todayResp.data?.data?.staffHours || []) as Array<{ userId: string; todayHours: number }>
+    const todayHoursMap: Record<string, number> = {}
+    for (const s of todayHours) {
+      todayHoursMap[s.userId] = s.todayHours
+    }
+    setTodayHoursByUserId(todayHoursMap)
+
+    const userStats = (statsResp.data?.data?.userStats || []) as Array<{ user_id: string; total_hours: number }>
+    const hoursMap: Record<string, number> = {}
+    for (const s of userStats) {
+      hoursMap[s.user_id] = Number(s.total_hours || 0)
+    }
+    setHoursByUserId(hoursMap)
+
+    setDailyHours(dailyResp.data?.data || null)
+
+    const actionText = quickActionType === 'clock-in' ? 'clocked in' : 'clocked out'
+    showToast.success(`Staff ${actionText} successfully`)
+  }
+
+  const handleResetPin = async (member: StaffUser) => {
+    try {
+      const response = await api.post(`/api/restaurant/staff/${member.id}/reset-pin`, {})
+      if (response.data.success) {
+        showToast.success(`PIN reset to: ${response.data.data.pin}`)
+      }
+    } catch (err: any) {
+      console.error('Failed to reset PIN:', err)
+      showToast.error(err.response?.data?.error?.message || 'Failed to reset PIN')
+    }
   }
 
   const roles = useMemo(() => {
@@ -673,29 +1197,14 @@ export default function StaffPage() {
     }
   }
 
-  // Get day abbreviation for the current week
-  const getDayAbbrev = (dateStr: string) => {
-    const date = new Date(dateStr)
-    return date.toLocaleDateString('en-US', { weekday: 'short' }).charAt(0).toUpperCase()
-  }
+  // Staff members cannot edit hours - only managers/owners/admins can
+  const canEditHours = isManagerOrOwner || isAdmin
 
-  // Get all dates for the current week (Mon-Sun)
-  const getWeekDates = () => {
-    const now = new Date()
-    const dayOfWeek = now.getDay()
-    const monday = new Date(now)
-    monday.setDate(now.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1))
-
-    const dates: string[] = []
-    for (let i = 0; i < 7; i++) {
-      const date = new Date(monday)
-      date.setDate(monday.getDate() + i)
-      dates.push(date.toISOString().split('T')[0])
+  const handleEditHours = (member: StaffUser) => {
+    if (canEditHours) {
+      setHoursEditorStaff(member)
     }
-    return dates
   }
-
-  const weekDates = getWeekDates()
 
   return (
     <>
@@ -741,6 +1250,22 @@ export default function StaffPage() {
               </p>
             </div>
             <div className="flex items-center gap-3">
+              <ScheduleViewToggle
+                view={scheduleView}
+                onViewChange={setScheduleView}
+                scheduledCount={schedules.length}
+              />
+              {scheduleView === 'calendar' && canEditHours && (
+                <motion.button
+                  className="btn-secondary inline-flex items-center space-x-2"
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => setShowTemplatesModal(true)}
+                >
+                  <CalendarDays className="w-4 h-4" />
+                  <span>Templates</span>
+                </motion.button>
+              )}
               <a
                 href="/staff/clock"
                 target="_blank"
@@ -748,7 +1273,7 @@ export default function StaffPage() {
                 className="btn-secondary inline-flex items-center space-x-2"
               >
                 <Smartphone className="w-4 h-4" />
-                <span>Staff Clock-In PWA</span>
+                <span>Staff Clock-In</span>
               </a>
               <motion.button
                 className="btn-primary inline-flex items-center space-x-2"
@@ -757,7 +1282,7 @@ export default function StaffPage() {
                 onClick={() => setShowAddModal(true)}
               >
                 <UserPlus className="w-4 h-4" />
-                <span>Add Staff Member</span>
+                <span>Add Staff</span>
               </motion.button>
             </div>
           </div>
@@ -954,120 +1479,74 @@ export default function StaffPage() {
                     </div>
                   </div>
                 </div>
-
-                {/* Hours Summary with Daily Breakdown */}
-                <div className="mb-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-medium text-surface-600 dark:text-surface-400">
-                      This Week
-                    </span>
-                    <span className="text-sm font-bold text-surface-900 dark:text-surface-100">
-                      {hoursThisWeek > 0 ? `${hoursThisWeek.toFixed(1)}h` : '0h'}
-                    </span>
-                  </div>
-                  {/* Daily breakdown bar chart */}
-                  <div className="flex gap-1">
-                    {weekDates.map((date) => {
-                      const dayHours = dailyHours?.userDailyHours[member.id]?.[date] || 0
-                      const isToday = date === new Date().toISOString().split('T')[0]
-                      const isFuture = new Date(date) > new Date()
-                      const maxHours = 12 // Scale bar to 12 hours max
-                      const heightPercent = Math.min((dayHours / maxHours) * 100, 100)
-                      const dayName = new Date(date).toLocaleDateString('en-US', { weekday: 'short' }).charAt(0)
-
-                      return (
-                        <div key={date} className="flex-1 flex flex-col items-center">
-                          <div className="relative w-full h-12 flex items-end">
-                            {/* Hour label on hover */}
-                            {dayHours > 0 && (
-                              <div className="absolute -top-5 left-1/2 transform -translate-x-1/2 text-[10px] font-medium text-surface-600 dark:text-surface-400 whitespace-nowrap">
-                                {dayHours.toFixed(1)}h
-                              </div>
-                            )}
-                            {/* Bar */}
-                            <div
-                              className={`w-full rounded-t-sm transition-all ${
-                                isFuture
-                                  ? 'bg-gray-100 dark:bg-surface-700'
-                                  : dayHours > 0
-                                    ? 'bg-primary-500'
-                                    : 'bg-gray-200 dark:bg-surface-600'
-                              }`}
-                              style={{ height: isFuture ? '4px' : `${Math.max(heightPercent, 4)}%` }}
-                            />
-                          </div>
-                          <span className={`text-[10px] mt-1 ${
-                            isToday
-                              ? 'font-bold text-primary-500'
-                              : 'text-surface-400 dark:text-surface-500'
-                          }`}>
-                            {dayName}
-                          </span>
-                        </div>
-                      )
-                    })}
-                  </div>
+                <div className="flex items-center space-x-2">
+                  <Filter className="w-4 h-4 text-surface-500" />
+                  <select
+                    className="input-field"
+                    value={selectedRole}
+                    onChange={(e) => setSelectedRole(e.target.value)}
+                  >
+                    {roles.map(role => (
+                      <option key={role} value={role}>
+                        {role === 'all' ? 'All Roles' : role}
+                      </option>
+                    ))}
+                  </select>
                 </div>
+              </div>
 
-                <div className="space-y-3">
-                  <div className="flex items-center space-x-2 text-sm text-surface-600 dark:text-surface-400">
-                    <Mail className="w-4 h-4" />
-                    <span>{member.email || '—'}</span>
-                  </div>
-                  {activeShift && (
-                    <div className="flex items-center space-x-2 text-sm text-surface-600 dark:text-surface-400">
-                      <Clock className="w-4 h-4" />
-                      <span>{shiftLabel}</span>
-                      {activeShift.is_on_break && (
-                        <span className="text-amber-500 flex items-center gap-1">
-                          <Coffee className="w-3 h-3" /> On Break
-                        </span>
-                      )}
-                    </div>
-                  )}
-                  {/* PIN display for staff */}
-                  {member.pin && (
-                    <div className="flex items-center justify-between pt-2 border-t border-surface-200 dark:border-surface-700">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm text-surface-600 dark:text-surface-400">PIN:</span>
-                        <span className="font-mono font-bold text-surface-900 dark:text-surface-100">
-                          {member.pin}
-                        </span>
-                      </div>
-                      <a
-                        href={`/staff/clock`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 font-medium"
-                      >
-                        <LogIn className="w-4 h-4" />
-                        Clock In
-                      </a>
-                    </div>
-                  )}
-                </div>
-              </motion.div>
-            )})}
-          </div>
+              {/* Staff Cards Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+                {(isLoading ? [] : filteredStaff).map((member, index) => {
+                  const status = getStatus(member.id)
+                  const activeShift = currentByUserId.get(member.id)
+                  const shiftLabel = activeShift ? `${formatTime(activeShift.clock_in_time)} - Now` : '—'
+                  const hoursThisWeek = hoursByUserId[member.id] ?? 0
+                  const hoursToday = todayHoursByUserId[member.id] ?? 0
 
-          {isLoading && (
-            <div className="text-center py-12 text-surface-500">Loading staff…</div>
-          )}
+                  return (
+                    <StaffCard
+                      key={member.id}
+                      member={member}
+                      status={status as 'on-shift' | 'on-break' | 'off-shift'}
+                      activeShift={activeShift}
+                      hoursThisWeek={hoursThisWeek}
+                      hoursToday={hoursToday}
+                      dailyHours={dailyHours || undefined}
+                      weekDates={weekDates}
+                      onEditStaff={setEditingStaff}
+                      onResetPin={handleResetPin}
+                      onEditHours={canEditHours ? handleEditHours : undefined}
+                      onViewHistory={setViewingHistoryStaff}
+                      onClockIn={handleClockIn}
+                      onClockOut={handleClockOut}
+                      onStartBreak={handleStartBreak}
+                      onEndBreak={handleEndBreak}
+                    />
+                  )
+                })}
+              </div>
 
-          {!isLoading && filteredStaff.length === 0 && (
-            <motion.div
-              className="text-center py-12"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-            >
-              <Users className="w-12 h-12 text-surface-400 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-surface-900 dark:text-surface-100 mb-2">
-                No staff members found
-              </h3>
-              <p className="text-surface-600 dark:text-surface-400">
-                Try adjusting your search or filter criteria
-              </p>
-            </motion.div>
+              {isLoading && (
+                <div className="text-center py-12 text-surface-500">Loading staff...</div>
+              )}
+
+              {!isLoading && filteredStaff.length === 0 && (
+                <motion.div
+                  className="text-center py-12"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                >
+                  <Users className="w-12 h-12 text-surface-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-surface-900 dark:text-surface-100 mb-2">
+                    No staff members found
+                  </h3>
+                  <p className="text-surface-600 dark:text-surface-400">
+                    Try adjusting your search or filter criteria
+                  </p>
+                </motion.div>
+              )}
+            </>
           )}
         </div>
       </DashboardLayout>

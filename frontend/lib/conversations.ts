@@ -10,6 +10,10 @@ export interface ConversationSession {
   toNumber?: string
   status: string
   audioUrl?: string
+  metadata?: {
+    assistant?: boolean
+    [key: string]: any
+  }
   insights?: {
     summary?: string
     intentPrimary?: string

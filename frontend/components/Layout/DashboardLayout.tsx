@@ -38,7 +38,65 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const { user, logout, isLoading } = useUser();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [mounted, setMounted] = React.useState(false);
+  const [edgeSwipeActive, setEdgeSwipeActive] = useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [isDesktop, setIsDesktop] = useState(false);
   const router = useRouter();
+
+  // Detect desktop screen size (lg breakpoint = 1024px)
+  React.useEffect(() => {
+    const checkIsDesktop = () => setIsDesktop(window.innerWidth >= 1024);
+    checkIsDesktop();
+    window.addEventListener('resize', checkIsDesktop);
+    return () => window.removeEventListener('resize', checkIsDesktop);
+  }, []);
+
+  // Haptic feedback function for native feel
+  const triggerHaptic = React.useCallback(() => {
+    if (typeof navigator !== 'undefined' && navigator.vibrate) {
+      navigator.vibrate(35);
+    }
+  }, []);
+
+  // Drawer animation variants with spring physics
+  const drawerVariants = {
+    open: { x: 0, transition: { type: 'spring' as const, stiffness: 300, damping: 30 } },
+    closed: { x: '-100%', transition: { type: 'spring' as const, stiffness: 300, damping: 30 } }
+  };
+
+  // Drag constraints (w-72 = 288px)
+  const dragConstraints = { left: 0, right: 288 };
+  const dragElastic = 0.1;
+
+  // Handle drag end for snap-to-open/close
+  const handleDragEnd = (_: Event, info: { offset: { x: number }; velocity: { x: number } }) => {
+    const { offset, velocity } = info;
+    const threshold = 100;
+
+    // Determine if we should open or close based on drag direction and velocity
+    if (offset.x > threshold || velocity.x > 500) {
+      setSidebarOpen(true);
+      triggerHaptic();
+    } else {
+      setSidebarOpen(false);
+      triggerHaptic();
+    }
+  };
+
+  // Handle edge swipe touch start
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (!sidebarOpen && e.touches[0].clientX <= 20) {
+      setEdgeSwipeActive(true);
+    }
+  };
+
+  // Reset edge swipe when drawer opens
+  React.useEffect(() => {
+    if (sidebarOpen) {
+      setEdgeSwipeActive(false);
+    }
+  }, [sidebarOpen]);
 
   React.useEffect(() => {
     setMounted(true);
@@ -230,24 +288,33 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const closeSidebar = () => setSidebarOpen(false);
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white" onTouchStart={handleTouchStart}>
       <AnimatePresence>
         {sidebarOpen && (
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-40 bg-surface-900/50 backdrop-blur-sm lg:hidden"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-40 bg-surface-900/60 backdrop-blur-md lg:hidden"
             onClick={closeSidebar}
           />
         )}
       </AnimatePresence>
 
       <motion.div
-        className={`fixed inset-y-0 left-0 z-50 w-72 bg-white dark:bg-gray-800 transform transition-transform duration-300 ease-out lg:translate-x-0 border-r border-gray-200 dark:border-gray-700 ${
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        className={`fixed inset-y-0 left-0 z-50 w-72 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 shadow-2xl shadow-black/20 gpu-accelerated will-change-transform ${
+          isDesktop ? '' : (sidebarOpen ? 'translate-x-0' : '-translate-x-full')
         }`}
         initial={false}
+        animate={isDesktop ? undefined : (sidebarOpen ? 'open' : 'closed')}
+        variants={isDesktop ? undefined : drawerVariants}
+        drag={!isDesktop && (edgeSwipeActive || sidebarOpen) ? 'x' : false}
+        dragConstraints={dragConstraints}
+        dragElastic={dragElastic}
+        dragSnapToOrigin={true}
+        onDragEnd={handleDragEnd}
+        whileDrag={!isDesktop ? { scale: 0.98 } : undefined}
       >
         <div className="flex items-center justify-between h-16 px-6 border-b border-gray-200 dark:border-gray-700">
           <motion.div className="flex items-center" whileHover={{ scale: 1.02 }}>
@@ -325,10 +392,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         {/* Logout Button - Always visible at bottom of sidebar */}
         <div className="px-4 py-4 border-t border-gray-200 dark:border-gray-700">
           <button
-            onClick={() => {
-              logout();
-              router.push('/login');
-            }}
+            onClick={() => setShowLogoutConfirm(true)}
             className="w-full flex items-center px-4 py-3 text-sm font-medium rounded-xl text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all duration-200"
           >
             <div className="flex items-center justify-center w-10 h-10 rounded-lg mr-3 bg-red-50 dark:bg-red-900/30">
@@ -342,13 +406,80 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         </div>
       </motion.div>
 
+      {/* Logout Confirmation Modal */}
+      <AnimatePresence>
+        {showLogoutConfirm && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 bg-surface-900/60 backdrop-blur-sm"
+              onClick={() => setShowLogoutConfirm(false)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            >
+              <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-sm w-full p-6 border border-gray-200 dark:border-gray-700">
+                <div className="flex items-center justify-center w-16 h-16 mx-auto bg-red-100 dark:bg-red-900/30 rounded-full mb-4">
+                  <LogOut className="w-8 h-8 text-red-600 dark:text-red-400" />
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white text-center mb-2">
+                  Sign Out?
+                </h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400 text-center mb-6">
+                  Are you sure you want to sign out of your account? You'll need to log in again to access your dashboard.
+                </p>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setShowLogoutConfirm(false)}
+                    className="flex-1 px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 font-medium hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                    disabled={isLoggingOut}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={async () => {
+                      setIsLoggingOut(true);
+                      await logout();
+                      router.push('/login');
+                    }}
+                    className="flex-1 px-4 py-3 rounded-xl bg-red-600 hover:bg-red-700 text-white font-medium transition-colors flex items-center justify-center gap-2"
+                    disabled={isLoggingOut}
+                  >
+                    {isLoggingOut ? (
+                      <>
+                        <motion.div
+                          animate={{ rotate: 360 }}
+                          transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                          className="w-4 h-4 border-2 border-white border-t-transparent rounded-full"
+                        />
+                        Signing out...
+                      </>
+                    ) : (
+                      'Sign Out'
+                    )}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
       <div className="pl-0 lg:pl-72 transition-all duration-300">
         <div className="bg-white/95 dark:bg-gray-900/95 sticky top-0 z-30 border-b border-gray-200 dark:border-gray-700 backdrop-blur-md safe-area-inset-top">
           <div className="px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between items-center h-16">
               <div className="flex items-center space-x-3">
                 <button
-                  onClick={() => setSidebarOpen(true)}
+                  onClick={() => {
+                    setSidebarOpen(true);
+                    triggerHaptic();
+                  }}
                   className="lg:hidden btn-icon"
                   aria-label="Open menu"
                 >
@@ -383,7 +514,10 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
               return (
                 <button
                   key={item.name}
-                  onClick={() => setSidebarOpen(true)}
+                  onClick={() => {
+                    setSidebarOpen(true);
+                    triggerHaptic();
+                  }}
                   className={`flex flex-col items-center justify-center py-2 rounded-lg text-xs font-medium ${
                     isActive ? 'text-primary-700 dark:text-primary-300' : 'text-gray-500 dark:text-surface-400'
                   } hover:text-primary-700 dark:hover:text-primary-300 transition-colors`}

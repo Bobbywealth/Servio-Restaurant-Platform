@@ -1,9 +1,10 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react'
 import Head from 'next/head'
 import DashboardLayout from '../../../components/Layout/DashboardLayout'
 import { useUser } from '../../../contexts/UserContext'
 import { conversationsApi, ConversationSession } from '../../../lib/conversations'
-import { RefreshCw, Filter, Search, Phone, Clock, ChevronRight, CheckCircle, AlertCircle, XCircle, FileText, MessageSquare } from 'lucide-react'
+import { socketManager } from '../../../lib/socket'
+import { RefreshCw, Filter, Search, Phone, Clock, ChevronRight, CheckCircle, AlertCircle, XCircle, FileText, MessageSquare, PhoneCall, Bot } from 'lucide-react'
 import { TableRowSkeleton } from '../../../components/ui/Skeleton'
 import { AnimatePresence, motion } from 'framer-motion'
 import Link from 'next/link'
@@ -64,6 +65,33 @@ function formatDuration(seconds?: number): string {
   return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`
 }
 
+function LiveDuration({ startTime }: { startTime: string }) {
+  const [duration, setDuration] = useState<string>('0:00')
+
+  useEffect(() => {
+    const updateDuration = () => {
+      const start = new Date(startTime).getTime()
+      const now = Date.now()
+      const elapsed = Math.floor((now - start) / 1000)
+
+      const mins = Math.floor(elapsed / 60)
+      const secs = elapsed % 60
+      setDuration(`${mins}:${secs.toString().padStart(2, '0')}`)
+    }
+
+    updateDuration()
+    const interval = setInterval(updateDuration, 1000)
+
+    return () => clearInterval(interval)
+  }, [startTime])
+
+  return (
+    <span className="text-xs font-mono text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/30 px-2 py-0.5 rounded">
+      {duration}
+    </span>
+  )
+}
+
 function formatDate(dateString: string): string {
   const date = new Date(dateString)
   const now = new Date()
@@ -104,9 +132,11 @@ export default function ConversationsPage() {
   const { user } = useUser()
   const [loading, setLoading] = useState(true)
   const [sessions, setSessions] = useState<ConversationSession[]>([])
+  const [activeCalls, setActiveCalls] = useState<ConversationSession[]>([])
   const [total, setTotal] = useState(0)
   const [showFilters, setShowFilters] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
+  const [newConversationAlert, setNewConversationAlert] = useState(false)
 
   const [filters, setFilters] = useState<ConversationFilters>({
     search: '',
@@ -146,6 +176,44 @@ export default function ConversationsPage() {
       loadConversations()
     }
   }, [user, pagination])
+
+  // Socket listeners for real-time updates
+  useEffect(() => {
+    const handleNewConversation = (data: { sessionId?: string; session?: ConversationSession; transcript?: string; confidence?: number }) => {
+      console.log('New conversation received:', data)
+
+      // Show notification
+      setNewConversationAlert(true)
+      setTimeout(() => setNewConversationAlert(false), 5000)
+
+      // Refresh the conversations list
+      loadConversations()
+
+      // If it's an active call, add it to active calls
+      if (data.session) {
+        setActiveCalls(prev => [...prev, data.session!])
+      }
+    }
+
+    const handleCallEnded = (data: { sessionId: string }) => {
+      console.log('Call ended:', data)
+      setActiveCalls(prev => prev.filter(call => call.id !== data.sessionId))
+      loadConversations()
+    }
+
+    // Connect and listen
+    if (!socketManager.connected) {
+      socketManager.connect()
+    }
+
+    socketManager.on('voice:command_received', handleNewConversation)
+    socketManager.on('call:ended', handleCallEnded)
+
+    return () => {
+      socketManager.off('voice:command_received', handleNewConversation)
+      socketManager.off('call:ended', handleCallEnded)
+    }
+  }, [user])
 
   const handleRefresh = () => {
     loadConversations(true)
@@ -199,6 +267,88 @@ export default function ConversationsPage() {
       </Head>
 
       <div className="p-4 md:p-6 max-w-7xl mx-auto">
+        {/* New Conversation Alert */}
+        <AnimatePresence>
+          {newConversationAlert && (
+            <motion.div
+              initial={{ opacity: 0, y: -20, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -20, scale: 0.95 }}
+              className="mb-4 p-4 bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 rounded-xl flex items-center gap-3"
+            >
+              <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0">
+                <Phone className="w-4 h-4 text-white animate-pulse" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-medium text-green-800 dark:text-green-200">
+                  New conversation received!
+                </p>
+              </div>
+              <button
+                onClick={() => setNewConversationAlert(false)}
+                className="p-1 hover:bg-green-100 dark:hover:bg-green-800 rounded-lg transition-colors"
+              >
+                <XCircle className="w-4 h-4 text-green-600 dark:text-green-400" />
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Active Calls Section */}
+        <AnimatePresence>
+          {activeCalls.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="mb-6 overflow-hidden"
+            >
+              <div className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-xl p-4 border border-green-200 dark:border-green-800">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-semibold text-green-800 dark:text-green-200 flex items-center gap-2">
+                    <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                    Active Now ({activeCalls.length})
+                  </h3>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {activeCalls.map((call) => (
+                    <div
+                      key={call.id}
+                      className="bg-white dark:bg-gray-800 rounded-lg p-3 shadow-sm border border-green-200 dark:border-green-700"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Phone className="w-4 h-4 text-green-600" />
+                          <span className="font-medium text-gray-900 dark:text-white">
+                            {call.fromNumber || 'Unknown'}
+                          </span>
+                        </div>
+                        <LiveDuration startTime={call.startedAt} />
+                      </div>
+                      <div className="mt-2 flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                        <span className="flex items-center gap-1">
+                          {call.direction === 'inbound' ? (
+                            <PhoneCall className="w-3 h-3" />
+                          ) : (
+                            <Phone className="w-3 h-3 rotate-180" />
+                          )}
+                          {call.direction === 'inbound' ? 'Inbound' : 'Outbound'}
+                        </span>
+                        {call.metadata?.assistant && (
+                          <span className="flex items-center gap-1">
+                            <Bot className="w-3 h-3" />
+                            AI
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
           <div>
@@ -395,15 +545,32 @@ export default function ConversationsPage() {
                   >
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                          {/* Direction Icon */}
                           <Phone className={`w-4 h-4 ${
                             session.direction === 'inbound'
                               ? 'text-blue-500'
                               : 'text-green-500'
                           }`} />
+                          {/* Phone Number */}
                           <span className="text-sm font-medium text-gray-900 dark:text-white">
                             {session.fromNumber || 'Unknown'}
                           </span>
+                          {/* Source/Provider Badge */}
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-surface-100 dark:bg-surface-800 text-surface-600 dark:text-surface-400">
+                            {session.metadata?.assistant ? (
+                              <>
+                                <Bot className="w-3 h-3" />
+                                AI
+                              </>
+                            ) : (
+                              <>
+                                <Phone className="w-3 h-3" />
+                                Phone
+                              </>
+                            )}
+                          </span>
+                          {/* Status Badge */}
                           <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${status.color}`}>
                             {status.icon}
                             <span className="ml-1">{status.label}</span>

@@ -3,25 +3,39 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { TabletSidebar } from '../../components/tablet/TabletSidebar';
 import { api } from '../../lib/api';
 
+// Define operating hours type with all possible properties
 type DayHours = {
   open: string;
   close: string;
   closed: boolean;
+  schedule?: boolean;
+  day?: string;
+  isOpen?: boolean;
 };
 
+// Define holiday schedule type with all possible properties
 type HolidaySchedule = {
   date: string;
   name: string;
   closed: boolean;
   open?: string;
   close?: string;
+  schedule?: boolean;
+  day?: string;
+  isOpen?: boolean;
+};
+
+type RestaurantSettings = {
+  holiday_schedule?: HolidaySchedule[];
+  pickup_instructions?: string;
+  [key: string]: any;
 };
 
 type RestaurantProfileResponse = {
   success: boolean;
   data?: {
     operating_hours?: Record<string, Partial<DayHours>>;
-    settings?: Record<string, any>;
+    settings?: RestaurantSettings;
   };
   error?: { message?: string };
 };
@@ -78,7 +92,21 @@ export default function TabletInfoPage() {
       setOperatingHours(normalizeHours(payload.data?.operating_hours));
       setProfileSettings(settings);
       setPickupInstructions(settings.pickup_instructions || '');
-      setHolidaySchedule(Array.isArray(settings.holiday_schedule) ? settings.holiday_schedule : []);
+      // Ensure holiday_schedule is an array of HolidaySchedule objects
+      const holidayData = settings.holiday_schedule;
+      const normalizedHolidays: HolidaySchedule[] = Array.isArray(holidayData)
+        ? holidayData.map((h: any) => ({
+            date: h.date || '',
+            name: h.name || '',
+            closed: h.closed ?? true,
+            open: h.open || '09:00',
+            close: h.close || '17:00',
+            schedule: h.schedule,
+            day: h.day,
+            isOpen: h.isOpen
+          }))
+        : [];
+      setHolidaySchedule(normalizedHolidays);
     } catch (err: any) {
       setError(err?.message || 'Failed to load restaurant info.');
     } finally {

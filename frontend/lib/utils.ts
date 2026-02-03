@@ -227,8 +227,12 @@ export function resolveMediaUrl(url?: string | null): string {
   if (url.startsWith('http://') || url.startsWith('https://')) return url
   const baseUrl =
     process.env.NEXT_PUBLIC_API_URL ||
-    process.env.NEXT_PUBLIC_BACKEND_URL ||
-    'http://localhost:3002'
+    process.env.NEXT_PUBLIC_BACKEND_URL
+
+  if (!baseUrl) {
+    throw new Error('NEXT_PUBLIC_API_URL or NEXT_PUBLIC_BACKEND_URL environment variable is required')
+  }
+
   if (url.startsWith('/')) return `${baseUrl}${url}`
   return `${baseUrl}/${url}`
 }

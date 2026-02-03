@@ -3,11 +3,10 @@ import { safeLocalStorage as SLS } from './utils'
 
 const BACKEND_URL =
   process.env.NEXT_PUBLIC_API_URL ||
-  process.env.NEXT_PUBLIC_BACKEND_URL ||
-  'http://localhost:3002'
+  process.env.NEXT_PUBLIC_BACKEND_URL
 
-if (process.env.NODE_ENV === 'production' && !process.env.NEXT_PUBLIC_API_URL && !process.env.NEXT_PUBLIC_BACKEND_URL) {
-  throw new Error('NEXT_PUBLIC_API_URL is required in production builds.')
+if (!BACKEND_URL) {
+  throw new Error('NEXT_PUBLIC_API_URL or NEXT_PUBLIC_BACKEND_URL environment variable is required')
 }
 
 // Ensure URL has protocol
@@ -35,9 +34,19 @@ let refreshInFlight: Promise<string | null> | null = null
 let lastRefreshTime = 0
 const MIN_REFRESH_INTERVAL = 30_000 // Don't refresh more than once per 30 seconds
 
+// Cache for token expiry to avoid parsing JWT on every request
+let cachedTokenExpiry: { token: string; expiresAt: number } | null = null
+
 // Check if token is about to expire (within 2 minutes)
 function isTokenExpiringSoon(token: string): boolean {
   try {
+    // Use cached expiry if token hasn't changed
+    if (cachedTokenExpiry && cachedTokenExpiry.token === token) {
+      const now = Date.now()
+      const twoMinutes = 2 * 60 * 1000
+      return cachedTokenExpiry.expiresAt - now < twoMinutes
+    }
+
     const parts = token.split('.')
     if (parts.length !== 3) return true
 
@@ -45,6 +54,10 @@ function isTokenExpiringSoon(token: string): boolean {
     if (!payload.exp) return false
 
     const expiresAt = payload.exp * 1000
+
+    // Cache the parsed expiry
+    cachedTokenExpiry = { token, expiresAt }
+
     const now = Date.now()
     const twoMinutes = 2 * 60 * 1000
 
@@ -74,6 +87,10 @@ async function proactiveRefresh(): Promise<string | null> {
         if (!newAccessToken) return null
         SLS.setItem('servio_access_token', newAccessToken)
         lastRefreshTime = Date.now()
+        // Sync new token to service worker for PWA support
+        syncTokenToServiceWorker(newAccessToken)
+        // Clear cached expiry so it gets recalculated with new token
+        cachedTokenExpiry = null
         if (process.env.NODE_ENV !== 'production') {
           console.info('[api] proactively refreshed access token')
         }
@@ -125,6 +142,9 @@ api.interceptors.request.use(async (config) => {
         if (!newAccessToken) return null
         SLS.setItem('servio_access_token', newAccessToken)
         lastRefreshTime = Date.now()
+        // Sync new token to service worker for PWA support
+        syncTokenToServiceWorker(newAccessToken)
+        cachedTokenExpiry = null
         if (process.env.NODE_ENV !== 'production') {
           console.info('[api] refreshed access token (request)')
         }
@@ -193,6 +213,9 @@ api.interceptors.response.use(
             if (!newAccessToken) return null
             SLS.setItem('servio_access_token', newAccessToken)
             lastRefreshTime = Date.now()
+            // Sync new token to service worker for PWA support
+            syncTokenToServiceWorker(newAccessToken)
+            cachedTokenExpiry = null
             refreshSuccess = true
             if (process.env.NODE_ENV !== 'production') {
               console.info('[api] refreshed access token')
@@ -291,4 +314,31 @@ const safeLocalStorage = {
 function isOnline(): boolean {
   if (typeof navigator === 'undefined') return true
   return navigator.onLine !== undefined ? navigator.onLine : true
+}
+
+// Sync auth token to service worker for offline/PWA support
+export function syncTokenToServiceWorker(token: string | null): void {
+  if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
+
+  navigator.serviceWorker.ready.then((registration) => {
+    if (registration.active) {
+      if (token) {
+        registration.active.postMessage({
+          type: 'SET_AUTH_TOKEN',
+          payload: { token }
+        })
+      } else {
+        registration.active.postMessage({
+          type: 'CLEAR_AUTH_TOKEN'
+        })
+      }
+    }
+  }).catch(() => {
+    // Service worker not available
+  })
+}
+
+// Clear cached token expiry when token changes
+export function clearTokenCache(): void {
+  cachedTokenExpiry = null
 }

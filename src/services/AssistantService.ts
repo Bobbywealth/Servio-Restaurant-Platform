@@ -4,6 +4,7 @@ import path from 'path';
 import os from 'os';
 import { DatabaseService } from './DatabaseService';
 import { MiniMaxService } from './MiniMaxService';
+import { VoiceConversationService } from './VoiceConversationService';
 import { logger } from '../utils/logger';
 import { ensureUploadsDir } from '../utils/uploads';
 import { v4 as uuidv4 } from 'uuid';
@@ -32,12 +33,189 @@ interface StreamChunk {
   processingTime?: number;
 }
 
+// Free emotion detection types
+type Sentiment = 'neutral' | 'urgent' | 'frustrated' | 'happy';
+
+// Free in-memory conversation context (cache for performance)
+interface ConversationContext {
+  sessionId: string;
+  userId: string;
+  conversationId?: string; // Database conversation ID
+  messages: Array<{role: 'user' | 'assistant' | 'system', content: string, timestamp: number}>;
+  recentOrders: Array<{itemId: string, quantity: number}>;
+  preferences: Record<string, any>;
+  lastActivity: number;
+  dbSynced: boolean; // Whether this conversation exists in the database
+}
+
+// In-memory cache for active conversations (resets on server restart, but conversations are persisted to DB)
+const conversationContexts = new Map<string, ConversationContext>();
+const CONVERSATION_MAX_MESSAGES = 10; // Keep last 10 messages in memory
+const CONVERSATION_TTL = 300000; // 5 minutes inactivity timeout
+
+// VoiceConversationService instance
+const voiceConversationService = VoiceConversationService.getInstance();
 
 
 export class AssistantService {
   private openai: OpenAI;
   private miniMax: MiniMaxService;
   private _db: any = null;
+
+  // Free keyword-based emotion detection
+  private detectSentiment(text: string): Sentiment {
+    const urgentKeywords = ['urgent', 'asap', 'now', 'hurry', 'fast', 'quickly', 'emergency', 'immediately', 'right away'];
+    const frustratedKeywords = ['wrong', 'bad', 'terrible', 'issue', 'problem', 'disappointed', 'frustrated', 'angry', 'annoyed', 'worst', 'horrible', 'useless', 'broken'];
+    const happyKeywords = ['great', 'thanks', 'love', 'perfect', 'awesome', 'excellent', 'amazing', 'wonderful', 'fantastic', 'good', 'nice'];
+
+    const lowerText = text.toLowerCase();
+
+    if (urgentKeywords.some(k => lowerText.includes(k))) return 'urgent';
+    if (frustratedKeywords.some(k => lowerText.includes(k))) return 'frustrated';
+    if (happyKeywords.some(k => lowerText.includes(k))) return 'happy';
+    return 'neutral';
+  }
+
+  // Get voice parameters based on sentiment (free optimization)
+  private getVoiceParamsForSentiment(sentiment: Sentiment): { voice: string; rate: number; pitch: string } {
+    const voiceMap: Record<Sentiment, { voice: string; rate: number; pitch: string }> = {
+      neutral: { voice: 'alloy', rate: 1.0, pitch: '0st' },
+      urgent: { voice: 'onyx', rate: 1.15, pitch: '+1st' }, // Faster, higher for urgency
+      frustrated: { voice: 'nova', rate: 0.9, pitch: '-0.5st' }, // Slower, lower for reassurance
+      happy: { voice: 'shimmer', rate: 1.0, pitch: '+0.5st' } // Slightly higher for positivity
+    };
+    return voiceMap[sentiment];
+  }
+
+  // Wrap text with SSML for natural prosody (free optimization)
+  private wrapWithSSML(text: string, sentiment: Sentiment = 'neutral'): string {
+    const { rate, pitch } = this.getVoiceParamsForSentiment(sentiment);
+    return `<speak>
+      <prosody rate="${rate}" pitch="${pitch}" volume="medium">
+        ${text}
+        <break time="300ms"/>
+      </prosody>
+    </speak>`;
+  }
+
+  // Free in-memory conversation context management with database persistence
+  private async getConversationContext(sessionId: string, userId: string): Promise<ConversationContext> {
+    const now = Date.now();
+
+    // Clean up expired conversations from memory only
+    for (const [key, ctx] of conversationContexts.entries()) {
+      if (now - ctx.lastActivity > CONVERSATION_TTL) {
+        // Mark as abandoned in database before removing from memory
+        if (ctx.dbSynced && ctx.conversationId) {
+          try {
+            await voiceConversationService.updateConversationStatus(ctx.conversationId, 'abandoned');
+          } catch (error) {
+            logger.warn('Failed to mark conversation as abandoned:', error);
+          }
+        }
+        conversationContexts.delete(key);
+      }
+    }
+
+    if (!conversationContexts.has(sessionId)) {
+      // Try to find existing conversation in database
+      let conversationId: string | undefined;
+      let existingConversation = false;
+
+      try {
+        const restaurantId = await this.resolveRestaurantId(userId);
+        const existing = await voiceConversationService.getConversationBySessionId(sessionId, restaurantId);
+        if (existing) {
+          conversationId = existing.id;
+          existingConversation = true;
+          logger.info('[assistant] Found existing conversation in database', { sessionId, conversationId });
+        }
+      } catch (error) {
+        logger.warn('[assistant] Failed to check for existing conversation:', error);
+      }
+
+      const ctx: ConversationContext = {
+        sessionId,
+        userId,
+        conversationId,
+        messages: [],
+        recentOrders: [],
+        preferences: {},
+        lastActivity: now,
+        dbSynced: !!conversationId
+      };
+
+      // If we found an existing conversation, load its messages
+      if (conversationId) {
+        try {
+          const messages = await voiceConversationService.getLastMessages(conversationId, CONVERSATION_MAX_MESSAGES);
+          ctx.messages = messages.map(m => ({
+            role: m.role,
+            content: m.content,
+            timestamp: new Date(m.created_at).getTime()
+          }));
+          logger.info('[assistant] Loaded messages from database', { sessionId, messageCount: messages.length });
+        } catch (error) {
+          logger.warn('[assistant] Failed to load messages from database:', error);
+        }
+      }
+
+      conversationContexts.set(sessionId, ctx);
+    }
+
+    const context = conversationContexts.get(sessionId)!;
+    context.lastActivity = now;
+    return context;
+  }
+
+  private async addMessageToContext(sessionId: string, userId: string, role: 'user' | 'assistant', content: string): Promise<void> {
+    const ctx = await this.getConversationContext(sessionId, userId);
+    ctx.messages.push({ role, content, timestamp: Date.now() });
+
+    // Keep only last N messages in memory
+    if (ctx.messages.length > CONVERSATION_MAX_MESSAGES) {
+      ctx.messages = ctx.messages.slice(-CONVERSATION_MAX_MESSAGES);
+    }
+
+    // Ensure conversation exists in database
+    if (!ctx.dbSynced) {
+      try {
+        const restaurantId = await this.resolveRestaurantId(userId);
+        const conversation = await voiceConversationService.createConversation({
+          restaurantId,
+          sessionId,
+          metadata: { userId }
+        });
+        ctx.conversationId = conversation.id;
+        ctx.dbSynced = true;
+        logger.info('[assistant] Created new conversation in database', { sessionId, conversationId: conversation.id });
+      } catch (error) {
+        logger.warn('[assistant] Failed to create conversation in database:', error);
+      }
+    }
+
+    // Persist message to database
+    if (ctx.dbSynced && ctx.conversationId) {
+      try {
+        await voiceConversationService.addMessage({
+          conversationId: ctx.conversationId,
+          role,
+          content,
+          metadata: { userId }
+        });
+      } catch (error) {
+        logger.warn('[assistant] Failed to persist message to database:', error);
+      }
+    }
+  }
+
+  private async getConversationHistory(sessionId: string, userId: string): Promise<string> {
+    const ctx = await this.getConversationContext(sessionId, userId);
+    if (ctx.messages.length === 0) return '';
+
+    return '\n\nRECENT CONVERSATION HISTORY:\n' +
+      ctx.messages.map(m => `${m.role === 'user' ? 'Customer' : 'Assistant'}: ${m.content}`).join('\n');
+  }
 
   constructor() {
     this.openai = new OpenAI({
@@ -93,13 +271,21 @@ export class AssistantService {
     }
   }
 
-  async processText(text: string, userId: string): Promise<Omit<AssistantResponse, 'transcript'>> {
+  async processText(text: string, userId: string, sessionId: string = 'default'): Promise<Omit<AssistantResponse, 'transcript'>> {
     const startTime = Date.now();
 
     try {
-      logger.info('[assistant] processText start', { userId, textPreview: text?.slice?.(0, 200) });
+      logger.info('[assistant] processText start', { userId, sessionId, textPreview: text?.slice?.(0, 200) });
+
+      // Detect sentiment for voice adaptation (free optimization)
+      const sentiment = this.detectSentiment(text);
+      logger.info('[assistant] detected sentiment', { sentiment, textPreview: text?.slice?.(50) });
+
+      // Get conversation context with database persistence (free optimization)
+      const conversationHistory = await this.getConversationHistory(sessionId, userId);
+
       // Get system prompt with current context
-      const systemPrompt = await this.getSystemPrompt(userId);
+      const systemPrompt = await this.getSystemPrompt(userId) + conversationHistory;
 
       let response = "I understand, let me help with that.";
       const actions: AssistantResponse['actions'] = [];
@@ -183,8 +369,12 @@ export class AssistantService {
         }
       }
 
-      // Generate TTS audio
-      const audioUrl = await this.generateSpeech(response);
+      // Add messages to conversation context with database persistence (free optimization)
+      await this.addMessageToContext(sessionId, userId, 'user', text);
+      await this.addMessageToContext(sessionId, userId, 'assistant', response);
+
+      // Generate TTS audio with sentiment-based voice (free optimization)
+      const audioUrl = await this.generateSpeech(response, sentiment);
 
       return {
         response,
@@ -443,50 +633,68 @@ export class AssistantService {
     }
   }
 
-  private async generateSpeech(text: string): Promise<string> {
+  private async generateSpeech(text: string, sentiment: Sentiment = 'neutral'): Promise<string> {
     try {
       // Check if we have any TTS provider configured
       const hasOpenAI = Boolean(process.env.OPENAI_API_KEY);
-      const hasMiniMax = this.miniMax.isConfigured();
+      let useMiniMax = this.miniMax.isConfigured();
 
-      if (!hasOpenAI && !hasMiniMax) {
+      if (!hasOpenAI && !useMiniMax) {
         return '';
       }
 
       // Keep responses bounded for latency/cost.
-      const input = text.length > 2000 ? text.slice(0, 2000) : text;
+      const plainText = text.length > 2000 ? text.slice(0, 2000) : text;
 
-      // Use MiniMax TTS if configured, otherwise fall back to OpenAI
-      if (hasMiniMax) {
-        logger.info('[assistant] Using MiniMax for TTS');
-        const result = await this.miniMax.textToSpeech(input);
-        return result.audioUrl;
+      // Wrap with SSML for natural prosody (free optimization)
+      const ssmlInput = this.wrapWithSSML(plainText, sentiment);
+      const input = plainText; // OpenAI doesn't fully support SSML yet, but we keep the structure for future
+
+      // Get voice parameters based on sentiment (free optimization)
+      const { voice } = this.getVoiceParamsForSentiment(sentiment);
+
+      // Try MiniMax TTS first if configured
+      if (useMiniMax) {
+        try {
+          logger.info('[assistant] Using MiniMax for TTS', { sentiment });
+          const result = await this.miniMax.textToSpeech(input);
+          return result.audioUrl;
+        } catch (miniMaxError) {
+          logger.warn('[assistant] MiniMax TTS failed, falling back to OpenAI', {
+            error: miniMaxError instanceof Error ? miniMaxError.message : String(miniMaxError)
+          });
+          useMiniMax = false;
+        }
       }
 
       // Fallback to OpenAI TTS
-      logger.info('[assistant] Using OpenAI for TTS');
-      const model = process.env.OPENAI_TTS_MODEL || 'tts-1';
-      const voice = (process.env.OPENAI_TTS_VOICE || 'alloy') as any;
+      if (!useMiniMax && hasOpenAI) {
+        logger.info('[assistant] Using OpenAI for TTS', { sentiment, voice });
+        const model = process.env.OPENAI_TTS_MODEL || 'tts-1';
+        const selectedVoice = (process.env.OPENAI_TTS_VOICE || voice) as any;
 
-      const speech = await this.openai.audio.speech.create({
-        model,
-        voice,
-        input,
-        response_format: 'mp3'
-      });
+        const speech = await this.openai.audio.speech.create({
+          model,
+          voice: selectedVoice,
+          input,
+          response_format: 'mp3'
+        });
 
-      const arrayBuffer = await speech.arrayBuffer();
-      const audioBuffer = Buffer.from(arrayBuffer);
+        const arrayBuffer = await speech.arrayBuffer();
+        const audioBuffer = Buffer.from(arrayBuffer);
 
-      // Use configurable UPLOADS_DIR for Render persistent disk support
-      const ttsDir = await ensureUploadsDir('tts');
+        // Use configurable UPLOADS_DIR for Render persistent disk support
+        const ttsDir = await ensureUploadsDir('tts');
 
-      const fileName = `tts_${Date.now()}_${uuidv4()}.mp3`;
-      const outPath = path.join(ttsDir, fileName);
-      await fs.promises.writeFile(outPath, audioBuffer);
+        const fileName = `tts_${Date.now()}_${uuidv4()}.mp3`;
+        const outPath = path.join(ttsDir, fileName);
+        await fs.promises.writeFile(outPath, audioBuffer);
 
-      // Served by backend static route: /uploads/*
-      return `/uploads/tts/${fileName}`;
+        // Served by backend static route: /uploads/*
+        return `/uploads/tts/${fileName}`;
+      }
+
+      return '';
     } catch (error) {
       logger.error('TTS generation failed:', error);
       return '';
