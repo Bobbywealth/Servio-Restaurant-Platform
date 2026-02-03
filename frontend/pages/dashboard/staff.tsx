@@ -29,11 +29,8 @@ import {
   Trash2
 } from 'lucide-react'
 import { api } from '../../lib/api'
-import { socketManager } from '../../lib/socket'
-import { StaffCard, HoursEditorModal, QuickTimeActionModal } from '../../components/staff'
-import { ScheduleCalendar, ShiftEditorModal, ShiftTemplatesManager, ScheduleViewToggle } from '../../components/schedule'
-import { showToast } from '../../components/ui/Toast'
 import { useUser } from '../../contexts/UserContext'
+import EditStaffHoursModal from '../../components/staff/EditStaffHoursModal'
 
 const DashboardLayout = dynamic(() => import('../../components/Layout/DashboardLayout'), {
   ssr: true,
@@ -534,7 +531,8 @@ function EditStaffModal({ isOpen, staffMember, onClose, onSuccess }: EditStaffMo
 }
 
 export default function StaffPage() {
-  const { isManagerOrOwner, isAdmin } = useUser()
+  const { user } = useUser()
+  const currentUserRole = user?.role || 'staff'
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedRole, setSelectedRole] = useState('all')
   const [isLoading, setIsLoading] = useState(true)
@@ -546,10 +544,8 @@ export default function StaffPage() {
   const [dailyHours, setDailyHours] = useState<DailyHours | null>(null)
   const [showAddModal, setShowAddModal] = useState(false)
   const [editingStaff, setEditingStaff] = useState<StaffUser | null>(null)
-  const [hoursEditorStaff, setHoursEditorStaff] = useState<StaffUser | null>(null)
-  const [viewingHistoryStaff, setViewingHistoryStaff] = useState<StaffUser | null>(null)
-  const [quickActionStaff, setQuickActionStaff] = useState<StaffUser | null>(null)
-  const [quickActionType, setQuickActionType] = useState<'clock-in' | 'clock-out' | 'start-break' | 'end-break'>('clock-in')
+  const [showEditHoursModal, setShowEditHoursModal] = useState(false)
+  const [editingHoursStaff, setEditingHoursStaff] = useState<StaffUser | null>(null)
   const [openMenu, setOpenMenu] = useState<string | null>(null)
 
   // Schedule state
@@ -1231,40 +1227,15 @@ export default function StaffPage() {
           onSuccess={handleStaffCreated}
         />
 
-        <HoursEditorModal
-          isOpen={!!hoursEditorStaff}
-          staffMember={hoursEditorStaff}
-          onClose={() => setHoursEditorStaff(null)}
-          onSave={handleStaffCreated}
-        />
-
-        <QuickTimeActionModal
-          isOpen={!!quickActionStaff}
-          staffMember={quickActionStaff}
-          action={quickActionType}
-          onAction={handleQuickAction}
-          onClose={() => setQuickActionStaff(null)}
-        />
-
-        <ShiftEditorModal
-          isOpen={showShiftModal}
-          onClose={() => setShowShiftModal(false)}
-          onSave={handleSaveShift}
-          onDelete={editingSchedule?.id ? handleDeleteShift : undefined}
-          schedule={editingSchedule}
-          staff={staff.filter(s => s.is_active)}
-          initialDate={shiftModalDate}
-          initialTime={shiftModalTime}
-        />
-
-        <ShiftTemplatesManager
-          isOpen={showTemplatesModal}
-          onClose={() => setShowTemplatesModal(false)}
-          templates={templates}
-          onCreateTemplate={handleCreateTemplate}
-          onUpdateTemplate={handleUpdateTemplate}
-          onDeleteTemplate={handleDeleteTemplate}
-          onApplyTemplate={handleApplyTemplate}
+        <EditStaffHoursModal
+          isOpen={showEditHoursModal}
+          staffMember={editingHoursStaff}
+          currentUserRole={currentUserRole}
+          onClose={() => {
+            setShowEditHoursModal(false)
+            setEditingHoursStaff(null)
+          }}
+          onRefresh={handleStaffCreated}
         />
 
         <div className="space-y-6">
@@ -1388,33 +1359,125 @@ export default function StaffPage() {
             </motion.div>
           </div>
 
-          {/* Conditional View: Calendar or Staff Cards */}
-          {scheduleView === 'calendar' ? (
-            <ScheduleCalendar
-              schedules={schedules}
-              staff={staff.filter(s => s.is_active).map(s => ({ id: s.id, name: s.name, role: s.role }))}
-              selectedWeekStart={selectedWeekStart}
-              onWeekChange={handleWeekChange}
-              onCreateShift={handleCreateShift}
-              onEditShift={handleEditShift}
-              onDeleteShift={handleDeleteShift}
-              onTogglePublish={handleTogglePublish}
-              onCopyShift={handleCopyShift}
-              canEdit={canEditHours}
-            />
-          ) : (
-            <>
-              {/* Search and Filters */}
-              <div className="flex flex-col sm:flex-row gap-4">
-                <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-surface-400 w-4 h-4" />
-                  <input
-                    type="text"
-                    placeholder="Search staff members..."
-                    className="input-field pl-10"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                  />
+          {/* Search and Filters */}
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-surface-400 w-4 h-4" />
+              <input
+                type="text"
+                placeholder="Search staff members..."
+                className="input-field pl-10"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+            <div className="flex items-center space-x-2">
+              <Filter className="w-4 h-4 text-surface-500" />
+              <select
+                className="input-field"
+                value={selectedRole}
+                onChange={(e) => setSelectedRole(e.target.value)}
+              >
+                {roles.map(role => (
+                  <option key={role} value={role}>
+                    {role === 'all' ? 'All Roles' : role}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Staff Cards Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+            {(isLoading ? [] : filteredStaff).map((member, index) => {
+              const status = getStatus(member.id)
+              const activeShift = currentByUserId.get(member.id)
+              const shiftLabel = activeShift ? `${formatTime(activeShift.clock_in_time)} - Now` : '—'
+              const hoursThisWeek = hoursByUserId[member.id] ?? 0
+              const hoursToday = todayHoursByUserId[member.id] ?? 0
+
+              return (
+              <motion.div
+                key={member.id}
+                className="card-hover"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.1 * index }}
+              >
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-12 h-12 bg-primary-500 rounded-xl flex items-center justify-center text-white font-semibold">
+                      {initials(member.name)}
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-surface-900 dark:text-surface-100">
+                        {member.name}
+                      </h3>
+                      <p className="text-sm text-surface-600 dark:text-surface-400">
+                        {member.role}{!member.is_active ? ' • Inactive' : ''}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={`status-badge ${getStatusColor(status)}`}>
+                      {getStatusText(status)}
+                    </span>
+                    <div className="relative">
+                      <button
+                        onClick={() => setOpenMenu(openMenu === member.id ? null : member.id)}
+                        className="btn-icon min-w-[44px] min-h-[44px]"
+                        aria-label="More options"
+                      >
+                        <MoreVertical className="w-4 h-4" />
+                      </button>
+                      {/* Dropdown Menu */}
+                      {openMenu === member.id && (
+                        <>
+                          <div
+                            className="fixed inset-0 z-10"
+                            onClick={() => setOpenMenu(null)}
+                          />
+                           <div className="absolute right-0 top-12 z-20 w-48 bg-white dark:bg-surface-800 rounded-xl shadow-lg border border-gray-200 dark:border-surface-700 py-1">
+                            <button
+                              onClick={() => {
+                                setEditingStaff(member)
+                                setOpenMenu(null)
+                              }}
+                              className="w-full px-4 py-3 text-left text-sm text-surface-700 dark:text-surface-200 hover:bg-gray-100 dark:hover:bg-surface-700 flex items-center gap-2"
+                            >
+                              <Edit3 className="w-4 h-4" />
+                              Edit Staff
+                            </button>
+                            {['manager', 'admin', 'owner'].includes(currentUserRole) && (
+                              <button
+                                onClick={() => {
+                                  setEditingHoursStaff(member)
+                                  setShowEditHoursModal(true)
+                                  setOpenMenu(null)
+                                }}
+                                className="w-full px-4 py-3 text-left text-sm text-surface-700 dark:text-surface-200 hover:bg-gray-100 dark:hover:bg-surface-700 flex items-center gap-2"
+                              >
+                                <Clock className="w-4 h-4" />
+                                Edit Hours
+                              </button>
+                            )}
+                            <button
+                              className="w-full px-4 py-3 text-left text-sm text-surface-700 dark:text-surface-200 hover:bg-gray-100 dark:hover:bg-surface-700 flex items-center gap-2"
+                            >
+                              <RefreshCw className="w-4 h-4" />
+                              Reset PIN
+                            </button>
+                            <button
+                              className="w-full px-4 py-3 text-left text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2"
+                            >
+                              <X className="w-4 h-4" />
+                              Deactivate
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
                 </div>
                 <div className="flex items-center space-x-2">
                   <Filter className="w-4 h-4 text-surface-500" />
