@@ -809,11 +809,21 @@ router.put('/templates/:id', asyncHandler(async (req: Request, res: Response) =>
 
 /**
  * DELETE /api/staff/scheduling/templates/:id
- * Delete a shift template
+ * Delete a shift template (managers/owners/admins only)
  */
 router.delete('/templates/:id', asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
-  const restaurantId = (req as any).user?.restaurantId;
+  const user = (req as any).user;
+  const restaurantId = user?.restaurantId;
+  const userRole = user?.role;
+
+  // Permission check - only managers, owners, admins can delete templates
+  if (!['manager', 'owner', 'admin', 'platform-admin'].includes(userRole)) {
+    return res.status(403).json({
+      success: false,
+      error: { message: 'You do not have permission to delete templates' }
+    });
+  }
 
   const db = DatabaseService.getInstance().getDatabase();
 

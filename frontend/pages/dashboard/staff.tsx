@@ -860,7 +860,11 @@ export default function StaffPage() {
       }
     } catch (error: any) {
       console.error('[SCHEDULING-FRONTEND] ERROR saving shift:', error.response?.data?.error?.message || error.message);
-      showToast.error(error.response?.data?.error?.message || 'Failed to save shift')
+      if (error.response?.status === 403) {
+        showToast.error('You do not have permission to modify schedules')
+      } else {
+        showToast.error(error.response?.data?.error?.message || 'Failed to save shift')
+      }
       throw error
     }
   }
@@ -871,7 +875,12 @@ export default function StaffPage() {
       showToast.success('Shift deleted successfully')
       await loadSchedules()
     } catch (error: any) {
-      showToast.error(error.response?.data?.error?.message || 'Failed to delete shift')
+      console.error('Failed to delete shift:', error)
+      if (error.response?.status === 403) {
+        showToast.error('You do not have permission to delete schedules')
+      } else {
+        showToast.error(error.response?.data?.error?.message || 'Failed to delete shift')
+      }
       throw error
     }
   }
@@ -1391,6 +1400,7 @@ export default function StaffPage() {
               onDeleteShift={handleDeleteShift}
               onTogglePublish={handleTogglePublish}
               onCopyShift={handleCopyShift}
+              canEdit={canEditHours}
             />
           ) : (
             <>

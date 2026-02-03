@@ -43,6 +43,7 @@ interface ScheduleCalendarProps {
   onDeleteShift: (scheduleId: string) => void
   onTogglePublish: (scheduleId: string, isPublished: boolean) => void
   onCopyShift: (schedule: Schedule) => void
+  canEdit?: boolean
 }
 
 const POSITION_COLORS: Record<string, string> = {
@@ -66,7 +67,8 @@ export function ScheduleCalendar({
   onEditShift,
   onDeleteShift,
   onTogglePublish,
-  onCopyShift
+  onCopyShift,
+  canEdit = true
 }: ScheduleCalendarProps) {
   const [openMenu, setOpenMenu] = useState<string | null>(null)
   const [hoveredDay, setHoveredDay] = useState<string | null>(null)
@@ -140,16 +142,19 @@ export function ScheduleCalendar({
   }
 
   const handleSlotClick = (date: Date, time?: string) => {
+    if (!canEdit) return
     const dateStr = formatDate(date)
     onCreateShift(dateStr, time)
   }
 
   const handleShiftClick = (e: React.MouseEvent, schedule: Schedule) => {
+    if (!canEdit) return
     e.stopPropagation()
     onEditShift(schedule)
   }
 
   const handleMenuAction = (e: React.MouseEvent, action: string, schedule: Schedule) => {
+    if (!canEdit) return
     e.stopPropagation()
     setOpenMenu(null)
     switch (action) {
@@ -263,16 +268,16 @@ export function ScheduleCalendar({
           return (
             <div
               key={dateStr}
-              className={`border-r border-surface-200 dark:border-surface-700 last:border-r-0 p-2 relative transition-colors ${
+              className={`border-r border-surface-200 dark:border-surface-700 p-2 relative transition-colors ${
                 hoveredDay === dateStr ? 'bg-surface-50 dark:bg-surface-700/50' : ''
-              }`}
+              } ${canEdit ? 'cursor-pointer' : 'cursor-default'}`}
               onMouseEnter={() => setHoveredDay(dateStr)}
               onMouseLeave={() => setHoveredDay(null)}
-              onClick={() => handleSlotClick(date)}
+              onClick={() => canEdit && handleSlotClick(date)}
             >
               {/* Add shift button on hover */}
               <AnimatePresence>
-                {hoveredDay === dateStr && (
+                {hoveredDay === dateStr && canEdit && (
                   <motion.button
                     initial={{ opacity: 0, scale: 0.8 }}
                     animate={{ opacity: 1, scale: 1 }}
@@ -293,11 +298,11 @@ export function ScheduleCalendar({
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     className={`
-                      relative group rounded-lg p-2 cursor-pointer
+                      relative rounded-lg p-2 cursor-pointer
                       ${getPositionColor(schedule.position)} text-white
                       shadow-sm hover:shadow-md transition-all
                     `}
-                    onClick={(e) => handleShiftClick(e, schedule)}
+                    onClick={(e) => canEdit && handleShiftClick(e, schedule)}
                   >
                     {/* Published indicator */}
                     <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -342,8 +347,9 @@ export function ScheduleCalendar({
                     )}
 
                     {/* Actions menu */}
-                    <div className="absolute top-1 left-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <div className="relative">
+                    <div className={`absolute top-1 left-1 transition-opacity ${canEdit ? 'opacity-0 group-hover:opacity-100' : 'opacity-100'}`}>
+                      {canEdit && (
+                        <div className="relative">
                         <button
                           onClick={(e) => {
                             e.stopPropagation()
@@ -412,13 +418,17 @@ export function ScheduleCalendar({
                 {/* Empty state for the day */}
                 {daySchedules.length === 0 && (
                   <div className="h-full flex items-center justify-center">
-                    <button
-                      onClick={() => handleSlotClick(date)}
-                      className="p-4 text-surface-400 dark:text-surface-500 hover:text-surface-600 dark:hover:text-surface-400 hover:bg-surface-100 dark:hover:bg-surface-700 rounded-lg transition-colors"
-                    >
-                      <Plus className="w-5 h-5 mx-auto" />
-                      <span className="text-xs mt-1 block">Add Shift</span>
-                    </button>
+                    {canEdit ? (
+                      <button
+                        onClick={() => handleSlotClick(date)}
+                        className="p-4 text-surface-400 dark:text-surface-500 hover:text-surface-600 dark:hover:text-surface-400 hover:bg-surface-100 dark:hover:bg-surface-700 rounded-lg transition-colors"
+                      >
+                        <Plus className="w-5 h-5 mx-auto" />
+                        <span className="text-xs mt-1 block">Add Shift</span>
+                      </button>
+                    ) : (
+                      <span className="text-xs text-surface-400 dark:text-surface-500">No shifts scheduled</span>
+                    )}
                   </div>
                 )}
               </div>
