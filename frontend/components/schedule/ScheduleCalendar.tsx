@@ -346,92 +346,27 @@ export function ScheduleCalendar({
                       </div>
                     )}
 
-                    {/* Actions menu */}
-                    <div className={`absolute top-1 left-1 transition-opacity ${canEdit ? 'opacity-0 group-hover:opacity-100' : 'opacity-100'}`}>
-                      {canEdit && (
-                        <div className="relative">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            setOpenMenu(openMenu === schedule.id ? null : schedule.id)
-                          }}
-                          className="p-1 hover:bg-white/20 rounded"
-                        >
-                          <MoreVertical className="w-3 h-3" />
-                        </button>
-                        {openMenu === schedule.id && (
-                          <>
-                            <div
-                              className="fixed inset-0 z-10"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                setOpenMenu(null)
-                              }}
-                            />
-                            <div className="absolute left-0 top-6 z-20 w-32 bg-white dark:bg-surface-800 rounded-xl shadow-lg border border-surface-200 dark:border-surface-700 py-1">
-                              <button
-                                onClick={(e) => handleMenuAction(e, 'edit', schedule)}
-                                className="w-full px-3 py-2 text-left text-xs text-surface-700 dark:text-surface-200 hover:bg-surface-100 dark:hover:bg-surface-700 flex items-center gap-2"
-                              >
-                                <Edit3 className="w-3 h-3" />
-                                Edit
-                              </button>
-                              <button
-                                onClick={(e) => handleMenuAction(e, 'copy', schedule)}
-                                className="w-full px-3 py-2 text-left text-xs text-surface-700 dark:text-surface-200 hover:bg-surface-100 dark:hover:bg-surface-700 flex items-center gap-2"
-                              >
-                                <Copy className="w-3 h-3" />
-                                Copy
-                              </button>
-                              <button
-                                onClick={(e) => handleMenuAction(e, 'publish', schedule)}
-                                className="w-full px-3 py-2 text-left text-xs text-surface-700 dark:text-surface-200 hover:bg-surface-100 dark:hover:bg-surface-700 flex items-center gap-2"
-                              >
-                                {schedule.is_published ? (
-                                  <>
-                                    <EyeOff className="w-3 h-3" />
-                                    Unpublish
-                                  </>
-                                ) : (
-                                  <>
-                                    <Eye className="w-3 h-3" />
-                                    Publish
-                                  </>
-                                )}
-                              </button>
-                              <hr className="my-1 border-surface-200 dark:border-surface-700" />
-                              <button
-                                onClick={(e) => handleMenuAction(e, 'delete', schedule)}
-                                className="w-full px-3 py-2 text-left text-xs text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2"
-                              >
-                                <Trash2 className="w-3 h-3" />
-                                Delete
-                              </button>
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    </div>
+                    {/* Actions menu - TODO: refactor to separate component */}
                   </motion.div>
                 ))}
-
-                {/* Empty state for the day */}
-                {daySchedules.length === 0 && (
-                  <div className="h-full flex items-center justify-center">
-                    {canEdit ? (
-                      <button
-                        onClick={() => handleSlotClick(date)}
-                        className="p-4 text-surface-400 dark:text-surface-500 hover:text-surface-600 dark:hover:text-surface-400 hover:bg-surface-100 dark:hover:bg-surface-700 rounded-lg transition-colors"
-                      >
-                        <Plus className="w-5 h-5 mx-auto" />
-                        <span className="text-xs mt-1 block">Add Shift</span>
-                      </button>
-                    ) : (
-                      <span className="text-xs text-surface-400 dark:text-surface-500">No shifts scheduled</span>
-                    )}
-                  </div>
-                )}
               </div>
+
+              {/* Empty state for the day */}
+              {daySchedules.length === 0 && (
+                <div className="h-full flex items-center justify-center">
+                  {canEdit ? (
+                    <button
+                      onClick={() => handleSlotClick(date)}
+                      className="p-4 text-surface-400 dark:text-surface-500 hover:text-surface-600 dark:hover:text-surface-400 hover:bg-surface-100 dark:hover:bg-surface-700 rounded-lg transition-colors"
+                    >
+                      <Plus className="w-5 h-5 mx-auto" />
+                      <span className="text-xs mt-1 block">Add Shift</span>
+                    </button>
+                  ) : (
+                    <span className="text-xs text-surface-400 dark:text-surface-500">No shifts scheduled</span>
+                  )}
+                </div>
+              )}
             </div>
           )
         })}
