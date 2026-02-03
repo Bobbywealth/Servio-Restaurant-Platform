@@ -23,6 +23,8 @@ import {
   RefreshCw
 } from 'lucide-react'
 import { api } from '../../lib/api'
+import { useUser } from '../../contexts/UserContext'
+import EditStaffHoursModal from '../../components/staff/EditStaffHoursModal'
 
 const DashboardLayout = dynamic(() => import('../../components/Layout/DashboardLayout'), {
   ssr: true,
@@ -501,6 +503,8 @@ function EditStaffModal({ isOpen, staffMember, onClose, onSuccess }: EditStaffMo
 }
 
 export default function StaffPage() {
+  const { user } = useUser()
+  const currentUserRole = user?.role || 'staff'
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedRole, setSelectedRole] = useState('all')
   const [isLoading, setIsLoading] = useState(true)
@@ -512,6 +516,8 @@ export default function StaffPage() {
   const [dailyHours, setDailyHours] = useState<DailyHours | null>(null)
   const [showAddModal, setShowAddModal] = useState(false)
   const [editingStaff, setEditingStaff] = useState<StaffUser | null>(null)
+  const [showEditHoursModal, setShowEditHoursModal] = useState(false)
+  const [editingHoursStaff, setEditingHoursStaff] = useState<StaffUser | null>(null)
   const [openMenu, setOpenMenu] = useState<string | null>(null)
 
   useEffect(() => {
@@ -712,6 +718,17 @@ export default function StaffPage() {
           onSuccess={handleStaffCreated}
         />
 
+        <EditStaffHoursModal
+          isOpen={showEditHoursModal}
+          staffMember={editingHoursStaff}
+          currentUserRole={currentUserRole}
+          onClose={() => {
+            setShowEditHoursModal(false)
+            setEditingHoursStaff(null)
+          }}
+          onRefresh={handleStaffCreated}
+        />
+
         <div className="space-y-6">
           {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -895,7 +912,7 @@ export default function StaffPage() {
                             className="fixed inset-0 z-10"
                             onClick={() => setOpenMenu(null)}
                           />
-                          <div className="absolute right-0 top-12 z-20 w-48 bg-white dark:bg-surface-800 rounded-xl shadow-lg border border-gray-200 dark:border-surface-700 py-1">
+                           <div className="absolute right-0 top-12 z-20 w-48 bg-white dark:bg-surface-800 rounded-xl shadow-lg border border-gray-200 dark:border-surface-700 py-1">
                             <button
                               onClick={() => {
                                 setEditingStaff(member)
@@ -906,6 +923,19 @@ export default function StaffPage() {
                               <Edit3 className="w-4 h-4" />
                               Edit Staff
                             </button>
+                            {['manager', 'admin', 'owner'].includes(currentUserRole) && (
+                              <button
+                                onClick={() => {
+                                  setEditingHoursStaff(member)
+                                  setShowEditHoursModal(true)
+                                  setOpenMenu(null)
+                                }}
+                                className="w-full px-4 py-3 text-left text-sm text-surface-700 dark:text-surface-200 hover:bg-gray-100 dark:hover:bg-surface-700 flex items-center gap-2"
+                              >
+                                <Clock className="w-4 h-4" />
+                                Edit Hours
+                              </button>
+                            )}
                             <button
                               className="w-full px-4 py-3 text-left text-sm text-surface-700 dark:text-surface-200 hover:bg-gray-100 dark:hover:bg-surface-700 flex items-center gap-2"
                             >
