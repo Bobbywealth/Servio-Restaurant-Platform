@@ -169,6 +169,9 @@ api.interceptors.request.use(async (config) => {
 function getLoginUrl(): string {
   if (typeof window === 'undefined') return '/login'
   const path = window.location.pathname
+  if (path.startsWith('/staff')) {
+    return '/staff/clock'
+  }
   if (path.startsWith('/tablet')) {
     const next = encodeURIComponent(path)
     return `/tablet/login?next=${next}`
