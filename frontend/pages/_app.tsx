@@ -32,6 +32,7 @@ export default function App({ Component, pageProps }: AppProps) {
   const [routeLoading, setRouteLoading] = useState(false)
   const router = useRouter()
   const isTabletRoute = router.pathname.startsWith('/tablet')
+  const isStaffRoute = router.pathname.startsWith('/staff')
 
   // Proactive session keep-alive to prevent auto-logout
   const keepSessionAlive = useCallback(async () => {
@@ -148,6 +149,7 @@ export default function App({ Component, pageProps }: AppProps) {
   // Service worker registration with update handling
   useEffect(() => {
     if (process.env.NODE_ENV !== 'production') return
+    if (isStaffRoute) return
     if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return
 
     let refreshing = false
@@ -226,7 +228,7 @@ export default function App({ Component, pageProps }: AppProps) {
     return () => {
       navigator.serviceWorker.removeEventListener('controllerchange', handleControllerChange)
     }
-  }, [])
+  }, [isStaffRoute])
 
   // Push notification subscription
   const pushSubscription = usePushSubscription()
@@ -270,12 +272,21 @@ export default function App({ Component, pageProps }: AppProps) {
         {/* PWA META TAGS */}
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-        <meta name="apple-mobile-web-app-title" content="Servio" />
+        <meta name="apple-mobile-web-app-title" content={isStaffRoute ? 'Servio Staff' : 'Servio'} />
         <meta name="format-detection" content="telephone=no" />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="msapplication-tap-highlight" content="no" />
-        <meta name="theme-color" content="#14B8A6" />
-        <link rel="manifest" href={isTabletRoute ? '/manifest-tablet.webmanifest' : '/manifest.json'} />
+        <meta name="theme-color" content={isStaffRoute ? '#ff6b35' : '#14B8A6'} />
+        <link
+          rel="manifest"
+          href={
+            isStaffRoute
+              ? '/manifest-staff.json'
+              : isTabletRoute
+              ? '/manifest-tablet.webmanifest'
+              : '/manifest.json'
+          }
+        />
         <link rel="apple-touch-icon" href="/images/servio_logo_transparent_tight.png" />
 
         {/* PERFORMANCE HINTS - CRITICAL */}
@@ -286,9 +297,12 @@ export default function App({ Component, pageProps }: AppProps) {
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
 
         {/* PRELOAD CRITICAL RESOURCES - omit 'as' to let browser detect type */}
-        <link rel="preload" href="/manifest.json" crossOrigin="anonymous" />
-        {isTabletRoute && (
-          <link rel="preload" href="/manifest-tablet.webmanifest" crossOrigin="anonymous" />
+        {!isStaffRoute && (
+          <link
+            rel="preload"
+            href={isTabletRoute ? '/manifest-tablet.webmanifest' : '/manifest.json'}
+            crossOrigin="anonymous"
+          />
         )}
       </Head>
 
