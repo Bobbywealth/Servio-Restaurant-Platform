@@ -1163,7 +1163,7 @@ export default function StaffClockPage() {
                 <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
               </button>
               <button
-                onClick={handleLogout}
+                onClick={() => handleLogout()}
                 className="p-2 text-slate-400 hover:text-white hover:bg-slate-700/50 rounded-xl transition-all"
                 title="Logout"
               >
