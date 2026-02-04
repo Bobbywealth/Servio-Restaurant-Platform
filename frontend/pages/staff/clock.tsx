@@ -40,24 +40,24 @@ function ConfirmDialog({ isOpen, title, message, confirmText, onConfirm, onCance
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-8">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onCancel} />
-      <div className="relative bg-slate-800 rounded-3xl shadow-2xl w-full max-w-sm p-6 border border-slate-700">
+      <div className="relative bg-slate-800 rounded-3xl shadow-2xl w-full max-w-sm md:max-w-md lg:max-w-lg p-6 md:p-10 lg:p-12 border border-slate-700">
         <div className="text-center">
-          <div className={`w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center ${variants[variant]}`}>
+          <div className={`w-16 h-16 md:w-24 md:h-24 lg:w-28 lg:h-28 mx-auto mb-4 md:mb-6 rounded-full flex items-center justify-center ${variants[variant]}`}>
             {variant === 'success' ? (
-              <CheckCircle className="w-8 h-8" />
+              <CheckCircle className="w-8 h-8 md:w-12 md:h-12 lg:w-14 lg:h-14" />
             ) : variant === 'warning' ? (
-              <Coffee className="w-8 h-8" />
+              <Coffee className="w-8 h-8 md:w-12 md:h-12 lg:w-14 lg:h-14" />
             ) : (
-              <LogOut className="w-8 h-8" />
+              <LogOut className="w-8 h-8 md:w-12 md:h-12 lg:w-14 lg:h-14" />
             )}
           </div>
-          <h2 className="text-xl font-bold text-white mb-2">{title}</h2>
-          <p className="text-slate-400 mb-6">{message}</p>
+          <h2 className="text-xl md:text-2xl lg:text-3xl font-bold text-white mb-2 md:mb-4">{title}</h2>
+          <p className="text-slate-400 md:text-lg lg:text-xl mb-6 md:mb-8">{message}</p>
           <button
             onClick={onConfirm}
-            className={`w-full py-4 rounded-2xl font-semibold text-white mb-3 transition-all ${
+            className={`w-full py-4 md:py-5 lg:py-6 rounded-2xl md:rounded-3xl font-semibold text-white md:text-lg lg:text-xl mb-3 md:mb-4 transition-all ${
               variant === 'success'
                 ? 'bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700'
                 : variant === 'warning'
@@ -69,7 +69,7 @@ function ConfirmDialog({ isOpen, title, message, confirmText, onConfirm, onCance
           </button>
           <button
             onClick={onCancel}
-            className="w-full py-3 rounded-2xl font-medium text-slate-400 hover:text-white transition-all"
+            className="w-full py-3 md:py-4 rounded-2xl font-medium text-slate-400 hover:text-white md:text-lg transition-all"
           >
             Cancel
           </button>
@@ -129,38 +129,38 @@ function PINEntry({ onLogin, error }: PINEntryProps) {
   return (
     <div className="min-h-screen bg-slate-900 flex flex-col">
       {/* Header with Logo */}
-      <header className="bg-slate-800/50 backdrop-blur-xl border-b border-slate-700/50 px-6 py-4">
-        <div className="max-w-md mx-auto flex items-center justify-center">
-          <div className="flex items-center gap-3">
+      <header className="bg-slate-800/50 backdrop-blur-xl border-b border-slate-700/50 px-6 py-4 md:py-6 lg:py-8">
+        <div className="max-w-md md:max-w-xl lg:max-w-2xl mx-auto flex items-center justify-center">
+          <div className="flex items-center gap-3 md:gap-4">
             <img
               src="/images/servio_icon_tight.png"
               alt="Servio Logo"
-              className="h-10 w-auto"
+              className="h-10 md:h-14 lg:h-16 w-auto"
             />
             <div>
-              <h1 className="text-lg font-bold text-white">Servio</h1>
-              <p className="text-xs text-slate-400">Staff Clock-In</p>
+              <h1 className="text-lg md:text-2xl lg:text-3xl font-bold text-white">Servio</h1>
+              <p className="text-xs md:text-sm lg:text-base text-slate-400">Staff Clock-In</p>
             </div>
           </div>
         </div>
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 flex items-center justify-center p-6">
-        <div className="w-full max-w-md">
+      <main className="flex-1 flex items-center justify-center p-6 md:p-8 lg:p-10">
+        <div className="w-full max-w-md md:max-w-xl lg:max-w-2xl">
           {/* Welcome Section */}
-          <div className="text-center mb-8">
-            <div className="w-20 h-20 bg-gradient-to-br from-orange-400 to-orange-500 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-2xl shadow-orange-500/20">
-              <User className="w-10 h-10 text-white" />
+          <div className="text-center mb-8 md:mb-12 lg:mb-14">
+            <div className="w-20 h-20 md:w-28 md:h-28 lg:w-32 lg:h-32 bg-gradient-to-br from-orange-400 to-orange-500 rounded-2xl md:rounded-3xl flex items-center justify-center mx-auto mb-4 md:mb-6 shadow-2xl shadow-orange-500/20">
+              <User className="w-10 h-10 md:w-14 md:h-14 lg:w-16 lg:h-16 text-white" />
             </div>
-            <h2 className="text-2xl font-bold text-white mb-2">Welcome Back</h2>
-            <p className="text-slate-400">Enter your PIN to continue</p>
+            <h2 className="text-2xl md:text-4xl lg:text-5xl font-bold text-white mb-2 md:mb-4">Welcome Back</h2>
+            <p className="text-slate-400 md:text-xl lg:text-2xl">Enter your PIN to continue</p>
           </div>
 
           {/* PIN Input Card */}
-          <div className="bg-slate-800/50 backdrop-blur-xl rounded-3xl p-8 border border-slate-700/50 shadow-2xl">
+          <div className="bg-slate-800/50 backdrop-blur-xl rounded-3xl p-8 md:p-12 lg:p-16 border border-slate-700/50 shadow-2xl">
             {/* PIN Dots */}
-            <div className="flex justify-center gap-4 mb-8">
+            <div className="flex justify-center gap-4 md:gap-6 lg:gap-8 mb-8 md:mb-12">
               {pin.map((digit, index) => (
                 <input
                   key={index}
@@ -175,13 +175,13 @@ function PINEntry({ onLogin, error }: PINEntryProps) {
                   onBlur={() => setIsFocused(null)}
                   placeholder="•"
                   className={`
-                    w-16 h-16 text-center text-3xl font-bold rounded-2xl
+                    w-16 h-16 md:w-24 md:h-24 lg:w-28 lg:h-28 text-center text-3xl md:text-5xl lg:text-6xl font-bold rounded-2xl md:rounded-3xl
                     transition-all duration-300 ease-out
-                    ${isFocused === index 
-                      ? 'bg-orange-500/20 border-orange-500 text-white shadow-lg shadow-orange-500/20 scale-105' 
+                    ${isFocused === index
+                      ? 'bg-orange-500/20 border-orange-500 text-white shadow-lg shadow-orange-500/20 scale-105'
                       : 'bg-slate-700/50 border-slate-600/50 text-white'
                     }
-                    border-2 outline-none
+                    border-2 md:border-3 outline-none
                   `}
                 />
               ))}
@@ -189,47 +189,47 @@ function PINEntry({ onLogin, error }: PINEntryProps) {
 
             {/* Error Message */}
             {error && (
-              <div className="flex items-center justify-center text-red-400 mb-4 animate-pulse">
-                <AlertCircle className="w-5 h-5 mr-2" />
-                <span className="text-sm">{error}</span>
+              <div className="flex items-center justify-center text-red-400 mb-4 md:mb-6 animate-pulse">
+                <AlertCircle className="w-5 h-5 md:w-6 md:h-6 mr-2" />
+                <span className="text-sm md:text-lg lg:text-xl">{error}</span>
               </div>
             )}
 
             {/* Help Text */}
             <div className="text-center">
-              <p className="text-slate-400 text-sm mb-2">
+              <p className="text-slate-400 text-sm md:text-lg lg:text-xl mb-2 md:mb-3">
                 Enter your 4-digit employee PIN
               </p>
-              <p className="text-slate-500 text-xs">
+              <p className="text-slate-500 text-xs md:text-base lg:text-lg">
                 Ask your manager if you don&apos;t have one
               </p>
             </div>
           </div>
 
           {/* Quick Tips */}
-          <div className="mt-8 grid grid-cols-2 gap-3">
-            <div className="bg-slate-800/30 rounded-xl p-4 border border-slate-700/30">
-              <div className="flex items-center gap-2 text-orange-400 mb-1">
-                <Clock className="w-4 h-4" />
-                <span className="text-xs font-medium text-orange-400">Quick Clock-In</span>
+          <div className="mt-8 md:mt-12 lg:mt-14 grid grid-cols-2 gap-3 md:gap-6">
+            <div className="bg-slate-800/30 rounded-xl md:rounded-2xl p-4 md:p-6 lg:p-8 border border-slate-700/30">
+              <div className="flex items-center gap-2 md:gap-3 text-orange-400 mb-1 md:mb-2">
+                <Clock className="w-4 h-4 md:w-6 md:h-6 lg:w-7 lg:h-7" />
+                <span className="text-xs md:text-base lg:text-lg font-medium text-orange-400">Quick Clock-In</span>
               </div>
-              <p className="text-xs text-slate-500">Enter PIN to start shift</p>
+              <p className="text-xs md:text-sm lg:text-base text-slate-500">Enter PIN to start shift</p>
             </div>
-            <div className="bg-slate-800/30 rounded-xl p-4 border border-slate-700/30">
-              <div className="flex items-center gap-2 text-orange-400 mb-1">
-                <Coffee className="w-4 h-4" />
-                <span className="text-xs font-medium text-orange-400">Take Breaks</span>
+            <div className="bg-slate-800/30 rounded-xl md:rounded-2xl p-4 md:p-6 lg:p-8 border border-slate-700/30">
+              <div className="flex items-center gap-2 md:gap-3 text-orange-400 mb-1 md:mb-2">
+                <Coffee className="w-4 h-4 md:w-6 md:h-6 lg:w-7 lg:h-7" />
+                <span className="text-xs md:text-base lg:text-lg font-medium text-orange-400">Take Breaks</span>
               </div>
-              <p className="text-xs text-slate-500">Track your break time</p>
+              <p className="text-xs md:text-sm lg:text-base text-slate-500">Track your break time</p>
             </div>
           </div>
         </div>
       </main>
 
       {/* Footer */}
-      <footer className="px-6 py-4 border-t border-slate-800">
+      <footer className="px-6 py-4 md:py-6 border-t border-slate-800">
         <div className="text-center">
-          <p className="text-xs text-slate-600">
+          <p className="text-xs md:text-sm lg:text-base text-slate-600">
             Powered by Servio Restaurant Platform
           </p>
         </div>
@@ -262,8 +262,8 @@ function ActionButton({ onClick, icon: Icon, label, variant = 'primary', disable
       onClick={onClick}
       disabled={disabled || loading}
       className={`
-        w-full py-4 px-6 rounded-2xl font-semibold text-lg
-        flex items-center justify-center gap-3
+        w-full py-4 md:py-6 lg:py-7 px-6 md:px-8 rounded-2xl md:rounded-3xl font-semibold text-lg md:text-xl lg:text-2xl
+        flex items-center justify-center gap-3 md:gap-4
         transition-all duration-300 ease-out transform active:scale-95
         ${variants[variant]}
         ${disabled ? 'opacity-50 cursor-not-allowed transform-none' : 'hover:-translate-y-0.5'}
@@ -271,10 +271,10 @@ function ActionButton({ onClick, icon: Icon, label, variant = 'primary', disable
       `}
     >
       {loading ? (
-        <RefreshCw className="w-6 h-6 animate-spin" />
+        <RefreshCw className="w-6 h-6 md:w-8 md:h-8 lg:w-9 lg:h-9 animate-spin" />
       ) : (
         <>
-          <Icon className="w-6 h-6" />
+          <Icon className="w-6 h-6 md:w-8 md:h-8 lg:w-9 lg:h-9" />
           <span>{label}</span>
         </>
       )}
@@ -297,9 +297,9 @@ function StatusBadge({ status }: StatusBadgeProps) {
   const { color, icon: Icon, label } = config[status] || config['clocked-out'];
 
   return (
-    <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full border ${color}`}>
-      <Icon className="w-5 h-5" />
-      <span className="font-medium">{label}</span>
+    <div className={`inline-flex items-center gap-2 md:gap-3 px-4 md:px-5 lg:px-6 py-2 md:py-3 rounded-full border ${color}`}>
+      <Icon className="w-5 h-5 md:w-6 md:h-6 lg:w-7 lg:h-7" />
+      <span className="font-medium md:text-lg lg:text-xl">{label}</span>
     </div>
   );
 }
@@ -317,25 +317,25 @@ function WeeklyHoursCard({ weeklyHours, breakMinutes = 0 }: WeeklyHoursCardProps
   const breakHours = (breakMinutes / 60).toFixed(1);
 
   return (
-    <div className="bg-slate-800/50 backdrop-blur-xl rounded-3xl p-6 border border-slate-700/50">
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-gradient-to-br from-orange-400 to-orange-500 rounded-xl flex items-center justify-center">
-            <TrendingUp className="w-5 h-5 text-white" />
+    <div className="bg-slate-800/50 backdrop-blur-xl rounded-3xl p-6 md:p-8 lg:p-10 border border-slate-700/50">
+      <div className="flex items-center justify-between mb-4 md:mb-6">
+        <div className="flex items-center gap-3 md:gap-4">
+          <div className="w-10 h-10 md:w-14 md:h-14 lg:w-16 lg:h-16 bg-gradient-to-br from-orange-400 to-orange-500 rounded-xl md:rounded-2xl flex items-center justify-center">
+            <TrendingUp className="w-5 h-5 md:w-7 md:h-7 lg:w-8 lg:h-8 text-white" />
           </div>
           <div>
-            <h3 className="font-semibold text-white">This Week</h3>
-            <p className="text-xs text-slate-400">Hours tracked</p>
+            <h3 className="font-semibold text-white md:text-lg lg:text-xl">This Week</h3>
+            <p className="text-xs md:text-sm lg:text-base text-slate-400">Hours tracked</p>
           </div>
         </div>
         <div className="text-right">
-          <p className="text-3xl font-bold text-white">{weeklyHours.toFixed(1)}</p>
-          <p className="text-xs text-slate-400">hours</p>
+          <p className="text-3xl md:text-4xl lg:text-5xl font-bold text-white">{weeklyHours.toFixed(1)}</p>
+          <p className="text-xs md:text-sm lg:text-base text-slate-400">hours</p>
         </div>
       </div>
 
       {/* Progress Bar */}
-      <div className="relative h-3 bg-slate-700/50 rounded-full overflow-hidden mb-3">
+      <div className="relative h-3 md:h-4 lg:h-5 bg-slate-700/50 rounded-full overflow-hidden mb-3 md:mb-4">
         <div
           className={`absolute left-0 top-0 h-full rounded-full transition-all duration-1000 ease-out ${
             isComplete
@@ -346,7 +346,7 @@ function WeeklyHoursCard({ weeklyHours, breakMinutes = 0 }: WeeklyHoursCardProps
         />
       </div>
 
-      <div className="flex items-center justify-between text-sm mb-4">
+      <div className="flex items-center justify-between text-sm md:text-base lg:text-lg mb-4 md:mb-6">
         <p className={isComplete ? 'text-emerald-400' : 'text-slate-400'}>
           {isComplete
             ? '✓ Full week completed!'
@@ -354,8 +354,8 @@ function WeeklyHoursCard({ weeklyHours, breakMinutes = 0 }: WeeklyHoursCardProps
           }
         </p>
         {breakMinutes > 0 && (
-          <div className="flex items-center gap-1 text-amber-400">
-            <Coffee className="w-3 h-3" />
+          <div className="flex items-center gap-1 md:gap-2 text-amber-400">
+            <Coffee className="w-3 h-3 md:w-4 md:h-4" />
             <span>{breakHours}h breaks</span>
           </div>
         )}
@@ -363,13 +363,13 @@ function WeeklyHoursCard({ weeklyHours, breakMinutes = 0 }: WeeklyHoursCardProps
 
       {/* Break Summary */}
       {breakMinutes > 0 && (
-        <div className="bg-amber-500/10 rounded-xl p-3 border border-amber-500/20">
+        <div className="bg-amber-500/10 rounded-xl md:rounded-2xl p-3 md:p-4 lg:p-5 border border-amber-500/20">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Coffee className="w-4 h-4 text-amber-400" />
-              <span className="text-sm text-amber-400">Total Break Time</span>
+            <div className="flex items-center gap-2 md:gap-3">
+              <Coffee className="w-4 h-4 md:w-5 md:h-5 lg:w-6 lg:h-6 text-amber-400" />
+              <span className="text-sm md:text-base lg:text-lg text-amber-400">Total Break Time</span>
             </div>
-            <span className="text-lg font-bold text-amber-400">{breakHours}h</span>
+            <span className="text-lg md:text-xl lg:text-2xl font-bold text-amber-400">{breakHours}h</span>
           </div>
         </div>
       )}
@@ -431,25 +431,25 @@ function CurrentShiftCard({ shift, onStartBreak, onEndBreak, onClockOut, loading
   const lastBreakTime = shift.breakMinutes > 0 ? `${Math.floor(shift.breakMinutes)}m` : null;
 
   return (
-    <div className="bg-slate-800/50 backdrop-blur-xl rounded-3xl p-6 border border-slate-700/50">
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+    <div className="bg-slate-800/50 backdrop-blur-xl rounded-3xl p-6 md:p-8 lg:p-10 border border-slate-700/50">
+      <div className="flex items-center justify-between mb-6 md:mb-8">
+        <div className="flex items-center gap-3 md:gap-4">
+          <div className={`w-10 h-10 md:w-14 md:h-14 lg:w-16 lg:h-16 rounded-xl md:rounded-2xl flex items-center justify-center ${
             shift.isOnBreak
               ? 'bg-gradient-to-br from-amber-400 to-amber-500'
               : 'bg-gradient-to-br from-emerald-400 to-emerald-500'
           }`}>
             {shift.isOnBreak ? (
-              <Coffee className="w-5 h-5 text-white" />
+              <Coffee className="w-5 h-5 md:w-7 md:h-7 lg:w-8 lg:h-8 text-white" />
             ) : (
-              <Briefcase className="w-5 h-5 text-white" />
+              <Briefcase className="w-5 h-5 md:w-7 md:h-7 lg:w-8 lg:h-8 text-white" />
             )}
           </div>
           <div>
-            <h3 className="font-semibold text-white">
+            <h3 className="font-semibold text-white md:text-lg lg:text-xl">
               {shift.isOnBreak ? 'On Break' : 'On Shift'}
             </h3>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs md:text-sm lg:text-base text-slate-400">
               {shift.isOnBreak
                 ? `Started at ${formatTime(clockInTime)}`
                 : `Started at ${formatTime(clockInTime)}`
@@ -461,50 +461,50 @@ function CurrentShiftCard({ shift, onStartBreak, onEndBreak, onClockOut, loading
       </div>
 
       {/* Timer Display */}
-      <div className={`text-center py-6 rounded-2xl mb-6 ${
+      <div className={`text-center py-6 md:py-10 lg:py-12 rounded-2xl md:rounded-3xl mb-6 md:mb-8 ${
         shift.isOnBreak
           ? 'bg-amber-500/10 border-2 border-amber-500/30'
           : 'bg-slate-900/50'
       }`}>
-        <div className="flex items-center justify-center gap-2 mb-2">
+        <div className="flex items-center justify-center gap-2 md:gap-3 mb-2 md:mb-4">
           {shift.isOnBreak ? (
             <>
-              <Coffee className="w-6 h-6 text-amber-400" />
-              <span className="text-amber-400 font-medium">BREAK TIME</span>
+              <Coffee className="w-6 h-6 md:w-8 md:h-8 lg:w-10 lg:h-10 text-amber-400" />
+              <span className="text-amber-400 font-medium md:text-lg lg:text-xl">BREAK TIME</span>
             </>
           ) : (
-            <Timer className="w-5 h-5 text-orange-400" />
+            <Timer className="w-5 h-5 md:w-7 md:h-7 lg:w-8 lg:h-8 text-orange-400" />
           )}
         </div>
-        <p className={`text-5xl font-bold tabular-nums tracking-tight ${
+        <p className={`text-5xl md:text-7xl lg:text-8xl font-bold tabular-nums tracking-tight ${
           shift.isOnBreak ? 'text-amber-400' : 'text-white'
         }`}>
           {shift.isOnBreak && breakTimer ? breakTimer : `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`}
         </p>
-        <p className="text-sm text-slate-400 mt-2">
+        <p className="text-sm md:text-base lg:text-lg text-slate-400 mt-2 md:mt-4">
           {shift.isOnBreak
             ? `Break in progress`
             : `Clocked in at ${formatTime(clockInTime)}`
           }
         </p>
         {shift.position && !shift.isOnBreak && (
-          <p className="text-xs text-slate-500 mt-1">Position: {shift.position}</p>
+          <p className="text-xs md:text-sm lg:text-base text-slate-500 mt-1 md:mt-2">Position: {shift.position}</p>
         )}
       </div>
 
       {/* Break Summary Card */}
       {!shift.isOnBreak && lastBreakTime && (
-        <div className="bg-slate-900/50 rounded-xl p-3 mb-6 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Coffee className="w-4 h-4 text-amber-400" />
-            <span className="text-sm text-slate-400">Total break time today</span>
+        <div className="bg-slate-900/50 rounded-xl md:rounded-2xl p-3 md:p-4 lg:p-5 mb-6 md:mb-8 flex items-center justify-between">
+          <div className="flex items-center gap-2 md:gap-3">
+            <Coffee className="w-4 h-4 md:w-5 md:h-5 lg:w-6 lg:h-6 text-amber-400" />
+            <span className="text-sm md:text-base lg:text-lg text-slate-400">Total break time today</span>
           </div>
-          <span className="text-sm font-medium text-amber-400">{lastBreakTime}</span>
+          <span className="text-sm md:text-base lg:text-lg font-medium text-amber-400">{lastBreakTime}</span>
         </div>
       )}
 
       {/* Action Buttons */}
-      <div className="space-y-3">
+      <div className="space-y-3 md:space-y-4">
         {shift.isOnBreak ? (
           <ActionButton
             label="End Break & Return to Work"
@@ -550,12 +550,12 @@ interface ClockInCardProps {
 
 function ClockInCard({ onClockIn, loading }: ClockInCardProps) {
   return (
-    <div className="bg-slate-800/50 backdrop-blur-xl rounded-3xl p-8 border border-slate-700/50 text-center">
-      <div className="w-24 h-24 bg-gradient-to-br from-orange-400 to-orange-500 rounded-full flex items-center justify-center mx-auto mb-6 shadow-2xl shadow-orange-500/20">
-        <LogIn className="w-12 h-12 text-white" />
+    <div className="bg-slate-800/50 backdrop-blur-xl rounded-3xl p-8 md:p-12 lg:p-14 border border-slate-700/50 text-center">
+      <div className="w-24 h-24 md:w-32 md:h-32 lg:w-40 lg:h-40 bg-gradient-to-br from-orange-400 to-orange-500 rounded-full flex items-center justify-center mx-auto mb-6 md:mb-8 lg:mb-10 shadow-2xl shadow-orange-500/20">
+        <LogIn className="w-12 h-12 md:w-16 md:h-16 lg:w-20 lg:h-20 text-white" />
       </div>
-      <h2 className="text-2xl font-bold text-white mb-2">Ready to Clock In?</h2>
-      <p className="text-slate-400 mb-8">Tap below to start your shift</p>
+      <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-white mb-2 md:mb-4">Ready to Clock In?</h2>
+      <p className="text-slate-400 md:text-lg lg:text-xl mb-8 md:mb-10 lg:mb-12">Tap below to start your shift</p>
       <ActionButton
         label="Clock In"
         icon={LogIn}
@@ -578,13 +578,13 @@ function ErrorBanner({ error, onDismiss }: ErrorBannerProps) {
   if (!error) return null;
 
   return (
-    <div className="fixed top-4 left-4 right-4 z-50">
-      <div className="bg-red-500/20 backdrop-blur-xl border border-red-500/30 rounded-2xl p-4 flex items-center gap-3">
-        <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
-        <p className="text-red-400 text-sm flex-1">{error}</p>
+    <div className="fixed top-4 left-4 right-4 md:top-6 md:left-6 md:right-6 z-50">
+      <div className="max-w-lg md:max-w-2xl lg:max-w-3xl mx-auto bg-red-500/20 backdrop-blur-xl border border-red-500/30 rounded-2xl p-4 md:p-5 lg:p-6 flex items-center gap-3 md:gap-4">
+        <AlertCircle className="w-5 h-5 md:w-6 md:h-6 lg:w-7 lg:h-7 text-red-400 flex-shrink-0" />
+        <p className="text-red-400 text-sm md:text-base lg:text-lg flex-1">{error}</p>
         <button
           onClick={onDismiss}
-          className="text-red-400 hover:text-red-300 p-1"
+          className="text-red-400 hover:text-red-300 p-1 md:p-2 text-xl md:text-2xl"
         >
           ×
         </button>
@@ -1120,59 +1120,59 @@ export default function StaffClockPage() {
 
         {/* Header */}
         <header className="bg-slate-800/50 backdrop-blur-xl border-b border-slate-700/50 sticky top-0 z-10">
-          <div className="max-w-lg mx-auto px-4 py-4 flex items-center justify-between">
-            <div className="flex items-center gap-3">
+          <div className="max-w-lg md:max-w-2xl lg:max-w-3xl mx-auto px-4 md:px-6 py-4 md:py-5 lg:py-6 flex items-center justify-between">
+            <div className="flex items-center gap-3 md:gap-4">
               <img
                 src="/images/servio_icon_tight.png"
                 alt="Servio Logo"
-                className="h-10 w-auto"
+                className="h-10 md:h-12 lg:h-14 w-auto"
               />
               <div>
-                <h1 className="font-semibold text-white">Servio Staff</h1>
-                <p className="text-xs text-slate-400">{user.restaurantName}</p>
+                <h1 className="font-semibold text-white md:text-lg lg:text-xl">Servio Staff</h1>
+                <p className="text-xs md:text-sm lg:text-base text-slate-400">{user.restaurantName}</p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 md:gap-3">
               <button
                 onClick={() => {
                   setError(null);
                   fetchUserStatus(user.pin);
                 }}
-                className="p-2 text-slate-400 hover:text-white hover:bg-slate-700/50 rounded-xl transition-all"
+                className="p-2 md:p-3 text-slate-400 hover:text-white hover:bg-slate-700/50 rounded-xl transition-all"
                 title="Refresh status"
               >
-                <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+                <RefreshCw className={`w-5 h-5 md:w-6 md:h-6 lg:w-7 lg:h-7 ${loading ? 'animate-spin' : ''}`} />
               </button>
               <button
                 onClick={() => handleLogout()}
-                className="p-2 text-slate-400 hover:text-white hover:bg-slate-700/50 rounded-xl transition-all"
+                className="p-2 md:p-3 text-slate-400 hover:text-white hover:bg-slate-700/50 rounded-xl transition-all"
                 title="Logout"
               >
-                <LogOut className="w-5 h-5" />
+                <LogOut className="w-5 h-5 md:w-6 md:h-6 lg:w-7 lg:h-7" />
               </button>
             </div>
           </div>
         </header>
 
         {/* Main Content */}
-        <main className="max-w-lg mx-auto px-4 py-6 space-y-6">
+        <main className="max-w-lg md:max-w-2xl lg:max-w-3xl mx-auto px-4 md:px-6 py-6 md:py-8 lg:py-10 space-y-6 md:space-y-8">
           {/* Welcome Banner */}
-          <div className="bg-gradient-to-r from-orange-500 to-orange-600 rounded-3xl p-6 shadow-2xl shadow-orange-500/20">
+          <div className="bg-gradient-to-r from-orange-500 to-orange-600 rounded-3xl p-6 md:p-8 lg:p-10 shadow-2xl shadow-orange-500/20">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="w-14 h-14 bg-white/20 backdrop-blur-xl rounded-2xl flex items-center justify-center">
-                  <User className="w-8 h-8 text-white" />
+              <div className="flex items-center gap-4 md:gap-6">
+                <div className="w-14 h-14 md:w-20 md:h-20 lg:w-24 lg:h-24 bg-white/20 backdrop-blur-xl rounded-2xl md:rounded-3xl flex items-center justify-center">
+                  <User className="w-8 h-8 md:w-10 md:h-10 lg:w-12 lg:h-12 text-white" />
                 </div>
                 <div>
-                  <p className="text-orange-100 text-sm">Welcome back,</p>
-                  <h2 className="text-2xl font-bold text-white">{user.name}</h2>
+                  <p className="text-orange-100 text-sm md:text-base lg:text-lg">Welcome back,</p>
+                  <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-white">{user.name}</h2>
                 </div>
               </div>
               <div className="text-right">
-                <p className="text-3xl font-bold text-white tabular-nums">
+                <p className="text-3xl md:text-4xl lg:text-5xl font-bold text-white tabular-nums">
                   {new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
                 </p>
-                <p className="text-xs text-orange-200">
+                <p className="text-xs md:text-sm lg:text-base text-orange-200">
                   {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
                 </p>
               </div>
@@ -1199,8 +1199,8 @@ export default function StaffClockPage() {
           )}
 
           {/* Footer */}
-          <div className="text-center py-4">
-            <p className="text-xs text-slate-600">
+          <div className="text-center py-4 md:py-6">
+            <p className="text-xs md:text-sm lg:text-base text-slate-600">
               Powered by Servio Restaurant Platform
             </p>
           </div>
