@@ -83,11 +83,9 @@ function ConfirmDialog({ isOpen, title, message, confirmText, onConfirm, onCance
 interface PINEntryProps {
   onLogin: (pin: string) => void;
   error?: string | null;
-  rememberDevice: boolean;
-  onRememberChange: (remember: boolean) => void;
 }
 
-function PINEntry({ onLogin, error, rememberDevice, onRememberChange }: PINEntryProps) {
+function PINEntry({ onLogin, error }: PINEntryProps) {
   const [pin, setPin] = useState(['', '', '', '']);
   const [isFocused, setIsFocused] = useState<number | null>(0);
   const inputRefs = [React.useRef<HTMLInputElement>(null), React.useRef<HTMLInputElement>(null), React.useRef<HTMLInputElement>(null), React.useRef<HTMLInputElement>(null)];
@@ -202,15 +200,6 @@ function PINEntry({ onLogin, error, rememberDevice, onRememberChange }: PINEntry
               <p className="text-slate-400 text-sm mb-2">
                 Enter your 4-digit employee PIN
               </p>
-              <label className="mt-4 flex items-center justify-center gap-2 text-sm text-slate-300">
-                <input
-                  type="checkbox"
-                  checked={rememberDevice}
-                  onChange={(e) => onRememberChange(e.target.checked)}
-                  className="h-4 w-4 rounded border-slate-500 bg-slate-700 text-orange-500 focus:ring-orange-500"
-                />
-                Remember this device
-              </label>
               <p className="text-slate-500 text-xs">
                 Ask your manager if you don&apos;t have one
               </p>
@@ -1109,14 +1098,6 @@ export default function StaffClockPage() {
         <PINEntry
           onLogin={handleLogin}
           error={error}
-          rememberDevice={rememberDevice}
-          onRememberChange={(value) => {
-            setRememberDevice(value);
-            localStorage.setItem('staffClockRemember', value ? 'true' : 'false');
-            if (!value) {
-              localStorage.removeItem('staffClockPin');
-            }
-          }}
         />
       </>
     );
