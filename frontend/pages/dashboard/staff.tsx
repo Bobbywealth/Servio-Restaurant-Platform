@@ -1208,6 +1208,7 @@ export default function StaffPage() {
   const handleEditHours = (member: StaffUser) => {
     if (canEditHours) {
       setEditingHoursStaff(member)
+      setShowEditHoursModal(true)
     }
   }
 

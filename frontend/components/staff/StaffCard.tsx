@@ -300,6 +300,18 @@ export function StaffCard({
                     <Edit3 className="w-4 h-4" />
                     Edit Staff
                   </button>
+                  {canEditHours && onEditHours && (
+                    <button
+                      onClick={() => {
+                        onEditHours(member)
+                        setOpenMenu(null)
+                      }}
+                      className="w-full px-4 py-3 text-left text-sm text-surface-700 dark:text-surface-200 hover:bg-gray-100 dark:hover:bg-surface-700 flex items-center gap-2"
+                    >
+                      <Clock className="w-4 h-4" />
+                      Edit Hours
+                    </button>
+                  )}
                   {onViewHistory && (
                     <button
                       onClick={() => {
