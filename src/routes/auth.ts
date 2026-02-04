@@ -1,10 +1,16 @@
 import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 import { DatabaseService } from '../services/DatabaseService';
 import { asyncHandler, ForbiddenError, UnauthorizedError } from '../middleware/errorHandler';
 import { issueAccessToken, requireAuth } from '../middleware/auth';
 import { logger } from '../utils/logger';
+
+// Fast SHA-256 hash for token lookup (secure for high-entropy UUIDs)
+function hashTokenForLookup(token: string): string {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
 
 const router = Router();
 
@@ -128,15 +134,17 @@ router.post(
       const sessionId = uuidv4();
       const refreshToken = uuidv4();
       const refreshTokenHash = await bcrypt.hash(refreshToken, 10);
-      
-      // If stayLoggedIn is true, use full 30-day TTL; otherwise use shorter 1-day TTL
-      const daysUntilExpiry = stayLoggedIn ? REFRESH_TOKEN_TTL_DAYS : 1;
+      // Fast lookup hash using SHA-256 (indexed for O(1) lookups)
+      const tokenHash = hashTokenForLookup(refreshToken);
+
+      // If stayLoggedIn is true, use full 30-day TTL; otherwise use 7-day TTL (was 1 day, too short)
+      const daysUntilExpiry = stayLoggedIn ? REFRESH_TOKEN_TTL_DAYS : 7;
       const expiresAt = new Date(Date.now() + daysUntilExpiry * 24 * 60 * 60 * 1000).toISOString();
 
       logger.info(`[auth.login] before_db_insert_session ${JSON.stringify({ requestId, sessionId, daysUntilExpiry })}`);
       await db.run(
-        'INSERT INTO auth_sessions (id, user_id, refresh_token_hash, expires_at) VALUES (?, ?, ?, ?)',
-        [sessionId, user.id, refreshTokenHash, expiresAt]
+        'INSERT INTO auth_sessions (id, user_id, refresh_token_hash, expires_at, token_hash) VALUES (?, ?, ?, ?, ?)',
+        [sessionId, user.id, refreshTokenHash, expiresAt, tokenHash]
       );
       logger.info(`[auth.login] after_db_insert_session ${JSON.stringify({ requestId, sessionId })}`);
 
@@ -188,34 +196,64 @@ router.post(
     if (!refreshToken) throw new UnauthorizedError('refreshToken is required');
 
     const db = DatabaseService.getInstance().getDatabase();
-    const sessions = await db.all<any>('SELECT * FROM auth_sessions');
 
-    const now = Date.now();
-    for (const s of sessions) {
-      const expired = new Date(s.expires_at).getTime() <= now;
-      if (expired) continue;
+    // Fast O(1) lookup using indexed token_hash instead of O(n) bcrypt comparisons
+    const tokenHash = hashTokenForLookup(String(refreshToken));
+    const session = await db.get<any>(
+      'SELECT * FROM auth_sessions WHERE token_hash = ? AND expires_at > NOW()',
+      [tokenHash]
+    );
 
-      const match = await bcrypt.compare(String(refreshToken), String(s.refresh_token_hash));
-      if (!match) continue;
+    // Fallback for sessions created before migration (without token_hash)
+    if (!session) {
+      // Check if there are any sessions without token_hash that might match
+      const legacySessions = await db.all<any>(
+        'SELECT * FROM auth_sessions WHERE token_hash IS NULL AND expires_at > NOW()'
+      );
 
-      const user = await db.get<any>('SELECT * FROM users WHERE id = ? AND is_active = TRUE', [s.user_id]);
-      if (!user) throw new UnauthorizedError('User not found or inactive');
+      for (const s of legacySessions) {
+        const match = await bcrypt.compare(String(refreshToken), String(s.refresh_token_hash));
+        if (match) {
+          // Upgrade this session with the fast lookup hash
+          await db.run('UPDATE auth_sessions SET token_hash = ? WHERE id = ?', [tokenHash, s.id]);
 
-      const accessToken = issueAccessToken({ 
-        sub: user.id, 
-        restaurantId: user.restaurant_id, 
-        sid: s.id 
-      });
-      return res.json({
-        success: true,
-        data: {
-          user: safeUser(user),
-          accessToken
+          const user = await db.get<any>('SELECT * FROM users WHERE id = ? AND is_active = TRUE', [s.user_id]);
+          if (!user) throw new UnauthorizedError('User not found or inactive');
+
+          const accessToken = issueAccessToken({
+            sub: user.id,
+            restaurantId: user.restaurant_id,
+            sid: s.id
+          });
+          return res.json({
+            success: true,
+            data: {
+              user: safeUser(user),
+              accessToken
+            }
+          });
         }
-      });
+      }
+
+      throw new UnauthorizedError('Invalid refresh token');
     }
 
-    throw new UnauthorizedError('Invalid refresh token');
+    // Session found via fast lookup
+    const user = await db.get<any>('SELECT * FROM users WHERE id = ? AND is_active = TRUE', [session.user_id]);
+    if (!user) throw new UnauthorizedError('User not found or inactive');
+
+    const accessToken = issueAccessToken({
+      sub: user.id,
+      restaurantId: user.restaurant_id,
+      sid: session.id
+    });
+    return res.json({
+      success: true,
+      data: {
+        user: safeUser(user),
+        accessToken
+      }
+    });
   })
 );
 
@@ -228,12 +266,20 @@ router.post(
     }
 
     const db = DatabaseService.getInstance().getDatabase();
-    const sessions = await db.all<any>('SELECT * FROM auth_sessions');
-    for (const s of sessions) {
-      const match = await bcrypt.compare(String(refreshToken), String(s.refresh_token_hash));
-      if (match) {
-        await db.run('DELETE FROM auth_sessions WHERE id = ?', [s.id]);
-        break;
+
+    // Fast O(1) lookup and delete using indexed token_hash
+    const tokenHash = hashTokenForLookup(String(refreshToken));
+    const result = await db.run('DELETE FROM auth_sessions WHERE token_hash = ?', [tokenHash]);
+
+    // Fallback for legacy sessions without token_hash
+    if (result.changes === 0) {
+      const legacySessions = await db.all<any>('SELECT * FROM auth_sessions WHERE token_hash IS NULL');
+      for (const s of legacySessions) {
+        const match = await bcrypt.compare(String(refreshToken), String(s.refresh_token_hash));
+        if (match) {
+          await db.run('DELETE FROM auth_sessions WHERE id = ?', [s.id]);
+          break;
+        }
       }
     }
 
@@ -275,11 +321,12 @@ router.post(
     const sessionId = uuidv4();
     const refreshToken = uuidv4();
     const refreshTokenHash = await bcrypt.hash(refreshToken, 10);
+    const tokenHash = hashTokenForLookup(refreshToken);
     const expiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000).toISOString();
-    
+
     await db.run(
-      'INSERT INTO auth_sessions (id, user_id, refresh_token_hash, expires_at) VALUES (?, ?, ?, ?)',
-      [sessionId, targetUser.id, refreshTokenHash, expiresAt]
+      'INSERT INTO auth_sessions (id, user_id, refresh_token_hash, expires_at, token_hash) VALUES (?, ?, ?, ?, ?)',
+      [sessionId, targetUser.id, refreshTokenHash, expiresAt, tokenHash]
     );
     
     const accessToken = issueAccessToken({ 

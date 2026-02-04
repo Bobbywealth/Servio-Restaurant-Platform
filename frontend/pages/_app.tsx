@@ -26,7 +26,8 @@ const ToastProvider = dynamic(() => import('../components/ui/Toast'), {
 })
 
 // Session keep-alive interval (refresh token proactively)
-const SESSION_KEEPALIVE_INTERVAL = 10 * 60 * 1000 // 10 minutes
+// Reduced from 10 minutes to 5 minutes for more reliable session maintenance
+const SESSION_KEEPALIVE_INTERVAL = 5 * 60 * 1000 // 5 minutes
 
 export default function App({ Component, pageProps }: AppProps) {
   const [routeLoading, setRouteLoading] = useState(false)
@@ -45,14 +46,15 @@ export default function App({ Component, pageProps }: AppProps) {
       // Only refresh if we have a refresh token
       if (!refreshToken) return
 
-      // Don't refresh if we have a recent access token (less than 5 minutes old)
-      // Check token expiry by decoding JWT
+      // Don't refresh if token is valid for at least 15 minutes
+      // More aggressive threshold to ensure token never expires during use
       if (accessToken) {
         try {
           const tokenData = JSON.parse(atob(accessToken.split('.')[1]))
           const exp = tokenData.exp * 1000
-          if (Date.now() < exp - 5 * 60 * 1000) {
-            return // Token still valid for at least 5 minutes
+          const fifteenMinutes = 15 * 60 * 1000
+          if (Date.now() < exp - fifteenMinutes) {
+            return // Token still valid for at least 15 minutes
           }
         } catch {
           // Invalid token, continue with refresh
@@ -116,24 +118,19 @@ export default function App({ Component, pageProps }: AppProps) {
     const interval = setInterval(keepSessionAlive, SESSION_KEEPALIVE_INTERVAL)
 
     // Keep alive on user activity (debounced)
+    // Refresh 30 seconds after activity stops (user is actively using the app)
     let activityTimeout: ReturnType<typeof setTimeout> | null = null
     const handleActivity = () => {
       if (activityTimeout) clearTimeout(activityTimeout)
-      activityTimeout = setTimeout(keepSessionAlive, 5 * 60 * 1000) // 5 min after activity
+      activityTimeout = setTimeout(keepSessionAlive, 30 * 1000) // 30 seconds after activity stops
     }
 
     let eventCleanup: (() => void)[] = []
 
-    const events = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll']
+    // Only track meaningful activity events, not passive ones like scroll/mousemove
+    const events = ['mousedown', 'keydown', 'touchstart']
     events.forEach(event => {
-      const handler = (e: Event) => {
-        if (e.type === 'touchstart') {
-          if (activityTimeout) clearTimeout(activityTimeout)
-          activityTimeout = setTimeout(keepSessionAlive, 5 * 60 * 1000)
-        } else {
-          handleActivity()
-        }
-      }
+      const handler = () => handleActivity()
       window.addEventListener(event, handler, { passive: true })
       eventCleanup.push(() => window.removeEventListener(event, handler))
     })
