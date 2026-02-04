@@ -2,7 +2,7 @@
   "name": "Servio Restaurant Platform",
   "short_name": "Servio",
   "description": "Premium restaurant operating system for voice-first operations. Lightning fast performance on all devices.",
-  "start_url": "/login",
+  "start_url": "/staff/clock",
   "display": "standalone",
   "display_override": ["standalone", "fullscreen", "minimal-ui"],
   "background_color": "#F9FAFB",
