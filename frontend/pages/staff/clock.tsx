@@ -83,9 +83,11 @@ function ConfirmDialog({ isOpen, title, message, confirmText, onConfirm, onCance
 interface PINEntryProps {
   onLogin: (pin: string) => void;
   error?: string | null;
+  rememberDevice: boolean;
+  onRememberChange: (remember: boolean) => void;
 }
 
-function PINEntry({ onLogin, error }: PINEntryProps) {
+function PINEntry({ onLogin, error, rememberDevice, onRememberChange }: PINEntryProps) {
   const [pin, setPin] = useState(['', '', '', '']);
   const [isFocused, setIsFocused] = useState<number | null>(0);
   const inputRefs = [React.useRef<HTMLInputElement>(null), React.useRef<HTMLInputElement>(null), React.useRef<HTMLInputElement>(null), React.useRef<HTMLInputElement>(null)];
@@ -200,6 +202,15 @@ function PINEntry({ onLogin, error }: PINEntryProps) {
               <p className="text-slate-400 text-sm mb-2">
                 Enter your 4-digit employee PIN
               </p>
+              <label className="mt-4 flex items-center justify-center gap-2 text-sm text-slate-300">
+                <input
+                  type="checkbox"
+                  checked={rememberDevice}
+                  onChange={(e) => onRememberChange(e.target.checked)}
+                  className="h-4 w-4 rounded border-slate-500 bg-slate-700 text-orange-500 focus:ring-orange-500"
+                />
+                Remember this device
+              </label>
               <p className="text-slate-500 text-xs">
                 Ask your manager if you don&apos;t have one
               </p>
@@ -688,6 +699,7 @@ export default function StaffClockPage() {
   const [error, setError] = useState<string | null>(null);
   const [currentShift, setCurrentShift] = useState<any>(null);
   const [weeklyHours, setWeeklyHours] = useState(0);
+  const [rememberDevice, setRememberDevice] = useState(false);
   const userRef = useRef<any>(null);
 
   // Confirmation dialog state
@@ -707,32 +719,6 @@ export default function StaffClockPage() {
     variant: 'success'
   });
 
-  // Check for existing session and set up periodic refresh
-  useEffect(() => {
-    const savedUser = localStorage.getItem('staffUser');
-    if (savedUser) {
-      try {
-        const userData = JSON.parse(savedUser);
-        setUser(userData);
-        userRef.current = userData;
-        fetchUserStatus(userData.pin);
-      } catch {
-        localStorage.removeItem('staffUser');
-      }
-    }
-    // Mark initial loading as complete
-    setLoading(false);
-
-    // Refresh status every 30 seconds for live updates
-    const refreshInterval = setInterval(() => {
-      if (userRef.current) {
-        fetchUserStatus(userRef.current.pin);
-      }
-    }, 30000);
-
-    return () => clearInterval(refreshInterval);
-  }, []);
-
   const fetchUserStatus = async (pin: string) => {
     try {
       const response = await fetch(`/api/staff/clock/pin-login`, {
@@ -751,9 +737,11 @@ export default function StaffClockPage() {
     }
   };
 
-  const handleLogin = async (pin: string) => {
+  const handleLogin = async (pin: string, options?: { silent?: boolean; remember?: boolean }) => {
     setLoading(true);
-    setError(null);
+    if (!options?.silent) {
+      setError(null);
+    }
 
     try {
       const response = await fetch('/api/staff/clock/pin-login', {
@@ -774,22 +762,83 @@ export default function StaffClockPage() {
         setCurrentShift(data.data.currentShift);
         setWeeklyHours(data.data.weeklyHours);
         localStorage.setItem('staffUser', JSON.stringify(userData));
+        const shouldRemember = options?.remember ?? rememberDevice;
+        if (shouldRemember) {
+          localStorage.setItem('staffClockPin', pin);
+          localStorage.setItem('staffClockRemember', 'true');
+        } else {
+          localStorage.removeItem('staffClockPin');
+          localStorage.setItem('staffClockRemember', 'false');
+        }
       } else {
-        setError(data.error?.message || 'Invalid PIN');
+        if (options?.silent) {
+          localStorage.removeItem('staffClockPin');
+          localStorage.setItem('staffClockRemember', 'false');
+          setError('Saved PIN is no longer valid. Please enter your PIN again.');
+        } else {
+          setError(data.error?.message || 'Invalid PIN');
+        }
       }
     } catch (err) {
-      setError('Connection error. Please try again.');
+      if (!options?.silent) {
+        setError('Connection error. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = (options?: { clearRememberedPin?: boolean }) => {
     setUser(null);
     setCurrentShift(null);
     setWeeklyHours(0);
     localStorage.removeItem('staffUser');
+    if (options?.clearRememberedPin !== false) {
+      localStorage.removeItem('staffClockPin');
+      localStorage.setItem('staffClockRemember', 'false');
+      setRememberDevice(false);
+    }
   };
+
+  // Check for existing session and set up periodic refresh
+  useEffect(() => {
+    const isStandalone = window.matchMedia?.('(display-mode: standalone)').matches || (window.navigator as any)?.standalone === true;
+    const rememberSetting = localStorage.getItem('staffClockRemember');
+    const shouldRemember = rememberSetting ? rememberSetting === 'true' : isStandalone;
+    setRememberDevice(shouldRemember);
+
+    const savedUser = localStorage.getItem('staffUser');
+    let autoLoginStarted = false;
+    if (savedUser) {
+      try {
+        const userData = JSON.parse(savedUser);
+        setUser(userData);
+        userRef.current = userData;
+        fetchUserStatus(userData.pin);
+      } catch {
+        localStorage.removeItem('staffUser');
+      }
+    } else if (shouldRemember) {
+      const storedPin = localStorage.getItem('staffClockPin');
+      if (storedPin) {
+        autoLoginStarted = true;
+        handleLogin(storedPin, { silent: true, remember: shouldRemember });
+      }
+    }
+    // Mark initial loading as complete
+    if (!autoLoginStarted) {
+      setLoading(false);
+    }
+
+    // Refresh status every 30 seconds for live updates
+    const refreshInterval = setInterval(() => {
+      if (userRef.current) {
+        fetchUserStatus(userRef.current.pin);
+      }
+    }, 30000);
+
+    return () => clearInterval(refreshInterval);
+  }, []);
 
   const doClockIn = async () => {
     if (!user) return;
@@ -821,7 +870,7 @@ export default function StaffClockPage() {
           variant: 'success',
           onConfirm: () => {
             setConfirmDialog(prev => ({ ...prev, isOpen: false }));
-            handleLogout();
+            handleLogout({ clearRememberedPin: false });
           }
         });
       } else {
@@ -860,7 +909,7 @@ export default function StaffClockPage() {
           variant: 'success',
           onConfirm: () => {
             setConfirmDialog(prev => ({ ...prev, isOpen: false }));
-            handleLogout();
+            handleLogout({ clearRememberedPin: false });
           }
         });
       } else {
@@ -934,7 +983,7 @@ export default function StaffClockPage() {
           variant: 'warning',
           onConfirm: () => {
             setConfirmDialog(prev => ({ ...prev, isOpen: false }));
-            handleLogout();
+            handleLogout({ clearRememberedPin: false });
           }
         });
       } else {
@@ -1000,7 +1049,7 @@ export default function StaffClockPage() {
             variant: 'success',
             onConfirm: () => {
               setConfirmDialog(prev => ({ ...prev, isOpen: false }));
-              handleLogout();
+              handleLogout({ clearRememberedPin: false });
             }
           });
         } else {
@@ -1026,7 +1075,7 @@ export default function StaffClockPage() {
             variant: 'success',
             onConfirm: () => {
               setConfirmDialog(prev => ({ ...prev, isOpen: false }));
-              handleLogout();
+              handleLogout({ clearRememberedPin: false });
             }
           });
         } else {
@@ -1057,7 +1106,18 @@ export default function StaffClockPage() {
           <meta name="theme-color" content="#0f172a" />
           <link rel="manifest" href="/manifest-staff.json" />
         </Head>
-        <PINEntry onLogin={handleLogin} error={error} />
+        <PINEntry
+          onLogin={handleLogin}
+          error={error}
+          rememberDevice={rememberDevice}
+          onRememberChange={(value) => {
+            setRememberDevice(value);
+            localStorage.setItem('staffClockRemember', value ? 'true' : 'false');
+            if (!value) {
+              localStorage.removeItem('staffClockPin');
+            }
+          }}
+        />
       </>
     );
   }
