@@ -34,6 +34,7 @@ import { useUser } from '../../contexts/UserContext'
 import EditStaffHoursModal from '../../components/staff/EditStaffHoursModal'
 import { showToast } from '../../components/ui/Toast'
 import ScheduleViewToggle from '../../components/schedule/ScheduleViewToggle'
+import { ScheduleCalendar } from '../../components/schedule/ScheduleCalendar'
 import StaffCard from '../../components/staff/StaffCard'
 
 const DashboardLayout = dynamic(() => import('../../components/Layout/DashboardLayout'), {
@@ -1393,44 +1394,15 @@ export default function StaffPage() {
             </div>
           </div>
 
-          {/* Staff Cards Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-                {(isLoading ? [] : filteredStaff).map((member, index) => {
-                  const status = getStatus(member.id)
-                  const activeShift = currentByUserId.get(member.id)
-                  const shiftLabel = activeShift ? `${formatTime(activeShift.clock_in_time)} - Now` : '—'
-                  const hoursThisWeek = hoursByUserId[member.id] ?? 0
-                  const hoursToday = todayHoursByUserId[member.id] ?? 0
+          {/* Loading State */}
+          {isLoading && (
+            <div className="text-center py-12 text-surface-500">Loading staff...</div>
+          )}
 
-                  return (
-                    <StaffCard
-                      key={member.id}
-                      member={member}
-                      status={status as 'on-shift' | 'on-break' | 'off-shift'}
-                      activeShift={activeShift}
-                      hoursThisWeek={hoursThisWeek}
-                      hoursToday={hoursToday}
-                      dailyHours={dailyHours || undefined}
-                      weekDates={weekDates}
-                      onEditStaff={setEditingStaff}
-                      onResetPin={handleResetPin}
-                      onEditHours={canEditHours ? handleEditHours : undefined}
-                      onViewHistory={setViewingHistoryStaff}
-                      onClockIn={handleClockIn}
-                      onClockOut={handleClockOut}
-                      onStartBreak={handleStartBreak}
-                      onEndBreak={handleEndBreak}
-                    />
-                  )
-                })}
-              </div>
-
-              {isLoading && (
-                <div className="text-center py-12 text-surface-500">Loading staff...</div>
-              )}
-
-              {!isLoading && filteredStaff.length === 0 && (
+          {/* Staff Cards Grid - shown when view is 'cards' */}
+          {scheduleView === 'cards' && !isLoading && (
+            <>
+              {filteredStaff.length === 0 ? (
                 <motion.div
                   className="text-center py-12"
                   initial={{ opacity: 0 }}
@@ -1444,8 +1416,59 @@ export default function StaffPage() {
                     Try adjusting your search or filter criteria
                   </p>
                 </motion.div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+                  {filteredStaff.map((member) => {
+                    const status = getStatus(member.id)
+                    const activeShift = currentByUserId.get(member.id)
+                    const hoursThisWeek = hoursByUserId[member.id] ?? 0
+                    const hoursToday = todayHoursByUserId[member.id] ?? 0
+
+                    return (
+                      <StaffCard
+                        key={member.id}
+                        member={member}
+                        status={status as 'on-shift' | 'on-break' | 'off-shift'}
+                        activeShift={activeShift}
+                        hoursThisWeek={hoursThisWeek}
+                        hoursToday={hoursToday}
+                        dailyHours={dailyHours || undefined}
+                        weekDates={weekDates}
+                        onEditStaff={setEditingStaff}
+                        onResetPin={handleResetPin}
+                        onEditHours={canEditHours ? handleEditHours : undefined}
+                        onViewHistory={setViewingHistoryStaff}
+                        onClockIn={handleClockIn}
+                        onClockOut={handleClockOut}
+                        onStartBreak={handleStartBreak}
+                        onEndBreak={handleEndBreak}
+                      />
+                    )
+                  })}
+                </div>
               )}
-            </div>
+            </>
+          )}
+
+          {/* Schedule Calendar - shown when view is 'calendar' */}
+          {scheduleView === 'calendar' && !isLoading && (
+            <ScheduleCalendar
+              schedules={schedules}
+              staff={filteredStaff.map(s => ({ id: s.id, name: s.name, role: s.role }))}
+              selectedWeekStart={selectedWeekStart}
+              onWeekChange={setSelectedWeekStart}
+              onCreateShift={(date, time) => {
+                setShiftModalDate(date)
+                setShiftModalTime(time)
+                setShowShiftModal(true)
+              }}
+              onEditShift={setEditingSchedule}
+              onDeleteShift={handleDeleteShift}
+              onTogglePublish={handleTogglePublish}
+              onCopyShift={handleCopyShift}
+              canEdit={canEditHours}
+            />
+          )}
         </div>
       </DashboardLayout>
     </>
