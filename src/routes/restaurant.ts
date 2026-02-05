@@ -1191,6 +1191,7 @@ router.delete('/staff/:id', asyncHandler(async (req: Request, res: Response) => 
   const db = DatabaseService.getInstance().getDatabase();
   const restaurantId = req.user?.restaurantId;
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const isHardDelete = req.query.mode === 'hard' || req.query.hard === 'true';
 
   if (!restaurantId) {
     return res.status(400).json({
@@ -1209,6 +1210,51 @@ router.delete('/staff/:id', asyncHandler(async (req: Request, res: Response) => 
       success: false,
       error: { message: 'Staff member not found' }
     });
+  }
+
+  if (isHardDelete) {
+    await db.exec('BEGIN');
+    try {
+      await db.run('DELETE FROM auth_sessions WHERE user_id = ?', [id]);
+      await db.run('DELETE FROM notification_reads WHERE user_id = ?', [id]);
+      await db.run('DELETE FROM notification_recipients WHERE recipient_user_id = ?', [id]);
+      await db.run('DELETE FROM push_subscriptions WHERE user_id = ?', [id]);
+      await db.run('DELETE FROM notification_preferences WHERE user_id = ?', [id]);
+      await db.run('DELETE FROM staff_schedules WHERE user_id = ?', [id]);
+      await db.run('DELETE FROM staff_availability WHERE user_id = ?', [id]);
+      await db.run('DELETE FROM time_entry_breaks WHERE time_entry_id IN (SELECT id FROM time_entries WHERE user_id = ?)', [id]);
+      await db.run('DELETE FROM time_entries WHERE user_id = ?', [id]);
+      await db.run('UPDATE staffing_notes SET user_id = NULL WHERE user_id = ?', [id]);
+      await db.run('UPDATE staffing_notes SET created_by = NULL WHERE created_by = ?', [id]);
+      await db.run('UPDATE inventory_transactions SET created_by = NULL WHERE created_by = ?', [id]);
+      await db.run('UPDATE menu_imports SET uploaded_by = NULL WHERE uploaded_by = ?', [id]);
+      await db.run('UPDATE receipts SET uploaded_by = NULL WHERE uploaded_by = ?', [id]);
+      await db.run('UPDATE receipt_analyses SET created_by = NULL WHERE created_by = ?', [id]);
+      await db.run('UPDATE call_reviews SET reviewed_by = NULL WHERE reviewed_by = ?', [id]);
+      await db.run('UPDATE orders SET accepted_by_user_id = NULL WHERE accepted_by_user_id = ?', [id]);
+      await db.run('UPDATE tasks SET assigned_to = NULL WHERE assigned_to = ?', [id]);
+      await db.run('UPDATE audit_logs SET user_id = NULL WHERE user_id = ?', [id]);
+      await db.run('DELETE FROM users WHERE id = ? AND restaurant_id = ?', [id, restaurantId]);
+      await db.exec('COMMIT');
+    } catch (error) {
+      await db.exec('ROLLBACK');
+      throw error;
+    }
+
+    await DatabaseService.getInstance().logAudit(
+      restaurantId,
+      req.user?.id || 'system',
+      'delete_staff_permanent',
+      'user',
+      id,
+      { staffName: existingStaff.name }
+    );
+
+    res.json({
+      success: true,
+      message: 'Staff member deleted permanently'
+    });
+    return;
   }
 
   // Soft delete - just mark as inactive

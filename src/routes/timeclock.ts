@@ -935,7 +935,7 @@ router.post('/pin-login', asyncHandler(async (req: Request, res: Response) => {
     LIMIT 1
   `, [user.id]);
 
-  // Get weekly hours
+  // Get weekly hours (current week starting Sunday)
   const startOfWeek = new Date();
   startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
   startOfWeek.setHours(0, 0, 0, 0);
@@ -1003,7 +1003,7 @@ router.get('/my-stats', asyncHandler(async (req: Request, res: Response) => {
 
   const actualUserId = user.id;
 
-  // Get weekly hours (current week starting Monday)
+  // Get weekly hours (current week starting Sunday)
   const startOfWeek = new Date();
   startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
   startOfWeek.setHours(0, 0, 0, 0);
