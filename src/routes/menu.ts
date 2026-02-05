@@ -802,23 +802,48 @@ router.put('/categories/reorder', asyncHandler(async (req: Request, res: Respons
     // Continue with existing categories only
   }
 
+  const existingCategoriesOrdered = await db.all(
+    `
+      SELECT id
+      FROM menu_categories
+      WHERE restaurant_id = ?
+      ORDER BY sort_order ASC, name ASC
+    `,
+    [restaurantId]
+  );
+
+  const existingOrderedIds = existingCategoriesOrdered.map((row: { id: string }) => String(row.id));
+  const allExistingIds = new Set(existingOrderedIds);
+  const missingOrderedIds = existingOrderedIds.filter((id) => !categoryIds.includes(id));
+  const orderedIds = [
+    ...categoryIds.filter((id) => allExistingIds.has(id)),
+    ...missingOrderedIds
+  ];
+
   // Update sort_order for each category
   let updatedCount = 0;
-  for (let i = 0; i < categoryIds.length; i++) {
-    const categoryId = categoryIds[i];
-    if (!existingIds.has(categoryId)) continue;
+  await db.run('BEGIN TRANSACTION');
+  try {
+    for (let i = 0; i < orderedIds.length; i++) {
+      const categoryId = orderedIds[i];
+      if (!allExistingIds.has(categoryId)) continue;
 
-    const result = await db.run(
-      'UPDATE menu_categories SET sort_order = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND restaurant_id = ?',
-      [i, categoryId, restaurantId]
-    );
+      const result = await db.run(
+        'UPDATE menu_categories SET sort_order = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND restaurant_id = ?',
+        [i, categoryId, restaurantId]
+      );
 
-    if (result.changes > 0) {
-      updatedCount++;
+      if (result.changes > 0) {
+        updatedCount++;
+      }
     }
+    await db.run('COMMIT');
+  } catch (error) {
+    await db.run('ROLLBACK');
+    throw error;
   }
 
-  logger.info(`Category reorder: updated ${updatedCount}/${categoryIds.length} categories for restaurant ${restaurantId}`);
+  logger.info(`Category reorder: updated ${updatedCount}/${orderedIds.length} categories for restaurant ${restaurantId}`);
 
   await DatabaseService.getInstance().logAudit(
     restaurantId,
@@ -826,10 +851,10 @@ router.put('/categories/reorder', asyncHandler(async (req: Request, res: Respons
     'reorder_menu_categories',
     'menu_category',
     'multiple',
-    { categoryIds, updatedCount }
+    { categoryIds: orderedIds, updatedCount }
   );
 
-  res.json({ success: true, updated: updatedCount });
+  res.json({ success: true, updated: updatedCount, total: orderedIds.length });
 }));
 
 /**
