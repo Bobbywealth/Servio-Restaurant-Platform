@@ -1767,7 +1767,7 @@ const MenuManagement: React.FC = () => {
                               const overId = String(over.id);
                               if (activeId === overId) return;
                               const ordered = items.slice().sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
-                              const ids = ordered.map((i) => i.id);
+                              const ids = ordered.map((i) => String(i.id));
                               const oldIndex = ids.indexOf(activeId);
                               const newIndex = ids.indexOf(overId);
                               if (oldIndex === -1 || newIndex === -1) return;
@@ -1776,7 +1776,10 @@ const MenuManagement: React.FC = () => {
                             }}
                           >
                             <SortableContext
-                              items={items.slice().sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)).map((i) => i.id)}
+                              items={items
+                                .slice()
+                                .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+                                .map((i) => String(i.id))}
                               strategy={verticalListSortingStrategy}
                             >
                               <tbody>
@@ -3545,7 +3548,9 @@ const SortableItemTableRow = memo(function SortableItemTableRow({
   modifierSummary: string;
   formatMoney: (v: number) => string;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: String(item.id)
+  });
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition
