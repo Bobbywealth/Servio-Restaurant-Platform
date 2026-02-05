@@ -183,7 +183,7 @@ export function CategorySidebar({
   };
 
   return (
-    <aside className="w-full md:w-64 lg:w-72 xl:w-80 shrink-0 bg-gray-900/60 border border-gray-800 rounded-2xl p-4">
+    <aside className="w-full md:w-56 lg:w-60 xl:w-72 shrink-0 bg-gray-900/60 border border-gray-800 rounded-2xl p-4">
       <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
         <div className="text-base sm:text-sm font-bold tracking-wide text-gray-200 uppercase">Categories</div>
         <button
