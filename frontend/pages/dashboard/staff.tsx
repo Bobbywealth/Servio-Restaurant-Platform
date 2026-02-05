@@ -585,17 +585,17 @@ export default function StaffPage() {
     return value.split('T')[0]
   }
 
-  // Get week dates for the bar chart
+  // Get week dates for the bar chart (Sunday to Saturday)
   const getWeekDates = () => {
     const now = new Date()
-    const dayOfWeek = now.getDay()
-    const monday = new Date(now)
-    monday.setDate(now.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1))
+    const dayOfWeek = now.getDay() // 0 = Sunday, 6 = Saturday
+    const sunday = new Date(now)
+    sunday.setDate(now.getDate() - dayOfWeek) // Go back to Sunday
 
     const dates: string[] = []
     for (let i = 0; i < 7; i++) {
-      const date = new Date(monday)
-      date.setDate(monday.getDate() + i)
+      const date = new Date(sunday)
+      date.setDate(sunday.getDate() + i)
       dates.push(formatLocalDate(date))
     }
     return dates
