@@ -14,10 +14,12 @@ import {
   AlertTriangle,
   Check,
   X,
-  Mail
+  Mail,
+  BarChart3
 } from 'lucide-react'
 import { api } from '../../lib/api'
 import { useUser } from '../../contexts/UserContext'
+import MiniHoursChart from './MiniHoursChart'
 
 interface StaffUser {
   id: string
@@ -458,6 +460,40 @@ export function StaffCard({
             </div>
           </div>
         )}
+
+        {/* Hours Summary with Mini Chart */}
+        <div className="bg-gradient-to-br from-surface-50 to-surface-100 dark:from-surface-700 dark:to-surface-750 rounded-xl p-3 mb-3">
+          {/* Hours Stats */}
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <BarChart3 className="w-4 h-4 text-primary-500" />
+              <span className="text-xs font-medium text-surface-600 dark:text-surface-300">Weekly Hours</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="text-right">
+                <span className="text-xs text-surface-500 dark:text-surface-400">Today</span>
+                <p className={`text-sm font-bold ${isOvertimeToday ? 'text-red-500' : 'text-surface-900 dark:text-surface-100'}`}>
+                  {hoursToday.toFixed(1)}h
+                </p>
+              </div>
+              <div className="w-px h-6 bg-surface-300 dark:bg-surface-600" />
+              <div className="text-right">
+                <span className="text-xs text-surface-500 dark:text-surface-400">Week</span>
+                <p className={`text-sm font-bold ${isOvertimeWeek ? 'text-red-500' : 'text-surface-900 dark:text-surface-100'}`}>
+                  {hoursThisWeek.toFixed(1)}h
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Mini Bar Chart */}
+          {dailyHours && weekDates.length > 0 && (
+            <MiniHoursChart
+              dailyHours={dailyHours.userDailyHours[member.id] || {}}
+              weekDates={weekDates}
+            />
+          )}
+        </div>
 
         {/* Contact Info */}
         <div className="flex items-center space-x-2 text-sm text-surface-600 dark:text-surface-400">
