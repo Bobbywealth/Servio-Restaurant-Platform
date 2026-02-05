@@ -1746,7 +1746,7 @@ const MenuManagement: React.FC = () => {
                       );
                     }
                     return (
-                      <div className="flex-1 overflow-auto -mx-3 sm:mx-0">
+                      <div className="flex-1 overflow-auto -mx-3 sm:mx-0 max-h-[calc(100vh-320px)] sm:max-h-[calc(100vh-300px)]">
                         <table className="w-full text-sm min-w-[400px] sm:min-w-0">
                           <thead className="sticky top-0 bg-gray-50 dark:bg-gray-900/40 z-10">
                             <tr className="text-left text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
