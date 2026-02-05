@@ -1956,25 +1956,97 @@ const MenuManagement: React.FC = () => {
                           <div>
                             <label className="block text-sm font-bold text-gray-700 dark:text-gray-300">Images</label>
                             <div className="mt-1 flex flex-col gap-2">
-                              <label className="inline-flex items-center gap-2 px-3 py-2 border border-dashed border-gray-300 rounded-lg text-sm text-gray-600 hover:text-gray-900 hover:border-gray-400 cursor-pointer dark:border-gray-600 dark:text-gray-300 dark:hover:text-white">
-                                <Upload className="w-4 h-4" />
-                                Add images (up to 5)
-                                <input
-                                  type="file"
-                                  accept="image/*"
-                                  multiple
-                                  className="hidden"
-                                  onChange={(e) => {
-                                    const files = Array.from(e.target.files || []);
-                                    const validFiles = filterImageFiles(files).slice(0, 5);
-                                    setBasicsDirty(true);
-                                    setEditItemImages(validFiles);
-                                  }}
-                                />
-                              </label>
-                              <div className="text-xs text-gray-500 dark:text-gray-400">
-                                {editItemExistingImages.length} existing, {editItemImages.length} new
-                              </div>
+                              {editItemExistingImages.length > 0 && (
+                                <div className="grid grid-cols-3 gap-2">
+                                  {editItemExistingImages.map((img, idx) => (
+                                    <div key={img} className="relative group rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600">
+                                      <img
+                                        src={resolveMediaUrl(img)}
+                                        alt={`Image ${idx + 1}`}
+                                        className="w-full h-20 object-cover"
+                                      />
+                                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1">
+                                        <label className="p-1 bg-white/90 rounded cursor-pointer hover:bg-white" title="Replace image">
+                                          <Upload className="w-3.5 h-3.5 text-gray-700" />
+                                          <input
+                                            type="file"
+                                            accept="image/*"
+                                            className="hidden"
+                                            onChange={(e) => {
+                                              const file = e.target.files?.[0];
+                                              if (!file) return;
+                                              const valid = filterImageFiles([file]);
+                                              if (valid.length === 0) return;
+                                              setBasicsDirty(true);
+                                              setEditItemExistingImages((prev) => prev.filter((_, i) => i !== idx));
+                                              setEditItemImages((prev) => [...prev, valid[0]]);
+                                            }}
+                                          />
+                                        </label>
+                                        <button
+                                          type="button"
+                                          className="p-1 bg-white/90 rounded hover:bg-white"
+                                          title="Remove image"
+                                          onClick={() => {
+                                            setBasicsDirty(true);
+                                            setEditItemExistingImages((prev) => prev.filter((_, i) => i !== idx));
+                                          }}
+                                        >
+                                          <X className="w-3.5 h-3.5 text-red-600" />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              {editItemImages.length > 0 && (
+                                <div className="grid grid-cols-3 gap-2">
+                                  {editItemImages.map((file, idx) => (
+                                    <div key={file.name + idx} className="relative group rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600">
+                                      <img
+                                        src={URL.createObjectURL(file)}
+                                        alt={file.name}
+                                        className="w-full h-20 object-cover"
+                                      />
+                                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                        <button
+                                          type="button"
+                                          className="p-1 bg-white/90 rounded hover:bg-white"
+                                          title="Remove image"
+                                          onClick={() => {
+                                            setBasicsDirty(true);
+                                            setEditItemImages((prev) => prev.filter((_, i) => i !== idx));
+                                          }}
+                                        >
+                                          <X className="w-3.5 h-3.5 text-red-600" />
+                                        </button>
+                                      </div>
+                                      <div className="absolute top-1 left-1 bg-blue-500 text-white text-[10px] px-1 rounded">New</div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              {(editItemExistingImages.length + editItemImages.length) < 5 && (
+                                <label className="inline-flex items-center gap-2 px-3 py-2 border border-dashed border-gray-300 rounded-lg text-sm text-gray-600 hover:text-gray-900 hover:border-gray-400 cursor-pointer dark:border-gray-600 dark:text-gray-300 dark:hover:text-white">
+                                  <Upload className="w-4 h-4" />
+                                  Add images (up to {5 - editItemExistingImages.length - editItemImages.length} more)
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    multiple
+                                    className="hidden"
+                                    onChange={(e) => {
+                                      const files = Array.from(e.target.files || []);
+                                      const remaining = 5 - editItemExistingImages.length - editItemImages.length;
+                                      const validFiles = filterImageFiles(files).slice(0, remaining);
+                                      if (validFiles.length > 0) {
+                                        setBasicsDirty(true);
+                                        setEditItemImages((prev) => [...prev, ...validFiles]);
+                                      }
+                                    }}
+                                  />
+                                </label>
+                              )}
                             </div>
                           </div>
 
@@ -3024,28 +3096,48 @@ const MenuManagement: React.FC = () => {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Images</label>
                   <div className="mt-1 flex flex-col gap-2">
-                    <label className="inline-flex items-center gap-2 px-3 py-2 border border-dashed border-gray-300 rounded-lg text-sm text-gray-600 hover:text-gray-900 hover:border-gray-400 cursor-pointer dark:border-gray-600 dark:text-gray-300 dark:hover:text-white">
-                      <Upload className="w-4 h-4" />
-                      Upload images (up to 5)
-                      <input
-                        type="file"
-                        accept="image/*"
-                        multiple
-                        className="hidden"
-                        onChange={(e) => {
-                          const files = Array.from(e.target.files || []);
-                          const validFiles = filterImageFiles(files).slice(0, 5);
-                          setNewItemImages(validFiles);
-                        }}
-                      />
-                    </label>
-                    <div className="text-xs text-gray-500">
-                      Max file size: {formatFileSize(MAX_IMAGE_SIZE_BYTES)} each.
-                    </div>
                     {newItemImages.length > 0 && (
-                      <div className="text-xs text-gray-500">
-                        {newItemImages.length} file{newItemImages.length > 1 ? 's' : ''} selected
+                      <div className="grid grid-cols-4 gap-2">
+                        {newItemImages.map((file, idx) => (
+                          <div key={file.name + idx} className="relative group rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600">
+                            <img
+                              src={URL.createObjectURL(file)}
+                              alt={file.name}
+                              className="w-full h-20 object-cover"
+                            />
+                            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                              <button
+                                type="button"
+                                className="p-1 bg-white/90 rounded hover:bg-white"
+                                title="Remove image"
+                                onClick={() => setNewItemImages((prev) => prev.filter((_, i) => i !== idx))}
+                              >
+                                <X className="w-3.5 h-3.5 text-red-600" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
                       </div>
+                    )}
+                    {newItemImages.length < 5 && (
+                      <label className="inline-flex items-center gap-2 px-3 py-2 border border-dashed border-gray-300 rounded-lg text-sm text-gray-600 hover:text-gray-900 hover:border-gray-400 cursor-pointer dark:border-gray-600 dark:text-gray-300 dark:hover:text-white">
+                        <Upload className="w-4 h-4" />
+                        Upload images (up to {5 - newItemImages.length} more)
+                        <input
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          className="hidden"
+                          onChange={(e) => {
+                            const files = Array.from(e.target.files || []);
+                            const remaining = 5 - newItemImages.length;
+                            const validFiles = filterImageFiles(files).slice(0, remaining);
+                            if (validFiles.length > 0) {
+                              setNewItemImages((prev) => [...prev, ...validFiles]);
+                            }
+                          }}
+                        />
+                      </label>
                     )}
                   </div>
                 </div>
@@ -3241,28 +3333,96 @@ const MenuManagement: React.FC = () => {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Images</label>
                   <div className="mt-1 flex flex-col gap-2">
-                    <label className="inline-flex items-center gap-2 px-3 py-2 border border-dashed border-gray-300 rounded-lg text-sm text-gray-600 hover:text-gray-900 hover:border-gray-400 cursor-pointer dark:border-gray-600 dark:text-gray-300 dark:hover:text-white">
-                      <Upload className="w-4 h-4" />
-                      Add images (up to 5)
-                      <input
-                        type="file"
-                        accept="image/*"
-                        multiple
-                        className="hidden"
-                        onChange={(e) => {
-                          const files = Array.from(e.target.files || []);
-                          const validFiles = filterImageFiles(files).slice(0, 5);
-                          setEditItemImages(validFiles);
-                        }}
-                      />
-                    </label>
-                    <div className="text-xs text-gray-500">
-                      Max file size: {formatFileSize(MAX_IMAGE_SIZE_BYTES)} each.
-                    </div>
-                    {(editItemExistingImages.length > 0 || editItemImages.length > 0) && (
-                      <div className="text-xs text-gray-500">
-                        {editItemExistingImages.length} existing, {editItemImages.length} new
+                    {editItemExistingImages.length > 0 && (
+                      <div className="grid grid-cols-4 gap-2">
+                        {editItemExistingImages.map((img, idx) => (
+                          <div key={img} className="relative group rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600">
+                            <img
+                              src={resolveMediaUrl(img)}
+                              alt={`Image ${idx + 1}`}
+                              className="w-full h-20 object-cover"
+                            />
+                            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1">
+                              <label className="p-1 bg-white/90 rounded cursor-pointer hover:bg-white" title="Replace image">
+                                <Upload className="w-3.5 h-3.5 text-gray-700" />
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  className="hidden"
+                                  onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    if (!file) return;
+                                    const valid = filterImageFiles([file]);
+                                    if (valid.length === 0) return;
+                                    setBasicsDirty(true);
+                                    setEditItemExistingImages((prev) => prev.filter((_, i) => i !== idx));
+                                    setEditItemImages((prev) => [...prev, valid[0]]);
+                                  }}
+                                />
+                              </label>
+                              <button
+                                type="button"
+                                className="p-1 bg-white/90 rounded hover:bg-white"
+                                title="Remove image"
+                                onClick={() => {
+                                  setBasicsDirty(true);
+                                  setEditItemExistingImages((prev) => prev.filter((_, i) => i !== idx));
+                                }}
+                              >
+                                <X className="w-3.5 h-3.5 text-red-600" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
                       </div>
+                    )}
+                    {editItemImages.length > 0 && (
+                      <div className="grid grid-cols-4 gap-2">
+                        {editItemImages.map((file, idx) => (
+                          <div key={file.name + idx} className="relative group rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600">
+                            <img
+                              src={URL.createObjectURL(file)}
+                              alt={file.name}
+                              className="w-full h-20 object-cover"
+                            />
+                            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                              <button
+                                type="button"
+                                className="p-1 bg-white/90 rounded hover:bg-white"
+                                title="Remove image"
+                                onClick={() => {
+                                  setBasicsDirty(true);
+                                  setEditItemImages((prev) => prev.filter((_, i) => i !== idx));
+                                }}
+                              >
+                                <X className="w-3.5 h-3.5 text-red-600" />
+                              </button>
+                            </div>
+                            <div className="absolute top-1 left-1 bg-blue-500 text-white text-[10px] px-1 rounded">New</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {(editItemExistingImages.length + editItemImages.length) < 5 && (
+                      <label className="inline-flex items-center gap-2 px-3 py-2 border border-dashed border-gray-300 rounded-lg text-sm text-gray-600 hover:text-gray-900 hover:border-gray-400 cursor-pointer dark:border-gray-600 dark:text-gray-300 dark:hover:text-white">
+                        <Upload className="w-4 h-4" />
+                        Add images (up to {5 - editItemExistingImages.length - editItemImages.length} more)
+                        <input
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          className="hidden"
+                          onChange={(e) => {
+                            const files = Array.from(e.target.files || []);
+                            const remaining = 5 - editItemExistingImages.length - editItemImages.length;
+                            const validFiles = filterImageFiles(files).slice(0, remaining);
+                            if (validFiles.length > 0) {
+                              setBasicsDirty(true);
+                              setEditItemImages((prev) => [...prev, ...validFiles]);
+                            }
+                          }}
+                        />
+                      </label>
                     )}
                   </div>
                 </div>
