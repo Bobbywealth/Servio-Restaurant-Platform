@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, memo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, memo, useRef } from 'react';
 import Head from 'next/head';
 import { motion, AnimatePresence } from 'framer-motion';
 import clsx from 'clsx';
@@ -118,6 +118,7 @@ const MenuManagement: React.FC = () => {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  const editorClosedByUserRef = useRef(false);
   const [editorTab, setEditorTab] = useState<'basics' | 'availability' | 'modifiers' | 'preview'>('basics');
   const [basicsDirty, setBasicsDirty] = useState(false);
   const [pendingSelection, setPendingSelection] = useState<{ type: 'category' | 'item'; id: string } | null>(null);
@@ -450,6 +451,11 @@ const MenuManagement: React.FC = () => {
     if (stillExists) {
       // Keep current selection in sync with refreshed object
       setEditingItem(stillExists);
+      return;
+    }
+    // Skip auto-select if user explicitly closed the editor
+    if (editorClosedByUserRef.current) {
+      editorClosedByUserRef.current = false;
       return;
     }
     // Auto-select first item in category
@@ -1772,6 +1778,7 @@ const MenuManagement: React.FC = () => {
                               type="button"
                               className="inline-flex shrink-0 items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 active:bg-gray-200 p-2 dark:hover:text-gray-200 dark:hover:bg-gray-700 min-h-[40px] min-w-[40px] touch-manipulation"
                               onClick={() => {
+                                editorClosedByUserRef.current = true;
                                 setSelectedItemId(null);
                                 setEditingItem(null);
                               }}
