@@ -1099,11 +1099,11 @@ router.get('/staff-hours', asyncHandler(async (req: Request, res: Response) => {
 router.get('/user-daily-hours', asyncHandler(async (req: Request, res: Response) => {
   const db = DatabaseService.getInstance().getDatabase();
 
-  // Get start of current week (Monday)
+  // Get start of current week (Sunday)
   const now = new Date();
-  const dayOfWeek = now.getDay();
+  const dayOfWeek = now.getDay(); // 0 = Sunday, 6 = Saturday
   const startOfWeek = new Date(now);
-  startOfWeek.setDate(now.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1));
+  startOfWeek.setDate(now.getDate() - dayOfWeek); // Go back to Sunday
   startOfWeek.setHours(0, 0, 0, 0);
 
   // Get daily hours for each user this week
