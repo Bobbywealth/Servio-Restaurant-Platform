@@ -1438,16 +1438,17 @@ router.delete('/items/:id/sizes/:sizeId', asyncHandler(async (req: Request, res:
 router.get('/items/full', asyncHandler(async (req: Request, res: Response) => {
   const db = DatabaseService.getInstance().getDatabase();
   const restaurantId = req.user?.restaurantId;
+  const includeInactive = req.query.includeInactive === '1' || req.query.includeInactive === 'true';
 
   const items = await db.all(`
-    SELECT 
+    SELECT
       mi.*,
       mc.name as category_name,
       mc.sort_order as category_sort_order
     FROM menu_items mi
     LEFT JOIN menu_categories mc ON mi.category_id = mc.id
     WHERE mi.restaurant_id = ?
-      AND (mc.is_active = TRUE OR mc.id IS NULL)
+      ${includeInactive ? '' : 'AND (mc.is_active = TRUE OR mc.id IS NULL)'}
     ORDER BY mc.sort_order ASC, mi.sort_order ASC, mi.name ASC
   `, [restaurantId]);
 

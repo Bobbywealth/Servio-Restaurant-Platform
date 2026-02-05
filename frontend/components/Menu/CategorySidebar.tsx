@@ -64,7 +64,9 @@ function SortableCategoryRow({
       style={style}
       className={clsx(
         'group relative flex items-center gap-2 sm:gap-3 rounded-xl border px-3 sm:px-4 py-3 sm:py-2.5 cursor-pointer select-none touch-manipulation',
-        selected ? 'border-teal-400 bg-teal-500/10' : 'border-gray-700 bg-gray-800/60 hover:bg-gray-800',
+        selected
+          ? 'border-servio-red-400 bg-servio-red-50 dark:border-servio-red-500 dark:bg-servio-red-900/20'
+          : 'border-surface-200 bg-white hover:bg-surface-50 dark:border-surface-700 dark:bg-surface-800 dark:hover:bg-surface-700',
         isDragging && 'opacity-70'
       )}
       onClick={onSelect}
@@ -73,7 +75,7 @@ function SortableCategoryRow({
     >
       <button
         type="button"
-        className="shrink-0 text-gray-400 hover:text-gray-200 active:text-gray-100 touch-manipulation p-1 -ml-1"
+        className="shrink-0 text-surface-400 hover:text-surface-600 active:text-surface-700 dark:text-surface-500 dark:hover:text-surface-300 dark:active:text-surface-200 touch-manipulation p-1 -ml-1"
         onClick={(e) => {
           e.stopPropagation();
         }}
@@ -88,18 +90,18 @@ function SortableCategoryRow({
       <div className="min-w-0 flex-1">
         <div className="flex items-center justify-between gap-2">
           <div className="min-w-0">
-            <div className={clsx('font-semibold truncate text-base sm:text-sm', category.is_hidden ? 'text-gray-400' : 'text-white')}>
+            <div className={clsx('font-semibold truncate text-base sm:text-sm', category.is_hidden ? 'text-surface-400 dark:text-surface-500' : 'text-surface-900 dark:text-white')}>
               {category.name}
             </div>
             {typeof category.item_count === 'number' ? (
-              <div className="text-sm sm:text-xs text-gray-400">{category.item_count} items</div>
+              <div className="text-sm sm:text-xs text-surface-500 dark:text-surface-400">{category.item_count} items</div>
             ) : null}
           </div>
 
           <div className="flex items-center gap-1">
             <button
               type="button"
-              className="shrink-0 text-gray-400 hover:text-gray-200 touch-manipulation p-2 -mr-2"
+              className="shrink-0 text-surface-400 hover:text-surface-600 dark:text-surface-500 dark:hover:text-surface-300 touch-manipulation p-2 -mr-2"
               onClick={(e) => {
                 e.stopPropagation();
                 onToggleHidden();
@@ -116,7 +118,7 @@ function SortableCategoryRow({
                 'shrink-0 transition-colors touch-manipulation p-2 -mr-2',
                 showDeleteConfirm
                   ? 'text-red-500 animate-pulse'
-                  : 'text-gray-400 hover:text-red-400'
+                  : 'text-surface-400 hover:text-red-500 dark:text-surface-500 dark:hover:text-red-400'
               )}
               onClick={handleDelete}
               aria-label="Delete category"
@@ -183,12 +185,12 @@ export function CategorySidebar({
   };
 
   return (
-    <aside className="w-full md:w-56 lg:w-60 xl:w-72 shrink-0 bg-gray-900/60 border border-gray-800 rounded-2xl p-4">
+    <aside className="w-full md:w-56 lg:w-60 xl:w-72 shrink-0 bg-white dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-2xl p-4">
       <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-        <div className="text-base sm:text-sm font-bold tracking-wide text-gray-200 uppercase">Categories</div>
+        <div className="text-base sm:text-sm font-bold tracking-wide text-surface-700 dark:text-surface-200 uppercase">Categories</div>
         <button
           type="button"
-          className="inline-flex items-center gap-2 rounded-xl bg-teal-600 hover:bg-teal-700 active:bg-teal-800 text-white px-4 py-2.5 sm:px-3 sm:py-2 text-sm sm:text-sm font-bold touch-manipulation min-h-[44px]"
+          className="inline-flex items-center gap-2 rounded-xl bg-servio-red-600 hover:bg-servio-red-700 active:bg-servio-red-800 text-white px-4 py-2.5 sm:px-3 sm:py-2 text-sm sm:text-sm font-bold touch-manipulation min-h-[44px]"
           onClick={onAddCategory}
         >
           <Plus className="h-5 w-5 sm:h-4 sm:w-4" />
@@ -198,7 +200,7 @@ export function CategorySidebar({
 
       <DndContext sensors={sensors} onDragEnd={onDragEnd}>
         <SortableContext items={ids} strategy={verticalListSortingStrategy}>
-          <div className="space-y-2 max-h-[calc(100vh-200px)] sm:max-h-[50vh] md:max-h-[60vh] lg:max-h-[70vh] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent">
+          <div className="space-y-2 max-h-[calc(100vh-200px)] sm:max-h-[50vh] md:max-h-[60vh] lg:max-h-[70vh] overflow-y-auto scrollbar-thin scrollbar-thumb-surface-300 dark:scrollbar-thumb-surface-600 scrollbar-track-transparent">
             {ordered.map((c) => (
               <SortableCategoryRow
                 key={c.id}
