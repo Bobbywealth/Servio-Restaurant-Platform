@@ -220,6 +220,7 @@ const MenuManagement: React.FC = () => {
       categoryRows.forEach((category: MenuCategory) => {
         categoryMap.set(category.id, {
           ...category,
+          sort_order: Number(category.sort_order ?? 0),
           items: []
         });
       });
@@ -230,7 +231,7 @@ const MenuManagement: React.FC = () => {
           name: group.category_name || 'Uncategorized',
           description: '',
           image: undefined,
-          sort_order: group.category_sort_order || 0,
+          sort_order: Number(group.category_sort_order ?? 0),
           is_active: true,
           item_count: 0,
           created_at: new Date().toISOString(),
@@ -657,6 +658,7 @@ const MenuManagement: React.FC = () => {
       const response = await api.put('/api/menu/categories/reorder', { categoryIds: nextOrderedIds });
       const { updated } = response.data || {};
       console.log('[handleReorderCategories] Category order saved:', { requested: nextOrderedIds.length, updated });
+      await loadMenuData();
       toast.success('Category order saved');
     } catch (error) {
       console.error('Failed to persist category order', error);

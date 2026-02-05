@@ -161,13 +161,18 @@ export function CategorySidebar({
 
   const ordered = useMemo(() => {
     // Preserve incoming order, but stable sort by sort_order when present.
-    const withOrder = categories.map((c, idx) => ({ c, idx }));
+    const withOrder = categories.map((c, idx) => ({
+      c,
+      idx,
+      sortOrder: Number.isFinite(c.sort_order) ? Number(c.sort_order) : null
+    }));
     withOrder.sort((a, b) => {
-      const ao = typeof a.c.sort_order === 'number' ? a.c.sort_order : null;
-      const bo = typeof b.c.sort_order === 'number' ? b.c.sort_order : null;
+      const ao = a.sortOrder;
+      const bo = b.sortOrder;
       if (ao === null && bo === null) return a.idx - b.idx;
-      if (ao === null) return 1;
-      if (bo === null) return -1;
+      if (ao === null) return a.idx - b.idx;
+      if (bo === null) return a.idx - b.idx;
+      if (ao === bo) return a.idx - b.idx;
       return ao - bo;
     });
     return withOrder.map((x) => x.c);
