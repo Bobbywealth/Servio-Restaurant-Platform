@@ -1023,7 +1023,7 @@ export default function AssistantPage() {
       </Head>
 
       <DashboardLayout>
-        <div className="h-[calc(100vh-6rem)] flex flex-col">
+        <div className="h-[calc(100vh-6rem)] flex flex-col overflow-hidden">
           {/* Header */}
           <div className="flex-shrink-0 mb-4">
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
@@ -1089,10 +1089,10 @@ export default function AssistantPage() {
             </div>
           </div>
 
-          <div className="flex-1 grid grid-cols-1 md:grid-cols-5 gap-4 min-h-0">
+          <div className="flex-1 grid grid-cols-1 md:grid-cols-5 gap-4 min-h-0 overflow-hidden">
             {/* Conversation History Panel */}
             {state.showHistory && (
-              <div className="md:col-span-1 bg-white/80 dark:bg-surface-800/80 backdrop-blur-xl rounded-2xl shadow-xl border border-white/50 dark:border-surface-700/50 flex flex-col max-h-[calc(100vh-200px)]">
+              <div className="md:col-span-1 bg-white/80 dark:bg-surface-800/80 backdrop-blur-xl rounded-2xl shadow-xl border border-white/50 dark:border-surface-700/50 flex flex-col min-h-0">
                 <div className="p-4 border-b border-surface-200/50 dark:border-surface-700/50">
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="font-bold text-surface-900 dark:text-white">Conversation History</h3>
@@ -1182,9 +1182,9 @@ export default function AssistantPage() {
             )}
 
             {/* Main Content - Adjust grid columns based on history visibility */}
-            <div className={`${state.showHistory ? 'md:col-span-4' : 'md:col-span-4'} space-y-4`}>
+            <div className={`${state.showHistory ? 'md:col-span-4' : 'md:col-span-4'} grid grid-cols-1 lg:grid-cols-4 gap-4 min-h-0 overflow-hidden`}>
             {/* Left Panel - Controls */}
-            <div className="md:col-span-1 space-y-3 overflow-y-auto">
+            <div className="lg:col-span-1 space-y-3 min-h-0 overflow-hidden">
               {/* Avatar Card */}
               <div className="relative bg-white/80 dark:bg-surface-800/80 backdrop-blur-xl rounded-2xl p-4 shadow-xl border border-white/50 dark:border-surface-700/50 overflow-hidden flex flex-col items-center">
                 <div className="absolute -top-10 -right-10 w-20 h-20 rounded-full bg-gradient-to-br from-teal-400/20 to-violet-400/20 blur-2xl" />
@@ -1290,9 +1290,9 @@ export default function AssistantPage() {
             </div>
 
             {/* Right Panel - Conversation */}
-            <div className="lg:col-span-3 space-y-4">
+            <div className="lg:col-span-3 space-y-4 flex flex-col min-h-0">
               {/* Conversation History */}
-              <div className="relative bg-white/80 dark:bg-surface-800/80 backdrop-blur-xl rounded-2xl p-4 shadow-xl border border-white/50 dark:border-surface-700/50 flex-1 flex flex-col min-h-0 max-h-[calc(100vh-280px)]">
+              <div className="relative bg-white/80 dark:bg-surface-800/80 backdrop-blur-xl rounded-2xl p-4 shadow-xl border border-white/50 dark:border-surface-700/50 flex-1 flex flex-col min-h-0">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-lg font-bold text-surface-900 dark:text-white">
                     Conversation
