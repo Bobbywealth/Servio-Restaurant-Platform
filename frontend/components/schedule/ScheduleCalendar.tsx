@@ -184,7 +184,7 @@ export function ScheduleCalendar({
     onEditShift(schedule)
   }
 
-  const handleDragStart = (e: React.DragEvent, scheduleId: string) => {
+  const handleDragStart = (e: React.DragEvent<HTMLDivElement>, scheduleId: string) => {
     if (!canEdit) return
     e.dataTransfer.setData('text/plain', scheduleId)
     e.dataTransfer.effectAllowed = 'move'
@@ -443,7 +443,7 @@ export function ScheduleCalendar({
                     `}
                     onClick={(e) => canEdit && handleShiftClick(e, schedule)}
                     draggable={canEdit}
-                    onDragStart={(event) => handleDragStart(event, schedule.id)}
+                    onDragStartCapture={(event) => handleDragStart(event, schedule.id)}
                   >
                     {/* Published indicator */}
                     <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
