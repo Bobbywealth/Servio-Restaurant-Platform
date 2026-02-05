@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { DatabaseService } from '../services/DatabaseService';
 import { asyncHandler, UnauthorizedError } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
-import { ensureUploadsDir } from '../utils/uploads';
+import { ensureUploadsDir, getUploadsPath } from '../utils/uploads';
 import multer from 'multer';
 import sharp from 'sharp';
 import { v4 as uuidv4 } from 'uuid';
@@ -1037,10 +1037,15 @@ router.put('/items/:id', upload.array('images', 5), asyncHandler(async (req: Req
   const removedImages = previousImages.filter((img: string) => !images.includes(img));
   for (const removedImg of removedImages) {
     try {
-      const filePath = path.join(process.cwd(), removedImg);
+      const relativeUploadsPath = removedImg.replace(/^\/?uploads\//, '');
+      const filePath = removedImg.startsWith('/uploads/') || removedImg.startsWith('uploads/')
+        ? getUploadsPath(relativeUploadsPath)
+        : (path.isAbsolute(removedImg) ? removedImg : path.join(process.cwd(), removedImg));
       await fs.unlink(filePath);
-    } catch (err) {
-      logger.warn(`Failed to delete removed image file: ${removedImg}`, err);
+    } catch (err: any) {
+      if (err?.code !== 'ENOENT') {
+        logger.warn(`Failed to delete removed image file: ${removedImg}`, err);
+      }
     }
   }
 
@@ -1148,10 +1153,15 @@ router.delete('/items/:id', asyncHandler(async (req: Request, res: Response) => 
   const itemImages: string[] = JSON.parse(item.images || '[]');
   for (const img of itemImages) {
     try {
-      const filePath = path.join(process.cwd(), img);
+      const relativeUploadsPath = img.replace(/^\/?uploads\//, '');
+      const filePath = img.startsWith('/uploads/') || img.startsWith('uploads/')
+        ? getUploadsPath(relativeUploadsPath)
+        : (path.isAbsolute(img) ? img : path.join(process.cwd(), img));
       await fs.unlink(filePath);
-    } catch (err) {
-      logger.warn(`Failed to delete image file on item delete: ${img}`, err);
+    } catch (err: any) {
+      if (err?.code !== 'ENOENT') {
+        logger.warn(`Failed to delete image file on item delete: ${img}`, err);
+      }
     }
   }
 
