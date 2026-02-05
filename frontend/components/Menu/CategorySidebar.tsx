@@ -38,7 +38,9 @@ function SortableCategoryRow({
   onToggleHidden: () => void;
   onDelete: () => void;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: category.id });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: String(category.id)
+  });
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition
@@ -171,7 +173,7 @@ export function CategorySidebar({
     return withOrder.map((x) => x.c);
   }, [categories]);
 
-  const ids = ordered.map((c) => c.id);
+  const ids = ordered.map((c) => String(c.id));
 
   const onDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
