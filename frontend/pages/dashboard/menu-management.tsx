@@ -1419,16 +1419,11 @@ const MenuManagement: React.FC = () => {
       if (!category.is_active) return false;
       if (selectedCategory !== 'all' && category.id !== selectedCategory) return false;
  
-      const searchLower = searchTerm.toLowerCase();
-      const matchesSearch = category.name.toLowerCase().includes(searchLower) ||
-                           category.items?.some(item =>
-                              item.name.toLowerCase().includes(searchLower) ||
-                              item.description.toLowerCase().includes(searchLower)
-                            );
- 
-      return matchesSearch;
+      // Don't filter categories by search term - only filter items within categories
+      // This allows searching for items even if the category name doesn't match
+      return true;
     });
-  }, [categories, selectedCategory, searchTerm]);
+  }, [categories, selectedCategory]);
 
   const totalItems = useMemo(() =>
     categories.reduce((sum, cat) => sum + (cat.item_count || 0), 0),
