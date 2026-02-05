@@ -6,13 +6,12 @@ import {
   Plus,
   Calendar,
   Clock,
-  User,
-  MoreVertical,
-  Edit3,
-  Trash2,
   Eye,
   EyeOff,
-  Copy
+  Copy,
+  Users,
+  AlertCircle,
+  CheckCircle
 } from 'lucide-react'
 
 interface Schedule {
@@ -43,6 +42,9 @@ interface ScheduleCalendarProps {
   onDeleteShift: (scheduleId: string) => void
   onTogglePublish: (scheduleId: string, isPublished: boolean) => void
   onCopyShift: (schedule: Schedule) => void
+  onCopyShiftMultiple: (schedule: Schedule, dates: string[]) => void
+  onMoveShift: (scheduleId: string, targetDate: string) => void
+  actualHoursByUserId?: Record<string, number>
   canEdit?: boolean
 }
 
@@ -68,11 +70,15 @@ export function ScheduleCalendar({
   onDeleteShift,
   onTogglePublish,
   onCopyShift,
+  onCopyShiftMultiple,
+  onMoveShift,
+  actualHoursByUserId,
   canEdit = true
 }: ScheduleCalendarProps) {
-  const [openMenu, setOpenMenu] = useState<string | null>(null)
   const [hoveredDay, setHoveredDay] = useState<string | null>(null)
   const [isClient, setIsClient] = useState(false)
+  const [copySchedule, setCopySchedule] = useState<Schedule | null>(null)
+  const [selectedCopyDates, setSelectedCopyDates] = useState<Record<string, boolean>>({})
 
   // Ensure client-side only rendering for dates to avoid hydration mismatch
   useEffect(() => {
@@ -127,6 +133,31 @@ export function ScheduleCalendar({
       .sort((a, b) => a.shift_start_time.localeCompare(b.shift_start_time))
   }
 
+  const getShiftHours = (schedule: Schedule) => {
+    const [startHour, startMinute] = schedule.shift_start_time.split(':').map(Number)
+    const [endHour, endMinute] = schedule.shift_end_time.split(':').map(Number)
+    const start = startHour + startMinute / 60
+    const end = endHour + endMinute / 60
+    return Math.max(0, end - start)
+  }
+
+  const scheduleTotalsByUserId = useMemo(() => {
+    const totals: Record<string, number> = {}
+    for (const schedule of schedules) {
+      totals[schedule.user_id] = (totals[schedule.user_id] || 0) + getShiftHours(schedule)
+    }
+    return totals
+  }, [schedules])
+
+  const totalScheduledHours = useMemo(() => {
+    return Object.values(scheduleTotalsByUserId).reduce((sum, hours) => sum + hours, 0)
+  }, [scheduleTotalsByUserId])
+
+  const totalActualHours = useMemo(() => {
+    if (!actualHoursByUserId) return null
+    return Object.values(actualHoursByUserId).reduce((sum, hours) => sum + hours, 0)
+  }, [actualHoursByUserId])
+
   const navigateWeek = (direction: 'prev' | 'next') => {
     const newDate = new Date(selectedWeekStart)
     newDate.setDate(selectedWeekStart.getDate() + (direction === 'next' ? 7 : -7))
@@ -153,24 +184,41 @@ export function ScheduleCalendar({
     onEditShift(schedule)
   }
 
-  const handleMenuAction = (e: React.MouseEvent, action: string, schedule: Schedule) => {
+  const handleDragStart = (e: React.DragEvent, scheduleId: string) => {
     if (!canEdit) return
-    e.stopPropagation()
-    setOpenMenu(null)
-    switch (action) {
-      case 'edit':
-        onEditShift(schedule)
-        break
-      case 'delete':
-        onDeleteShift(schedule.id)
-        break
-      case 'publish':
-        onTogglePublish(schedule.id, !schedule.is_published)
-        break
-      case 'copy':
-        onCopyShift(schedule)
-        break
+    e.dataTransfer.setData('text/plain', scheduleId)
+    e.dataTransfer.effectAllowed = 'move'
+  }
+
+  const handleDropShift = (e: React.DragEvent, dateStr: string) => {
+    if (!canEdit) return
+    e.preventDefault()
+    const scheduleId = e.dataTransfer.getData('text/plain')
+    if (!scheduleId) return
+    onMoveShift(scheduleId, dateStr)
+  }
+
+  const openCopyModal = (schedule: Schedule) => {
+    const nextSelections: Record<string, boolean> = {}
+    for (const date of weekDates) {
+      const dateStr = formatDate(date)
+      nextSelections[dateStr] = dateStr !== schedule.shift_date
     }
+    setCopySchedule(schedule)
+    setSelectedCopyDates(nextSelections)
+  }
+
+  const confirmCopyMultiple = () => {
+    if (!copySchedule) return
+    const selectedDates = Object.entries(selectedCopyDates)
+      .filter(([, selected]) => selected)
+      .map(([date]) => date)
+    if (selectedDates.length === 0) {
+      setCopySchedule(null)
+      return
+    }
+    onCopyShiftMultiple(copySchedule, selectedDates)
+    setCopySchedule(null)
   }
 
   const weekRangeLabel =
@@ -185,39 +233,118 @@ export function ScheduleCalendar({
         })}`
       : 'Loading...'
 
+  const coverageGapDates = weekDates
+    .filter(date => getSchedulesForDate(date).length === 0)
+    .map(date => formatDate(date))
+
   return (
     <div className="bg-white dark:bg-surface-800 rounded-2xl shadow-sm border border-surface-200 dark:border-surface-700 overflow-hidden">
       {/* Calendar Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-surface-200 dark:border-surface-700">
-        <div className="flex items-center gap-4">
-          <h2 className="text-xl font-bold text-surface-900 dark:text-surface-100">
-            Schedule
-          </h2>
-          <div className="flex items-center gap-2 bg-surface-100 dark:bg-surface-700 rounded-xl p-1">
-            <button
-              onClick={() => navigateWeek('prev')}
-              className="p-2 hover:bg-surface-200 dark:hover:bg-surface-600 rounded-lg transition-colors"
-            >
-              <ChevronLeft className="w-4 h-4 text-surface-600 dark:text-surface-400" />
-            </button>
-            <button
-              onClick={goToToday}
-              className="px-3 py-1 text-sm font-medium text-surface-700 dark:text-surface-300 hover:bg-surface-200 dark:hover:bg-surface-600 rounded-lg transition-colors"
-            >
-              Today
-            </button>
-            <button
-              onClick={() => navigateWeek('next')}
-              className="p-2 hover:bg-surface-200 dark:hover:bg-surface-600 rounded-lg transition-colors"
-            >
-              <ChevronRight className="w-4 h-4 text-surface-600 dark:text-surface-400" />
-            </button>
+      <div className="px-6 py-4 border-b border-surface-200 dark:border-surface-700 space-y-4">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+          <div className="flex flex-wrap items-center gap-4">
+            <h2 className="text-xl font-bold text-surface-900 dark:text-surface-100">
+              Schedule
+            </h2>
+            <div className="flex items-center gap-2 bg-surface-100 dark:bg-surface-700 rounded-xl p-1">
+              <button
+                onClick={() => navigateWeek('prev')}
+                className="p-2 hover:bg-surface-200 dark:hover:bg-surface-600 rounded-lg transition-colors"
+              >
+                <ChevronLeft className="w-4 h-4 text-surface-600 dark:text-surface-400" />
+              </button>
+              <button
+                onClick={goToToday}
+                className="px-3 py-1 text-sm font-medium text-surface-700 dark:text-surface-300 hover:bg-surface-200 dark:hover:bg-surface-600 rounded-lg transition-colors"
+              >
+                Today
+              </button>
+              <button
+                onClick={() => navigateWeek('next')}
+                className="p-2 hover:bg-surface-200 dark:hover:bg-surface-600 rounded-lg transition-colors"
+              >
+                <ChevronRight className="w-4 h-4 text-surface-600 dark:text-surface-400" />
+              </button>
+            </div>
+            <span className="text-sm text-surface-600 dark:text-surface-400">
+              {weekRangeLabel}
+            </span>
+          </div>
+          <div className="flex flex-wrap items-center gap-3 text-xs text-surface-500 dark:text-surface-400">
+            <span className="inline-flex items-center gap-1 rounded-full bg-surface-100 dark:bg-surface-700 px-3 py-1">
+              <Clock className="w-3 h-3" />
+              {totalScheduledHours.toFixed(1)}h scheduled
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-full bg-surface-100 dark:bg-surface-700 px-3 py-1">
+              <Users className="w-3 h-3" />
+              {staff.length} staff
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-full bg-surface-100 dark:bg-surface-700 px-3 py-1">
+              <AlertCircle className="w-3 h-3" />
+              {coverageGapDates.length} coverage gaps
+            </span>
+            {totalActualHours !== null && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-surface-100 dark:bg-surface-700 px-3 py-1">
+                <CheckCircle className="w-3 h-3" />
+                {totalActualHours.toFixed(1)}h actual
+              </span>
+            )}
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-surface-600 dark:text-surface-400">
-            {weekRangeLabel}
-          </span>
+
+        <div className="rounded-xl border border-surface-200 dark:border-surface-700 bg-surface-50 dark:bg-surface-700/40 p-4">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+            <div>
+              <h3 className="text-sm font-semibold text-surface-800 dark:text-surface-100">
+                Weekly hours by staff
+              </h3>
+              <p className="text-xs text-surface-500 dark:text-surface-400">
+                Scheduled vs actual hours for the selected week.
+              </p>
+            </div>
+            <span className="text-xs text-surface-500 dark:text-surface-400">
+              Tip: drag & drop shifts to move them to another day.
+            </span>
+          </div>
+          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+            {staff.map((member) => {
+              const scheduledHours = scheduleTotalsByUserId[member.id] || 0
+              const actualHours = actualHoursByUserId?.[member.id]
+              const variance =
+                actualHours !== undefined ? scheduledHours - actualHours : null
+              return (
+                <div
+                  key={member.id}
+                  className="flex items-center justify-between rounded-lg border border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-800 px-3 py-2"
+                >
+                  <div>
+                    <p className="text-sm font-medium text-surface-900 dark:text-surface-100">
+                      {member.name}
+                    </p>
+                    <p className="text-xs text-surface-500 dark:text-surface-400">
+                      {member.role}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-semibold text-surface-900 dark:text-surface-100">
+                      {scheduledHours.toFixed(1)}h
+                    </p>
+                    <p className="text-xs text-surface-500 dark:text-surface-400">
+                      {actualHours !== undefined
+                        ? `${actualHours.toFixed(1)}h actual`
+                        : 'Actual hours unavailable'}
+                    </p>
+                    {variance !== null && (
+                      <p className={`text-[11px] ${variance >= 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                        {variance >= 0 ? '+' : ''}
+                        {variance.toFixed(1)}h vs actual
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
         </div>
       </div>
 
@@ -231,6 +358,7 @@ export function ScheduleCalendar({
             const end = parseInt(s.shift_end_time.split(':')[0]) + parseInt(s.shift_end_time.split(':')[1]) / 60
             return sum + Math.max(0, end - start)
           }, 0)
+          const isCoverageGap = daySchedules.length === 0
 
           return (
             <div
@@ -254,6 +382,11 @@ export function ScheduleCalendar({
                   {totalHours.toFixed(1)}h
                 </div>
               )}
+              {isCoverageGap && (
+                <div className="mt-2 inline-flex items-center gap-1 rounded-full bg-amber-100 dark:bg-amber-900/30 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-300">
+                  Coverage gap
+                </div>
+              )}
             </div>
           )
         })}
@@ -274,6 +407,12 @@ export function ScheduleCalendar({
               onMouseEnter={() => setHoveredDay(dateStr)}
               onMouseLeave={() => setHoveredDay(null)}
               onClick={() => canEdit && handleSlotClick(date)}
+              onDragOver={(event) => {
+                if (canEdit) {
+                  event.preventDefault()
+                }
+              }}
+              onDrop={(event) => handleDropShift(event, dateStr)}
             >
               {/* Add shift button on hover */}
               <AnimatePresence>
@@ -298,14 +437,16 @@ export function ScheduleCalendar({
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     className={`
-                      relative rounded-lg p-2 cursor-pointer
+                      group relative rounded-lg p-2 cursor-pointer
                       ${getPositionColor(schedule.position)} text-white
                       shadow-sm hover:shadow-md transition-all
                     `}
                     onClick={(e) => canEdit && handleShiftClick(e, schedule)}
+                    draggable={canEdit}
+                    onDragStart={(event) => handleDragStart(event, schedule.id)}
                   >
                     {/* Published indicator */}
-                    <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
                       <button
                         onClick={(e) => {
                           e.stopPropagation()
@@ -318,6 +459,26 @@ export function ScheduleCalendar({
                         ) : (
                           <EyeOff className="w-3 h-3" />
                         )}
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onCopyShift(schedule)
+                        }}
+                        className="p-1 hover:bg-white/20 rounded"
+                        title="Copy shift"
+                      >
+                        <Copy className="w-3 h-3" />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          openCopyModal(schedule)
+                        }}
+                        className="p-1 hover:bg-white/20 rounded"
+                        title="Copy to multiple days"
+                      >
+                        <Calendar className="w-3 h-3" />
                       </button>
                     </div>
 
@@ -371,6 +532,71 @@ export function ScheduleCalendar({
           )
         })}
       </div>
+
+      {/* Copy to multiple days modal */}
+      <AnimatePresence>
+        {copySchedule && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="w-full max-w-md rounded-2xl bg-white dark:bg-surface-800 shadow-xl border border-surface-200 dark:border-surface-700"
+            >
+              <div className="px-6 py-4 border-b border-surface-200 dark:border-surface-700">
+                <h3 className="text-lg font-semibold text-surface-900 dark:text-surface-100">
+                  Copy shift to multiple days
+                </h3>
+                <p className="text-sm text-surface-500 dark:text-surface-400">
+                  Select the days you want to duplicate {copySchedule.user_name}&apos;s shift.
+                </p>
+              </div>
+              <div className="px-6 py-4 space-y-3">
+                {weekDates.map((date) => {
+                  const dateStr = formatDate(date)
+                  return (
+                    <label key={dateStr} className="flex items-center justify-between text-sm text-surface-700 dark:text-surface-200">
+                      <span>
+                        {date.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={!!selectedCopyDates[dateStr]}
+                        onChange={() =>
+                          setSelectedCopyDates((prev) => ({
+                            ...prev,
+                            [dateStr]: !prev[dateStr]
+                          }))
+                        }
+                        className="h-4 w-4 rounded border-surface-300 text-primary-500 focus:ring-primary-500"
+                      />
+                    </label>
+                  )
+                })}
+              </div>
+              <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-surface-200 dark:border-surface-700">
+                <button
+                  onClick={() => setCopySchedule(null)}
+                  className="px-4 py-2 text-sm rounded-lg border border-surface-200 dark:border-surface-600 text-surface-600 dark:text-surface-200 hover:bg-surface-50 dark:hover:bg-surface-700"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmCopyMultiple}
+                  className="px-4 py-2 text-sm rounded-lg bg-primary-500 text-white hover:bg-primary-600"
+                >
+                  Copy shifts
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Legend */}
       <div className="flex items-center justify-between px-6 py-3 border-t border-surface-200 dark:border-surface-700 bg-surface-50 dark:bg-surface-700/50">
