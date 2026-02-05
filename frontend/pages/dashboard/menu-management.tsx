@@ -1738,34 +1738,49 @@ const MenuManagement: React.FC = () => {
                 )}
               </div>
 
-              {/* Right pane: Item editor - Responsive with better mobile support */}
-              <div className="w-full lg:w-[340px] xl:w-[400px] shrink-0 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 lg:max-h-[calc(100vh-200px)] lg:sticky lg:top-4">
-                {!editingItem || !selectedItemId ? (
-                  <div className="p-4 sm:p-6">
-                    <div className="text-base sm:text-lg font-black text-gray-900 dark:text-white">Item Editor</div>
-                    <div className="mt-2 text-sm text-gray-500 dark:text-gray-400">Select an item to edit.</div>
-                  </div>
-                ) : (
-                  <div className="flex flex-col h-full max-h-[70vh] lg:max-h-none">
-                    {/* Editor Header */}
-                    <div className="p-3 sm:p-4 border-b border-gray-200 dark:border-gray-700 sticky top-0 bg-white dark:bg-gray-800 z-10">
-                      <div className="flex items-start justify-between gap-2 sm:gap-3">
-                        <div className="min-w-0 flex-1">
-                          <div className="text-base sm:text-lg font-black text-gray-900 dark:text-white truncate">{editingItem.name}</div>
-                          <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                            {activeCategory?.name ? `Category: ${activeCategory.name}` : ''}
+              {/* Right pane: Item editor - Only shows when item selected */}
+              <AnimatePresence>
+                {editingItem && selectedItemId && (
+                  <motion.div
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 20 }}
+                    transition={{ duration: 0.2 }}
+                    className="w-full lg:w-[340px] xl:w-[400px] shrink-0 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 lg:max-h-[calc(100vh-200px)] lg:sticky lg:top-4"
+                  >
+                    <div className="flex flex-col h-full max-h-[70vh] lg:max-h-none">
+                      {/* Editor Header */}
+                      <div className="p-3 sm:p-4 border-b border-gray-200 dark:border-gray-700 sticky top-0 bg-white dark:bg-gray-800 z-10">
+                        <div className="flex items-start justify-between gap-2 sm:gap-3">
+                          <div className="min-w-0 flex-1">
+                            <div className="text-base sm:text-lg font-black text-gray-900 dark:text-white truncate">{editingItem.name}</div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                              {activeCategory?.name ? `Category: ${activeCategory.name}` : ''}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              className="inline-flex shrink-0 items-center justify-center gap-1 sm:gap-2 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 active:bg-red-100 px-2 sm:px-3 py-2 text-xs sm:text-sm font-bold disabled:opacity-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-900/20 min-h-[40px] touch-manipulation"
+                              onClick={() => handleDeleteItem(editingItem)}
+                              disabled={deletingItemId === editingItem.id}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                              <span className="hidden sm:inline">{deletingItemId === editingItem.id ? 'Deleting…' : 'Delete'}</span>
+                            </button>
+                            <button
+                              type="button"
+                              className="inline-flex shrink-0 items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 active:bg-gray-200 p-2 dark:hover:text-gray-200 dark:hover:bg-gray-700 min-h-[40px] min-w-[40px] touch-manipulation"
+                              onClick={() => {
+                                setSelectedItemId(null);
+                                setEditingItem(null);
+                              }}
+                              title="Close editor"
+                            >
+                              <X className="h-5 w-5" />
+                            </button>
                           </div>
                         </div>
-                        <button
-                          type="button"
-                          className="inline-flex shrink-0 items-center justify-center gap-1 sm:gap-2 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 active:bg-red-100 px-2 sm:px-3 py-2 text-xs sm:text-sm font-bold disabled:opacity-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-900/20 min-h-[40px] touch-manipulation"
-                          onClick={() => handleDeleteItem(editingItem)}
-                          disabled={deletingItemId === editingItem.id}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                          <span className="hidden sm:inline">{deletingItemId === editingItem.id ? 'Deleting…' : 'Delete'}</span>
-                        </button>
-                      </div>
 
                       {/* Editor Tabs - Scrollable on mobile */}
                       <div className="mt-3 -mx-3 sm:mx-0 px-3 sm:px-0 overflow-x-auto scrollbar-hide">
@@ -2138,8 +2153,9 @@ const MenuManagement: React.FC = () => {
                       )}
                     </div>
                   </div>
+                  </motion.div>
                 )}
-              </div>
+              </AnimatePresence>
             </div>
           )}
         </div>
