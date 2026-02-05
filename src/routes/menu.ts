@@ -491,17 +491,17 @@ router.get('/categories/all', asyncHandler(async (req: Request, res: Response) =
   const restaurantId = req.user?.restaurantId;
   
   const categories = await db.all(`
-    SELECT 
-      id,
-      name,
-      description,
-      COALESCE(is_hidden, FALSE) as is_hidden,
-      sort_order,
-      is_active,
-      created_at,
-      (SELECT COUNT(*) FROM menu_items WHERE category_id = menu_categories.id) as item_count
-    FROM menu_categories 
-    WHERE restaurant_id = ? AND is_active = TRUE
+    SELECT
+        id,
+        name,
+        description,
+        COALESCE(is_hidden, FALSE) as is_hidden,
+        sort_order,
+        is_active,
+        created_at,
+        (SELECT COUNT(*) FROM menu_items WHERE category_id = menu_categories.id) as item_count
+    FROM menu_categories
+    WHERE restaurant_id = ?
     ORDER BY sort_order ASC, name ASC
   `, [restaurantId]);
 

@@ -191,6 +191,7 @@ const MenuManagement: React.FC = () => {
   const [newItemAttachedGroups, setNewItemAttachedGroups] = useState<AttachedGroup[]>([]);
   const [editItemAttachedGroups, setEditItemAttachedGroups] = useState<AttachedGroup[]>([]);
   const [editItemExistingAttachedGroups, setEditItemExistingAttachedGroups] = useState<AttachedGroup[]>([]);
+  const [editItemOriginalCategoryId, setEditItemOriginalCategoryId] = useState<string>('');
   const [newModifierGroup, setNewModifierGroup] = useState({
     name: '',
     description: '',
@@ -1168,6 +1169,8 @@ const MenuManagement: React.FC = () => {
       setNewItemImages([]);
       setNewItemAttachedGroups([]);
       await loadMenuData();
+      // Switch to the category where the new item was added
+      setSelectedCategory(newItem.categoryId);
     } catch (error) {
       console.error('Failed to create menu item:', error);
       toast.error('Failed to create menu item');
@@ -1177,6 +1180,7 @@ const MenuManagement: React.FC = () => {
   };
 
   const openEditItemModal = async (item: MenuItem) => {
+    setEditItemOriginalCategoryId(item.category_id);
     setEditItem({
       id: item.id,
       name: item.name,
@@ -1299,6 +1303,7 @@ const MenuManagement: React.FC = () => {
       toast.success('Menu item updated');
       setBasicsDirty(false);
       // Optimistically update local state so the editor stays consistent immediately.
+      const updatedImages = [...editItemExistingImages];
       setCategories((prev) =>
         prev.map((cat) => ({
           ...cat,
@@ -1311,13 +1316,19 @@ const MenuManagement: React.FC = () => {
                   price: Number(editItem.price || 0),
                   category_id: editItem.categoryId,
                   preparation_time: editItem.preparationTime ? Number(editItem.preparationTime) : undefined,
-                  is_available: Boolean(editItem.isAvailable)
+                  is_available: Boolean(editItem.isAvailable),
+                  images: updatedImages,
+                  image: updatedImages.length > 0 ? updatedImages[0] : undefined
                 }
               : it
           )
         }))
       );
       await loadMenuData();
+      // Switch to the new category if the item was moved to a different category
+      if (editItem.categoryId !== editItemOriginalCategoryId) {
+        setSelectedCategory(editItem.categoryId);
+      }
     } catch (error) {
       console.error('Failed to update menu item:', error);
       toast.error('Failed to update menu item');
@@ -1404,15 +1415,17 @@ const MenuManagement: React.FC = () => {
   // Memoize expensive computations to prevent recalculation on every render
   const filteredCategories = useMemo(() => {
     return categories.filter(category => {
+      // Filter out inactive categories from main view
+      if (!category.is_active) return false;
       if (selectedCategory !== 'all' && category.id !== selectedCategory) return false;
-
+ 
       const searchLower = searchTerm.toLowerCase();
       const matchesSearch = category.name.toLowerCase().includes(searchLower) ||
                            category.items?.some(item =>
-                             item.name.toLowerCase().includes(searchLower) ||
-                             item.description.toLowerCase().includes(searchLower)
-                           );
-
+                              item.name.toLowerCase().includes(searchLower) ||
+                              item.description.toLowerCase().includes(searchLower)
+                            );
+ 
       return matchesSearch;
     });
   }, [categories, selectedCategory, searchTerm]);
@@ -1435,17 +1448,17 @@ const MenuManagement: React.FC = () => {
         <title>Menu Management - Servio</title>
       </Head>
 
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <div className="min-h-screen bg-surface-50 dark:bg-surface-900">
         {/* Header - Mobile Optimized */}
-        <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+        <div className="bg-white dark:bg-surface-800 border-b border-surface-200 dark:border-surface-700">
           <div className="px-4 sm:px-6 py-4">
             {/* Title and Primary Action Row */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div className="min-w-0">
-                <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">
+                <h1 className="text-xl sm:text-2xl font-bold text-surface-900 dark:text-white">
                   Menu Manager
                 </h1>
-                <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mt-1">
+                <p className="text-xs sm:text-sm text-surface-600 dark:text-surface-400 mt-1">
                   {user?.name}&apos;s Restaurant • {totalItems} items • {availableItems} available
                 </p>
               </div>
@@ -1453,7 +1466,7 @@ const MenuManagement: React.FC = () => {
               {/* Primary action - always visible */}
               <button
                 onClick={() => openAddItemModal()}
-                className="flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white rounded-lg transition-colors min-h-[44px] touch-manipulation font-medium sm:shrink-0"
+                className="flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 bg-servio-red-600 hover:bg-servio-red-700 active:bg-servio-red-800 text-white rounded-lg transition-colors min-h-[44px] touch-manipulation font-medium sm:shrink-0"
               >
                 <Plus className="w-4 h-4" />
                 Add Item
@@ -1465,7 +1478,7 @@ const MenuManagement: React.FC = () => {
               <div className="flex items-center gap-2 sm:gap-3 min-w-max sm:min-w-0 sm:flex-wrap">
                 <button
                   onClick={handlePreviewMenu}
-                  className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-gray-100 hover:bg-gray-200 active:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 rounded-lg transition-colors min-h-[40px] touch-manipulation text-sm whitespace-nowrap"
+                  className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-surface-100 hover:bg-surface-200 active:bg-surface-300 dark:bg-surface-700 dark:hover:bg-surface-600 rounded-lg transition-colors min-h-[40px] touch-manipulation text-sm whitespace-nowrap"
                 >
                   <Eye className="w-4 h-4 shrink-0" />
                   <span className="hidden xs:inline">Preview</span>
@@ -2875,7 +2888,7 @@ const MenuManagement: React.FC = () => {
                     <option value="">Select category</option>
                     {categories.map((category) => (
                       <option key={category.id} value={category.id}>
-                        {category.name}
+                        {category.name}{!category.is_active && ' (Inactive)'}
                       </option>
                     ))}
                   </select>
@@ -3177,7 +3190,7 @@ const MenuManagement: React.FC = () => {
                     <option value="">Select category</option>
                     {categories.map((category) => (
                       <option key={category.id} value={category.id}>
-                        {category.name}
+                        {category.name}{!category.is_active && ' (Inactive)'}
                       </option>
                     ))}
                   </select>
