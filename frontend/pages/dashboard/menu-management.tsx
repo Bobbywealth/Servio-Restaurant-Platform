@@ -119,6 +119,7 @@ const MenuManagement: React.FC = () => {
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const editorClosedByUserRef = useRef(false);
+  const previousActiveCategoryIdRef = useRef<string | null>(null);
   const [editorTab, setEditorTab] = useState<'basics' | 'availability' | 'modifiers' | 'preview'>('basics');
   const [basicsDirty, setBasicsDirty] = useState(false);
   const [pendingSelection, setPendingSelection] = useState<{ type: 'category' | 'item'; id: string } | null>(null);
@@ -433,6 +434,9 @@ const MenuManagement: React.FC = () => {
 
   // Selection behavior: keep editor selection valid and auto-select first item when category changes.
   useEffect(() => {
+    const previousCategoryId = previousActiveCategoryIdRef.current;
+    const categoryChanged = previousCategoryId !== activeCategoryId;
+    previousActiveCategoryIdRef.current = activeCategoryId ?? null;
     if (loading) return;
     if (basicsDirty) return;
     if (!activeCategoryId) {
@@ -451,6 +455,9 @@ const MenuManagement: React.FC = () => {
     if (stillExists) {
       // Keep current selection in sync with refreshed object
       setEditingItem(stillExists);
+      return;
+    }
+    if (!categoryChanged) {
       return;
     }
     // Skip auto-select if user explicitly closed the editor
