@@ -68,6 +68,7 @@ interface StaffCardProps {
   onEndBreak?: (userId: string) => Promise<void>
   onEdit?: (staff: any) => void
   onDeactivate?: (staff: any) => void
+  onDelete?: (staff: any) => void
   className?: string
   showScheduleView?: boolean
 }
@@ -90,6 +91,7 @@ export function StaffCard({
   onEndBreak,
   onEdit,
   onDeactivate,
+  onDelete,
   className = '',
   showScheduleView = false
 }: StaffCardProps) {
@@ -234,6 +236,13 @@ export function StaffCard({
     setOpenMenu(null)
   }
 
+  const handleDelete = () => {
+    if (onDelete) {
+      onDelete(member)
+    }
+    setOpenMenu(null)
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -341,6 +350,15 @@ export function StaffCard({
                     <Trash2 className="w-4 h-4" />
                     Deactivate
                   </button>
+                  {onDelete && (
+                    <button
+                      onClick={handleDelete}
+                      className="w-full px-4 py-3 text-left text-sm text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2"
+                    >
+                      <AlertTriangle className="w-4 h-4" />
+                      Delete Permanently
+                    </button>
+                  )}
                 </div>
               </>
             )}

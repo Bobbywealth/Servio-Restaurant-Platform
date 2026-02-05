@@ -91,7 +91,7 @@ export default function EditStaffHoursModal({
   const getWeekStart = (date: Date) => {
     const d = new Date(date)
     const day = d.getDay()
-    const diff = d.getDate() - day + (day === 0 ? -6 : 1)
+    const diff = d.getDate() - day
     return new Date(d.setDate(diff))
   }
 

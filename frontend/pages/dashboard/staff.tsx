@@ -585,6 +585,23 @@ export default function StaffPage() {
     return value.split('T')[0]
   }
 
+  const getCurrentWeekRange = () => {
+    const now = new Date()
+    const dayOfWeek = now.getDay()
+    const start = new Date(now)
+    start.setDate(now.getDate() - dayOfWeek)
+    start.setHours(0, 0, 0, 0)
+
+    const end = new Date(start)
+    end.setDate(start.getDate() + 6)
+    end.setHours(23, 59, 59, 999)
+
+    return {
+      startDate: formatLocalDate(start),
+      endDate: formatLocalDate(end)
+    }
+  }
+
   // Get week dates for the bar chart (Sunday to Saturday)
   const getWeekDates = () => {
     const now = new Date()
@@ -646,7 +663,10 @@ export default function StaffPage() {
         }
 
         try {
-          const statsResp = await api.get('/api/timeclock/stats')
+          const { startDate, endDate } = getCurrentWeekRange()
+          const statsResp = await api.get('/api/timeclock/stats', {
+            params: { startDate, endDate }
+          })
           const userStats = (statsResp.data?.data?.userStats || []) as Array<{ user_id: string; total_hours: number }>
           const hoursMap: Record<string, number> = {}
           for (const s of userStats) {
@@ -763,9 +783,21 @@ export default function StaffPage() {
     }
   }
 
+  const refreshStaffList = async () => {
+    try {
+      const staffResp = await api.get('/api/restaurant/staff')
+      setStaff((staffResp.data?.data?.staff || []) as StaffUser[])
+    } catch (e) {
+      console.error('Failed to refresh staff list:', e)
+    }
+  }
+
   const refreshHoursData = async () => {
     try {
-      const statsResp = await api.get('/api/timeclock/stats')
+      const { startDate, endDate } = getCurrentWeekRange()
+      const statsResp = await api.get('/api/timeclock/stats', {
+        params: { startDate, endDate }
+      })
       const userStats = (statsResp.data?.data?.userStats || []) as Array<{ user_id: string; total_hours: number }>
       const hoursMap: Record<string, number> = {}
       for (const s of userStats) {
@@ -1081,7 +1113,10 @@ export default function StaffPage() {
         setTodayHoursByUserId(todayHoursMap)
 
         // Refresh weekly stats
-        const statsResp = await api.get('/api/timeclock/stats')
+        const { startDate, endDate } = getCurrentWeekRange()
+        const statsResp = await api.get('/api/timeclock/stats', {
+          params: { startDate, endDate }
+        })
         const userStats = (statsResp.data?.data?.userStats || []) as Array<{ user_id: string; total_hours: number }>
         const hoursMap: Record<string, number> = {}
         for (const s of userStats) {
@@ -1158,10 +1193,13 @@ export default function StaffPage() {
     }
 
     // Refresh all data
+    const { startDate, endDate } = getCurrentWeekRange()
     const [currentResp, todayResp, statsResp, dailyResp] = await Promise.all([
       api.get('/api/timeclock/current-staff'),
       api.get('/api/timeclock/staff-hours'),
-      api.get('/api/timeclock/stats'),
+      api.get('/api/timeclock/stats', {
+        params: { startDate, endDate }
+      }),
       api.get('/api/timeclock/user-daily-hours')
     ])
 
@@ -1196,6 +1234,34 @@ export default function StaffPage() {
     } catch (err: any) {
       console.error('Failed to reset PIN:', err)
       showToast.error(err.response?.data?.error?.message || 'Failed to reset PIN')
+    }
+  }
+
+  const handleDeactivateStaff = async (member: StaffUser) => {
+    if (!confirm(`Deactivate ${member.name}? They will no longer be able to clock in.`)) return
+
+    try {
+      await api.delete(`/api/restaurant/staff/${member.id}`)
+      showToast.success(`${member.name} has been deactivated`)
+      await Promise.all([refreshStaffList(), refreshStaffData(), refreshHoursData()])
+    } catch (err: any) {
+      console.error('Failed to deactivate staff member:', err)
+      showToast.error(err.response?.data?.error?.message || 'Failed to deactivate staff member')
+    }
+  }
+
+  const handleDeleteStaff = async (member: StaffUser) => {
+    if (!confirm(`Delete ${member.name} permanently? This removes their history and cannot be undone.`)) return
+
+    try {
+      await api.delete(`/api/restaurant/staff/${member.id}`, {
+        params: { mode: 'hard' }
+      })
+      showToast.success(`${member.name} has been deleted`)
+      await Promise.all([refreshStaffList(), refreshStaffData(), refreshHoursData()])
+    } catch (err: any) {
+      console.error('Failed to delete staff member:', err)
+      showToast.error(err.response?.data?.error?.message || 'Failed to delete staff member')
     }
   }
 
@@ -1505,6 +1571,8 @@ export default function StaffPage() {
                         onClockOut={handleClockOut}
                         onStartBreak={handleStartBreak}
                         onEndBreak={handleEndBreak}
+                        onDeactivate={handleDeactivateStaff}
+                        onDelete={handleDeleteStaff}
                       />
                     )
                   })}
