@@ -1598,7 +1598,7 @@ const MenuManagement: React.FC = () => {
               <p className="text-gray-500 mt-2">Loading menu...</p>
             </div>
           ) : (
-            <div className="flex flex-col md:flex-row gap-4 sm:gap-6 h-full">
+            <div className="flex flex-col md:flex-row gap-3 lg:gap-4 xl:gap-6 h-full">
               {/* Category Sidebar - Collapsible on mobile */}
               <CategorySidebar
                 categories={categories.map((c) => ({
@@ -1621,7 +1621,7 @@ const MenuManagement: React.FC = () => {
               />
 
               {/* Middle pane: Items */}
-              <div className="flex-1 min-w-0 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 flex flex-col">
+              <div className="flex-1 min-w-0 lg:min-w-[280px] bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 flex flex-col">
                 <div className="p-3 sm:p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between gap-2 sm:gap-3 shrink-0">
                   <div className="min-w-0 flex-1">
                     <div className="text-base sm:text-sm font-bold text-gray-900 dark:text-white truncate">
@@ -1739,7 +1739,7 @@ const MenuManagement: React.FC = () => {
               </div>
 
               {/* Right pane: Item editor - Responsive with better mobile support */}
-              <div className="w-full lg:w-[420px] shrink-0 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 lg:max-h-[calc(100vh-200px)] lg:sticky lg:top-4">
+              <div className="w-full lg:w-[340px] xl:w-[400px] shrink-0 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 lg:max-h-[calc(100vh-200px)] lg:sticky lg:top-4">
                 {!editingItem || !selectedItemId ? (
                   <div className="p-4 sm:p-6">
                     <div className="text-base sm:text-lg font-black text-gray-900 dark:text-white">Item Editor</div>
@@ -1836,12 +1836,12 @@ const MenuManagement: React.FC = () => {
                             />
                           </div>
 
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <div className="grid grid-cols-2 gap-3">
                             <div>
                               <label className="block text-sm font-bold text-gray-700 dark:text-gray-300">
                                 Base Price
                                 {editItemSizes.length > 0 && (
-                                  <span className="ml-2 text-xs font-normal text-amber-600 dark:text-amber-400">
+                                  <span className="block text-xs font-normal text-amber-600 dark:text-amber-400">
                                     (Not used - sizes override)
                                   </span>
                                 )}
@@ -1858,7 +1858,7 @@ const MenuManagement: React.FC = () => {
                               />
                               {editItemSizes.length === 0 && (
                                 <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                                  Price customers pay. Add sizes in the Avail. tab for size-based pricing.
+                                  Price customers pay.
                                 </p>
                               )}
                             </div>
@@ -1994,7 +1994,7 @@ const MenuManagement: React.FC = () => {
                               </div>
                             </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                            <div className="space-y-3 mb-4">
                               <div>
                                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                                   Modifier Name *
