@@ -203,14 +203,14 @@ const MenuManagement: React.FC = () => {
   const [newModifierOptionDrafts, setNewModifierOptionDrafts] = useState<Record<string, { name: string; description: string; priceModifier: string }>>({});
 
   // Load menu data
-  const loadMenuData = useCallback(async () => {
+  const loadMenuData = useCallback(async (showSpinner = false) => {
     if (!user?.id) return;
 
     try {
-      setLoading(true);
+      if (showSpinner) setLoading(true);
       const [categoriesResponse, itemsResponse] = await Promise.all([
         api.get('/api/menu/categories/all'),
-        api.get('/api/menu/items/full')
+        api.get('/api/menu/items/full', { params: { includeInactive: '1' } })
       ]);
 
       const categoryRows = categoriesResponse.data?.data || [];
@@ -430,7 +430,7 @@ const MenuManagement: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    loadMenuData();
+    loadMenuData(true);
   }, [loadMenuData]);
 
   // Selection behavior: keep editor selection valid and auto-select first item when category changes.
@@ -1098,7 +1098,7 @@ const MenuManagement: React.FC = () => {
       name: '',
       description: '',
       price: '',
-      categoryId: categoryId || (categories[0]?.id ?? ''),
+      categoryId: categoryId || activeCategoryId || (categories[0]?.id ?? ''),
       preparationTime: '',
       isAvailable: true
     });
@@ -1115,14 +1115,31 @@ const MenuManagement: React.FC = () => {
 
     setIsSaving(true);
     try {
-      await api.post('/api/menu/categories', {
+      const resp = await api.post('/api/menu/categories', {
         name: newCategory.name.trim(),
         description: newCategory.description.trim(),
         sortOrder: Number(newCategory.sortOrder || 0)
       });
       toast.success('Category created');
       setShowAddCategoryModal(false);
-      await loadMenuData();
+      // Optimistically add the new category so it appears immediately
+      const created = resp.data?.data;
+      if (created?.id) {
+        const optimisticCategory: CategoryWithItems = {
+          id: created.id,
+          name: newCategory.name.trim(),
+          description: newCategory.description.trim(),
+          sort_order: Number(newCategory.sortOrder || 0),
+          is_active: true,
+          item_count: 0,
+          created_at: new Date().toISOString(),
+          items: []
+        };
+        setCategories((prev) => [...prev, optimisticCategory].sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name)));
+        setSelectedCategory(created.id);
+      }
+      // Background refresh (no loading spinner)
+      loadMenuData();
     } catch (error) {
       console.error('Failed to create category:', error);
       toast.error('Failed to create category');
@@ -1160,7 +1177,8 @@ const MenuManagement: React.FC = () => {
       const resp = await api.post('/api/menu/items', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
-      const createdId = resp.data?.data?.id as string | undefined;
+      const created = resp.data?.data;
+      const createdId = created?.id as string | undefined;
       if (createdId && newItemAttachedGroups.length > 0) {
         await syncItemModifierGroups(createdId, newItemAttachedGroups, []);
       }
@@ -1168,9 +1186,40 @@ const MenuManagement: React.FC = () => {
       setShowAddItemModal(false);
       setNewItemImages([]);
       setNewItemAttachedGroups([]);
-      await loadMenuData();
+      // Optimistically add the new item to local state so it appears immediately
+      if (created) {
+        const optimisticItem: MenuItem = {
+          id: created.id,
+          restaurant_id: created.restaurant_id || user?.restaurantId || '',
+          category_id: newItem.categoryId,
+          name: newItem.name.trim(),
+          description: newItem.description.trim(),
+          price: Number(newItem.price),
+          cost: undefined,
+          images: Array.isArray(created.images) ? created.images : [],
+          image: Array.isArray(created.images) ? created.images[0] : undefined,
+          is_available: newItem.isAvailable,
+          is_featured: false,
+          preparation_time: newItem.preparationTime ? Number(newItem.preparationTime) : undefined,
+          allergens: [],
+          sort_order: 0,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          sizes: [],
+          modifierGroups: []
+        };
+        setCategories((prev) =>
+          prev.map((cat) =>
+            cat.id === newItem.categoryId
+              ? { ...cat, items: [...(cat.items || []), optimisticItem], item_count: (cat.item_count || 0) + 1 }
+              : cat
+          )
+        );
+      }
       // Switch to the category where the new item was added
       setSelectedCategory(newItem.categoryId);
+      // Background refresh to sync full server state (no loading spinner)
+      loadMenuData();
     } catch (error) {
       console.error('Failed to create menu item:', error);
       toast.error('Failed to create menu item');
@@ -1296,14 +1345,17 @@ const MenuManagement: React.FC = () => {
       formData.append('existingImages', JSON.stringify(editItemExistingImages));
       editItemImages.forEach((file) => formData.append('images', file));
 
-      await api.put(`/api/menu/items/${editItem.id}`, formData, {
+      const updateResp = await api.put(`/api/menu/items/${editItem.id}`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       await syncItemModifierGroups(editItem.id, editItemAttachedGroups, editItemExistingAttachedGroups);
       toast.success('Menu item updated');
       setBasicsDirty(false);
+      // Use server response images (includes newly uploaded ones) for immediate update
+      const serverImages = Array.isArray(updateResp.data?.data?.images) ? updateResp.data.data.images : [...editItemExistingImages];
+      setEditItemExistingImages(serverImages);
+      setEditItemImages([]);
       // Optimistically update local state so the editor stays consistent immediately.
-      const updatedImages = [...editItemExistingImages];
       setCategories((prev) =>
         prev.map((cat) => ({
           ...cat,
@@ -1317,14 +1369,15 @@ const MenuManagement: React.FC = () => {
                   category_id: editItem.categoryId,
                   preparation_time: editItem.preparationTime ? Number(editItem.preparationTime) : undefined,
                   is_available: Boolean(editItem.isAvailable),
-                  images: updatedImages,
-                  image: updatedImages.length > 0 ? updatedImages[0] : undefined
+                  images: serverImages,
+                  image: serverImages.length > 0 ? serverImages[0] : undefined
                 }
               : it
           )
         }))
       );
-      await loadMenuData();
+      // Background refresh to sync full server state (no loading spinner)
+      loadMenuData();
       // Switch to the new category if the item was moved to a different category
       if (editItem.categoryId !== editItemOriginalCategoryId) {
         setSelectedCategory(editItem.categoryId);
@@ -1415,10 +1468,10 @@ const MenuManagement: React.FC = () => {
   // Memoize expensive computations to prevent recalculation on every render
   const filteredCategories = useMemo(() => {
     return categories.filter(category => {
-      // Filter out inactive categories from main view
-      if (!category.is_active) return false;
+      // Show all categories in the management view (including inactive ones)
+      // so staff can add/edit items in any category. is_active only controls public visibility.
       if (selectedCategory !== 'all' && category.id !== selectedCategory) return false;
- 
+
       // Don't filter categories by search term - only filter items within categories
       // This allows searching for items even if the category name doesn't match
       return true;
