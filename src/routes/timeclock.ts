@@ -1143,7 +1143,11 @@ router.get('/user-daily-hours', asyncHandler(async (req: Request, res: Response)
       userDailyHours[row.user_id] = {};
     }
     if (row.work_date) {
-      userDailyHours[row.user_id][row.work_date] = Number(row.hours || 0);
+      // Normalize date format to YYYY-MM-DD string (handle both Date objects and strings)
+      const dateStr = row.work_date instanceof Date
+        ? row.work_date.toISOString().split('T')[0]
+        : String(row.work_date).split('T')[0];
+      userDailyHours[row.user_id][dateStr] = Number(row.hours || 0);
     }
   }
 
