@@ -7,6 +7,7 @@ import multer from 'multer';
 import sharp from 'sharp';
 import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
+import fs from 'fs/promises';
 import OpenAI from 'openai';
 import mammoth from 'mammoth';
 
@@ -1013,21 +1014,33 @@ router.put('/items/:id', upload.array('images', 5), asyncHandler(async (req: Req
   }
 
   // Handle image updates
+  const previousImages: string[] = JSON.parse(existingItem.images || '[]');
   let images = existingImages ? JSON.parse(existingImages) : [];
-  
+
   if (req.files && Array.isArray(req.files)) {
     const uploadsPath = await ensureUploadsDir('menu');
-    
+
     for (const file of req.files) {
       const fileName = `${id}-${uuidv4()}.webp`;
       const filePath = path.join(uploadsPath, fileName);
-      
+
       await sharp(file.buffer)
         .resize(800, 600, { fit: 'inside', withoutEnlargement: true })
         .webp({ quality: 80 })
         .toFile(filePath);
-      
+
       images.push(`/uploads/menu/${fileName}`);
+    }
+  }
+
+  // Clean up removed image files from disk
+  const removedImages = previousImages.filter((img: string) => !images.includes(img));
+  for (const removedImg of removedImages) {
+    try {
+      const filePath = path.join(process.cwd(), removedImg);
+      await fs.unlink(filePath);
+    } catch (err) {
+      logger.warn(`Failed to delete removed image file: ${removedImg}`, err);
     }
   }
 
@@ -1123,12 +1136,23 @@ router.delete('/items/:id', asyncHandler(async (req: Request, res: Response) => 
   const restaurantId = req.user?.restaurantId;
   const db = DatabaseService.getInstance().getDatabase();
 
-  const item = await db.get('SELECT id, name FROM menu_items WHERE id = ? AND restaurant_id = ?', [id, restaurantId]);
+  const item = await db.get('SELECT id, name, images FROM menu_items WHERE id = ? AND restaurant_id = ?', [id, restaurantId]);
   if (!item) {
     return res.status(404).json({
       success: false,
       error: { message: 'Menu item not found' }
     });
+  }
+
+  // Clean up image files from disk
+  const itemImages: string[] = JSON.parse(item.images || '[]');
+  for (const img of itemImages) {
+    try {
+      const filePath = path.join(process.cwd(), img);
+      await fs.unlink(filePath);
+    } catch (err) {
+      logger.warn(`Failed to delete image file on item delete: ${img}`, err);
+    }
   }
 
   await db.run('UPDATE order_items SET menu_item_id = NULL WHERE menu_item_id = ?', [id]);
