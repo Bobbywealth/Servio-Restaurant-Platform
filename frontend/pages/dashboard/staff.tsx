@@ -603,6 +603,25 @@ export default function StaffPage() {
 
   const weekDates = getWeekDates()
 
+  const selectedWeekDates = useMemo(() => {
+    const dates: string[] = []
+    for (let i = 0; i < 7; i++) {
+      const date = new Date(selectedWeekStart)
+      date.setDate(selectedWeekStart.getDate() + i)
+      dates.push(formatLocalDate(date))
+    }
+    return dates
+  }, [selectedWeekStart])
+
+  const actualHoursByUserId = useMemo(() => {
+    if (!dailyHours?.userDailyHours) return undefined
+    const totals: Record<string, number> = {}
+    for (const [userId, daily] of Object.entries(dailyHours.userDailyHours)) {
+      totals[userId] = selectedWeekDates.reduce((sum, date) => sum + (daily[date] || 0), 0)
+    }
+    return totals
+  }, [dailyHours, selectedWeekDates])
+
   useEffect(() => {
     let isMounted = true
 
@@ -903,6 +922,50 @@ export default function StaffPage() {
     setShiftModalDate(schedule.shift_date)
     setShiftModalTime(schedule.shift_start_time)
     setShowShiftModal(true)
+  }
+
+  const handleCopyShiftMultiple = async (schedule: Schedule, dates: string[]) => {
+    const schedulesToCopy = dates
+      .filter((date) => date !== schedule.shift_date)
+      .map((date) => ({
+        user_id: schedule.user_id,
+        shift_date: date,
+        shift_start_time: schedule.shift_start_time,
+        shift_end_time: schedule.shift_end_time,
+        position: schedule.position,
+        notes: schedule.notes
+      }))
+
+    if (schedulesToCopy.length === 0) {
+      showToast.info('No new days selected for copying.')
+      return
+    }
+
+    try {
+      const resp = await api.post('/api/staff/scheduling/schedules/bulk', {
+        schedules: schedulesToCopy
+      })
+      showToast.success(`Copied ${resp.data?.data?.created || schedulesToCopy.length} shifts`)
+      await loadSchedules()
+    } catch (error: any) {
+      console.error('Failed to copy shifts:', error)
+      showToast.error(error.response?.data?.error?.message || 'Failed to copy shifts')
+    }
+  }
+
+  const handleMoveShift = async (scheduleId: string, targetDate: string) => {
+    const schedule = schedules.find((item) => item.id === scheduleId)
+    if (!schedule || schedule.shift_date === targetDate) return
+    try {
+      await api.put(`/api/staff/scheduling/schedules/${scheduleId}`, {
+        shift_date: targetDate
+      })
+      showToast.success('Shift moved successfully')
+      await loadSchedules()
+    } catch (error: any) {
+      console.error('Failed to move shift:', error)
+      showToast.error(error.response?.data?.error?.message || 'Failed to move shift')
+    }
   }
 
   const handleCreateTemplate = async (template: Omit<ShiftTemplate, 'id' | 'is_active'>) => {
@@ -1456,7 +1519,7 @@ export default function StaffPage() {
               schedules={schedules}
               staff={filteredStaff.map(s => ({ id: s.id, name: s.name, role: s.role }))}
               selectedWeekStart={selectedWeekStart}
-              onWeekChange={setSelectedWeekStart}
+              onWeekChange={handleWeekChange}
               onCreateShift={(date, time) => {
                 setShiftModalDate(date)
                 setShiftModalTime(time)
@@ -1466,6 +1529,9 @@ export default function StaffPage() {
               onDeleteShift={handleDeleteShift}
               onTogglePublish={handleTogglePublish}
               onCopyShift={handleCopyShift}
+              onCopyShiftMultiple={handleCopyShiftMultiple}
+              onMoveShift={handleMoveShift}
+              actualHoursByUserId={actualHoursByUserId}
               canEdit={canEditHours}
             />
           )}
