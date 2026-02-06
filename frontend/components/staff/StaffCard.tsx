@@ -99,15 +99,17 @@ export function StaffCard({
   const [openMenu, setOpenMenu] = useState<string | null | boolean>(null)
   const [loading, setLoading] = useState<string | null>(null)
   const [shiftDuration, setShiftDuration] = useState<string>('')
+  const [breakMinutesTotal, setBreakMinutesTotal] = useState<number>(0)
   const [isHovering, setIsHovering] = useState(false)
 
   // Staff members cannot edit hours - only managers/owners/admins can
   const canEditHours = isManagerOrOwner || isAdmin
 
-  // Calculate real-time shift duration
+  // Calculate real-time shift duration and break total
   useEffect(() => {
     if (!activeShift || status === 'off-shift') {
       setShiftDuration('')
+      setBreakMinutesTotal(0)
       return
     }
 
@@ -124,6 +126,19 @@ export function StaffCard({
       } else {
         setShiftDuration(`${mins}m`)
       }
+
+      let totalBreakMinutes = Number(activeShift.break_minutes || 0)
+      if (status === 'on-break' && activeShift.current_break_start) {
+        const breakStart = new Date(activeShift.current_break_start)
+        if (!Number.isNaN(breakStart.getTime())) {
+          const breakDiffMs = now.getTime() - breakStart.getTime()
+          const breakDiffMins = Math.floor(breakDiffMs / 60000)
+          if (breakDiffMins > 0) {
+            totalBreakMinutes += breakDiffMins
+          }
+        }
+      }
+      setBreakMinutesTotal(Math.max(0, Math.round(totalBreakMinutes)))
     }
 
     updateDuration()
@@ -475,6 +490,15 @@ export function StaffCard({
                   </span>
                 )}
               </div>
+            </div>
+            <div className="mt-2 flex items-center justify-between text-xs text-surface-500 dark:text-surface-300">
+              <div className="flex items-center gap-2">
+                <Coffee className="w-3 h-3" />
+                <span>Breaks</span>
+              </div>
+              <span className="font-medium text-surface-700 dark:text-surface-200">
+                {breakMinutesTotal}m
+              </span>
             </div>
           </div>
         )}
