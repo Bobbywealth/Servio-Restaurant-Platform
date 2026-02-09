@@ -734,9 +734,9 @@ export default function PublicProfile() {
       {/* Premium Hero Section */}
       <div className="relative h-56 md:h-72 overflow-hidden">
         {restaurant.cover_image_url ? (
-          <img 
-            src={restaurant.cover_image_url} 
-            alt={restaurant.name} 
+          <img
+            src={resolveMediaUrl(restaurant.cover_image_url)}
+            alt={restaurant.name}
             className="w-full h-full object-cover"
           />
         ) : (
@@ -755,7 +755,7 @@ export default function PublicProfile() {
                   animate={{ scale: 1, opacity: 1 }}
                   transition={{ delay: 0.2 }}
                 >
-                  <img src={restaurant.logo_url} alt="Logo" className="w-full h-full object-contain rounded-xl" />
+                  <img src={resolveMediaUrl(restaurant.logo_url)} alt="Logo" className="w-full h-full object-contain rounded-xl" />
                 </motion.div>
               )}
               <motion.div 
