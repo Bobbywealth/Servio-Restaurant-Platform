@@ -10,7 +10,7 @@ import { useUser } from '../../contexts/UserContext';
 // Animated skeleton loader for tablet login
 function TabletLoginSkeleton() {
   return (
-    <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center p-6 relative overflow-hidden">
+    <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center p-6 relative overflow-x-hidden">
       <div className="absolute inset-0">
         <div className="absolute inset-0 bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900" />
         {/* Animated background elements */}
@@ -161,7 +161,7 @@ export default function TabletLoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center p-6 relative overflow-hidden">
+    <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center p-6 relative overflow-x-hidden">
       <Head>
         <title>Tablet Login | Servio</title>
         <meta name="apple-mobile-web-app-capable" content="yes" />
