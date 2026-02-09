@@ -22,7 +22,8 @@ import {
   FileText,
   Check,
   Loader2,
-  Sparkles
+  Sparkles,
+  DollarSign
 } from 'lucide-react'
 import { InventoryCardSkeleton, StatCardSkeleton } from '../../components/ui/Skeleton'
 import { PullToRefresh } from '../../components/ui/PullToRefresh'
@@ -41,6 +42,7 @@ interface InventoryItem {
   on_hand_qty: number
   low_stock_threshold: number
   category?: string
+  unit_cost?: number
   updated_at: string
 }
 
@@ -84,7 +86,8 @@ export default function InventoryPage() {
     unit: 'each',
     onHandQty: '',
     lowStockThreshold: '',
-    category: ''
+    category: '',
+    unitCost: ''
   })
   const [editItem, setEditItem] = useState({
     id: '',
@@ -93,7 +96,8 @@ export default function InventoryPage() {
     unit: 'each',
     onHandQty: '',
     lowStockThreshold: '',
-    category: ''
+    category: '',
+    unitCost: ''
   })
   const [showReceiptModal, setShowReceiptModal] = useState(false)
   const [receiptImage, setReceiptImage] = useState<File | null>(null)
@@ -143,11 +147,12 @@ export default function InventoryPage() {
         unit: newItem.unit.trim(),
         onHandQty: newItem.onHandQty ? Number(newItem.onHandQty) : 0,
         lowStockThreshold: newItem.lowStockThreshold ? Number(newItem.lowStockThreshold) : 10,
-        category: newItem.category.trim() || undefined
+        category: newItem.category.trim() || undefined,
+        unitCost: newItem.unitCost ? Number(newItem.unitCost) : undefined
       })
       toast.success('Inventory item created')
       setShowAddModal(false)
-      setNewItem({ name: '', sku: '', unit: 'each', onHandQty: '', lowStockThreshold: '', category: '' })
+      setNewItem({ name: '', sku: '', unit: 'each', onHandQty: '', lowStockThreshold: '', category: '', unitCost: '' })
       await fetchData()
     } catch (e: any) {
       const msg = e?.response?.data?.error?.message || 'Failed to create item'
@@ -165,7 +170,8 @@ export default function InventoryPage() {
       unit: item.unit,
       onHandQty: String(item.on_hand_qty),
       lowStockThreshold: String(item.low_stock_threshold),
-      category: item.category || ''
+      category: item.category || '',
+      unitCost: item.unit_cost !== undefined ? String(item.unit_cost) : ''
     })
     setEditingItem(item)
     setShowEditModal(true)
@@ -185,7 +191,8 @@ export default function InventoryPage() {
         unit: editItem.unit.trim(),
         onHandQty: editItem.onHandQty ? Number(editItem.onHandQty) : 0,
         lowStockThreshold: editItem.lowStockThreshold ? Number(editItem.lowStockThreshold) : 10,
-        category: editItem.category.trim() || undefined
+        category: editItem.category.trim() || undefined,
+        unitCost: editItem.unitCost ? Number(editItem.unitCost) : undefined
       })
       toast.success('Inventory item updated')
       setShowEditModal(false)
@@ -356,6 +363,11 @@ export default function InventoryPage() {
 
   const lowStockCount = items.filter(item => item.on_hand_qty <= item.low_stock_threshold).length
 
+  const totalInventoryValue = items.reduce((sum, item) => {
+    const cost = item.unit_cost !== undefined ? item.unit_cost : 0
+    return sum + (cost * item.on_hand_qty)
+  }, 0)
+
   return (
     <>
       <Head>
@@ -419,7 +431,7 @@ export default function InventoryPage() {
           )}
 
           {/* Stats Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             <motion.div
               className="card-hover"
               initial={{ opacity: 0, y: 20 }}
@@ -478,6 +490,27 @@ export default function InventoryPage() {
                   </p>
                   <p className="text-2xl font-bold text-surface-900 dark:text-surface-100">
                     {items.length - lowStockCount}
+                  </p>
+                </div>
+              </div>
+            </motion.div>
+
+            <motion.div
+              className="card-hover"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4 }}
+            >
+              <div className="flex items-center">
+                <div className="p-3 rounded-xl bg-amber-500">
+                  <DollarSign className="h-6 w-6 text-white" />
+                </div>
+                <div className="ml-4">
+                  <p className="text-sm font-medium text-surface-600 dark:text-surface-400">
+                    Total Value
+                  </p>
+                  <p className="text-2xl font-bold text-surface-900 dark:text-surface-100">
+                    ${totalInventoryValue.toFixed(2)}
                   </p>
                 </div>
               </div>
@@ -576,7 +609,7 @@ export default function InventoryPage() {
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-surface-900 dark:text-surface-100">
-                        —
+                        {item.unit_cost !== undefined ? `${Number(item.unit_cost).toFixed(2)}` : '—'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`status-badge ${
@@ -802,6 +835,18 @@ export default function InventoryPage() {
                         placeholder="e.g. Proteins, Produce, Dairy"
                       />
                     </div>
+                    <div>
+                      <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">Unit Cost ($)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={newItem.unitCost}
+                        onChange={(e) => setNewItem(prev => ({ ...prev, unitCost: e.target.value }))}
+                        className="input-field"
+                        placeholder="0.00"
+                      />
+                    </div>
                   </div>
                   <div className="mt-6 flex justify-end gap-3">
                     <button
@@ -918,6 +963,18 @@ export default function InventoryPage() {
                         onChange={(e) => setEditItem(prev => ({ ...prev, category: e.target.value }))}
                         className="input-field"
                         placeholder="e.g. Proteins, Produce, Dairy"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">Unit Cost ($)</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={editItem.unitCost}
+                        onChange={(e) => setEditItem(prev => ({ ...prev, unitCost: e.target.value }))}
+                        className="input-field"
+                        placeholder="0.00"
                       />
                     </div>
                   </div>
