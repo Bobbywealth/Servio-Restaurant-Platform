@@ -26,11 +26,18 @@ import {
   Copy,
   Eye,
   EyeOff,
-  Trash2
+  Trash2,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react'
 import { api } from '../../lib/api'
+import { socketManager } from '../../lib/socket'
 import { useUser } from '../../contexts/UserContext'
 import EditStaffHoursModal from '../../components/staff/EditStaffHoursModal'
+import { showToast } from '../../components/ui/Toast'
+import ScheduleViewToggle from '../../components/schedule/ScheduleViewToggle'
+import { ScheduleCalendar } from '../../components/schedule/ScheduleCalendar'
+import StaffCard from '../../components/staff/StaffCard'
 
 const DashboardLayout = dynamic(() => import('../../components/Layout/DashboardLayout'), {
   ssr: true,
@@ -531,7 +538,7 @@ function EditStaffModal({ isOpen, staffMember, onClose, onSuccess }: EditStaffMo
 }
 
 export default function StaffPage() {
-  const { user } = useUser()
+  const { user, isManagerOrOwner, isAdmin } = useUser()
   const currentUserRole = user?.role || 'staff'
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedRole, setSelectedRole] = useState('all')
@@ -546,6 +553,7 @@ export default function StaffPage() {
   const [editingStaff, setEditingStaff] = useState<StaffUser | null>(null)
   const [showEditHoursModal, setShowEditHoursModal] = useState(false)
   const [editingHoursStaff, setEditingHoursStaff] = useState<StaffUser | null>(null)
+  const [viewingHistoryStaff, setViewingHistoryStaff] = useState<StaffUser | null>(null)
   const [openMenu, setOpenMenu] = useState<string | null>(null)
 
   // Schedule state
@@ -554,10 +562,11 @@ export default function StaffPage() {
   const [templates, setTemplates] = useState<ShiftTemplate[]>([])
   const [selectedWeekStart, setSelectedWeekStart] = useState<Date>(() => {
     const now = new Date()
-    const dayOfWeek = now.getDay()
-    const monday = new Date(now)
-    monday.setDate(now.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1))
-    return monday
+    const dayOfWeek = now.getDay() // 0 = Sunday, 6 = Saturday
+    const sunday = new Date(now)
+    sunday.setDate(now.getDate() - dayOfWeek) // Go back to Sunday
+    sunday.setHours(0, 0, 0, 0)
+    return sunday
   })
   const [editingSchedule, setEditingSchedule] = useState<Schedule | null>(null)
   const [showShiftModal, setShowShiftModal] = useState(false)
@@ -579,23 +588,66 @@ export default function StaffPage() {
     return value.split('T')[0]
   }
 
-  // Get week dates for the bar chart
-  const getWeekDates = () => {
+  const getWeekRange = useCallback((weekStart?: Date) => {
+    const start = weekStart ? new Date(weekStart) : new Date(selectedWeekStart)
+    start.setHours(0, 0, 0, 0)
+
+    const end = new Date(start)
+    end.setDate(start.getDate() + 6)
+    end.setHours(23, 59, 59, 999)
+
+    return {
+      startDate: formatLocalDate(start),
+      endDate: formatLocalDate(end)
+    }
+  }, [selectedWeekStart])
+
+  // For backward compatibility - returns current calendar week
+  const getCurrentWeekRange = () => {
     const now = new Date()
     const dayOfWeek = now.getDay()
-    const monday = new Date(now)
-    monday.setDate(now.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1))
+    const start = new Date(now)
+    start.setDate(now.getDate() - dayOfWeek)
+    start.setHours(0, 0, 0, 0)
 
+    const end = new Date(start)
+    end.setDate(start.getDate() + 6)
+    end.setHours(23, 59, 59, 999)
+
+    return {
+      startDate: formatLocalDate(start),
+      endDate: formatLocalDate(end)
+    }
+  }
+
+  // Check if currently viewing the current week
+  const isCurrentWeek = useMemo(() => {
+    const now = new Date()
+    const dayOfWeek = now.getDay()
+    const currentSunday = new Date(now)
+    currentSunday.setDate(now.getDate() - dayOfWeek)
+    currentSunday.setHours(0, 0, 0, 0)
+    return formatLocalDate(selectedWeekStart) === formatLocalDate(currentSunday)
+  }, [selectedWeekStart])
+
+  const selectedWeekDates = useMemo(() => {
     const dates: string[] = []
     for (let i = 0; i < 7; i++) {
-      const date = new Date(monday)
-      date.setDate(monday.getDate() + i)
+      const date = new Date(selectedWeekStart)
+      date.setDate(selectedWeekStart.getDate() + i)
       dates.push(formatLocalDate(date))
     }
     return dates
-  }
+  }, [selectedWeekStart])
 
-  const weekDates = getWeekDates()
+  const actualHoursByUserId = useMemo(() => {
+    if (!dailyHours?.userDailyHours) return undefined
+    const totals: Record<string, number> = {}
+    for (const [userId, daily] of Object.entries(dailyHours.userDailyHours)) {
+      totals[userId] = selectedWeekDates.reduce((sum, date) => sum + (daily[date] || 0), 0)
+    }
+    return totals
+  }, [dailyHours, selectedWeekDates])
 
   useEffect(() => {
     let isMounted = true
@@ -621,36 +673,34 @@ export default function StaffPage() {
         }
 
         try {
-          const statsResp = await api.get('/api/timeclock/stats')
+          const { startDate, endDate } = getCurrentWeekRange()
+          const [statsResp, todayResp, dailyResp] = await Promise.all([
+            api.get('/api/timeclock/stats', {
+              params: { startDate, endDate }
+            }),
+            api.get('/api/timeclock/staff-hours'),
+            api.get('/api/timeclock/user-daily-hours', {
+              params: { startDate, endDate }
+            })
+          ])
+
           const userStats = (statsResp.data?.data?.userStats || []) as Array<{ user_id: string; total_hours: number }>
           const hoursMap: Record<string, number> = {}
           for (const s of userStats) {
             hoursMap[s.user_id] = Number(s.total_hours || 0)
           }
           if (isMounted) setHoursByUserId(hoursMap)
-        } catch (statsError) {
-          console.warn('Failed to load timeclock stats:', statsError)
-        }
 
-        // Fetch today's hours for each staff member
-        try {
-          const todayResp = await api.get('/api/timeclock/staff-hours')
           const todayHours = (todayResp.data?.data?.staffHours || []) as Array<{ userId: string; todayHours: number }>
           const todayHoursMap: Record<string, number> = {}
           for (const s of todayHours) {
             todayHoursMap[s.userId] = s.todayHours
           }
           if (isMounted) setTodayHoursByUserId(todayHoursMap)
-        } catch (todayError) {
-          console.warn('Failed to load today hours:', todayError)
-        }
 
-        // Fetch daily hours breakdown for the week
-        try {
-          const dailyResp = await api.get('/api/timeclock/user-daily-hours')
           if (isMounted) setDailyHours(dailyResp.data?.data || null)
-        } catch (dailyError) {
-          console.warn('Failed to load daily hours:', dailyError)
+        } catch (statsError) {
+          console.warn('Failed to load timeclock data:', statsError)
         }
 
         // Fetch schedules for the current week
@@ -738,9 +788,28 @@ export default function StaffPage() {
     }
   }
 
+  const refreshStaffList = async () => {
+    try {
+      const staffResp = await api.get('/api/restaurant/staff')
+      setStaff((staffResp.data?.data?.staff || []) as StaffUser[])
+    } catch (e) {
+      console.error('Failed to refresh staff list:', e)
+    }
+  }
+
   const refreshHoursData = async () => {
     try {
-      const statsResp = await api.get('/api/timeclock/stats')
+      const { startDate, endDate } = getWeekRange()
+      const [statsResp, todayResp, dailyResp] = await Promise.all([
+        api.get('/api/timeclock/stats', {
+          params: { startDate, endDate }
+        }),
+        api.get('/api/timeclock/staff-hours'),
+        api.get('/api/timeclock/user-daily-hours', {
+          params: { startDate, endDate }
+        })
+      ])
+
       const userStats = (statsResp.data?.data?.userStats || []) as Array<{ user_id: string; total_hours: number }>
       const hoursMap: Record<string, number> = {}
       for (const s of userStats) {
@@ -748,24 +817,51 @@ export default function StaffPage() {
       }
       setHoursByUserId(hoursMap)
 
-      const todayResp = await api.get('/api/timeclock/staff-hours')
       const todayHours = (todayResp.data?.data?.staffHours || []) as Array<{ userId: string; todayHours: number }>
       const todayHoursMap: Record<string, number> = {}
       for (const s of todayHours) {
         todayHoursMap[s.userId] = s.todayHours
       }
       setTodayHoursByUserId(todayHoursMap)
+      setDailyHours(dailyResp.data?.data || null)
     } catch (e) {
       console.error('Failed to refresh hours:', e)
     }
   }
 
-  const loadSchedules = async (showError = false) => {
-    try {
-      const endDate = new Date(selectedWeekStart)
-      endDate.setDate(selectedWeekStart.getDate() + 6)
+  const loadWeekData = async (weekStart?: Date) => {
+    const ws = weekStart || selectedWeekStart
+    const { startDate, endDate } = getWeekRange(ws)
 
-      const startDateStr = formatLocalDate(selectedWeekStart)
+    try {
+      const [statsResp, dailyResp] = await Promise.all([
+        api.get('/api/timeclock/stats', {
+          params: { startDate, endDate }
+        }),
+        api.get('/api/timeclock/user-daily-hours', {
+          params: { startDate, endDate }
+        })
+      ])
+
+      const userStats = (statsResp.data?.data?.userStats || []) as Array<{ user_id: string; total_hours: number }>
+      const hoursMap: Record<string, number> = {}
+      for (const s of userStats) {
+        hoursMap[s.user_id] = Number(s.total_hours || 0)
+      }
+      setHoursByUserId(hoursMap)
+      setDailyHours(dailyResp.data?.data || null)
+    } catch (e) {
+      console.warn('Failed to load week data:', e)
+    }
+  }
+
+  const loadSchedules = async (showError = false, weekStart?: Date) => {
+    const ws = weekStart || selectedWeekStart
+    try {
+      const endDate = new Date(ws)
+      endDate.setDate(ws.getDate() + 6)
+
+      const startDateStr = formatLocalDate(ws)
       const endDateStr = formatLocalDate(endDate)
 
       console.log('[SCHEDULING-FRONTEND] Fetching schedules for date range:', startDateStr, 'to', endDateStr);
@@ -899,6 +995,50 @@ export default function StaffPage() {
     setShowShiftModal(true)
   }
 
+  const handleCopyShiftMultiple = async (schedule: Schedule, dates: string[]) => {
+    const schedulesToCopy = dates
+      .filter((date) => date !== schedule.shift_date)
+      .map((date) => ({
+        user_id: schedule.user_id,
+        shift_date: date,
+        shift_start_time: schedule.shift_start_time,
+        shift_end_time: schedule.shift_end_time,
+        position: schedule.position,
+        notes: schedule.notes
+      }))
+
+    if (schedulesToCopy.length === 0) {
+      showToast.info('No new days selected for copying.')
+      return
+    }
+
+    try {
+      const resp = await api.post('/api/staff/scheduling/schedules/bulk', {
+        schedules: schedulesToCopy
+      })
+      showToast.success(`Copied ${resp.data?.data?.created || schedulesToCopy.length} shifts`)
+      await loadSchedules()
+    } catch (error: any) {
+      console.error('Failed to copy shifts:', error)
+      showToast.error(error.response?.data?.error?.message || 'Failed to copy shifts')
+    }
+  }
+
+  const handleMoveShift = async (scheduleId: string, targetDate: string) => {
+    const schedule = schedules.find((item) => item.id === scheduleId)
+    if (!schedule || schedule.shift_date === targetDate) return
+    try {
+      await api.put(`/api/staff/scheduling/schedules/${scheduleId}`, {
+        shift_date: targetDate
+      })
+      showToast.success('Shift moved successfully')
+      await loadSchedules()
+    } catch (error: any) {
+      console.error('Failed to move shift:', error)
+      showToast.error(error.response?.data?.error?.message || 'Failed to move shift')
+    }
+  }
+
   const handleCreateTemplate = async (template: Omit<ShiftTemplate, 'id' | 'is_active'>) => {
     await api.post('/api/staff/scheduling/templates', template)
     showToast.success('Template created')
@@ -953,7 +1093,10 @@ export default function StaffPage() {
 
   const handleWeekChange = useCallback(async (date: Date) => {
     setSelectedWeekStart(date)
-    await loadSchedules()
+    await Promise.all([
+      loadSchedules(false, date),
+      loadWeekData(date)
+    ])
   }, [])
 
   const handleStaffCreated = () => {
@@ -998,28 +1141,7 @@ export default function StaffPage() {
       })
 
       if (response.data.success) {
-        // Refresh current staff data
-        const currentResp = await api.get('/api/timeclock/current-staff')
-        setCurrentStaff(currentResp.data?.data?.currentStaff || [])
-
-        // Refresh today's hours
-        const todayResp = await api.get('/api/timeclock/staff-hours')
-        const todayHours = (todayResp.data?.data?.staffHours || []) as Array<{ userId: string; todayHours: number }>
-        const todayHoursMap: Record<string, number> = {}
-        for (const s of todayHours) {
-          todayHoursMap[s.userId] = s.todayHours
-        }
-        setTodayHoursByUserId(todayHoursMap)
-
-        // Refresh weekly stats
-        const statsResp = await api.get('/api/timeclock/stats')
-        const userStats = (statsResp.data?.data?.userStats || []) as Array<{ user_id: string; total_hours: number }>
-        const hoursMap: Record<string, number> = {}
-        for (const s of userStats) {
-          hoursMap[s.user_id] = Number(s.total_hours || 0)
-        }
-        setHoursByUserId(hoursMap)
-
+        await Promise.all([refreshStaffData(), refreshHoursData()])
         showToast.success(`${response.data.data.userName} clocked out successfully`)
       }
     } catch (err: any) {
@@ -1067,7 +1189,7 @@ export default function StaffPage() {
     }
   }
 
-  const handleQuickAction = async (userId: string, time: Date, reason?: string) => {
+  const handleQuickAction = async (userId: string, time: Date, reason?: string, quickActionType?: 'clock-in' | 'clock-out') => {
     // This is called from QuickTimeActionModal for backdated actions
     switch (quickActionType) {
       case 'clock-in':
@@ -1089,30 +1211,7 @@ export default function StaffPage() {
     }
 
     // Refresh all data
-    const [currentResp, todayResp, statsResp, dailyResp] = await Promise.all([
-      api.get('/api/timeclock/current-staff'),
-      api.get('/api/timeclock/staff-hours'),
-      api.get('/api/timeclock/stats'),
-      api.get('/api/timeclock/user-daily-hours')
-    ])
-
-    setCurrentStaff(currentResp.data?.data?.currentStaff || [])
-
-    const todayHours = (todayResp.data?.data?.staffHours || []) as Array<{ userId: string; todayHours: number }>
-    const todayHoursMap: Record<string, number> = {}
-    for (const s of todayHours) {
-      todayHoursMap[s.userId] = s.todayHours
-    }
-    setTodayHoursByUserId(todayHoursMap)
-
-    const userStats = (statsResp.data?.data?.userStats || []) as Array<{ user_id: string; total_hours: number }>
-    const hoursMap: Record<string, number> = {}
-    for (const s of userStats) {
-      hoursMap[s.user_id] = Number(s.total_hours || 0)
-    }
-    setHoursByUserId(hoursMap)
-
-    setDailyHours(dailyResp.data?.data || null)
+    await Promise.all([refreshStaffData(), refreshHoursData()])
 
     const actionText = quickActionType === 'clock-in' ? 'clocked in' : 'clocked out'
     showToast.success(`Staff ${actionText} successfully`)
@@ -1127,6 +1226,34 @@ export default function StaffPage() {
     } catch (err: any) {
       console.error('Failed to reset PIN:', err)
       showToast.error(err.response?.data?.error?.message || 'Failed to reset PIN')
+    }
+  }
+
+  const handleDeactivateStaff = async (member: StaffUser) => {
+    if (!confirm(`Deactivate ${member.name}? They will no longer be able to clock in.`)) return
+
+    try {
+      await api.delete(`/api/restaurant/staff/${member.id}`)
+      showToast.success(`${member.name} has been deactivated`)
+      await Promise.all([refreshStaffList(), refreshStaffData(), refreshHoursData()])
+    } catch (err: any) {
+      console.error('Failed to deactivate staff member:', err)
+      showToast.error(err.response?.data?.error?.message || 'Failed to deactivate staff member')
+    }
+  }
+
+  const handleDeleteStaff = async (member: StaffUser) => {
+    if (!confirm(`Delete ${member.name} permanently? This removes their history and cannot be undone.`)) return
+
+    try {
+      await api.delete(`/api/restaurant/staff/${member.id}`, {
+        params: { mode: 'hard' }
+      })
+      showToast.success(`${member.name} has been deleted`)
+      await Promise.all([refreshStaffList(), refreshStaffData(), refreshHoursData()])
+    } catch (err: any) {
+      console.error('Failed to delete staff member:', err)
+      showToast.error(err.response?.data?.error?.message || 'Failed to delete staff member')
     }
   }
 
@@ -1202,7 +1329,8 @@ export default function StaffPage() {
 
   const handleEditHours = (member: StaffUser) => {
     if (canEditHours) {
-      setHoursEditorStaff(member)
+      setEditingHoursStaff(member)
+      setShowEditHoursModal(true)
     }
   }
 
@@ -1349,7 +1477,7 @@ export default function StaffPage() {
                 </div>
                 <div className="ml-4">
                   <p className="text-sm font-medium text-surface-600 dark:text-surface-400">
-                    Total Hours This Week
+                    {isCurrentWeek ? 'Total Hours This Week' : 'Total Hours Selected Week'}
                   </p>
                   <p className="text-2xl font-bold text-surface-900 dark:text-surface-100">
                     {Math.round(totalHours)}
@@ -1387,151 +1515,67 @@ export default function StaffPage() {
             </div>
           </div>
 
-          {/* Staff Cards Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-            {(isLoading ? [] : filteredStaff).map((member, index) => {
-              const status = getStatus(member.id)
-              const activeShift = currentByUserId.get(member.id)
-              const shiftLabel = activeShift ? `${formatTime(activeShift.clock_in_time)} - Now` : '—'
-              const hoursThisWeek = hoursByUserId[member.id] ?? 0
-              const hoursToday = todayHoursByUserId[member.id] ?? 0
+          {/* Loading State */}
+          {isLoading && (
+            <div className="text-center py-12 text-surface-500">Loading staff...</div>
+          )}
 
-              return (
-              <motion.div
-                key={member.id}
-                className="card-hover"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.1 * index }}
-              >
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-12 h-12 bg-primary-500 rounded-xl flex items-center justify-center text-white font-semibold">
-                      {initials(member.name)}
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-surface-900 dark:text-surface-100">
-                        {member.name}
-                      </h3>
-                      <p className="text-sm text-surface-600 dark:text-surface-400">
-                        {member.role}{!member.is_active ? ' • Inactive' : ''}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className={`status-badge ${getStatusColor(status)}`}>
-                      {getStatusText(status)}
+          {/* Staff Cards Grid - shown when view is 'cards' */}
+          {scheduleView === 'cards' && !isLoading && (
+            <>
+              {/* Week Navigation */}
+              <div className="flex items-center justify-between bg-white dark:bg-surface-800 rounded-xl px-4 py-3 border border-surface-200 dark:border-surface-700">
+                <button
+                  onClick={() => {
+                    const prev = new Date(selectedWeekStart)
+                    prev.setDate(prev.getDate() - 7)
+                    handleWeekChange(prev)
+                  }}
+                  className="p-2 text-surface-600 dark:text-surface-400 hover:text-surface-900 dark:hover:text-surface-100 rounded-lg hover:bg-gray-100 dark:hover:bg-surface-700 transition-colors"
+                >
+                  <ChevronLeft className="w-5 h-5" />
+                </button>
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2 px-4 py-2 bg-gray-50 dark:bg-surface-700 rounded-lg">
+                    <Calendar className="w-4 h-4 text-surface-500" />
+                    <span className="text-sm font-medium text-surface-900 dark:text-surface-100">
+                      {selectedWeekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - {(() => {
+                        const end = new Date(selectedWeekStart)
+                        end.setDate(end.getDate() + 6)
+                        return end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                      })()}
                     </span>
-                    <div className="relative">
-                      <button
-                        onClick={() => setOpenMenu(openMenu === member.id ? null : member.id)}
-                        className="btn-icon min-w-[44px] min-h-[44px]"
-                        aria-label="More options"
-                      >
-                        <MoreVertical className="w-4 h-4" />
-                      </button>
-                      {/* Dropdown Menu */}
-                      {openMenu === member.id && (
-                        <>
-                          <div
-                            className="fixed inset-0 z-10"
-                            onClick={() => setOpenMenu(null)}
-                          />
-                           <div className="absolute right-0 top-12 z-20 w-48 bg-white dark:bg-surface-800 rounded-xl shadow-lg border border-gray-200 dark:border-surface-700 py-1">
-                            <button
-                              onClick={() => {
-                                setEditingStaff(member)
-                                setOpenMenu(null)
-                              }}
-                              className="w-full px-4 py-3 text-left text-sm text-surface-700 dark:text-surface-200 hover:bg-gray-100 dark:hover:bg-surface-700 flex items-center gap-2"
-                            >
-                              <Edit3 className="w-4 h-4" />
-                              Edit Staff
-                            </button>
-                            {['manager', 'admin', 'owner'].includes(currentUserRole) && (
-                              <button
-                                onClick={() => {
-                                  setEditingHoursStaff(member)
-                                  setShowEditHoursModal(true)
-                                  setOpenMenu(null)
-                                }}
-                                className="w-full px-4 py-3 text-left text-sm text-surface-700 dark:text-surface-200 hover:bg-gray-100 dark:hover:bg-surface-700 flex items-center gap-2"
-                              >
-                                <Clock className="w-4 h-4" />
-                                Edit Hours
-                              </button>
-                            )}
-                            <button
-                              className="w-full px-4 py-3 text-left text-sm text-surface-700 dark:text-surface-200 hover:bg-gray-100 dark:hover:bg-surface-700 flex items-center gap-2"
-                            >
-                              <RefreshCw className="w-4 h-4" />
-                              Reset PIN
-                            </button>
-                            <button
-                              className="w-full px-4 py-3 text-left text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2"
-                            >
-                              <X className="w-4 h-4" />
-                              Deactivate
-                            </button>
-                          </div>
-                        </>
-                      )}
-                    </div>
                   </div>
+                  {!isCurrentWeek && (
+                    <button
+                      onClick={() => {
+                        const now = new Date()
+                        const dayOfWeek = now.getDay()
+                        const sunday = new Date(now)
+                        sunday.setDate(now.getDate() - dayOfWeek)
+                        sunday.setHours(0, 0, 0, 0)
+                        handleWeekChange(sunday)
+                      }}
+                      className="text-sm text-primary-600 hover:text-primary-700 font-medium"
+                    >
+                      This Week
+                    </button>
+                  )}
                 </div>
-                <div className="flex items-center space-x-2">
-                  <Filter className="w-4 h-4 text-surface-500" />
-                  <select
-                    className="input-field"
-                    value={selectedRole}
-                    onChange={(e) => setSelectedRole(e.target.value)}
-                  >
-                    {roles.map(role => (
-                      <option key={role} value={role}>
-                        {role === 'all' ? 'All Roles' : role}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <button
+                  onClick={() => {
+                    const next = new Date(selectedWeekStart)
+                    next.setDate(next.getDate() + 7)
+                    handleWeekChange(next)
+                  }}
+                  disabled={isCurrentWeek}
+                  className="p-2 text-surface-600 dark:text-surface-400 hover:text-surface-900 dark:hover:text-surface-100 rounded-lg hover:bg-gray-100 dark:hover:bg-surface-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronRight className="w-5 h-5" />
+                </button>
               </div>
 
-              {/* Staff Cards Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-                {(isLoading ? [] : filteredStaff).map((member, index) => {
-                  const status = getStatus(member.id)
-                  const activeShift = currentByUserId.get(member.id)
-                  const shiftLabel = activeShift ? `${formatTime(activeShift.clock_in_time)} - Now` : '—'
-                  const hoursThisWeek = hoursByUserId[member.id] ?? 0
-                  const hoursToday = todayHoursByUserId[member.id] ?? 0
-
-                  return (
-                    <StaffCard
-                      key={member.id}
-                      member={member}
-                      status={status as 'on-shift' | 'on-break' | 'off-shift'}
-                      activeShift={activeShift}
-                      hoursThisWeek={hoursThisWeek}
-                      hoursToday={hoursToday}
-                      dailyHours={dailyHours || undefined}
-                      weekDates={weekDates}
-                      onEditStaff={setEditingStaff}
-                      onResetPin={handleResetPin}
-                      onEditHours={canEditHours ? handleEditHours : undefined}
-                      onViewHistory={setViewingHistoryStaff}
-                      onClockIn={handleClockIn}
-                      onClockOut={handleClockOut}
-                      onStartBreak={handleStartBreak}
-                      onEndBreak={handleEndBreak}
-                    />
-                  )
-                })}
-              </div>
-
-              {isLoading && (
-                <div className="text-center py-12 text-surface-500">Loading staff...</div>
-              )}
-
-              {!isLoading && filteredStaff.length === 0 && (
+              {filteredStaff.length === 0 ? (
                 <motion.div
                   className="text-center py-12"
                   initial={{ opacity: 0 }}
@@ -1545,8 +1589,63 @@ export default function StaffPage() {
                     Try adjusting your search or filter criteria
                   </p>
                 </motion.div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+                  {filteredStaff.map((member) => {
+                    const status = getStatus(member.id)
+                    const activeShift = currentByUserId.get(member.id)
+                    const hoursThisWeek = hoursByUserId[member.id] ?? 0
+                    const hoursToday = todayHoursByUserId[member.id] ?? 0
+
+                    return (
+                      <StaffCard
+                        key={member.id}
+                        member={member}
+                        status={status as 'on-shift' | 'on-break' | 'off-shift'}
+                        activeShift={activeShift}
+                        hoursThisWeek={hoursThisWeek}
+                        hoursToday={hoursToday}
+                        dailyHours={dailyHours || undefined}
+                        weekDates={selectedWeekDates}
+                        onEditStaff={setEditingStaff}
+                        onResetPin={handleResetPin}
+                        onEditHours={canEditHours ? handleEditHours : undefined}
+                        onViewHistory={setViewingHistoryStaff}
+                        onClockIn={handleClockIn}
+                        onClockOut={handleClockOut}
+                        onStartBreak={handleStartBreak}
+                        onEndBreak={handleEndBreak}
+                        onDeactivate={handleDeactivateStaff}
+                        onDelete={handleDeleteStaff}
+                      />
+                    )
+                  })}
+                </div>
               )}
             </>
+          )}
+
+          {/* Schedule Calendar - shown when view is 'calendar' */}
+          {scheduleView === 'calendar' && !isLoading && (
+            <ScheduleCalendar
+              schedules={schedules}
+              staff={filteredStaff.map(s => ({ id: s.id, name: s.name, role: s.role }))}
+              selectedWeekStart={selectedWeekStart}
+              onWeekChange={handleWeekChange}
+              onCreateShift={(date, time) => {
+                setShiftModalDate(date)
+                setShiftModalTime(time)
+                setShowShiftModal(true)
+              }}
+              onEditShift={setEditingSchedule}
+              onDeleteShift={handleDeleteShift}
+              onTogglePublish={handleTogglePublish}
+              onCopyShift={handleCopyShift}
+              onCopyShiftMultiple={handleCopyShiftMultiple}
+              onMoveShift={handleMoveShift}
+              actualHoursByUserId={actualHoursByUserId}
+              canEdit={canEditHours}
+            />
           )}
         </div>
       </DashboardLayout>

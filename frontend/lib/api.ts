@@ -37,14 +37,15 @@ const MIN_REFRESH_INTERVAL = 30_000 // Don't refresh more than once per 30 secon
 // Cache for token expiry to avoid parsing JWT on every request
 let cachedTokenExpiry: { token: string; expiresAt: number } | null = null
 
-// Check if token is about to expire (within 2 minutes)
+// Check if token is about to expire (within 10 minutes)
+// Increased threshold for more reliable proactive refresh
 function isTokenExpiringSoon(token: string): boolean {
   try {
     // Use cached expiry if token hasn't changed
     if (cachedTokenExpiry && cachedTokenExpiry.token === token) {
       const now = Date.now()
-      const twoMinutes = 2 * 60 * 1000
-      return cachedTokenExpiry.expiresAt - now < twoMinutes
+      const tenMinutes = 10 * 60 * 1000
+      return cachedTokenExpiry.expiresAt - now < tenMinutes
     }
 
     const parts = token.split('.')
@@ -59,9 +60,9 @@ function isTokenExpiringSoon(token: string): boolean {
     cachedTokenExpiry = { token, expiresAt }
 
     const now = Date.now()
-    const twoMinutes = 2 * 60 * 1000
+    const tenMinutes = 10 * 60 * 1000
 
-    return expiresAt - now < twoMinutes
+    return expiresAt - now < tenMinutes
   } catch {
     return false
   }
@@ -169,6 +170,9 @@ api.interceptors.request.use(async (config) => {
 function getLoginUrl(): string {
   if (typeof window === 'undefined') return '/login'
   const path = window.location.pathname
+  if (path.startsWith('/staff')) {
+    return '/staff/clock'
+  }
   if (path.startsWith('/tablet')) {
     const next = encodeURIComponent(path)
     return `/tablet/login?next=${next}`

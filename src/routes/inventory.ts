@@ -30,7 +30,7 @@ const router = Router();
  * Create a new inventory item
  */
 router.post('/', asyncHandler(async (req: Request, res: Response) => {
-  const { name, sku, unit, onHandQty, lowStockThreshold, category } = req.body;
+  const { name, sku, unit, onHandQty, lowStockThreshold, category, unitCost } = req.body;
   const db = DatabaseService.getInstance().getDatabase();
   const restaurantId = req.user?.restaurantId;
 
@@ -59,8 +59,8 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
 
   await db.run(`
     INSERT INTO inventory_items (
-      id, restaurant_id, name, sku, unit, on_hand_qty, low_stock_threshold, category, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      id, restaurant_id, name, sku, unit, on_hand_qty, low_stock_threshold, category, unit_cost, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
   `, [
     itemId,
     restaurantId,
@@ -69,7 +69,8 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
     unit.trim(),
     onHandQty ?? 0,
     lowStockThreshold ?? 10,
-    category?.trim() || null
+    category?.trim() || null,
+    unitCost ? Number(unitCost) : 0
   ]);
 
   const newItem = await db.get('SELECT * FROM inventory_items WHERE id = ?', [itemId]);
@@ -97,7 +98,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
  */
 router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const { name, sku, unit, onHandQty, lowStockThreshold, category } = req.body;
+  const { name, sku, unit, onHandQty, lowStockThreshold, category, unitCost } = req.body;
   const db = DatabaseService.getInstance().getDatabase();
   const restaurantId = req.user?.restaurantId;
 
@@ -139,6 +140,10 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
   if (category !== undefined) {
     updateFields.push('category = ?');
     updateValues.push(category?.trim() || null);
+  }
+  if (unitCost !== undefined) {
+    updateFields.push('unit_cost = ?');
+    updateValues.push(Number(unitCost));
   }
 
   if (updateFields.length > 0) {
@@ -578,8 +583,8 @@ router.post('/create-from-receipt', asyncHandler(async (req: Request, res: Respo
 
         await db.run(`
           INSERT INTO inventory_items (
-            id, restaurant_id, name, unit, on_hand_qty, low_stock_threshold, category, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            id, restaurant_id, name, unit, on_hand_qty, low_stock_threshold, category, unit_cost, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         `, [
           itemId,
           restaurantId,
@@ -587,7 +592,8 @@ router.post('/create-from-receipt', asyncHandler(async (req: Request, res: Respo
           (unit || 'each').trim(),
           quantity || 1,
           10, // default low stock threshold
-          category?.trim() || null
+          category?.trim() || null,
+          unitCost ? Number(unitCost) : 0
         ]);
 
         const newItem = await db.get('SELECT * FROM inventory_items WHERE id = ?', [itemId]);

@@ -26,12 +26,14 @@ const ToastProvider = dynamic(() => import('../components/ui/Toast'), {
 })
 
 // Session keep-alive interval (refresh token proactively)
-const SESSION_KEEPALIVE_INTERVAL = 10 * 60 * 1000 // 10 minutes
+// Reduced from 10 minutes to 5 minutes for more reliable session maintenance
+const SESSION_KEEPALIVE_INTERVAL = 5 * 60 * 1000 // 5 minutes
 
 export default function App({ Component, pageProps }: AppProps) {
   const [routeLoading, setRouteLoading] = useState(false)
   const router = useRouter()
   const isTabletRoute = router.pathname.startsWith('/tablet')
+  const isStaffRoute = router.pathname.startsWith('/staff')
 
   // Proactive session keep-alive to prevent auto-logout
   const keepSessionAlive = useCallback(async () => {
@@ -44,14 +46,15 @@ export default function App({ Component, pageProps }: AppProps) {
       // Only refresh if we have a refresh token
       if (!refreshToken) return
 
-      // Don't refresh if we have a recent access token (less than 5 minutes old)
-      // Check token expiry by decoding JWT
+      // Don't refresh if token is valid for at least 15 minutes
+      // More aggressive threshold to ensure token never expires during use
       if (accessToken) {
         try {
           const tokenData = JSON.parse(atob(accessToken.split('.')[1]))
           const exp = tokenData.exp * 1000
-          if (Date.now() < exp - 5 * 60 * 1000) {
-            return // Token still valid for at least 5 minutes
+          const fifteenMinutes = 15 * 60 * 1000
+          if (Date.now() < exp - fifteenMinutes) {
+            return // Token still valid for at least 15 minutes
           }
         } catch {
           // Invalid token, continue with refresh
@@ -115,24 +118,19 @@ export default function App({ Component, pageProps }: AppProps) {
     const interval = setInterval(keepSessionAlive, SESSION_KEEPALIVE_INTERVAL)
 
     // Keep alive on user activity (debounced)
+    // Refresh 30 seconds after activity stops (user is actively using the app)
     let activityTimeout: ReturnType<typeof setTimeout> | null = null
     const handleActivity = () => {
       if (activityTimeout) clearTimeout(activityTimeout)
-      activityTimeout = setTimeout(keepSessionAlive, 5 * 60 * 1000) // 5 min after activity
+      activityTimeout = setTimeout(keepSessionAlive, 30 * 1000) // 30 seconds after activity stops
     }
 
     let eventCleanup: (() => void)[] = []
 
-    const events = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll']
+    // Only track meaningful activity events, not passive ones like scroll/mousemove
+    const events = ['mousedown', 'keydown', 'touchstart']
     events.forEach(event => {
-      const handler = (e: Event) => {
-        if (e.type === 'touchstart') {
-          if (activityTimeout) clearTimeout(activityTimeout)
-          activityTimeout = setTimeout(keepSessionAlive, 5 * 60 * 1000)
-        } else {
-          handleActivity()
-        }
-      }
+      const handler = () => handleActivity()
       window.addEventListener(event, handler, { passive: true })
       eventCleanup.push(() => window.removeEventListener(event, handler))
     })
@@ -148,6 +146,7 @@ export default function App({ Component, pageProps }: AppProps) {
   // Service worker registration with update handling
   useEffect(() => {
     if (process.env.NODE_ENV !== 'production') return
+    if (isStaffRoute) return
     if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return
 
     let refreshing = false
@@ -226,7 +225,7 @@ export default function App({ Component, pageProps }: AppProps) {
     return () => {
       navigator.serviceWorker.removeEventListener('controllerchange', handleControllerChange)
     }
-  }, [])
+  }, [isStaffRoute])
 
   // Push notification subscription
   const pushSubscription = usePushSubscription()
@@ -270,12 +269,21 @@ export default function App({ Component, pageProps }: AppProps) {
         {/* PWA META TAGS */}
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-        <meta name="apple-mobile-web-app-title" content="Servio" />
+        <meta name="apple-mobile-web-app-title" content={isStaffRoute ? 'Servio Staff' : 'Servio'} />
         <meta name="format-detection" content="telephone=no" />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="msapplication-tap-highlight" content="no" />
-        <meta name="theme-color" content="#14B8A6" />
-        <link rel="manifest" href={isTabletRoute ? '/manifest-tablet.webmanifest' : '/manifest.json'} />
+        <meta name="theme-color" content={isStaffRoute ? '#ff6b35' : '#14B8A6'} />
+        <link
+          rel="manifest"
+          href={
+            isStaffRoute
+              ? '/manifest-staff.json'
+              : isTabletRoute
+              ? '/manifest-tablet.webmanifest'
+              : '/manifest.json'
+          }
+        />
         <link rel="apple-touch-icon" href="/images/servio_logo_transparent_tight.png" />
 
         {/* PERFORMANCE HINTS - CRITICAL */}
@@ -286,9 +294,12 @@ export default function App({ Component, pageProps }: AppProps) {
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
 
         {/* PRELOAD CRITICAL RESOURCES - omit 'as' to let browser detect type */}
-        <link rel="preload" href="/manifest.json" crossOrigin="anonymous" />
-        {isTabletRoute && (
-          <link rel="preload" href="/manifest-tablet.webmanifest" crossOrigin="anonymous" />
+        {!isStaffRoute && (
+          <link
+            rel="preload"
+            href={isTabletRoute ? '/manifest-tablet.webmanifest' : '/manifest.json'}
+            crossOrigin="anonymous"
+          />
         )}
       </Head>
 

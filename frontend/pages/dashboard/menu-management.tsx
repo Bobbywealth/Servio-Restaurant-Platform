@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, memo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, memo, useRef } from 'react';
 import Head from 'next/head';
 import { motion, AnimatePresence } from 'framer-motion';
 import clsx from 'clsx';
@@ -118,6 +118,8 @@ const MenuManagement: React.FC = () => {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  const editorClosedByUserRef = useRef(false);
+  const previousActiveCategoryIdRef = useRef<string | null>(null);
   const [editorTab, setEditorTab] = useState<'basics' | 'availability' | 'modifiers' | 'preview'>('basics');
   const [basicsDirty, setBasicsDirty] = useState(false);
   const [pendingSelection, setPendingSelection] = useState<{ type: 'category' | 'item'; id: string } | null>(null);
@@ -189,6 +191,7 @@ const MenuManagement: React.FC = () => {
   const [newItemAttachedGroups, setNewItemAttachedGroups] = useState<AttachedGroup[]>([]);
   const [editItemAttachedGroups, setEditItemAttachedGroups] = useState<AttachedGroup[]>([]);
   const [editItemExistingAttachedGroups, setEditItemExistingAttachedGroups] = useState<AttachedGroup[]>([]);
+  const [editItemOriginalCategoryId, setEditItemOriginalCategoryId] = useState<string>('');
   const [newModifierGroup, setNewModifierGroup] = useState({
     name: '',
     description: '',
@@ -200,14 +203,14 @@ const MenuManagement: React.FC = () => {
   const [newModifierOptionDrafts, setNewModifierOptionDrafts] = useState<Record<string, { name: string; description: string; priceModifier: string }>>({});
 
   // Load menu data
-  const loadMenuData = useCallback(async () => {
+  const loadMenuData = useCallback(async (showSpinner = false) => {
     if (!user?.id) return;
 
     try {
-      setLoading(true);
+      if (showSpinner) setLoading(true);
       const [categoriesResponse, itemsResponse] = await Promise.all([
         api.get('/api/menu/categories/all'),
-        api.get('/api/menu/items/full')
+        api.get('/api/menu/items/full', { params: { includeInactive: '1' } })
       ]);
 
       const categoryRows = categoriesResponse.data?.data || [];
@@ -217,6 +220,7 @@ const MenuManagement: React.FC = () => {
       categoryRows.forEach((category: MenuCategory) => {
         categoryMap.set(category.id, {
           ...category,
+          sort_order: Number(category.sort_order ?? 0),
           items: []
         });
       });
@@ -227,7 +231,7 @@ const MenuManagement: React.FC = () => {
           name: group.category_name || 'Uncategorized',
           description: '',
           image: undefined,
-          sort_order: group.category_sort_order || 0,
+          sort_order: Number(group.category_sort_order ?? 0),
           is_active: true,
           item_count: 0,
           created_at: new Date().toISOString(),
@@ -427,11 +431,14 @@ const MenuManagement: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    loadMenuData();
+    loadMenuData(true);
   }, [loadMenuData]);
 
   // Selection behavior: keep editor selection valid and auto-select first item when category changes.
   useEffect(() => {
+    const previousCategoryId = previousActiveCategoryIdRef.current;
+    const categoryChanged = previousCategoryId !== activeCategoryId;
+    previousActiveCategoryIdRef.current = activeCategoryId ?? null;
     if (loading) return;
     if (basicsDirty) return;
     if (!activeCategoryId) {
@@ -450,6 +457,14 @@ const MenuManagement: React.FC = () => {
     if (stillExists) {
       // Keep current selection in sync with refreshed object
       setEditingItem(stillExists);
+      return;
+    }
+    if (!categoryChanged) {
+      return;
+    }
+    // Skip auto-select if user explicitly closed the editor
+    if (editorClosedByUserRef.current) {
+      editorClosedByUserRef.current = false;
       return;
     }
     // Auto-select first item in category
@@ -627,22 +642,31 @@ const MenuManagement: React.FC = () => {
 
   const handleReorderCategories = async (nextOrderedIds: string[]) => {
     const previousCategories = categories;
+    const existingIds = categories.map((category) => category.id);
+    const orderedIds = [
+      ...nextOrderedIds,
+      ...existingIds.filter((id) => !nextOrderedIds.includes(id))
+    ];
     // Optimistic reorder in UI
     setCategories((prev) => {
       const byId = new Map(prev.map((c) => [c.id, c] as const));
-      const next = nextOrderedIds.map((id, idx) => {
+      const next = orderedIds.map((id, idx) => {
         const c = byId.get(id);
         return c ? { ...c, sort_order: idx } : null;
       }).filter(Boolean) as CategoryWithItems[];
       // Append anything not in nextOrderedIds (safety)
-      const remaining = prev.filter((c) => !nextOrderedIds.includes(c.id));
+      const remaining = prev.filter((c) => !orderedIds.includes(c.id));
       return [...next, ...remaining];
     });
 
     try {
-      const response = await api.put('/api/menu/categories/reorder', { categoryIds: nextOrderedIds });
+      const response = await api.put('/api/menu/categories/reorder', {
+        categoryIds: orderedIds,
+        orderedIds
+      });
       const { updated } = response.data || {};
-      console.log('[handleReorderCategories] Category order saved:', { requested: nextOrderedIds.length, updated });
+      console.log('[handleReorderCategories] Category order saved:', { requested: orderedIds.length, updated });
+      await loadMenuData();
       toast.success('Category order saved');
     } catch (error) {
       console.error('Failed to persist category order', error);
@@ -1084,7 +1108,7 @@ const MenuManagement: React.FC = () => {
       name: '',
       description: '',
       price: '',
-      categoryId: categoryId || (categories[0]?.id ?? ''),
+      categoryId: categoryId || activeCategoryId || (categories[0]?.id ?? ''),
       preparationTime: '',
       isAvailable: true
     });
@@ -1101,14 +1125,31 @@ const MenuManagement: React.FC = () => {
 
     setIsSaving(true);
     try {
-      await api.post('/api/menu/categories', {
+      const resp = await api.post('/api/menu/categories', {
         name: newCategory.name.trim(),
         description: newCategory.description.trim(),
         sortOrder: Number(newCategory.sortOrder || 0)
       });
       toast.success('Category created');
       setShowAddCategoryModal(false);
-      await loadMenuData();
+      // Optimistically add the new category so it appears immediately
+      const created = resp.data?.data;
+      if (created?.id) {
+        const optimisticCategory: CategoryWithItems = {
+          id: created.id,
+          name: newCategory.name.trim(),
+          description: newCategory.description.trim(),
+          sort_order: Number(newCategory.sortOrder || 0),
+          is_active: true,
+          item_count: 0,
+          created_at: new Date().toISOString(),
+          items: []
+        };
+        setCategories((prev) => [...prev, optimisticCategory].sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name)));
+        setSelectedCategory(created.id);
+      }
+      // Background refresh (no loading spinner)
+      loadMenuData();
     } catch (error) {
       console.error('Failed to create category:', error);
       toast.error('Failed to create category');
@@ -1146,7 +1187,8 @@ const MenuManagement: React.FC = () => {
       const resp = await api.post('/api/menu/items', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
-      const createdId = resp.data?.data?.id as string | undefined;
+      const created = resp.data?.data;
+      const createdId = created?.id as string | undefined;
       if (createdId && newItemAttachedGroups.length > 0) {
         await syncItemModifierGroups(createdId, newItemAttachedGroups, []);
       }
@@ -1154,7 +1196,40 @@ const MenuManagement: React.FC = () => {
       setShowAddItemModal(false);
       setNewItemImages([]);
       setNewItemAttachedGroups([]);
-      await loadMenuData();
+      // Optimistically add the new item to local state so it appears immediately
+      if (created) {
+        const optimisticItem: MenuItem = {
+          id: created.id,
+          restaurant_id: created.restaurant_id || user?.restaurantId || '',
+          category_id: newItem.categoryId,
+          name: newItem.name.trim(),
+          description: newItem.description.trim(),
+          price: Number(newItem.price),
+          cost: undefined,
+          images: Array.isArray(created.images) ? created.images : [],
+          image: Array.isArray(created.images) ? created.images[0] : undefined,
+          is_available: newItem.isAvailable,
+          is_featured: false,
+          preparation_time: newItem.preparationTime ? Number(newItem.preparationTime) : undefined,
+          allergens: [],
+          sort_order: 0,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          sizes: [],
+          modifierGroups: []
+        };
+        setCategories((prev) =>
+          prev.map((cat) =>
+            cat.id === newItem.categoryId
+              ? { ...cat, items: [...(cat.items || []), optimisticItem], item_count: (cat.item_count || 0) + 1 }
+              : cat
+          )
+        );
+      }
+      // Switch to the category where the new item was added
+      setSelectedCategory(newItem.categoryId);
+      // Background refresh to sync full server state (no loading spinner)
+      loadMenuData();
     } catch (error) {
       console.error('Failed to create menu item:', error);
       toast.error('Failed to create menu item');
@@ -1164,6 +1239,7 @@ const MenuManagement: React.FC = () => {
   };
 
   const openEditItemModal = async (item: MenuItem) => {
+    setEditItemOriginalCategoryId(item.category_id);
     setEditItem({
       id: item.id,
       name: item.name,
@@ -1279,12 +1355,16 @@ const MenuManagement: React.FC = () => {
       formData.append('existingImages', JSON.stringify(editItemExistingImages));
       editItemImages.forEach((file) => formData.append('images', file));
 
-      await api.put(`/api/menu/items/${editItem.id}`, formData, {
+      const updateResp = await api.put(`/api/menu/items/${editItem.id}`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       await syncItemModifierGroups(editItem.id, editItemAttachedGroups, editItemExistingAttachedGroups);
       toast.success('Menu item updated');
       setBasicsDirty(false);
+      // Use server response images (includes newly uploaded ones) for immediate update
+      const serverImages = Array.isArray(updateResp.data?.data?.images) ? updateResp.data.data.images : [...editItemExistingImages];
+      setEditItemExistingImages(serverImages);
+      setEditItemImages([]);
       // Optimistically update local state so the editor stays consistent immediately.
       setCategories((prev) =>
         prev.map((cat) => ({
@@ -1298,13 +1378,20 @@ const MenuManagement: React.FC = () => {
                   price: Number(editItem.price || 0),
                   category_id: editItem.categoryId,
                   preparation_time: editItem.preparationTime ? Number(editItem.preparationTime) : undefined,
-                  is_available: Boolean(editItem.isAvailable)
+                  is_available: Boolean(editItem.isAvailable),
+                  images: serverImages,
+                  image: serverImages.length > 0 ? serverImages[0] : undefined
                 }
               : it
           )
         }))
       );
-      await loadMenuData();
+      // Background refresh to sync full server state (no loading spinner)
+      loadMenuData();
+      // Switch to the new category if the item was moved to a different category
+      if (editItem.categoryId !== editItemOriginalCategoryId) {
+        setSelectedCategory(editItem.categoryId);
+      }
     } catch (error) {
       console.error('Failed to update menu item:', error);
       toast.error('Failed to update menu item');
@@ -1391,18 +1478,15 @@ const MenuManagement: React.FC = () => {
   // Memoize expensive computations to prevent recalculation on every render
   const filteredCategories = useMemo(() => {
     return categories.filter(category => {
+      // Show all categories in the management view (including inactive ones)
+      // so staff can add/edit items in any category. is_active only controls public visibility.
       if (selectedCategory !== 'all' && category.id !== selectedCategory) return false;
 
-      const searchLower = searchTerm.toLowerCase();
-      const matchesSearch = category.name.toLowerCase().includes(searchLower) ||
-                           category.items?.some(item =>
-                             item.name.toLowerCase().includes(searchLower) ||
-                             item.description.toLowerCase().includes(searchLower)
-                           );
-
-      return matchesSearch;
+      // Don't filter categories by search term - only filter items within categories
+      // This allows searching for items even if the category name doesn't match
+      return true;
     });
-  }, [categories, selectedCategory, searchTerm]);
+  }, [categories, selectedCategory]);
 
   const totalItems = useMemo(() =>
     categories.reduce((sum, cat) => sum + (cat.item_count || 0), 0),
@@ -1422,17 +1506,17 @@ const MenuManagement: React.FC = () => {
         <title>Menu Management - Servio</title>
       </Head>
 
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <div className="min-h-screen bg-surface-50 dark:bg-surface-900">
         {/* Header - Mobile Optimized */}
-        <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+        <div className="bg-white dark:bg-surface-800 border-b border-surface-200 dark:border-surface-700">
           <div className="px-4 sm:px-6 py-4">
             {/* Title and Primary Action Row */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div className="min-w-0">
-                <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">
+                <h1 className="text-xl sm:text-2xl font-bold text-surface-900 dark:text-white">
                   Menu Manager
                 </h1>
-                <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mt-1">
+                <p className="text-xs sm:text-sm text-surface-600 dark:text-surface-400 mt-1">
                   {user?.name}&apos;s Restaurant • {totalItems} items • {availableItems} available
                 </p>
               </div>
@@ -1440,7 +1524,7 @@ const MenuManagement: React.FC = () => {
               {/* Primary action - always visible */}
               <button
                 onClick={() => openAddItemModal()}
-                className="flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white rounded-lg transition-colors min-h-[44px] touch-manipulation font-medium sm:shrink-0"
+                className="flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 bg-servio-red-600 hover:bg-servio-red-700 active:bg-servio-red-800 text-white rounded-lg transition-colors min-h-[44px] touch-manipulation font-medium sm:shrink-0"
               >
                 <Plus className="w-4 h-4" />
                 Add Item
@@ -1452,7 +1536,7 @@ const MenuManagement: React.FC = () => {
               <div className="flex items-center gap-2 sm:gap-3 min-w-max sm:min-w-0 sm:flex-wrap">
                 <button
                   onClick={handlePreviewMenu}
-                  className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-gray-100 hover:bg-gray-200 active:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 rounded-lg transition-colors min-h-[40px] touch-manipulation text-sm whitespace-nowrap"
+                  className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-surface-100 hover:bg-surface-200 active:bg-surface-300 dark:bg-surface-700 dark:hover:bg-surface-600 rounded-lg transition-colors min-h-[40px] touch-manipulation text-sm whitespace-nowrap"
                 >
                   <Eye className="w-4 h-4 shrink-0" />
                   <span className="hidden xs:inline">Preview</span>
@@ -1598,7 +1682,7 @@ const MenuManagement: React.FC = () => {
               <p className="text-gray-500 mt-2">Loading menu...</p>
             </div>
           ) : (
-            <div className="flex flex-col md:flex-row gap-4 sm:gap-6 h-full">
+            <div className="flex flex-col md:flex-row gap-3 lg:gap-4 xl:gap-6 h-full">
               {/* Category Sidebar - Collapsible on mobile */}
               <CategorySidebar
                 categories={categories.map((c) => ({
@@ -1621,7 +1705,7 @@ const MenuManagement: React.FC = () => {
               />
 
               {/* Middle pane: Items */}
-              <div className="flex-1 min-w-0 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 flex flex-col">
+              <div className="flex-1 min-w-0 lg:min-w-[280px] bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 flex flex-col">
                 <div className="p-3 sm:p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between gap-2 sm:gap-3 shrink-0">
                   <div className="min-w-0 flex-1">
                     <div className="text-base sm:text-sm font-bold text-gray-900 dark:text-white truncate">
@@ -1672,7 +1756,7 @@ const MenuManagement: React.FC = () => {
                       );
                     }
                     return (
-                      <div className="flex-1 overflow-auto -mx-3 sm:mx-0">
+                      <div className="flex-1 overflow-auto -mx-3 sm:mx-0 max-h-[calc(100vh-320px)] sm:max-h-[calc(100vh-300px)]">
                         <table className="w-full text-sm min-w-[400px] sm:min-w-0">
                           <thead className="sticky top-0 bg-gray-50 dark:bg-gray-900/40 z-10">
                             <tr className="text-left text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
@@ -1693,7 +1777,7 @@ const MenuManagement: React.FC = () => {
                               const overId = String(over.id);
                               if (activeId === overId) return;
                               const ordered = items.slice().sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
-                              const ids = ordered.map((i) => i.id);
+                              const ids = ordered.map((i) => String(i.id));
                               const oldIndex = ids.indexOf(activeId);
                               const newIndex = ids.indexOf(overId);
                               if (oldIndex === -1 || newIndex === -1) return;
@@ -1702,7 +1786,10 @@ const MenuManagement: React.FC = () => {
                             }}
                           >
                             <SortableContext
-                              items={items.slice().sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)).map((i) => i.id)}
+                              items={items
+                                .slice()
+                                .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+                                .map((i) => String(i.id))}
                               strategy={verticalListSortingStrategy}
                             >
                               <tbody>
@@ -1738,34 +1825,50 @@ const MenuManagement: React.FC = () => {
                 )}
               </div>
 
-              {/* Right pane: Item editor - Responsive with better mobile support */}
-              <div className="w-full lg:w-[420px] shrink-0 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 lg:max-h-[calc(100vh-200px)] lg:sticky lg:top-4">
-                {!editingItem || !selectedItemId ? (
-                  <div className="p-4 sm:p-6">
-                    <div className="text-base sm:text-lg font-black text-gray-900 dark:text-white">Item Editor</div>
-                    <div className="mt-2 text-sm text-gray-500 dark:text-gray-400">Select an item to edit.</div>
-                  </div>
-                ) : (
-                  <div className="flex flex-col h-full max-h-[70vh] lg:max-h-none">
-                    {/* Editor Header */}
-                    <div className="p-3 sm:p-4 border-b border-gray-200 dark:border-gray-700 sticky top-0 bg-white dark:bg-gray-800 z-10">
-                      <div className="flex items-start justify-between gap-2 sm:gap-3">
-                        <div className="min-w-0 flex-1">
-                          <div className="text-base sm:text-lg font-black text-gray-900 dark:text-white truncate">{editingItem.name}</div>
-                          <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                            {activeCategory?.name ? `Category: ${activeCategory.name}` : ''}
+              {/* Right pane: Item editor - Only shows when item selected */}
+              <AnimatePresence>
+                {editingItem && selectedItemId && (
+                  <motion.div
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 20 }}
+                    transition={{ duration: 0.2 }}
+                    className="w-full lg:w-[340px] xl:w-[400px] shrink-0 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 lg:max-h-[calc(100vh-200px)] lg:sticky lg:top-4"
+                  >
+                    <div className="flex flex-col h-full max-h-[70vh] lg:max-h-none">
+                      {/* Editor Header */}
+                      <div className="p-3 sm:p-4 border-b border-gray-200 dark:border-gray-700 sticky top-0 bg-white dark:bg-gray-800 z-10">
+                        <div className="flex items-start justify-between gap-2 sm:gap-3">
+                          <div className="min-w-0 flex-1">
+                            <div className="text-base sm:text-lg font-black text-gray-900 dark:text-white truncate">{editingItem.name}</div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                              {activeCategory?.name ? `Category: ${activeCategory.name}` : ''}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              className="inline-flex shrink-0 items-center justify-center gap-1 sm:gap-2 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 active:bg-red-100 px-2 sm:px-3 py-2 text-xs sm:text-sm font-bold disabled:opacity-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-900/20 min-h-[40px] touch-manipulation"
+                              onClick={() => handleDeleteItem(editingItem)}
+                              disabled={deletingItemId === editingItem.id}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                              <span className="hidden sm:inline">{deletingItemId === editingItem.id ? 'Deleting…' : 'Delete'}</span>
+                            </button>
+                            <button
+                              type="button"
+                              className="inline-flex shrink-0 items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 active:bg-gray-200 p-2 dark:hover:text-gray-200 dark:hover:bg-gray-700 min-h-[40px] min-w-[40px] touch-manipulation"
+                              onClick={() => {
+                                editorClosedByUserRef.current = true;
+                                setSelectedItemId(null);
+                                setEditingItem(null);
+                              }}
+                              title="Close editor"
+                            >
+                              <X className="h-5 w-5" />
+                            </button>
                           </div>
                         </div>
-                        <button
-                          type="button"
-                          className="inline-flex shrink-0 items-center justify-center gap-1 sm:gap-2 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 active:bg-red-100 px-2 sm:px-3 py-2 text-xs sm:text-sm font-bold disabled:opacity-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-900/20 min-h-[40px] touch-manipulation"
-                          onClick={() => handleDeleteItem(editingItem)}
-                          disabled={deletingItemId === editingItem.id}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                          <span className="hidden sm:inline">{deletingItemId === editingItem.id ? 'Deleting…' : 'Delete'}</span>
-                        </button>
-                      </div>
 
                       {/* Editor Tabs - Scrollable on mobile */}
                       <div className="mt-3 -mx-3 sm:mx-0 px-3 sm:px-0 overflow-x-auto scrollbar-hide">
@@ -1836,12 +1939,12 @@ const MenuManagement: React.FC = () => {
                             />
                           </div>
 
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <div className="grid grid-cols-2 gap-3">
                             <div>
                               <label className="block text-sm font-bold text-gray-700 dark:text-gray-300">
                                 Base Price
                                 {editItemSizes.length > 0 && (
-                                  <span className="ml-2 text-xs font-normal text-amber-600 dark:text-amber-400">
+                                  <span className="block text-xs font-normal text-amber-600 dark:text-amber-400">
                                     (Not used - sizes override)
                                   </span>
                                 )}
@@ -1858,7 +1961,7 @@ const MenuManagement: React.FC = () => {
                               />
                               {editItemSizes.length === 0 && (
                                 <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                                  Price customers pay. Add sizes in the Avail. tab for size-based pricing.
+                                  Price customers pay.
                                 </p>
                               )}
                             </div>
@@ -1919,25 +2022,97 @@ const MenuManagement: React.FC = () => {
                           <div>
                             <label className="block text-sm font-bold text-gray-700 dark:text-gray-300">Images</label>
                             <div className="mt-1 flex flex-col gap-2">
-                              <label className="inline-flex items-center gap-2 px-3 py-2 border border-dashed border-gray-300 rounded-lg text-sm text-gray-600 hover:text-gray-900 hover:border-gray-400 cursor-pointer dark:border-gray-600 dark:text-gray-300 dark:hover:text-white">
-                                <Upload className="w-4 h-4" />
-                                Add images (up to 5)
-                                <input
-                                  type="file"
-                                  accept="image/*"
-                                  multiple
-                                  className="hidden"
-                                  onChange={(e) => {
-                                    const files = Array.from(e.target.files || []);
-                                    const validFiles = filterImageFiles(files).slice(0, 5);
-                                    setBasicsDirty(true);
-                                    setEditItemImages(validFiles);
-                                  }}
-                                />
-                              </label>
-                              <div className="text-xs text-gray-500 dark:text-gray-400">
-                                {editItemExistingImages.length} existing, {editItemImages.length} new
-                              </div>
+                              {editItemExistingImages.length > 0 && (
+                                <div className="grid grid-cols-3 gap-2">
+                                  {editItemExistingImages.map((img, idx) => (
+                                    <div key={img} className="relative group rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600">
+                                      <img
+                                        src={resolveMediaUrl(img)}
+                                        alt={`Image ${idx + 1}`}
+                                        className="w-full h-20 object-cover"
+                                      />
+                                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1">
+                                        <label className="p-1 bg-white/90 rounded cursor-pointer hover:bg-white" title="Replace image">
+                                          <Upload className="w-3.5 h-3.5 text-gray-700" />
+                                          <input
+                                            type="file"
+                                            accept="image/*"
+                                            className="hidden"
+                                            onChange={(e) => {
+                                              const file = e.target.files?.[0];
+                                              if (!file) return;
+                                              const valid = filterImageFiles([file]);
+                                              if (valid.length === 0) return;
+                                              setBasicsDirty(true);
+                                              setEditItemExistingImages((prev) => prev.filter((_, i) => i !== idx));
+                                              setEditItemImages((prev) => [...prev, valid[0]]);
+                                            }}
+                                          />
+                                        </label>
+                                        <button
+                                          type="button"
+                                          className="p-1 bg-white/90 rounded hover:bg-white"
+                                          title="Remove image"
+                                          onClick={() => {
+                                            setBasicsDirty(true);
+                                            setEditItemExistingImages((prev) => prev.filter((_, i) => i !== idx));
+                                          }}
+                                        >
+                                          <X className="w-3.5 h-3.5 text-red-600" />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              {editItemImages.length > 0 && (
+                                <div className="grid grid-cols-3 gap-2">
+                                  {editItemImages.map((file, idx) => (
+                                    <div key={file.name + idx} className="relative group rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600">
+                                      <img
+                                        src={URL.createObjectURL(file)}
+                                        alt={file.name}
+                                        className="w-full h-20 object-cover"
+                                      />
+                                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                        <button
+                                          type="button"
+                                          className="p-1 bg-white/90 rounded hover:bg-white"
+                                          title="Remove image"
+                                          onClick={() => {
+                                            setBasicsDirty(true);
+                                            setEditItemImages((prev) => prev.filter((_, i) => i !== idx));
+                                          }}
+                                        >
+                                          <X className="w-3.5 h-3.5 text-red-600" />
+                                        </button>
+                                      </div>
+                                      <div className="absolute top-1 left-1 bg-blue-500 text-white text-[10px] px-1 rounded">New</div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              {(editItemExistingImages.length + editItemImages.length) < 5 && (
+                                <label className="inline-flex items-center gap-2 px-3 py-2 border border-dashed border-gray-300 rounded-lg text-sm text-gray-600 hover:text-gray-900 hover:border-gray-400 cursor-pointer dark:border-gray-600 dark:text-gray-300 dark:hover:text-white">
+                                  <Upload className="w-4 h-4" />
+                                  Add images (up to {5 - editItemExistingImages.length - editItemImages.length} more)
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    multiple
+                                    className="hidden"
+                                    onChange={(e) => {
+                                      const files = Array.from(e.target.files || []);
+                                      const remaining = 5 - editItemExistingImages.length - editItemImages.length;
+                                      const validFiles = filterImageFiles(files).slice(0, remaining);
+                                      if (validFiles.length > 0) {
+                                        setBasicsDirty(true);
+                                        setEditItemImages((prev) => [...prev, ...validFiles]);
+                                      }
+                                    }}
+                                  />
+                                </label>
+                              )}
                             </div>
                           </div>
 
@@ -1994,7 +2169,7 @@ const MenuManagement: React.FC = () => {
                               </div>
                             </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                            <div className="space-y-3 mb-4">
                               <div>
                                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                                   Modifier Name *
@@ -2138,8 +2313,9 @@ const MenuManagement: React.FC = () => {
                       )}
                     </div>
                   </div>
+                  </motion.div>
                 )}
-              </div>
+              </AnimatePresence>
             </div>
           )}
         </div>
@@ -2845,7 +3021,7 @@ const MenuManagement: React.FC = () => {
                     <option value="">Select category</option>
                     {categories.map((category) => (
                       <option key={category.id} value={category.id}>
-                        {category.name}
+                        {category.name}{!category.is_active && ' (Inactive)'}
                       </option>
                     ))}
                   </select>
@@ -2986,28 +3162,48 @@ const MenuManagement: React.FC = () => {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Images</label>
                   <div className="mt-1 flex flex-col gap-2">
-                    <label className="inline-flex items-center gap-2 px-3 py-2 border border-dashed border-gray-300 rounded-lg text-sm text-gray-600 hover:text-gray-900 hover:border-gray-400 cursor-pointer dark:border-gray-600 dark:text-gray-300 dark:hover:text-white">
-                      <Upload className="w-4 h-4" />
-                      Upload images (up to 5)
-                      <input
-                        type="file"
-                        accept="image/*"
-                        multiple
-                        className="hidden"
-                        onChange={(e) => {
-                          const files = Array.from(e.target.files || []);
-                          const validFiles = filterImageFiles(files).slice(0, 5);
-                          setNewItemImages(validFiles);
-                        }}
-                      />
-                    </label>
-                    <div className="text-xs text-gray-500">
-                      Max file size: {formatFileSize(MAX_IMAGE_SIZE_BYTES)} each.
-                    </div>
                     {newItemImages.length > 0 && (
-                      <div className="text-xs text-gray-500">
-                        {newItemImages.length} file{newItemImages.length > 1 ? 's' : ''} selected
+                      <div className="grid grid-cols-4 gap-2">
+                        {newItemImages.map((file, idx) => (
+                          <div key={file.name + idx} className="relative group rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600">
+                            <img
+                              src={URL.createObjectURL(file)}
+                              alt={file.name}
+                              className="w-full h-20 object-cover"
+                            />
+                            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                              <button
+                                type="button"
+                                className="p-1 bg-white/90 rounded hover:bg-white"
+                                title="Remove image"
+                                onClick={() => setNewItemImages((prev) => prev.filter((_, i) => i !== idx))}
+                              >
+                                <X className="w-3.5 h-3.5 text-red-600" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
                       </div>
+                    )}
+                    {newItemImages.length < 5 && (
+                      <label className="inline-flex items-center gap-2 px-3 py-2 border border-dashed border-gray-300 rounded-lg text-sm text-gray-600 hover:text-gray-900 hover:border-gray-400 cursor-pointer dark:border-gray-600 dark:text-gray-300 dark:hover:text-white">
+                        <Upload className="w-4 h-4" />
+                        Upload images (up to {5 - newItemImages.length} more)
+                        <input
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          className="hidden"
+                          onChange={(e) => {
+                            const files = Array.from(e.target.files || []);
+                            const remaining = 5 - newItemImages.length;
+                            const validFiles = filterImageFiles(files).slice(0, remaining);
+                            if (validFiles.length > 0) {
+                              setNewItemImages((prev) => [...prev, ...validFiles]);
+                            }
+                          }}
+                        />
+                      </label>
                     )}
                   </div>
                 </div>
@@ -3147,7 +3343,7 @@ const MenuManagement: React.FC = () => {
                     <option value="">Select category</option>
                     {categories.map((category) => (
                       <option key={category.id} value={category.id}>
-                        {category.name}
+                        {category.name}{!category.is_active && ' (Inactive)'}
                       </option>
                     ))}
                   </select>
@@ -3203,28 +3399,96 @@ const MenuManagement: React.FC = () => {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Images</label>
                   <div className="mt-1 flex flex-col gap-2">
-                    <label className="inline-flex items-center gap-2 px-3 py-2 border border-dashed border-gray-300 rounded-lg text-sm text-gray-600 hover:text-gray-900 hover:border-gray-400 cursor-pointer dark:border-gray-600 dark:text-gray-300 dark:hover:text-white">
-                      <Upload className="w-4 h-4" />
-                      Add images (up to 5)
-                      <input
-                        type="file"
-                        accept="image/*"
-                        multiple
-                        className="hidden"
-                        onChange={(e) => {
-                          const files = Array.from(e.target.files || []);
-                          const validFiles = filterImageFiles(files).slice(0, 5);
-                          setEditItemImages(validFiles);
-                        }}
-                      />
-                    </label>
-                    <div className="text-xs text-gray-500">
-                      Max file size: {formatFileSize(MAX_IMAGE_SIZE_BYTES)} each.
-                    </div>
-                    {(editItemExistingImages.length > 0 || editItemImages.length > 0) && (
-                      <div className="text-xs text-gray-500">
-                        {editItemExistingImages.length} existing, {editItemImages.length} new
+                    {editItemExistingImages.length > 0 && (
+                      <div className="grid grid-cols-4 gap-2">
+                        {editItemExistingImages.map((img, idx) => (
+                          <div key={img} className="relative group rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600">
+                            <img
+                              src={resolveMediaUrl(img)}
+                              alt={`Image ${idx + 1}`}
+                              className="w-full h-20 object-cover"
+                            />
+                            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1">
+                              <label className="p-1 bg-white/90 rounded cursor-pointer hover:bg-white" title="Replace image">
+                                <Upload className="w-3.5 h-3.5 text-gray-700" />
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  className="hidden"
+                                  onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    if (!file) return;
+                                    const valid = filterImageFiles([file]);
+                                    if (valid.length === 0) return;
+                                    setBasicsDirty(true);
+                                    setEditItemExistingImages((prev) => prev.filter((_, i) => i !== idx));
+                                    setEditItemImages((prev) => [...prev, valid[0]]);
+                                  }}
+                                />
+                              </label>
+                              <button
+                                type="button"
+                                className="p-1 bg-white/90 rounded hover:bg-white"
+                                title="Remove image"
+                                onClick={() => {
+                                  setBasicsDirty(true);
+                                  setEditItemExistingImages((prev) => prev.filter((_, i) => i !== idx));
+                                }}
+                              >
+                                <X className="w-3.5 h-3.5 text-red-600" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
                       </div>
+                    )}
+                    {editItemImages.length > 0 && (
+                      <div className="grid grid-cols-4 gap-2">
+                        {editItemImages.map((file, idx) => (
+                          <div key={file.name + idx} className="relative group rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600">
+                            <img
+                              src={URL.createObjectURL(file)}
+                              alt={file.name}
+                              className="w-full h-20 object-cover"
+                            />
+                            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                              <button
+                                type="button"
+                                className="p-1 bg-white/90 rounded hover:bg-white"
+                                title="Remove image"
+                                onClick={() => {
+                                  setBasicsDirty(true);
+                                  setEditItemImages((prev) => prev.filter((_, i) => i !== idx));
+                                }}
+                              >
+                                <X className="w-3.5 h-3.5 text-red-600" />
+                              </button>
+                            </div>
+                            <div className="absolute top-1 left-1 bg-blue-500 text-white text-[10px] px-1 rounded">New</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {(editItemExistingImages.length + editItemImages.length) < 5 && (
+                      <label className="inline-flex items-center gap-2 px-3 py-2 border border-dashed border-gray-300 rounded-lg text-sm text-gray-600 hover:text-gray-900 hover:border-gray-400 cursor-pointer dark:border-gray-600 dark:text-gray-300 dark:hover:text-white">
+                        <Upload className="w-4 h-4" />
+                        Add images (up to {5 - editItemExistingImages.length - editItemImages.length} more)
+                        <input
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          className="hidden"
+                          onChange={(e) => {
+                            const files = Array.from(e.target.files || []);
+                            const remaining = 5 - editItemExistingImages.length - editItemImages.length;
+                            const validFiles = filterImageFiles(files).slice(0, remaining);
+                            if (validFiles.length > 0) {
+                              setBasicsDirty(true);
+                              setEditItemImages((prev) => [...prev, ...validFiles]);
+                            }
+                          }}
+                        />
+                      </label>
                     )}
                   </div>
                 </div>
@@ -3294,7 +3558,9 @@ const SortableItemTableRow = memo(function SortableItemTableRow({
   modifierSummary: string;
   formatMoney: (v: number) => string;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: String(item.id)
+  });
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition

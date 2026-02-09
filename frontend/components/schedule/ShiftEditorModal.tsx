@@ -11,6 +11,7 @@ import {
   Loader2,
   AlertCircle
 } from 'lucide-react'
+import { showToast } from '../ui/Toast'
 
 interface Schedule {
   id?: string
@@ -84,14 +85,16 @@ export function ShiftEditorModal({
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [deleteConfirm, setDeleteConfirm] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
   const isEditing = !!schedule?.id
 
   // Initialize form when modal opens
   useEffect(() => {
     if (isOpen) {
+      console.log('[ShiftEditorModal] Modal opened, schedule:', schedule)
       if (schedule) {
+        console.log('[ShiftEditorModal] Editing mode, schedule.id:', schedule.id)
         setFormData({
           id: schedule.id,
           user_id: schedule.user_id,
@@ -115,7 +118,7 @@ export function ShiftEditorModal({
         })
       }
       setError(null)
-      setDeleteConfirm(false)
+      setShowDeleteConfirm(false)
     }
   }, [isOpen, schedule, initialDate, initialTime, staff])
 
@@ -155,18 +158,45 @@ export function ShiftEditorModal({
     }
   }
 
-  const handleDelete = async () => {
+  const handleDeleteClick = () => {
+    if (showDeleteConfirm) {
+      // User confirmed, actually delete
+      executeDelete()
+    } else {
+      // Show confirmation
+      setShowDeleteConfirm(true)
+    }
+  }
+
+  const executeDelete = async () => {
     if (!schedule?.id || !onDelete) return
 
     setLoading(true)
     try {
+      console.log('[ShiftEditorModal] Calling onDelete with id:', schedule.id)
       await onDelete(schedule.id)
+      console.log('[ShiftEditorModal] Delete successful')
+      showToast.success('Shift deleted successfully')
       onClose()
     } catch (err: any) {
-      setError(err.response?.data?.error?.message || 'Failed to delete shift')
+      console.error('[ShiftEditorModal] Delete failed:', err)
+      // Try to extract error message from different possible formats
+      const errorMessage =
+        err.response?.data?.error?.message ||
+        err.response?.data?.error ||
+        err.response?.data?.message ||
+        err.message ||
+        'Failed to delete shift'
+      setError(errorMessage)
+      showToast.error(errorMessage)
     } finally {
       setLoading(false)
+      setShowDeleteConfirm(false)
     }
+  }
+
+  const cancelDelete = () => {
+    setShowDeleteConfirm(false)
   }
 
   const formatTimeForDisplay = (time: string) => {
@@ -358,27 +388,42 @@ export function ShiftEditorModal({
             {/* Actions */}
             <div className="flex gap-3 pt-4">
               {isEditing && onDelete && (
-                <button
-                  type="button"
-                  onClick={() => deleteConfirm ? handleDelete() : setDeleteConfirm(true)}
-                  disabled={loading}
-                  className={`px-4 py-3 rounded-xl font-medium flex items-center justify-center gap-2 transition-colors ${
-                    deleteConfirm
-                      ? 'bg-red-500 hover:bg-red-600 text-white'
-                      : 'border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20'
-                  }`}
-                >
-                  {loading ? (
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                  ) : deleteConfirm ? (
-                    'Confirm Delete'
+                <>
+                  {showDeleteConfirm ? (
+                    <div className="flex-1 flex gap-2">
+                      <button
+                        type="button"
+                        onClick={executeDelete}
+                        disabled={loading}
+                        className="flex-1 px-4 py-3 rounded-xl bg-red-500 hover:bg-red-600 text-white font-medium transition-colors flex items-center justify-center gap-2"
+                      >
+                        {loading ? (
+                          <Loader2 className="w-5 h-5 animate-spin" />
+                        ) : (
+                          'Yes, Delete'
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={cancelDelete}
+                        disabled={loading}
+                        className="flex-1 px-4 py-3 rounded-xl border border-surface-200 dark:border-surface-600 text-surface-700 dark:text-surface-300 font-medium hover:bg-surface-50 dark:hover:bg-surface-700 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
                   ) : (
-                    <>
+                    <button
+                      type="button"
+                      onClick={handleDeleteClick}
+                      disabled={loading}
+                      className="px-4 py-3 rounded-xl border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 font-medium hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex items-center justify-center gap-2"
+                    >
                       <Trash2 className="w-5 h-5" />
                       Delete
-                    </>
+                    </button>
                   )}
-                </button>
+                </>
               )}
               <button
                 type="button"

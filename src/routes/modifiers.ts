@@ -373,6 +373,92 @@ router.post('/menu-items/:itemId/modifier-groups', asyncHandler(async (req: Requ
   ensureRestaurantAccess(req, group.restaurant_id);
   await assertItemRestaurant(db, itemId, group.restaurant_id);
 
+  const normalizedOverrides = {
+    overrideMin: overrideMin === null || overrideMin === undefined ? null : Number(overrideMin),
+    overrideMax: overrideMax === null || overrideMax === undefined ? null : Number(overrideMax),
+    overrideRequired: overrideRequired === null || overrideRequired === undefined ? null : Boolean(overrideRequired),
+    displayOrder: Number(displayOrder ?? 0),
+  };
+
+  const existing = await db.get(
+    `
+      SELECT id
+      FROM item_modifier_groups
+      WHERE item_id = ? AND group_id = ? AND deleted_at IS NULL
+    `,
+    [itemId, groupId]
+  );
+  if (existing) {
+    await db.run(
+      `
+        UPDATE item_modifier_groups
+        SET override_min = ?, override_max = ?, override_required = ?, display_order = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `,
+      [
+        normalizedOverrides.overrideMin,
+        normalizedOverrides.overrideMax,
+        normalizedOverrides.overrideRequired,
+        normalizedOverrides.displayOrder,
+        existing.id,
+      ]
+    );
+    return res.status(200).json({
+      success: true,
+      data: {
+        id: existing.id,
+        itemId,
+        groupId,
+        overrideMin: normalizedOverrides.overrideMin,
+        overrideMax: normalizedOverrides.overrideMax,
+        overrideRequired: normalizedOverrides.overrideRequired,
+        displayOrder: normalizedOverrides.displayOrder,
+      }
+    });
+  }
+
+  const softDeleted = await db.get(
+    `
+      SELECT id
+      FROM item_modifier_groups
+      WHERE item_id = ? AND group_id = ? AND deleted_at IS NOT NULL
+    `,
+    [itemId, groupId]
+  );
+  if (softDeleted) {
+    await db.run(
+      `
+        UPDATE item_modifier_groups
+        SET deleted_at = NULL,
+            override_min = ?,
+            override_max = ?,
+            override_required = ?,
+            display_order = ?,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `,
+      [
+        normalizedOverrides.overrideMin,
+        normalizedOverrides.overrideMax,
+        normalizedOverrides.overrideRequired,
+        normalizedOverrides.displayOrder,
+        softDeleted.id,
+      ]
+    );
+    return res.status(200).json({
+      success: true,
+      data: {
+        id: softDeleted.id,
+        itemId,
+        groupId,
+        overrideMin: normalizedOverrides.overrideMin,
+        overrideMax: normalizedOverrides.overrideMax,
+        overrideRequired: normalizedOverrides.overrideRequired,
+        displayOrder: normalizedOverrides.displayOrder,
+      }
+    });
+  }
+
   const joinId = uuidv4();
   await db.run(`
     INSERT INTO item_modifier_groups (
@@ -382,10 +468,10 @@ router.post('/menu-items/:itemId/modifier-groups', asyncHandler(async (req: Requ
     joinId,
     itemId,
     groupId,
-    overrideMin === null || overrideMin === undefined ? null : Number(overrideMin),
-    overrideMax === null || overrideMax === undefined ? null : Number(overrideMax),
-    overrideRequired === null || overrideRequired === undefined ? null : Boolean(overrideRequired),
-    Number(displayOrder ?? 0),
+    normalizedOverrides.overrideMin,
+    normalizedOverrides.overrideMax,
+    normalizedOverrides.overrideRequired,
+    normalizedOverrides.displayOrder,
   ]);
 
   res.status(201).json({
@@ -394,10 +480,10 @@ router.post('/menu-items/:itemId/modifier-groups', asyncHandler(async (req: Requ
       id: joinId,
       itemId,
       groupId,
-      overrideMin: overrideMin ?? null,
-      overrideMax: overrideMax ?? null,
-      overrideRequired: overrideRequired ?? null,
-      displayOrder: Number(displayOrder ?? 0),
+      overrideMin: normalizedOverrides.overrideMin,
+      overrideMax: normalizedOverrides.overrideMax,
+      overrideRequired: normalizedOverrides.overrideRequired,
+      displayOrder: normalizedOverrides.displayOrder,
     }
   });
 }));

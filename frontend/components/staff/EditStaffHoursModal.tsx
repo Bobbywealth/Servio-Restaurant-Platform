@@ -57,6 +57,7 @@ export default function EditStaffHoursModal({
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [expandedRow, setExpandedRow] = useState<string | null>(null)
+  const [isEditingActiveEntry, setIsEditingActiveEntry] = useState(false)
 
   const [editForm, setEditForm] = useState({
     clockInTime: '',
@@ -90,7 +91,7 @@ export default function EditStaffHoursModal({
   const getWeekStart = (date: Date) => {
     const d = new Date(date)
     const day = d.getDay()
-    const diff = d.getDate() - day + (day === 0 ? -6 : 1)
+    const diff = d.getDate() - day
     return new Date(d.setDate(diff))
   }
 
@@ -137,6 +138,7 @@ export default function EditStaffHoursModal({
 
   const openEditForm = (entry: TimeEntry) => {
     setExpandedRow(entry.id)
+    setIsEditingActiveEntry(!entry.clock_out_time)
     setEditForm({
       clockInTime: toLocalDateTime(entry.clock_in_time),
       clockOutTime: entry.clock_out_time ? toLocalDateTime(entry.clock_out_time) : '',
@@ -150,6 +152,7 @@ export default function EditStaffHoursModal({
 
   const closeEditForm = () => {
     setExpandedRow(null)
+    setIsEditingActiveEntry(false)
     setEditForm({
       clockInTime: '',
       clockOutTime: '',
@@ -196,8 +199,10 @@ export default function EditStaffHoursModal({
     }
 
     if (!editForm.clockOutTime) {
-      errors.clockOutTime = 'Clock out time is required'
-      isValid = false
+      if (!isEditingActiveEntry) {
+        errors.clockOutTime = 'Clock out time is required'
+        isValid = false
+      }
     } else if (editForm.clockInTime && new Date(editForm.clockOutTime) <= new Date(editForm.clockInTime)) {
       errors.clockOutTime = 'Clock out must be after clock in'
       isValid = false
@@ -247,7 +252,7 @@ export default function EditStaffHoursModal({
     try {
       const response = await api.put(`/api/timeclock/entries/${expandedRow}`, {
         clockInTime: fromLocalDateTime(editForm.clockInTime),
-        clockOutTime: fromLocalDateTime(editForm.clockOutTime),
+        clockOutTime: editForm.clockOutTime ? fromLocalDateTime(editForm.clockOutTime) : undefined,
         breakMinutes: parseInt(editForm.breakMinutes) || 0,
         position: editForm.position || undefined,
         notes: editForm.notes || undefined
@@ -430,9 +435,9 @@ export default function EditStaffHoursModal({
                         }}
                       >
                         <button
-                          onClick={() => canEdit && !isActiveEntry && openEditForm(entry)}
+                          onClick={() => canEdit && openEditForm(entry)}
                           className="w-full px-4 py-3 grid grid-cols-7 gap-4 items-center hover:bg-gray-50 dark:hover:bg-surface-700 transition-colors disabled:cursor-not-allowed"
-                          disabled={!canEdit || isActiveEntry}
+                          disabled={!canEdit}
                         >
                           <div className="text-sm font-medium text-surface-900 dark:text-surface-100">
                             {formatDateTime(entry.clock_in_time).split(', ')[0]}
@@ -458,12 +463,10 @@ export default function EditStaffHoursModal({
                             {entry.position || '-'}
                           </div>
                           <div className="text-right">
-                            {canEdit && !isActiveEntry ? (
+                            {canEdit ? (
                               <button className="text-primary-600 hover:text-primary-700 text-sm font-medium">
                                 {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                               </button>
-                            ) : isActiveEntry ? (
-                              <span className="text-xs text-amber-600 font-medium">Active Shift</span>
                             ) : (
                               <span className="text-xs text-surface-400">No Access</span>
                             )}
@@ -535,6 +538,11 @@ export default function EditStaffHoursModal({
                                     />
                                     {formErrors.clockOutTime && (
                                       <p className="text-red-600 text-xs mt-1">{formErrors.clockOutTime}</p>
+                                    )}
+                                    {isEditingActiveEntry && !formErrors.clockOutTime && (
+                                      <p className="text-xs text-surface-500 mt-1">
+                                        Leave blank to keep this shift active.
+                                      </p>
                                     )}
                                   </div>
 

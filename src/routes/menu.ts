@@ -2,11 +2,12 @@ import { Router, Request, Response } from 'express';
 import { DatabaseService } from '../services/DatabaseService';
 import { asyncHandler, UnauthorizedError } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
-import { ensureUploadsDir } from '../utils/uploads';
+import { ensureUploadsDir, getUploadsPath } from '../utils/uploads';
 import multer from 'multer';
 import sharp from 'sharp';
 import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
+import fs from 'fs/promises';
 import OpenAI from 'openai';
 import mammoth from 'mammoth';
 
@@ -491,17 +492,17 @@ router.get('/categories/all', asyncHandler(async (req: Request, res: Response) =
   const restaurantId = req.user?.restaurantId;
   
   const categories = await db.all(`
-    SELECT 
-      id,
-      name,
-      description,
-      COALESCE(is_hidden, FALSE) as is_hidden,
-      sort_order,
-      is_active,
-      created_at,
-      (SELECT COUNT(*) FROM menu_items WHERE category_id = menu_categories.id) as item_count
-    FROM menu_categories 
-    WHERE restaurant_id = ? AND is_active = TRUE
+    SELECT
+        id,
+        name,
+        description,
+        COALESCE(is_hidden, FALSE) as is_hidden,
+        sort_order,
+        is_active,
+        created_at,
+        (SELECT COUNT(*) FROM menu_items WHERE category_id = menu_categories.id) as item_count
+    FROM menu_categories
+    WHERE restaurant_id = ?
     ORDER BY sort_order ASC, name ASC
   `, [restaurantId]);
 
@@ -537,6 +538,92 @@ router.post('/categories', asyncHandler(async (req: Request, res: Response) => {
   );
 
   res.status(201).json({ success: true, data: { id: categoryId, name, description, sortOrder } });
+}));
+
+/**
+ * PUT /api/menu/categories/reorder
+ * Reorder categories by setting sort_order (drag-and-drop)
+ * Body: { categoryIds: string[] }
+ */
+router.put('/categories/reorder', asyncHandler(async (req: Request, res: Response) => {
+  const restaurantId = req.user?.restaurantId;
+  if (!restaurantId) throw new UnauthorizedError();
+  const db = DatabaseService.getInstance().getDatabase();
+
+  const categoryIdsRaw = (req.body?.categoryIds ?? req.body?.orderedIds) as unknown;
+  const categoryIds = Array.isArray(categoryIdsRaw) ? categoryIdsRaw.map(String) : [];
+  if (!categoryIds.length) {
+    return res.status(400).json({ success: false, error: { message: 'categoryIds is required' } });
+  }
+
+  // Verify all categories exist and belong to this restaurant using IN clause
+  const placeholders = categoryIds.map(() => '?').join(', ');
+  const existingCategories = await db.all(
+    `SELECT id FROM menu_categories WHERE id IN (${placeholders}) AND restaurant_id = ?`,
+    [...categoryIds, restaurantId]
+  );
+
+  const existingIds = new Set(existingCategories.map(c => c.id));
+  const missingIds = categoryIds.filter(id => !existingIds.has(id));
+
+  if (missingIds.length > 0) {
+    logger.warn(`Category reorder: ${missingIds.length} categories not found or don't belong to restaurant ${restaurantId}:`, missingIds);
+    // Continue with existing categories only
+  }
+
+  const existingCategoriesOrdered = await db.all(
+    `
+      SELECT id
+      FROM menu_categories
+      WHERE restaurant_id = ?
+      ORDER BY sort_order ASC, name ASC
+    `,
+    [restaurantId]
+  );
+
+  const existingOrderedIds = existingCategoriesOrdered.map((row: { id: string }) => String(row.id));
+  const allExistingIds = new Set(existingOrderedIds);
+  const missingOrderedIds = existingOrderedIds.filter((id) => !categoryIds.includes(id));
+  const orderedIds = [
+    ...categoryIds.filter((id) => allExistingIds.has(id)),
+    ...missingOrderedIds
+  ];
+
+  // Update sort_order for each category
+  let updatedCount = 0;
+  await db.run('BEGIN TRANSACTION');
+  try {
+    for (let i = 0; i < orderedIds.length; i++) {
+      const categoryId = orderedIds[i];
+      if (!allExistingIds.has(categoryId)) continue;
+
+      const result = await db.run(
+        'UPDATE menu_categories SET sort_order = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND restaurant_id = ?',
+        [i, categoryId, restaurantId]
+      );
+
+      if (result.changes > 0) {
+        updatedCount++;
+      }
+    }
+    await db.run('COMMIT');
+  } catch (error) {
+    await db.run('ROLLBACK');
+    throw error;
+  }
+
+  logger.info(`Category reorder: updated ${updatedCount}/${orderedIds.length} categories for restaurant ${restaurantId}`);
+
+  await DatabaseService.getInstance().logAudit(
+    restaurantId,
+    req.user?.id || 'system',
+    'reorder_menu_categories',
+    'menu_category',
+    'multiple',
+    { categoryIds: orderedIds, updatedCount }
+  );
+
+  res.json({ success: true, updated: updatedCount, total: orderedIds.length });
 }));
 
 router.put('/categories/:id', asyncHandler(async (req: Request, res: Response) => {
@@ -770,66 +857,6 @@ router.delete('/categories/:id/modifier-groups/:groupId', asyncHandler(async (re
   res.json({ success: true });
 }));
 
-/**
- * PUT /api/menu/categories/reorder
- * Reorder categories by setting sort_order (drag-and-drop)
- * Body: { categoryIds: string[] }
- */
-router.put('/categories/reorder', asyncHandler(async (req: Request, res: Response) => {
-  const restaurantId = req.user?.restaurantId;
-  if (!restaurantId) throw new UnauthorizedError();
-  const db = DatabaseService.getInstance().getDatabase();
-
-  const categoryIdsRaw = (req.body?.categoryIds ?? req.body?.orderedIds) as unknown;
-  const categoryIds = Array.isArray(categoryIdsRaw) ? categoryIdsRaw.map(String) : [];
-  if (!categoryIds.length) {
-    return res.status(400).json({ success: false, error: { message: 'categoryIds is required' } });
-  }
-
-  // Verify all categories exist and belong to this restaurant using IN clause
-  const placeholders = categoryIds.map(() => '?').join(', ');
-  const existingCategories = await db.all(
-    `SELECT id FROM menu_categories WHERE id IN (${placeholders}) AND restaurant_id = ?`,
-    [...categoryIds, restaurantId]
-  );
-
-  const existingIds = new Set(existingCategories.map(c => c.id));
-  const missingIds = categoryIds.filter(id => !existingIds.has(id));
-
-  if (missingIds.length > 0) {
-    logger.warn(`Category reorder: ${missingIds.length} categories not found or don't belong to restaurant ${restaurantId}:`, missingIds);
-    // Continue with existing categories only
-  }
-
-  // Update sort_order for each category
-  let updatedCount = 0;
-  for (let i = 0; i < categoryIds.length; i++) {
-    const categoryId = categoryIds[i];
-    if (!existingIds.has(categoryId)) continue;
-
-    const result = await db.run(
-      'UPDATE menu_categories SET sort_order = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND restaurant_id = ?',
-      [i, categoryId, restaurantId]
-    );
-
-    if (result.changes > 0) {
-      updatedCount++;
-    }
-  }
-
-  logger.info(`Category reorder: updated ${updatedCount}/${categoryIds.length} categories for restaurant ${restaurantId}`);
-
-  await DatabaseService.getInstance().logAudit(
-    restaurantId,
-    req.user?.id || 'system',
-    'reorder_menu_categories',
-    'menu_category',
-    'multiple',
-    { categoryIds, updatedCount }
-  );
-
-  res.json({ success: true, updated: updatedCount });
-}));
 
 /**
  * PUT /api/menu/categories/:id/items/reorder
@@ -1013,21 +1040,38 @@ router.put('/items/:id', upload.array('images', 5), asyncHandler(async (req: Req
   }
 
   // Handle image updates
+  const previousImages: string[] = JSON.parse(existingItem.images || '[]');
   let images = existingImages ? JSON.parse(existingImages) : [];
-  
+
   if (req.files && Array.isArray(req.files)) {
     const uploadsPath = await ensureUploadsDir('menu');
-    
+
     for (const file of req.files) {
       const fileName = `${id}-${uuidv4()}.webp`;
       const filePath = path.join(uploadsPath, fileName);
-      
+
       await sharp(file.buffer)
         .resize(800, 600, { fit: 'inside', withoutEnlargement: true })
         .webp({ quality: 80 })
         .toFile(filePath);
-      
+
       images.push(`/uploads/menu/${fileName}`);
+    }
+  }
+
+  // Clean up removed image files from disk
+  const removedImages = previousImages.filter((img: string) => !images.includes(img));
+  for (const removedImg of removedImages) {
+    try {
+      const relativeUploadsPath = removedImg.replace(/^\/?uploads\//, '');
+      const filePath = removedImg.startsWith('/uploads/') || removedImg.startsWith('uploads/')
+        ? getUploadsPath(relativeUploadsPath)
+        : (path.isAbsolute(removedImg) ? removedImg : path.join(process.cwd(), removedImg));
+      await fs.unlink(filePath);
+    } catch (err: any) {
+      if (err?.code !== 'ENOENT') {
+        logger.warn(`Failed to delete removed image file: ${removedImg}`, err);
+      }
     }
   }
 
@@ -1123,12 +1167,28 @@ router.delete('/items/:id', asyncHandler(async (req: Request, res: Response) => 
   const restaurantId = req.user?.restaurantId;
   const db = DatabaseService.getInstance().getDatabase();
 
-  const item = await db.get('SELECT id, name FROM menu_items WHERE id = ? AND restaurant_id = ?', [id, restaurantId]);
+  const item = await db.get('SELECT id, name, images FROM menu_items WHERE id = ? AND restaurant_id = ?', [id, restaurantId]);
   if (!item) {
     return res.status(404).json({
       success: false,
       error: { message: 'Menu item not found' }
     });
+  }
+
+  // Clean up image files from disk
+  const itemImages: string[] = JSON.parse(item.images || '[]');
+  for (const img of itemImages) {
+    try {
+      const relativeUploadsPath = img.replace(/^\/?uploads\//, '');
+      const filePath = img.startsWith('/uploads/') || img.startsWith('uploads/')
+        ? getUploadsPath(relativeUploadsPath)
+        : (path.isAbsolute(img) ? img : path.join(process.cwd(), img));
+      await fs.unlink(filePath);
+    } catch (err: any) {
+      if (err?.code !== 'ENOENT') {
+        logger.warn(`Failed to delete image file on item delete: ${img}`, err);
+      }
+    }
   }
 
   await db.run('UPDATE order_items SET menu_item_id = NULL WHERE menu_item_id = ?', [id]);
@@ -1414,16 +1474,17 @@ router.delete('/items/:id/sizes/:sizeId', asyncHandler(async (req: Request, res:
 router.get('/items/full', asyncHandler(async (req: Request, res: Response) => {
   const db = DatabaseService.getInstance().getDatabase();
   const restaurantId = req.user?.restaurantId;
+  const includeInactive = req.query.includeInactive === '1' || req.query.includeInactive === 'true';
 
   const items = await db.all(`
-    SELECT 
+    SELECT
       mi.*,
       mc.name as category_name,
       mc.sort_order as category_sort_order
     FROM menu_items mi
     LEFT JOIN menu_categories mc ON mi.category_id = mc.id
     WHERE mi.restaurant_id = ?
-      AND (mc.is_active = TRUE OR mc.id IS NULL)
+      ${includeInactive ? '' : 'AND (mc.is_active = TRUE OR mc.id IS NULL)'}
     ORDER BY mc.sort_order ASC, mi.sort_order ASC, mi.name ASC
   `, [restaurantId]);
 
@@ -1609,7 +1670,7 @@ router.get('/items/full', asyncHandler(async (req: Request, res: Response) => {
       acc[categoryId] = {
         category_id: item.category_id,
         category_name: categoryName,
-        category_sort_order: item.category_sort_order || 999,
+        category_sort_order: item.category_sort_order ?? 999,
         items: []
       };
     }

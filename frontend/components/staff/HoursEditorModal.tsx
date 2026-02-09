@@ -76,11 +76,11 @@ export function HoursEditorModal({ isOpen, staffMember, onClose, onSave }: Hours
   const [editingEntry, setEditingEntry] = useState<TimeEntry | null>(null)
   const [deletingEntry, setDeletingEntry] = useState<string | null>(null)
 
-  // Get start of week (Monday)
+  // Get start of week (Sunday)
   function getWeekStart(date: Date): Date {
     const d = new Date(date)
     const day = d.getDay()
-    const diff = d.getDate() - day + (day === 0 ? -6 : 1)
+    const diff = d.getDate() - day
     d.setDate(diff)
     d.setHours(0, 0, 0, 0)
     return d

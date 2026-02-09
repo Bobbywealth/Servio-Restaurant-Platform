@@ -935,7 +935,7 @@ router.post('/pin-login', asyncHandler(async (req: Request, res: Response) => {
     LIMIT 1
   `, [user.id]);
 
-  // Get weekly hours
+  // Get weekly hours (current week starting Sunday)
   const startOfWeek = new Date();
   startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
   startOfWeek.setHours(0, 0, 0, 0);
@@ -1003,7 +1003,7 @@ router.get('/my-stats', asyncHandler(async (req: Request, res: Response) => {
 
   const actualUserId = user.id;
 
-  // Get weekly hours (current week starting Monday)
+  // Get weekly hours (current week starting Sunday)
   const startOfWeek = new Date();
   startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
   startOfWeek.setHours(0, 0, 0, 0);
@@ -1099,14 +1099,31 @@ router.get('/staff-hours', asyncHandler(async (req: Request, res: Response) => {
 router.get('/user-daily-hours', asyncHandler(async (req: Request, res: Response) => {
   const db = DatabaseService.getInstance().getDatabase();
 
-  // Get start of current week (Monday)
-  const now = new Date();
-  const dayOfWeek = now.getDay();
-  const startOfWeek = new Date(now);
-  startOfWeek.setDate(now.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1));
-  startOfWeek.setHours(0, 0, 0, 0);
+  let startOfWeek: Date;
+  const { startDate, endDate } = req.query;
 
-  // Get daily hours for each user this week
+  if (startDate && typeof startDate === 'string') {
+    // Use provided start date
+    startOfWeek = new Date(startDate + 'T00:00:00');
+  } else {
+    // Default: Get start of current week (Sunday)
+    const now = new Date();
+    const dayOfWeek = now.getDay(); // 0 = Sunday, 6 = Saturday
+    startOfWeek = new Date(now);
+    startOfWeek.setDate(now.getDate() - dayOfWeek); // Go back to Sunday
+    startOfWeek.setHours(0, 0, 0, 0);
+  }
+
+  let endOfWeek: Date;
+  if (endDate && typeof endDate === 'string') {
+    endOfWeek = new Date(endDate + 'T23:59:59.999');
+  } else {
+    endOfWeek = new Date(startOfWeek);
+    endOfWeek.setDate(startOfWeek.getDate() + 6);
+    endOfWeek.setHours(23, 59, 59, 999);
+  }
+
+  // Get daily hours for each user in the specified week
   const dailyHours = await db.all(`
     SELECT
       u.id as user_id,
@@ -1116,11 +1133,12 @@ router.get('/user-daily-hours', asyncHandler(async (req: Request, res: Response)
     FROM users u
     LEFT JOIN time_entries te ON u.id = te.user_id
       AND te.clock_in_time >= ?
+      AND te.clock_in_time <= ?
       AND te.clock_out_time IS NOT NULL
     WHERE u.is_active = TRUE
     GROUP BY u.id, u.name, te.clock_in_time::date
     ORDER BY u.name, te.clock_in_time::date
-  `, [startOfWeek.toISOString()]);
+  `, [startOfWeek.toISOString(), endOfWeek.toISOString()]);
 
   // Also get currently clocked-in hours for today
   const currentHours = await db.all(`
@@ -1143,7 +1161,11 @@ router.get('/user-daily-hours', asyncHandler(async (req: Request, res: Response)
       userDailyHours[row.user_id] = {};
     }
     if (row.work_date) {
-      userDailyHours[row.user_id][row.work_date] = Number(row.hours || 0);
+      // Normalize date format to YYYY-MM-DD string (handle both Date objects and strings)
+      const dateStr = row.work_date instanceof Date
+        ? row.work_date.toISOString().split('T')[0]
+        : String(row.work_date).split('T')[0];
+      userDailyHours[row.user_id][dateStr] = Number(row.hours || 0);
     }
   }
 

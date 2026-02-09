@@ -14,10 +14,12 @@ import {
   AlertTriangle,
   Check,
   X,
-  Mail
+  Mail,
+  BarChart3
 } from 'lucide-react'
 import { api } from '../../lib/api'
 import { useUser } from '../../contexts/UserContext'
+import MiniHoursChart from './MiniHoursChart'
 
 interface StaffUser {
   id: string
@@ -66,6 +68,7 @@ interface StaffCardProps {
   onEndBreak?: (userId: string) => Promise<void>
   onEdit?: (staff: any) => void
   onDeactivate?: (staff: any) => void
+  onDelete?: (staff: any) => void
   className?: string
   showScheduleView?: boolean
 }
@@ -88,6 +91,7 @@ export function StaffCard({
   onEndBreak,
   onEdit,
   onDeactivate,
+  onDelete,
   className = '',
   showScheduleView = false
 }: StaffCardProps) {
@@ -95,15 +99,17 @@ export function StaffCard({
   const [openMenu, setOpenMenu] = useState<string | null | boolean>(null)
   const [loading, setLoading] = useState<string | null>(null)
   const [shiftDuration, setShiftDuration] = useState<string>('')
+  const [breakMinutesTotal, setBreakMinutesTotal] = useState<number>(0)
   const [isHovering, setIsHovering] = useState(false)
 
   // Staff members cannot edit hours - only managers/owners/admins can
   const canEditHours = isManagerOrOwner || isAdmin
 
-  // Calculate real-time shift duration
+  // Calculate real-time shift duration and break total
   useEffect(() => {
     if (!activeShift || status === 'off-shift') {
       setShiftDuration('')
+      setBreakMinutesTotal(0)
       return
     }
 
@@ -120,6 +126,19 @@ export function StaffCard({
       } else {
         setShiftDuration(`${mins}m`)
       }
+
+      let totalBreakMinutes = Number(activeShift.break_minutes || 0)
+      if (status === 'on-break' && activeShift.current_break_start) {
+        const breakStart = new Date(activeShift.current_break_start)
+        if (!Number.isNaN(breakStart.getTime())) {
+          const breakDiffMs = now.getTime() - breakStart.getTime()
+          const breakDiffMins = Math.floor(breakDiffMs / 60000)
+          if (breakDiffMins > 0) {
+            totalBreakMinutes += breakDiffMins
+          }
+        }
+      }
+      setBreakMinutesTotal(Math.max(0, Math.round(totalBreakMinutes)))
     }
 
     updateDuration()
@@ -232,6 +251,13 @@ export function StaffCard({
     setOpenMenu(null)
   }
 
+  const handleDelete = () => {
+    if (onDelete) {
+      onDelete(member)
+    }
+    setOpenMenu(null)
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -300,6 +326,18 @@ export function StaffCard({
                     <Edit3 className="w-4 h-4" />
                     Edit Staff
                   </button>
+                  {canEditHours && onEditHours && (
+                    <button
+                      onClick={() => {
+                        onEditHours(member)
+                        setOpenMenu(null)
+                      }}
+                      className="w-full px-4 py-3 text-left text-sm text-surface-700 dark:text-surface-200 hover:bg-gray-100 dark:hover:bg-surface-700 flex items-center gap-2"
+                    >
+                      <Clock className="w-4 h-4" />
+                      Edit Hours
+                    </button>
+                  )}
                   {onViewHistory && (
                     <button
                       onClick={() => {
@@ -327,6 +365,15 @@ export function StaffCard({
                     <Trash2 className="w-4 h-4" />
                     Deactivate
                   </button>
+                  {onDelete && (
+                    <button
+                      onClick={handleDelete}
+                      className="w-full px-4 py-3 text-left text-sm text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2"
+                    >
+                      <AlertTriangle className="w-4 h-4" />
+                      Delete Permanently
+                    </button>
+                  )}
                 </div>
               </>
             )}
@@ -444,8 +491,51 @@ export function StaffCard({
                 )}
               </div>
             </div>
+            <div className="mt-2 flex items-center justify-between text-xs text-surface-500 dark:text-surface-300">
+              <div className="flex items-center gap-2">
+                <Coffee className="w-3 h-3" />
+                <span>Breaks</span>
+              </div>
+              <span className="font-medium text-surface-700 dark:text-surface-200">
+                {breakMinutesTotal}m
+              </span>
+            </div>
           </div>
         )}
+
+        {/* Hours Summary with Mini Chart */}
+        <div className="bg-gradient-to-br from-surface-50 to-surface-100 dark:from-surface-700 dark:to-surface-750 rounded-xl p-3 mb-3">
+          {/* Hours Stats */}
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <BarChart3 className="w-4 h-4 text-primary-500" />
+              <span className="text-xs font-medium text-surface-600 dark:text-surface-300">Weekly Hours</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="text-right">
+                <span className="text-xs text-surface-500 dark:text-surface-400">Today</span>
+                <p className={`text-sm font-bold ${isOvertimeToday ? 'text-red-500' : 'text-surface-900 dark:text-surface-100'}`}>
+                  {hoursToday.toFixed(1)}h
+                </p>
+              </div>
+              <div className="w-px h-6 bg-surface-300 dark:bg-surface-600" />
+              <div className="text-right">
+                <span className="text-xs text-surface-500 dark:text-surface-400">Week</span>
+                <p className={`text-sm font-bold ${isOvertimeWeek ? 'text-red-500' : 'text-surface-900 dark:text-surface-100'}`}>
+                  {hoursThisWeek.toFixed(1)}h
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Mini Bar Chart */}
+          {dailyHours && weekDates.length > 0 && (
+            <MiniHoursChart
+              dailyHours={dailyHours.userDailyHours[member.id] || {}}
+              weekDates={weekDates}
+            />
+          )}
+        </div>
 
         {/* Contact Info */}
         <div className="flex items-center space-x-2 text-sm text-surface-600 dark:text-surface-400">

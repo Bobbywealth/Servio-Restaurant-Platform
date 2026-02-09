@@ -375,41 +375,50 @@ app.use('/uploads', express.static(UPLOADS_DIR, {
 logger.info(`Static file serving enabled: /uploads -> ${UPLOADS_DIR}`);
 
 // IN-MEMORY CACHE FOR API RESPONSES
-const cache = new Map();
+const cache = new Map<string, { data: any; timestamp: number; headers: Record<string, string> }>();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 const MAX_CACHE_SIZE = 1000;
 
-// Cache middleware disabled temporarily for debugging
-// app.use((req, res, next) => {
-//   if (req.method === 'GET' && !req.url.includes('/auth') && !req.url.includes('/timeclock')) {
-//     const cacheKey = req.url;
-//     const cached = cache.get(cacheKey);
-//
-//     if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-//       res.set(cached.headers);
-//       res.set('X-Cache', 'HIT');
-//       return res.json(cached.data);
-//     }
-//
-//     // Cache the response
-//     const originalSend = res.json;
-//     res.json = function(data) {
-//       if (res.statusCode === 200 && cache.size < MAX_CACHE_SIZE) {
-//         cache.set(cacheKey, {
-//           data,
-//           timestamp: Date.now(),
-//           headers: {
-//             'Cache-Control': 'public, max-age=300',
-//             'ETag': Buffer.from(JSON.stringify(data)).toString('base64').slice(0, 20)
-//           }
-//         });
-//       }
-//       res.set('X-Cache', 'MISS');
-//       return originalSend.call(this, data);
-//     };
-//   }
-//   next();
-// });
+// Cache middleware for GET requests (excludes auth, timeclock, and real-time data)
+app.use((req, res, next) => {
+  // Only cache GET requests
+  if (req.method !== 'GET') return next();
+
+  // Skip caching for auth, timeclock, and other real-time endpoints
+  const skipCachePatterns = ['/auth', '/timeclock', '/socket.io', '/health', '/notifications', '/push'];
+  if (skipCachePatterns.some(pattern => req.url.includes(pattern))) {
+    return next();
+  }
+
+  // Generate cache key including authorization to separate user-specific data
+  const authHeader = req.headers.authorization || 'anonymous';
+  const cacheKey = `${authHeader.slice(-20)}:${req.url}`;
+  const cached = cache.get(cacheKey);
+
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    res.set(cached.headers);
+    res.set('X-Cache', 'HIT');
+    return res.json(cached.data);
+  }
+
+  // Cache the response
+  const originalJson = res.json.bind(res);
+  res.json = function(data: any) {
+    if (res.statusCode === 200 && cache.size < MAX_CACHE_SIZE) {
+      cache.set(cacheKey, {
+        data,
+        timestamp: Date.now(),
+        headers: {
+          'Cache-Control': 'public, max-age=300',
+          'ETag': Buffer.from(JSON.stringify(data)).toString('base64').slice(0, 20)
+        }
+      });
+    }
+    res.set('X-Cache', 'MISS');
+    return originalJson(data);
+  };
+  next();
+});
 
 // PERFORMANCE HEADERS FOR ALL RESPONSES
 app.use((req, res, next) => {
@@ -564,6 +573,22 @@ app.get('/api', (req, res) => {
 
 // 404 handler moved to initializeServer() to ensure it comes after route registration
 
+// Cleanup expired auth sessions periodically (every hour)
+const SESSION_CLEANUP_INTERVAL = 60 * 60 * 1000; // 1 hour
+let sessionCleanupTimer: ReturnType<typeof setInterval> | null = null;
+
+async function cleanupExpiredSessions() {
+  try {
+    const db = DatabaseService.getInstance().getDatabase();
+    const result = await db.run('DELETE FROM auth_sessions WHERE expires_at < NOW()');
+    if (result.changes > 0) {
+      logger.info(`[session-cleanup] Deleted ${result.changes} expired sessions`);
+    }
+  } catch (error) {
+    logger.error('[session-cleanup] Failed to clean up expired sessions:', error);
+  }
+}
+
 // Initialize server and start listening
 initializeServer().then(() => {
   server.listen(PORT, () => {
@@ -571,6 +596,11 @@ initializeServer().then(() => {
     logger.info(`📱 Assistant API: http://localhost:${PORT}/api/assistant`);
     logger.info(`🔧 Health Check: http://localhost:${PORT}/health`);
     logger.info(`📋 API Docs: http://localhost:${PORT}/api`);
+
+    // Start session cleanup job
+    cleanupExpiredSessions(); // Run once on startup
+    sessionCleanupTimer = setInterval(cleanupExpiredSessions, SESSION_CLEANUP_INTERVAL);
+    logger.info('🧹 Session cleanup job started (runs every hour)');
   });
 }).catch((error) => {
   logger.error('Failed to start server:', error);
@@ -580,6 +610,7 @@ initializeServer().then(() => {
 // Graceful shutdown
 process.on('SIGTERM', () => {
   logger.info('SIGTERM signal received: closing HTTP server');
+  if (sessionCleanupTimer) clearInterval(sessionCleanupTimer);
   server.close(() => {
     logger.info('HTTP server closed');
     DatabaseService.close();
@@ -589,6 +620,7 @@ process.on('SIGTERM', () => {
 
 process.on('SIGINT', () => {
   logger.info('SIGINT signal received: closing HTTP server');
+  if (sessionCleanupTimer) clearInterval(sessionCleanupTimer);
   server.close(() => {
     logger.info('HTTP server closed');
     DatabaseService.close();

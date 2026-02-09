@@ -207,6 +207,7 @@ export default function PublicProfile() {
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
   const [showStickyNav, setShowStickyNav] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [showAllCategories, setShowAllCategories] = useState(false);
 
   // Category visibility state
   const [visibleCategoryCount, setVisibleCategoryCount] = useState(2);
@@ -814,6 +815,12 @@ export default function PublicProfile() {
               </button>
             )}
           </div>
+          {/* Results count */}
+          {searchQuery && (
+            <div className="text-sm text-slate-500">
+              {getFilteredItems().length} results found
+            </div>
+          )}
 
           {/* Filter Row */}
           <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1">
@@ -905,8 +912,8 @@ export default function PublicProfile() {
               All
             </button>
 
-            {/* Individual Category Buttons */}
-            {categories.map(cat => {
+            {/* Individual Category Buttons - Show top 2 or all based on state */}
+            {(showAllCategories ? categories : categories.slice(0, 2)).map(cat => {
               const catLower = cat.toLowerCase();
               const isPopular = catLower.includes('popular') || catLower.includes('hot') || catLower.includes('best');
               const itemsByCat = getItemsByCategory();
@@ -923,9 +930,10 @@ export default function PublicProfile() {
                         ? 'bg-orange-500 text-white'
                         : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                   }`}
+                  title={cat}
                 >
-                  {cat}
-                  <span className={`text-xs ${
+                  <span className="truncate">{cat}</span>
+                  <span className={`text-xs flex-shrink-0 ${
                     selectedCategory === cat ? 'text-white/70' : 'text-slate-400'
                   }`}>
                     ({categoryItems.length})
@@ -933,6 +941,20 @@ export default function PublicProfile() {
                 </button>
               );
             })}
+
+            {/* More Button - Show if there are more categories */}
+            {categories.length > 2 && (
+              <button
+                onClick={() => setShowAllCategories(!showAllCategories)}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all flex-shrink-0 ${
+                  showAllCategories
+                    ? 'bg-blue-100 text-blue-700'
+                    : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
+                }`}
+              >
+                {showAllCategories ? 'Show less' : `+${categories.length - 2} more`}
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -943,35 +965,50 @@ export default function PublicProfile() {
           initial={{ y: -100 }}
           animate={{ y: 0 }}
           className="sticky top-[68px] z-10 bg-white/95 backdrop-blur-md border-b border-slate-200/50 shadow-sm"
-          style={{ maxHeight: 'calc(100vh - 140px)', overflowY: 'auto' }}
         >
           <div className="max-w-4xl mx-auto px-4 py-2">
-            <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-2">
+            <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-2 -mx-4 px-4">
               {/* All Categories Button for sticky nav */}
               <button
-                onClick={() => scrollToCategory('all')}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all bg-blue-600 text-white"
+                onClick={() => { scrollToCategory('all'); setShowAllCategories(true); }}
+                className="flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-all bg-blue-600 text-white flex-shrink-0"
               >
                 All
               </button>
 
-              {categories.map(cat => {
+              {/* Show top 2 or all categories based on state */}
+              {(showAllCategories ? categories : categories.slice(0, 2)).map(cat => {
                 const catLower = cat.toLowerCase();
                 const isPopular = catLower.includes('popular') || catLower.includes('hot') || catLower.includes('best');
                 return (
                   <button
                     key={cat}
                     onClick={() => scrollToCategory(cat)}
-                    className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all ${
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-all flex-shrink-0 max-w-[100px] truncate ${
                       isPopular
                         ? 'bg-orange-500 text-white'
                         : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                     }`}
+                    title={cat}
                   >
-                    {cat}
+                    <span className="truncate">{cat}</span>
                   </button>
                 );
               })}
+
+              {/* More Button for sticky nav */}
+              {categories.length > 2 && (
+                <button
+                  onClick={() => setShowAllCategories(!showAllCategories)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-all flex-shrink-0 ${
+                    showAllCategories
+                      ? 'bg-blue-100 text-blue-700'
+                      : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
+                  }`}
+                >
+                  {showAllCategories ? 'Less' : `+${categories.length - 2}`}
+                </button>
+              )}
             </div>
           </div>
         </motion.div>
@@ -1011,30 +1048,32 @@ export default function PublicProfile() {
                 transition={{ delay: catIndex * 0.05 }}
               >
                 {/* Visual Category Header with Collapsible */}
-                <div className="flex items-center justify-between mb-4 bg-white/95 py-2 -mt-2">
+                <div className="flex items-center justify-between mb-4 bg-gradient-to-r from-white to-slate-50 rounded-2xl px-4 py-3 -mt-2 border border-slate-100 shadow-sm">
                   <div className="flex items-center gap-3">
                     {isPopular && (
-                      <span className="flex items-center gap-1 px-2 py-1 bg-orange-500 text-white text-xs font-bold rounded-full">
+                      <span className="flex items-center gap-1 px-3 py-1 bg-gradient-to-r from-orange-500 to-orange-600 text-white text-xs font-bold rounded-full shadow-sm">
                         <Flame className="w-3 h-3" />
                         HOT
                       </span>
                     )}
-                    <h2 className={`font-black text-slate-900 ${
-                      isPopular ? 'text-2xl' : 'text-xl'
+                    <h2 className={`font-bold text-slate-900 ${
+                      isPopular ? 'text-xl' : 'text-lg'
                     }`}>
                       {cat}
                     </h2>
-                    <span className="text-sm text-slate-400 font-medium">({categoryItems.length})</span>
+                    <span className="text-sm text-slate-400 font-medium bg-slate-100 px-2 py-0.5 rounded-full">
+                      {categoryItems.length}
+                    </span>
                   </div>
                   <button
                     onClick={() => toggleCategory(cat)}
-                    className="flex items-center justify-center w-10 h-10 rounded-full bg-slate-100 hover:bg-slate-200 transition-colors"
+                    className="flex items-center justify-center w-9 h-9 rounded-full bg-slate-100 hover:bg-blue-100 hover:text-blue-600 transition-all active:scale-95"
                     aria-label={isCollapsed ? `Expand ${cat}` : `Collapse ${cat}`}
                   >
                     {isCollapsed ? (
-                      <ChevronDown className="w-5 h-5 text-slate-600" />
+                      <ChevronDown className="w-5 h-5" />
                     ) : (
-                      <ChevronUp className="w-5 h-5 text-slate-600" />
+                      <ChevronUp className="w-5 h-5" />
                     )}
                   </button>
                 </div>
@@ -1055,11 +1094,10 @@ export default function PublicProfile() {
                     {categoryItems.map((item, itemIndex) => (
                       <motion.div
                         key={item.id}
-                        className="group bg-white rounded-2xl p-4 shadow-sm border border-slate-100 hover:shadow-xl hover:border-slate-200 transition-all duration-300"
+                        className="group bg-white rounded-2xl p-4 shadow-sm border border-slate-100 hover:shadow-lg hover:border-blue-200 hover:-translate-y-1 transition-all duration-300 cursor-pointer"
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: (catIndex * 0.05) + (itemIndex * 0.03) }}
-                        whileHover={{ y: -2 }}
                       >
                         <div className="flex justify-between items-start gap-3">
                           <div className="flex-1 flex gap-3">
