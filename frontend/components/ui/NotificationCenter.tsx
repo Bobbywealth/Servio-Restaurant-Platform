@@ -300,16 +300,16 @@ export default function NotificationCenter({ className = '' }: NotificationCente
               className={`
                 ${isMobile 
                   ? 'fixed bottom-0 left-0 right-0 z-50 rounded-t-2xl' 
-                  : 'absolute right-0 top-14 z-50 w-full sm:w-96 max-w-[calc(100vw-2rem)]'
+                  : 'absolute right-0 top-14 z-50 w-80 sm:w-96'
                 }
               `}
             >
               <div className="
                 bg-white dark:bg-gray-900 
-                border border-gray-200 dark:border-gray-700
-                shadow-2xl overflow-hidden
+                border-t border-x border-gray-200 dark:border-gray-700
+                shadow-2xl
                 flex flex-col
-                ${isMobile ? 'rounded-t-2xl max-h-[70vh]' : 'rounded-xl max-h-[600px]'}
+                ${isMobile ? 'rounded-t-2xl h-[70vh] max-h-[70vh]' : 'rounded-xl h-[600px] max-h-[600px]'}
               ">
                 {/* Header */}
                 <div className="
