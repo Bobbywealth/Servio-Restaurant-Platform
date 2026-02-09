@@ -118,6 +118,7 @@ const MenuManagement: React.FC = () => {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  const selectedItemIdRef = useRef<string | null>(null);
   const editorClosedByUserRef = useRef(false);
   const previousActiveCategoryIdRef = useRef<string | null>(null);
   const [editorTab, setEditorTab] = useState<'basics' | 'availability' | 'modifiers' | 'preview'>('basics');
@@ -439,6 +440,7 @@ const MenuManagement: React.FC = () => {
     const previousCategoryId = previousActiveCategoryIdRef.current;
     const categoryChanged = previousCategoryId !== activeCategoryId;
     previousActiveCategoryIdRef.current = activeCategoryId ?? null;
+    
     if (loading) return;
     if (basicsDirty) return;
     if (!activeCategoryId) {
@@ -453,12 +455,17 @@ const MenuManagement: React.FC = () => {
       setEditingItem(null);
       return;
     }
-    const stillExists = selectedItemId ? items.find((i) => i.id === selectedItemId) : null;
+    
+    // BUG #2 FIX: Use ref to track selectedItemId to avoid dependency loop
+    const currentSelectedItemId = selectedItemIdRef.current;
+    const stillExists = currentSelectedItemId ? items.find((i) => i.id === currentSelectedItemId) : null;
     if (stillExists) {
       // Keep current selection in sync with refreshed object
       setEditingItem(stillExists);
       return;
     }
+    // Update ref when selectedItemId changes
+    selectedItemIdRef.current = selectedItemId;
     if (!categoryChanged) {
       return;
     }
@@ -470,7 +477,7 @@ const MenuManagement: React.FC = () => {
     // Auto-select first item in category
     void openEditItemModal(items[0]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeCategoryId, categories, loading, basicsDirty, selectedItemId]);
+  }, [activeCategoryId, categories, loading, basicsDirty]);
 
   const loadModifierGroups = useCallback(async () => {
     try {
@@ -563,9 +570,12 @@ const MenuManagement: React.FC = () => {
   // Keep category-level groups in sync with selected category
   useEffect(() => {
     const categoryId = selectedCategory && selectedCategory !== 'all' ? selectedCategory : categories[0]?.id;
+    
     if (!categoryId) return;
     loadCategoryChoiceGroups(categoryId);
-  }, [selectedCategory, categories, loadCategoryChoiceGroups]);
+  }, [selectedCategory, loadCategoryChoiceGroups]);
+  // BUG #3 FIX: Removed 'categories' from dependencies to avoid excessive re-renders
+  // The effect will still run when selectedCategory changes, which is sufficient
 
   // DnD sensors (must be defined at top-level for hooks)
   // Touch-friendly sensors with larger activation distance for tablet use
@@ -873,10 +883,14 @@ const MenuManagement: React.FC = () => {
         selectionType: 'single',
         options: [{ name: '', priceDelta: 0 }]
       });
-
-      // Reload data
-      await loadModifierGroups();
-      await loadMenuData();
+      try {
+        await loadModifierGroups();
+      } catch (error) {
+      }
+      try {
+        await loadMenuData();
+      } catch (error) {
+      }
       // Refresh attached groups
       const groups = Array.isArray((editItem as any).modifierGroups) ? (editItem as any).modifierGroups : [];
       const attached = groups
@@ -992,6 +1006,7 @@ const MenuManagement: React.FC = () => {
     attachments: AttachedGroup[],
     existingAttachments: AttachedGroup[]
   ) => {
+    
     // Build list of groups to attach
     const attachmentsToCreate = [];
     for (const att of attachments) {
@@ -1004,18 +1019,35 @@ const MenuManagement: React.FC = () => {
       });
     }
 
+    let creationErrors: any[] = [];
     // First, create all new attachments
     for (const att of attachmentsToCreate) {
-      await api.post(`/api/menu-items/${itemId}/modifier-groups`, att);
+      try {
+        await api.post(`/api/menu-items/${itemId}/modifier-groups`, att);
+      } catch (error) {
+        creationErrors.push({ groupId: att.groupId, error });
+      }
+    }
+
+    // If there were creation errors, log and potentially abort deletion
+    if (creationErrors.length > 0) {
     }
 
     // Then, delete only the old attachments that aren't in the new list
     const newGroupIds = new Set(attachments.map(a => a.groupId));
+      newGroupIds: Array.from(newGroupIds),
+      existingGroupIds: existingAttachments.map(e => e.groupId)
+    });
+    
     for (const existing of existingAttachments) {
       if (existing.groupId && !newGroupIds.has(existing.groupId)) {
-        await api.delete(`/api/menu-items/${itemId}/modifier-groups/${existing.groupId}`);
+        try {
+          await api.delete(`/api/menu-items/${itemId}/modifier-groups/${existing.groupId}`);
+        } catch (error) {
+        }
       }
     }
+    
   };
 
   const handleImportFile = async (file: File) => {

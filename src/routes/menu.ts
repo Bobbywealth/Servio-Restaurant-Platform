@@ -466,15 +466,31 @@ router.get('/public/:slug', asyncHandler(async (req: Request, res: Response) => 
     };
   });
 
+  // Safe JSON parsing for restaurant data
+  const safeJsonParse = (str: string | null | undefined, fallback: any = {}) => {
+    if (!str || str.trim() === '' || str === 'null' || str === 'undefined') {
+      return fallback;
+    }
+    try {
+      return JSON.parse(str);
+    } catch (e) {
+      logger.warn('[BUG-1] JSON parse warning:', {
+        field: str.substring(0, 50) + '...',
+        error: e instanceof Error ? e.message : 'Unknown error'
+      });
+      return fallback;
+    }
+  };
+
   res.json({
     success: true,
     data: {
       restaurant: { 
         name: restaurant.name, 
-        settings: JSON.parse(restaurant.settings || '{}'),
+        settings: safeJsonParse(restaurant.settings),
         logo_url: restaurant.logo_url,
         cover_image_url: restaurant.cover_image_url,
-        address: JSON.parse(restaurant.address || '{}'),
+        address: safeJsonParse(restaurant.address),
         phone: restaurant.phone,
         description: restaurant.description
       },

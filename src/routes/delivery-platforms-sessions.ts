@@ -187,9 +187,13 @@ router.get('/list', asyncHandler(async (req: Request, res: Response) => {
  * Clean up expired sessions (admin only)
  */
 router.post('/cleanup', asyncHandler(async (req: Request, res: Response) => {
-  // TODO: Add admin check here
-  // if (req.user?.role !== 'admin') throw new UnauthorizedError('Admin only');
-
+  // Admin check
+  if (req.user?.role !== 'platform-admin' && req.user?.role !== 'admin') {
+    return res.status(403).json({
+      success: false,
+      error: { message: 'Admin access required' }
+    });
+  }
   const cleaned = sessionService.cleanupExpiredSessions();
 
   res.json({
