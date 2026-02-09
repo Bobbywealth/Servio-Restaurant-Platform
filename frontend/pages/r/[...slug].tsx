@@ -102,6 +102,70 @@ interface CartItem extends MenuItem {
   calculatedPrice: number; // Base price + size + modifiers
 }
 
+interface PublicCategorySidebarProps {
+  categories: string[];
+  selectedCategory: string | null;
+  onCategorySelect: (category: string) => void;
+  itemsByCategory: Record<string, MenuItem[]>;
+}
+
+function PublicCategorySidebar({ categories, selectedCategory, onCategorySelect, itemsByCategory }: PublicCategorySidebarProps) {
+  return (
+    <aside className="hidden lg:block w-64 shrink-0 sticky top-40 h-fit">
+      <div className="bg-white/95 backdrop-blur-md rounded-2xl shadow-sm border border-slate-200/50 overflow-hidden">
+        <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-4 py-3">
+          <h3 className="text-white font-bold text-sm uppercase tracking-wide">Categories</h3>
+        </div>
+        <nav className="max-h-[calc(100vh-300px)] overflow-y-auto scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-transparent">
+          <ul className="p-2 space-y-1">
+            <li>
+              <button
+                onClick={() => onCategorySelect('all')}
+                className={`w-full text-left px-4 py-3 rounded-xl text-sm font-medium transition-all ${
+                  !selectedCategory || selectedCategory === 'all'
+                    ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20'
+                    : 'text-slate-700 hover:bg-slate-100'
+                }`}
+              >
+                All Items
+              </button>
+            </li>
+            {categories.map((cat) => {
+              const catLower = cat.toLowerCase();
+              const isPopular = catLower.includes('popular') || catLower.includes('hot') || catLower.includes('best');
+              const categoryItems = itemsByCategory[cat] || [];
+              const itemCount = categoryItems.length;
+
+              return (
+                <li key={cat}>
+                  <button
+                    onClick={() => onCategorySelect(cat)}
+                    className={`w-full text-left px-4 py-3 rounded-xl text-sm font-medium transition-all flex items-center justify-between ${
+                      selectedCategory === cat
+                        ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20'
+                        : 'text-slate-700 hover:bg-slate-100'
+                    }`}
+                  >
+                    <span className="flex items-center gap-2">
+                      {isPopular && <Flame className="w-3.5 h-3.5 text-orange-400" />}
+                      <span className="truncate">{cat}</span>
+                    </span>
+                    <span className={`text-xs font-bold rounded-full px-2 py-0.5 ${
+                      selectedCategory === cat ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'
+                    }`}>
+                      {itemCount}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
+      </div>
+    </aside>
+  );
+}
+
 export default function PublicProfile() {
   const router = useRouter();
   const { slug } = router.query;
@@ -143,6 +207,10 @@ export default function PublicProfile() {
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
   const [showStickyNav, setShowStickyNav] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+
+  // Category visibility state
+  const [visibleCategoryCount, setVisibleCategoryCount] = useState(2);
+  const [showAllCategories, setShowAllCategories] = useState(false);
 
   // Scroll listener for sticky navigation
   useEffect(() => {
@@ -224,6 +292,14 @@ export default function PublicProfile() {
     return itemsByCat;
   };
 
+  // Get visible categories (limited or all)
+  const getVisibleCategories = () => {
+    if (showAllCategories) {
+      return categories;
+    }
+    return categories.slice(0, visibleCategoryCount);
+  };
+
   // Scroll to category
   const scrollToCategory = (cat: string) => {
     setSelectedCategory(cat === 'all' ? null : cat);
@@ -237,6 +313,23 @@ export default function PublicProfile() {
         behavior: 'smooth'
       });
     }
+  };
+
+  // Handle showing more categories
+  const handleShowMoreCategories = () => {
+    setVisibleCategoryCount(prev => prev + 2);
+  };
+
+  // Handle showing all categories
+  const handleShowAllCategories = () => {
+    setShowAllCategories(true);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // Handle showing less categories
+  const handleShowLessCategories = () => {
+    setVisibleCategoryCount(2);
+    setShowAllCategories(false);
   };
 
   useEffect(() => {
@@ -796,14 +889,14 @@ export default function PublicProfile() {
         </div>
       </div>
 
-      {/* Category Selection Bar - Always Visible */}
-      <div className="sticky top-[140px] z-10 bg-white/95 backdrop-blur-md border-b border-slate-200/50 shadow-sm">
-        <div className="max-w-4xl mx-auto px-4 py-3">
+      {/* Category Selection Bar - Mobile Only */}
+      <div className="sticky top-[140px] z-10 lg:hidden bg-white/95 backdrop-blur-md border-b border-slate-200/50 shadow-sm">
+        <div className="max-w-4xl mx-auto px-4 py-4">
           <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1">
             {/* All Categories Button */}
             <button
               onClick={() => scrollToCategory('all')}
-              className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all ${
+              className={`flex items-center gap-1.5 px-4 py-3 rounded-full text-sm font-medium whitespace-nowrap transition-all min-h-[44px] ${
                 !selectedCategory || selectedCategory === 'all'
                   ? 'bg-blue-600 text-white'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
@@ -823,7 +916,7 @@ export default function PublicProfile() {
                 <button
                   key={cat}
                   onClick={() => scrollToCategory(cat)}
-                  className={`flex items-center gap-1.5 px-3 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all ${
+                  className={`flex items-center gap-1.5 px-4 py-3 rounded-full text-sm font-medium whitespace-nowrap transition-all min-h-[44px] ${
                     selectedCategory === cat
                       ? 'bg-blue-600 text-white'
                       : isPopular
@@ -885,9 +978,20 @@ export default function PublicProfile() {
       )}
 
       {/* Menu */}
-      <div className="max-w-4xl mx-auto px-4 py-6">
-        <div className="space-y-8">
-          {categories.map((cat, catIndex) => {
+      <div className="max-w-6xl mx-auto px-4 py-6">
+        <div className="flex gap-6">
+          {/* Desktop Sidebar - Hidden on Mobile, Visible on Desktop */}
+          <PublicCategorySidebar
+            categories={categories}
+            selectedCategory={selectedCategory}
+            onCategorySelect={scrollToCategory}
+            itemsByCategory={getItemsByCategory()}
+          />
+
+          {/* Main Content - Full width on mobile, flex-1 on desktop */}
+          <div className="flex-1 min-w-0">
+            <div className="space-y-8">
+              {getVisibleCategories().map((cat, catIndex) => {
             const itemsByCat = getItemsByCategory();
             const categoryItems = itemsByCat[cat] || [];
             const isCollapsed = collapsedCategories.has(cat);
@@ -1000,6 +1104,46 @@ export default function PublicProfile() {
               </motion.div>
             );
           })}
+
+          {/* Show More Categories Button */}
+          {!showAllCategories && categories.length > 2 && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="text-center py-6"
+            >
+              <button
+                onClick={handleShowMoreCategories}
+                className="px-8 py-4 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-2xl font-bold text-base shadow-lg shadow-blue-600/30 transition-all hover:scale-105 active:scale-95 min-h-[52px]"
+              >
+                Show More Categories ({categories.length - visibleCategoryCount} remaining)
+              </button>
+              <div className="mt-3">
+                <button
+                  onClick={handleShowAllCategories}
+                  className="text-blue-600 font-semibold hover:text-blue-700 text-sm underline"
+                >
+                  Show all {categories.length} categories
+                </button>
+              </div>
+            </motion.div>
+          )}
+
+          {/* Show All Categories Button (when showing partial) */}
+          {showAllCategories && categories.length > 2 && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="text-center py-6"
+            >
+              <button
+                onClick={handleShowLessCategories}
+                className="px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold text-sm transition-all min-h-[44px]"
+              >
+                Show Less Categories
+              </button>
+            </motion.div>
+          )}
         </div>
 
         {/* No Results Message */}
@@ -1016,6 +1160,8 @@ export default function PublicProfile() {
             </button>
           </div>
         )}
+        </div>
+      </div>
       </div>
 
       {cart.length > 0 && (
