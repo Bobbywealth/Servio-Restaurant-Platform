@@ -26,7 +26,9 @@ import {
   Copy,
   Eye,
   EyeOff,
-  Trash2
+  Trash2,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react'
 import { api } from '../../lib/api'
 import { socketManager } from '../../lib/socket'
@@ -560,10 +562,11 @@ export default function StaffPage() {
   const [templates, setTemplates] = useState<ShiftTemplate[]>([])
   const [selectedWeekStart, setSelectedWeekStart] = useState<Date>(() => {
     const now = new Date()
-    const dayOfWeek = now.getDay()
-    const monday = new Date(now)
-    monday.setDate(now.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1))
-    return monday
+    const dayOfWeek = now.getDay() // 0 = Sunday, 6 = Saturday
+    const sunday = new Date(now)
+    sunday.setDate(now.getDate() - dayOfWeek) // Go back to Sunday
+    sunday.setHours(0, 0, 0, 0)
+    return sunday
   })
   const [editingSchedule, setEditingSchedule] = useState<Schedule | null>(null)
   const [showShiftModal, setShowShiftModal] = useState(false)
@@ -585,6 +588,21 @@ export default function StaffPage() {
     return value.split('T')[0]
   }
 
+  const getWeekRange = useCallback((weekStart?: Date) => {
+    const start = weekStart ? new Date(weekStart) : new Date(selectedWeekStart)
+    start.setHours(0, 0, 0, 0)
+
+    const end = new Date(start)
+    end.setDate(start.getDate() + 6)
+    end.setHours(23, 59, 59, 999)
+
+    return {
+      startDate: formatLocalDate(start),
+      endDate: formatLocalDate(end)
+    }
+  }, [selectedWeekStart])
+
+  // For backward compatibility - returns current calendar week
   const getCurrentWeekRange = () => {
     const now = new Date()
     const dayOfWeek = now.getDay()
@@ -602,23 +620,15 @@ export default function StaffPage() {
     }
   }
 
-  // Get week dates for the bar chart (Sunday to Saturday)
-  const getWeekDates = () => {
+  // Check if currently viewing the current week
+  const isCurrentWeek = useMemo(() => {
     const now = new Date()
-    const dayOfWeek = now.getDay() // 0 = Sunday, 6 = Saturday
-    const sunday = new Date(now)
-    sunday.setDate(now.getDate() - dayOfWeek) // Go back to Sunday
-
-    const dates: string[] = []
-    for (let i = 0; i < 7; i++) {
-      const date = new Date(sunday)
-      date.setDate(sunday.getDate() + i)
-      dates.push(formatLocalDate(date))
-    }
-    return dates
-  }
-
-  const weekDates = getWeekDates()
+    const dayOfWeek = now.getDay()
+    const currentSunday = new Date(now)
+    currentSunday.setDate(now.getDate() - dayOfWeek)
+    currentSunday.setHours(0, 0, 0, 0)
+    return formatLocalDate(selectedWeekStart) === formatLocalDate(currentSunday)
+  }, [selectedWeekStart])
 
   const selectedWeekDates = useMemo(() => {
     const dates: string[] = []
@@ -664,38 +674,33 @@ export default function StaffPage() {
 
         try {
           const { startDate, endDate } = getCurrentWeekRange()
-          const statsResp = await api.get('/api/timeclock/stats', {
-            params: { startDate, endDate }
-          })
+          const [statsResp, todayResp, dailyResp] = await Promise.all([
+            api.get('/api/timeclock/stats', {
+              params: { startDate, endDate }
+            }),
+            api.get('/api/timeclock/staff-hours'),
+            api.get('/api/timeclock/user-daily-hours', {
+              params: { startDate, endDate }
+            })
+          ])
+
           const userStats = (statsResp.data?.data?.userStats || []) as Array<{ user_id: string; total_hours: number }>
           const hoursMap: Record<string, number> = {}
           for (const s of userStats) {
             hoursMap[s.user_id] = Number(s.total_hours || 0)
           }
           if (isMounted) setHoursByUserId(hoursMap)
-        } catch (statsError) {
-          console.warn('Failed to load timeclock stats:', statsError)
-        }
 
-        // Fetch today's hours for each staff member
-        try {
-          const todayResp = await api.get('/api/timeclock/staff-hours')
           const todayHours = (todayResp.data?.data?.staffHours || []) as Array<{ userId: string; todayHours: number }>
           const todayHoursMap: Record<string, number> = {}
           for (const s of todayHours) {
             todayHoursMap[s.userId] = s.todayHours
           }
           if (isMounted) setTodayHoursByUserId(todayHoursMap)
-        } catch (todayError) {
-          console.warn('Failed to load today hours:', todayError)
-        }
 
-        // Fetch daily hours breakdown for the week
-        try {
-          const dailyResp = await api.get('/api/timeclock/user-daily-hours')
           if (isMounted) setDailyHours(dailyResp.data?.data || null)
-        } catch (dailyError) {
-          console.warn('Failed to load daily hours:', dailyError)
+        } catch (statsError) {
+          console.warn('Failed to load timeclock data:', statsError)
         }
 
         // Fetch schedules for the current week
@@ -794,10 +799,17 @@ export default function StaffPage() {
 
   const refreshHoursData = async () => {
     try {
-      const { startDate, endDate } = getCurrentWeekRange()
-      const statsResp = await api.get('/api/timeclock/stats', {
-        params: { startDate, endDate }
-      })
+      const { startDate, endDate } = getWeekRange()
+      const [statsResp, todayResp, dailyResp] = await Promise.all([
+        api.get('/api/timeclock/stats', {
+          params: { startDate, endDate }
+        }),
+        api.get('/api/timeclock/staff-hours'),
+        api.get('/api/timeclock/user-daily-hours', {
+          params: { startDate, endDate }
+        })
+      ])
+
       const userStats = (statsResp.data?.data?.userStats || []) as Array<{ user_id: string; total_hours: number }>
       const hoursMap: Record<string, number> = {}
       for (const s of userStats) {
@@ -805,24 +817,51 @@ export default function StaffPage() {
       }
       setHoursByUserId(hoursMap)
 
-      const todayResp = await api.get('/api/timeclock/staff-hours')
       const todayHours = (todayResp.data?.data?.staffHours || []) as Array<{ userId: string; todayHours: number }>
       const todayHoursMap: Record<string, number> = {}
       for (const s of todayHours) {
         todayHoursMap[s.userId] = s.todayHours
       }
       setTodayHoursByUserId(todayHoursMap)
+      setDailyHours(dailyResp.data?.data || null)
     } catch (e) {
       console.error('Failed to refresh hours:', e)
     }
   }
 
-  const loadSchedules = async (showError = false) => {
-    try {
-      const endDate = new Date(selectedWeekStart)
-      endDate.setDate(selectedWeekStart.getDate() + 6)
+  const loadWeekData = async (weekStart?: Date) => {
+    const ws = weekStart || selectedWeekStart
+    const { startDate, endDate } = getWeekRange(ws)
 
-      const startDateStr = formatLocalDate(selectedWeekStart)
+    try {
+      const [statsResp, dailyResp] = await Promise.all([
+        api.get('/api/timeclock/stats', {
+          params: { startDate, endDate }
+        }),
+        api.get('/api/timeclock/user-daily-hours', {
+          params: { startDate, endDate }
+        })
+      ])
+
+      const userStats = (statsResp.data?.data?.userStats || []) as Array<{ user_id: string; total_hours: number }>
+      const hoursMap: Record<string, number> = {}
+      for (const s of userStats) {
+        hoursMap[s.user_id] = Number(s.total_hours || 0)
+      }
+      setHoursByUserId(hoursMap)
+      setDailyHours(dailyResp.data?.data || null)
+    } catch (e) {
+      console.warn('Failed to load week data:', e)
+    }
+  }
+
+  const loadSchedules = async (showError = false, weekStart?: Date) => {
+    const ws = weekStart || selectedWeekStart
+    try {
+      const endDate = new Date(ws)
+      endDate.setDate(ws.getDate() + 6)
+
+      const startDateStr = formatLocalDate(ws)
       const endDateStr = formatLocalDate(endDate)
 
       console.log('[SCHEDULING-FRONTEND] Fetching schedules for date range:', startDateStr, 'to', endDateStr);
@@ -1054,7 +1093,10 @@ export default function StaffPage() {
 
   const handleWeekChange = useCallback(async (date: Date) => {
     setSelectedWeekStart(date)
-    await loadSchedules()
+    await Promise.all([
+      loadSchedules(false, date),
+      loadWeekData(date)
+    ])
   }, [])
 
   const handleStaffCreated = () => {
@@ -1099,31 +1141,7 @@ export default function StaffPage() {
       })
 
       if (response.data.success) {
-        // Refresh current staff data
-        const currentResp = await api.get('/api/timeclock/current-staff')
-        setCurrentStaff(currentResp.data?.data?.currentStaff || [])
-
-        // Refresh today's hours
-        const todayResp = await api.get('/api/timeclock/staff-hours')
-        const todayHours = (todayResp.data?.data?.staffHours || []) as Array<{ userId: string; todayHours: number }>
-        const todayHoursMap: Record<string, number> = {}
-        for (const s of todayHours) {
-          todayHoursMap[s.userId] = s.todayHours
-        }
-        setTodayHoursByUserId(todayHoursMap)
-
-        // Refresh weekly stats
-        const { startDate, endDate } = getCurrentWeekRange()
-        const statsResp = await api.get('/api/timeclock/stats', {
-          params: { startDate, endDate }
-        })
-        const userStats = (statsResp.data?.data?.userStats || []) as Array<{ user_id: string; total_hours: number }>
-        const hoursMap: Record<string, number> = {}
-        for (const s of userStats) {
-          hoursMap[s.user_id] = Number(s.total_hours || 0)
-        }
-        setHoursByUserId(hoursMap)
-
+        await Promise.all([refreshStaffData(), refreshHoursData()])
         showToast.success(`${response.data.data.userName} clocked out successfully`)
       }
     } catch (err: any) {
@@ -1193,33 +1211,7 @@ export default function StaffPage() {
     }
 
     // Refresh all data
-    const { startDate, endDate } = getCurrentWeekRange()
-    const [currentResp, todayResp, statsResp, dailyResp] = await Promise.all([
-      api.get('/api/timeclock/current-staff'),
-      api.get('/api/timeclock/staff-hours'),
-      api.get('/api/timeclock/stats', {
-        params: { startDate, endDate }
-      }),
-      api.get('/api/timeclock/user-daily-hours')
-    ])
-
-    setCurrentStaff(currentResp.data?.data?.currentStaff || [])
-
-    const todayHours = (todayResp.data?.data?.staffHours || []) as Array<{ userId: string; todayHours: number }>
-    const todayHoursMap: Record<string, number> = {}
-    for (const s of todayHours) {
-      todayHoursMap[s.userId] = s.todayHours
-    }
-    setTodayHoursByUserId(todayHoursMap)
-
-    const userStats = (statsResp.data?.data?.userStats || []) as Array<{ user_id: string; total_hours: number }>
-    const hoursMap: Record<string, number> = {}
-    for (const s of userStats) {
-      hoursMap[s.user_id] = Number(s.total_hours || 0)
-    }
-    setHoursByUserId(hoursMap)
-
-    setDailyHours(dailyResp.data?.data || null)
+    await Promise.all([refreshStaffData(), refreshHoursData()])
 
     const actionText = quickActionType === 'clock-in' ? 'clocked in' : 'clocked out'
     showToast.success(`Staff ${actionText} successfully`)
@@ -1485,7 +1477,7 @@ export default function StaffPage() {
                 </div>
                 <div className="ml-4">
                   <p className="text-sm font-medium text-surface-600 dark:text-surface-400">
-                    Total Hours This Week
+                    {isCurrentWeek ? 'Total Hours This Week' : 'Total Hours Selected Week'}
                   </p>
                   <p className="text-2xl font-bold text-surface-900 dark:text-surface-100">
                     {Math.round(totalHours)}
@@ -1531,6 +1523,58 @@ export default function StaffPage() {
           {/* Staff Cards Grid - shown when view is 'cards' */}
           {scheduleView === 'cards' && !isLoading && (
             <>
+              {/* Week Navigation */}
+              <div className="flex items-center justify-between bg-white dark:bg-surface-800 rounded-xl px-4 py-3 border border-surface-200 dark:border-surface-700">
+                <button
+                  onClick={() => {
+                    const prev = new Date(selectedWeekStart)
+                    prev.setDate(prev.getDate() - 7)
+                    handleWeekChange(prev)
+                  }}
+                  className="p-2 text-surface-600 dark:text-surface-400 hover:text-surface-900 dark:hover:text-surface-100 rounded-lg hover:bg-gray-100 dark:hover:bg-surface-700 transition-colors"
+                >
+                  <ChevronLeft className="w-5 h-5" />
+                </button>
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2 px-4 py-2 bg-gray-50 dark:bg-surface-700 rounded-lg">
+                    <Calendar className="w-4 h-4 text-surface-500" />
+                    <span className="text-sm font-medium text-surface-900 dark:text-surface-100">
+                      {selectedWeekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - {(() => {
+                        const end = new Date(selectedWeekStart)
+                        end.setDate(end.getDate() + 6)
+                        return end.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                      })()}
+                    </span>
+                  </div>
+                  {!isCurrentWeek && (
+                    <button
+                      onClick={() => {
+                        const now = new Date()
+                        const dayOfWeek = now.getDay()
+                        const sunday = new Date(now)
+                        sunday.setDate(now.getDate() - dayOfWeek)
+                        sunday.setHours(0, 0, 0, 0)
+                        handleWeekChange(sunday)
+                      }}
+                      className="text-sm text-primary-600 hover:text-primary-700 font-medium"
+                    >
+                      This Week
+                    </button>
+                  )}
+                </div>
+                <button
+                  onClick={() => {
+                    const next = new Date(selectedWeekStart)
+                    next.setDate(next.getDate() + 7)
+                    handleWeekChange(next)
+                  }}
+                  disabled={isCurrentWeek}
+                  className="p-2 text-surface-600 dark:text-surface-400 hover:text-surface-900 dark:hover:text-surface-100 rounded-lg hover:bg-gray-100 dark:hover:bg-surface-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronRight className="w-5 h-5" />
+                </button>
+              </div>
+
               {filteredStaff.length === 0 ? (
                 <motion.div
                   className="text-center py-12"
@@ -1562,7 +1606,7 @@ export default function StaffPage() {
                         hoursThisWeek={hoursThisWeek}
                         hoursToday={hoursToday}
                         dailyHours={dailyHours || undefined}
-                        weekDates={weekDates}
+                        weekDates={selectedWeekDates}
                         onEditStaff={setEditingStaff}
                         onResetPin={handleResetPin}
                         onEditHours={canEditHours ? handleEditHours : undefined}
