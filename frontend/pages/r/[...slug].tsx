@@ -207,7 +207,6 @@ export default function PublicProfile() {
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
   const [showStickyNav, setShowStickyNav] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const [showAllCategories, setShowAllCategories] = useState(false);
 
   // Category visibility state
   const [visibleCategoryCount, setVisibleCategoryCount] = useState(2);
