@@ -642,22 +642,30 @@ const MenuManagement: React.FC = () => {
 
   const handleReorderCategories = async (nextOrderedIds: string[]) => {
     const previousCategories = categories;
+    const existingIds = categories.map((category) => category.id);
+    const orderedIds = [
+      ...nextOrderedIds,
+      ...existingIds.filter((id) => !nextOrderedIds.includes(id))
+    ];
     // Optimistic reorder in UI
     setCategories((prev) => {
       const byId = new Map(prev.map((c) => [c.id, c] as const));
-      const next = nextOrderedIds.map((id, idx) => {
+      const next = orderedIds.map((id, idx) => {
         const c = byId.get(id);
         return c ? { ...c, sort_order: idx } : null;
       }).filter(Boolean) as CategoryWithItems[];
       // Append anything not in nextOrderedIds (safety)
-      const remaining = prev.filter((c) => !nextOrderedIds.includes(c.id));
+      const remaining = prev.filter((c) => !orderedIds.includes(c.id));
       return [...next, ...remaining];
     });
 
     try {
-      const response = await api.put('/api/menu/categories/reorder', { categoryIds: nextOrderedIds });
+      const response = await api.put('/api/menu/categories/reorder', {
+        categoryIds: orderedIds,
+        orderedIds
+      });
       const { updated } = response.data || {};
-      console.log('[handleReorderCategories] Category order saved:', { requested: nextOrderedIds.length, updated });
+      console.log('[handleReorderCategories] Category order saved:', { requested: orderedIds.length, updated });
       await loadMenuData();
       toast.success('Category order saved');
     } catch (error) {
