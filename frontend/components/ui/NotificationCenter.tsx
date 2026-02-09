@@ -15,7 +15,8 @@ import {
   Mic,
   Settings,
   Check,
-  Trash2
+  Trash2,
+  ChevronLeft
 } from 'lucide-react'
 import { useSocket } from '../../lib/socket'
 import { formatRelativeTime } from '../../lib/utils'
@@ -241,11 +242,11 @@ export default function NotificationCenter({ className = '' }: NotificationCente
     return colorMap[priority]
   }
 
-  // Mobile bottom sheet variants
+  // Mobile right-side slide-in variants
   const mobileVariants = {
-    hidden: { y: '100%' },
-    visible: { y: 0, transition: { type: 'spring' as const, stiffness: 300, damping: 30 } },
-    exit: { y: '100%', transition: { duration: 0.2 } }
+    hidden: { x: '100%' },
+    visible: { x: 0, transition: { type: 'spring' as const, stiffness: 300, damping: 30 } },
+    exit: { x: '100%', transition: { duration: 0.25 } }
   }
 
   // Desktop panel variants
@@ -287,11 +288,11 @@ export default function NotificationCenter({ className = '' }: NotificationCente
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
-              className="fixed inset-0 bg-black/20 dark:bg-black/40 backdrop-blur-sm z-40 lg:hidden"
+              className="fixed inset-0 bg-black/30 dark:bg-black/50 backdrop-blur-sm z-40"
               onClick={() => setIsOpen(false)}
             />
 
-            {/* Panel - Mobile: Bottom sheet, Desktop: Dropdown */}
+            {/* Mobile: Right side slide-in | Desktop: Dropdown */}
             <motion.div
               initial="hidden"
               animate="visible"
@@ -299,25 +300,35 @@ export default function NotificationCenter({ className = '' }: NotificationCente
               variants={isMobile ? mobileVariants : desktopVariants}
               className={`
                 ${isMobile 
-                  ? 'fixed bottom-0 left-0 right-0 z-50 rounded-t-2xl' 
+                  ? 'fixed top-0 right-0 bottom-0 z-50 w-full max-w-sm' 
                   : 'absolute right-0 top-14 z-50 w-80 sm:w-96'
                 }
               `}
             >
-              <div className="
-                bg-white dark:bg-gray-900 
-                border-t border-x border-gray-200 dark:border-gray-700
-                shadow-2xl
+              <div className={`
+                h-full bg-white dark:bg-gray-900
+                border-l border-gray-200 dark:border-gray-700
+                shadow-2xl overflow-hidden
                 flex flex-col
-                ${isMobile ? 'rounded-t-2xl h-[70vh] max-h-[70vh]' : 'rounded-xl h-[600px] max-h-[600px]'}
-              ">
+                ${isMobile ? 'rounded-l-2xl' : 'rounded-xl rounded-tr-none'}
+                ${!isMobile ? 'max-h-[600px]' : ''}
+              `}>
                 {/* Header */}
                 <div className="
-                  flex items-center justify-between px-4 py-3
+                  flex items-center px-4 py-3
                   bg-gray-50 dark:bg-gray-800/50
                   border-b border-gray-200 dark:border-gray-700
                   sticky top-0 z-10
                 ">
+                  {isMobile && (
+                    <button
+                      onClick={() => setIsOpen(false)}
+                      className="mr-2 p-1.5 -ml-1.5 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                    >
+                      <ChevronLeft className="w-5 h-5" />
+                    </button>
+                  )}
+                  
                   <div className="flex items-center gap-2">
                     <h3 className="font-semibold text-gray-900 dark:text-white text-base">
                       Notifications
@@ -329,7 +340,7 @@ export default function NotificationCenter({ className = '' }: NotificationCente
                     )}
                   </div>
                   
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1 ml-auto">
                     {unreadCount > 0 && (
                       <button
                         onClick={markAllAsRead}
@@ -349,12 +360,14 @@ export default function NotificationCenter({ className = '' }: NotificationCente
                     >
                       <Settings className="w-4 h-4" />
                     </button>
-                    <button
-                      onClick={() => setIsOpen(false)}
-                      className="p-1.5 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors lg:hidden"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
+                    {!isMobile && (
+                      <button
+                        onClick={() => setIsOpen(false)}
+                        className="p-1.5 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -384,8 +397,8 @@ export default function NotificationCenter({ className = '' }: NotificationCente
                         return (
                           <motion.div
                             key={notification.id}
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
+                            initial={{ opacity: 0, x: 20 }}
+                            animate={{ opacity: 1, x: 0 }}
                             transition={{ delay: index * 0.03 }}
                             className={`
                               relative p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors cursor-pointer
@@ -424,7 +437,7 @@ export default function NotificationCenter({ className = '' }: NotificationCente
                                       e.stopPropagation()
                                       removeNotification(notification.id)
                                     }}
-                                    className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors opacity-0 group-hover:opacity-100"
+                                    className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors"
                                   >
                                     <X className="w-3.5 h-3.5" />
                                   </button>
