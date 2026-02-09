@@ -41,7 +41,7 @@ export default function LoginPage() {
   // Show loading state while checking auth - Animated skeleton
   if (!mounted || isLoading) {
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4 relative overflow-hidden">
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4 relative overflow-x-hidden">
         {/* Animated background */}
         <div className="absolute inset-0 overflow-hidden">
           <motion.div
@@ -162,7 +162,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center p-4 relative overflow-hidden">
+    <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center p-4 relative overflow-x-hidden">
       <Head>
         <title>Login | Servio - Restaurant Operating System</title>
         <meta name="apple-mobile-web-app-capable" content="yes" />

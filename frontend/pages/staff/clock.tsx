@@ -1139,7 +1139,7 @@ export default function StaffClockPage() {
         </header>
 
         {/* Main Content */}
-        <main className="flex-1 flex flex-col max-w-lg md:max-w-2xl lg:max-w-3xl mx-auto px-4 md:px-6 py-3 md:py-4 lg:py-5 w-full overflow-hidden">
+        <main className="flex-1 flex flex-col max-w-lg md:max-w-2xl lg:max-w-3xl mx-auto px-4 md:px-6 py-3 md:py-4 lg:py-5 w-full overflow-y-auto">
           {/* Welcome Banner */}
           <div className="bg-gradient-to-r from-orange-500 to-orange-600 rounded-2xl md:rounded-3xl p-4 md:p-5 lg:p-6 shadow-2xl shadow-orange-500/20 flex-shrink-0">
             <div className="flex items-center justify-between">

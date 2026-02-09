@@ -26,7 +26,7 @@ export default function HomePage() {
         <meta property="og:url" content="https://servio.com" />
       </Head>
 
-        <div className="min-h-screen bg-gray-900 text-white overflow-hidden">
+        <div className="min-h-screen bg-gray-900 text-white overflow-x-hidden">
           {/* Animated Background Blobs */}
           <div className="fixed inset-0 pointer-events-none overflow-hidden">
             <motion.div
@@ -181,7 +181,7 @@ export default function HomePage() {
         </AnimatePresence>
 
         {/* Hero Section */}
-        <div className="relative min-h-screen flex items-center justify-center overflow-hidden py-24 md:py-0 pt-20">
+        <div className="relative min-h-screen flex items-center justify-center overflow-x-hidden py-24 md:py-0 pt-20">
           {/* Background Image with Overlay */}
           <div className="absolute inset-0">
             <img
