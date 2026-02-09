@@ -72,6 +72,7 @@ interface MenuItem {
   fromPrice?: number;
   is_available: boolean;
   category_name: string;
+  category_sort_order?: number;
   images?: string[];
   image?: string;
   sizes?: ItemSize[];
@@ -251,15 +252,20 @@ export default function PublicProfile() {
     setActiveFilters([]);
   };
 
-  // Get unique categories
-  const categories = Array.from(new Set(items.map(i => i.category_name))).sort((a, b) => {
-    // Put "Popular" or "Hottest" items first
-    const aLower = a.toLowerCase();
-    const bLower = b.toLowerCase();
-    if (aLower.includes('popular') || aLower.includes('hot') || aLower.includes('best')) return -1;
-    if (bLower.includes('popular') || bLower.includes('hot') || bLower.includes('best')) return 1;
-    return a.localeCompare(b);
-  });
+  // Get unique categories preserving the sort_order from the database.
+  // Items arrive from the API sorted by mc.sort_order ASC, so we derive
+  // the category order from first-occurrence and explicit category_sort_order.
+  const categories = (() => {
+    const seen = new Map<string, number>();
+    for (const item of items) {
+      if (!seen.has(item.category_name)) {
+        seen.set(item.category_name, item.category_sort_order ?? 0);
+      }
+    }
+    return Array.from(seen.entries())
+      .sort((a, b) => a[1] - b[1])
+      .map(([name]) => name);
+  })();
 
   // Filter items based on search and filters
   const getFilteredItems = () => {
