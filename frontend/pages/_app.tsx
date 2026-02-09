@@ -7,6 +7,7 @@ import Router from 'next/router'
 import dynamic from 'next/dynamic'
 import { UserProvider } from '../contexts/UserContext'
 import { ThemeProvider } from '../contexts/ThemeContext'
+import { ErrorBoundary } from '../components/ErrorBoundary'
 import { Inter } from 'next/font/google'
 import { usePushSubscription } from '../lib/hooks'
 import { safeLocalStorage } from '../lib/utils'
@@ -157,7 +158,7 @@ export default function App({ Component, pageProps }: AppProps) {
     }
 
     const sendAuthTokenToSW = () => {
-      const token = window.localStorage.getItem('servio_access_token')
+      const token = safeLocalStorage.getItem('servio_access_token')
       if (token && navigator.serviceWorker.controller) {
         navigator.serviceWorker.controller.postMessage({
           type: 'SET_AUTH_TOKEN',
@@ -237,15 +238,16 @@ export default function App({ Component, pageProps }: AppProps) {
     // 2. User is authenticated (has access token)
     // 3. Not already subscribed
     // 4. Permission not denied
+    // 5. Not currently loading
     if (
-      !pushSubscription.isSupported ||
+      pushSubscription.isSupported &&
       !pushSubscription.subscription &&
       pushSubscription.permission !== 'denied' &&
       !pushSubscription.isLoading
     ) {
       // Check if user is authenticated
-      const accessToken = window.localStorage.getItem('servio_access_token')
-      if (accessToken) {
+      const accessToken = safeLocalStorage.getItem('servio_access_token')
+      if (accessToken && typeof Notification !== 'undefined') {
         // Request notification permission and subscribe
         Notification.requestPermission().then(permission => {
           if (permission === 'granted') {
@@ -258,7 +260,7 @@ export default function App({ Component, pageProps }: AppProps) {
         })
       }
     }
-  }, [pushSubscription, pushSubscription.isSupported, pushSubscription.subscription, pushSubscription.permission, pushSubscription.isLoading])
+  }, [pushSubscription.isSupported, pushSubscription.subscription, pushSubscription.permission, pushSubscription.isLoading])
 
   return (
     <>
@@ -325,7 +327,9 @@ export default function App({ Component, pageProps }: AppProps) {
           {routeLoading && (
             <div className="fixed top-0 left-0 right-0 z-[9999] h-0.5 bg-primary-500 animate-route-progress" />
           )}
-          <Component {...pageProps} />
+          <ErrorBoundary>
+            <Component {...pageProps} />
+          </ErrorBoundary>
           <ToastProvider />
         </UserProvider>
       </ThemeProvider>

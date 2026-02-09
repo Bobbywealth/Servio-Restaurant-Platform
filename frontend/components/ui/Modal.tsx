@@ -27,6 +27,7 @@ export const Modal: React.FC<ModalProps> = ({
 }) => {
   useEffect(() => {
     if (!closeOnEscape) return
+    if (typeof document === 'undefined') return
 
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isOpen) {
@@ -39,6 +40,8 @@ export const Modal: React.FC<ModalProps> = ({
   }, [isOpen, onClose, closeOnEscape])
 
   useEffect(() => {
+    if (typeof document === 'undefined') return
+
     if (isOpen) {
       document.body.style.overflow = 'hidden'
     } else {

@@ -24,13 +24,20 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [isDarkMode, setIsDarkMode] = useState(false);
 
   useEffect(() => {
-    const savedTheme = localStorage.getItem('theme') as Theme | null;
-    const savedMotion = localStorage.getItem('motion') as MotionPreference | null;
-    if (savedTheme) setThemeState(savedTheme);
-    if (savedMotion) setMotionPreference(savedMotion);
+    if (typeof window === 'undefined') return;
+    try {
+      const savedTheme = localStorage.getItem('theme') as Theme | null;
+      const savedMotion = localStorage.getItem('motion') as MotionPreference | null;
+      if (savedTheme) setThemeState(savedTheme);
+      if (savedMotion) setMotionPreference(savedMotion);
+    } catch {
+      // localStorage may not be available in some environments
+    }
   }, []);
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+
     const root = window.document.documentElement;
     root.classList.remove('dark', 'light');
 
@@ -53,18 +60,18 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   const setTheme = (newTheme: Theme) => {
     setThemeState(newTheme);
-    localStorage.setItem('theme', newTheme);
+    try { localStorage.setItem('theme', newTheme); } catch {}
   };
 
   const toggleTheme = () => {
     const newTheme = theme === 'light' ? 'dark' : 'light';
     setThemeState(newTheme);
-    localStorage.setItem('theme', newTheme);
+    try { localStorage.setItem('theme', newTheme); } catch {}
   };
 
   const updateMotionPreference = (preference: MotionPreference) => {
     setMotionPreference(preference);
-    localStorage.setItem('motion', preference);
+    try { localStorage.setItem('motion', preference); } catch {}
   };
 
   return (
