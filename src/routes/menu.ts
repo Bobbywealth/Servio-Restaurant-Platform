@@ -1670,7 +1670,7 @@ router.get('/items/full', asyncHandler(async (req: Request, res: Response) => {
       acc[categoryId] = {
         category_id: item.category_id,
         category_name: categoryName,
-        category_sort_order: item.category_sort_order || 999,
+        category_sort_order: item.category_sort_order ?? 999,
         items: []
       };
     }
