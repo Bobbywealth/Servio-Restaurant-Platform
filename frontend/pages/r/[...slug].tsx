@@ -675,16 +675,16 @@ export default function PublicProfile() {
       ? 'Your order was declined by the restaurant.'
       : 'Thank you for your order';
     return (
-      <div className={`min-h-screen flex flex-col items-center justify-center p-6 text-center bg-gradient-to-b ${isCancelled ? 'from-red-50 to-white' : 'from-green-50 to-white'}`}>
+      <div className={`min-h-screen flex flex-col items-center justify-center px-4 sm:p-6 py-12 text-center bg-gradient-to-b safe-area-inset-left safe-area-inset-right ${isCancelled ? 'from-red-50 to-white' : 'from-green-50 to-white'}`}>
         <motion.div
           initial={{ scale: 0 }}
           animate={{ scale: 1 }}
           transition={{ type: "spring", bounce: 0.5 }}
         >
-          <CheckCircle2 className={`h-24 w-24 mb-6 ${isCancelled ? 'text-red-500' : 'text-green-500'}`} />
+          <CheckCircle2 className={`h-20 w-20 sm:h-24 sm:w-24 mb-6 ${isCancelled ? 'text-red-500' : 'text-green-500'}`} />
         </motion.div>
-        <h1 className="text-4xl font-bold mb-2">{headline}</h1>
-        <p className="text-xl text-gray-600 mb-6">{subcopy}</p>
+        <h1 className="text-3xl sm:text-4xl font-bold mb-2">{headline}</h1>
+        <p className="text-lg sm:text-xl text-gray-600 mb-6">{subcopy}</p>
         
         <div className="bg-white rounded-2xl shadow-lg p-6 mb-6 w-full max-w-sm">
           <div className="text-sm text-gray-500 uppercase tracking-widest mb-1">Order Number</div>
@@ -734,13 +734,17 @@ export default function PublicProfile() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white pb-24">
+    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white" style={{ paddingBottom: cart.length > 0 ? 'calc(5rem + env(safe-area-inset-bottom, 0px))' : '1.5rem' }}>
       <Head>
         <title>{restaurant.name} - Online Ordering</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+        <meta name="theme-color" content="#1e293b" />
       </Head>
 
       {/* Premium Hero Section */}
-      <div className="relative h-56 md:h-72 overflow-hidden">
+      <div className="relative h-44 sm:h-56 md:h-72 overflow-hidden">
         {restaurant.cover_image_url ? (
           <img
             src={resolveMediaUrl(restaurant.cover_image_url)}
@@ -751,14 +755,14 @@ export default function PublicProfile() {
           <div className="w-full h-full bg-gradient-to-br from-slate-800 via-slate-900 to-black" />
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
-        
+
         {/* Restaurant Info Overlay */}
-        <div className="absolute bottom-0 left-0 right-0 p-6 md:p-8">
+        <div className="absolute bottom-0 left-0 right-0 p-4 sm:p-6 md:p-8 safe-area-inset-left safe-area-inset-right">
           <div className="max-w-4xl mx-auto">
-            <div className="flex items-end gap-5">
+            <div className="flex items-end gap-3 sm:gap-5">
               {restaurant.logo_url && (
-                <motion.div 
-                  className="w-20 h-20 md:w-24 md:h-24 bg-white rounded-2xl p-2 shadow-2xl shrink-0"
+                <motion.div
+                  className="w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 bg-white rounded-2xl p-1.5 sm:p-2 shadow-2xl shrink-0"
                   initial={{ scale: 0.8, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
                   transition={{ delay: 0.2 }}
@@ -766,15 +770,15 @@ export default function PublicProfile() {
                   <img src={resolveMediaUrl(restaurant.logo_url)} alt="Logo" className="w-full h-full object-contain rounded-xl" />
                 </motion.div>
               )}
-              <motion.div 
-                className="mb-1"
+              <motion.div
+                className="mb-1 min-w-0 flex-1"
                 initial={{ y: 20, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
                 transition={{ delay: 0.3 }}
               >
-                <h1 className="text-3xl md:text-4xl font-black text-white tracking-tight">{restaurant.name}</h1>
+                <h1 className="text-2xl sm:text-3xl md:text-4xl font-black text-white tracking-tight truncate">{restaurant.name}</h1>
                 {restaurant.description && (
-                  <p className="text-white/70 text-sm md:text-base mt-1 line-clamp-2 max-w-md">{restaurant.description}</p>
+                  <p className="text-white/70 text-xs sm:text-sm md:text-base mt-1 line-clamp-2">{restaurant.description}</p>
                 )}
               </motion.div>
             </div>
@@ -784,19 +788,19 @@ export default function PublicProfile() {
 
       {/* Info Bar */}
       <div className="bg-white/80 backdrop-blur-xl shadow-sm border-b border-slate-200/50 sticky top-0 z-10">
-        <div className="max-w-4xl mx-auto px-4 py-3">
-          <div className="flex flex-wrap items-center gap-3 md:gap-6 text-sm">
-            <span className="inline-flex items-center gap-2 px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-full font-medium">
-              <Clock className="w-4 h-4" /> 20-30 min
+        <div className="max-w-4xl mx-auto px-4 py-2.5 sm:py-3 safe-area-inset-left safe-area-inset-right">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3 md:gap-6 text-xs sm:text-sm">
+            <span className="inline-flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1 sm:py-1.5 bg-emerald-50 text-emerald-700 rounded-full font-medium">
+              <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> 20-30 min
             </span>
             {restaurant.address?.city && (
-              <span className="inline-flex items-center gap-1.5 text-slate-600">
-                <MapPin className="w-4 h-4 text-slate-400" /> {restaurant.address.city}, {restaurant.address.state}
+              <span className="inline-flex items-center gap-1 sm:gap-1.5 text-slate-600">
+                <MapPin className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-400" /> {restaurant.address.city}, {restaurant.address.state}
               </span>
             )}
             {restaurant.phone && (
-              <span className="inline-flex items-center gap-1.5 text-slate-600">
-                <Phone className="w-4 h-4 text-slate-400" /> {restaurant.phone}
+              <span className="hidden xs:inline-flex items-center gap-1 sm:gap-1.5 text-slate-600">
+                <Phone className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-400" /> {restaurant.phone}
               </span>
             )}
           </div>
@@ -804,10 +808,10 @@ export default function PublicProfile() {
       </div>
 
       {/* Search and Filter Bar */}
-      <div className="sticky top-[68px] z-20 bg-white/95 backdrop-blur-md border-b border-slate-200/50 shadow-sm">
-        <div className="max-w-4xl mx-auto px-4 py-3">
+      <div className="sticky top-[52px] sm:top-[60px] z-20 bg-white/95 backdrop-blur-md border-b border-slate-200/50 shadow-sm">
+        <div className="max-w-4xl mx-auto px-4 py-2 sm:py-3 safe-area-inset-left safe-area-inset-right">
           {/* Search Input */}
-          <div className="relative mb-3">
+          <div className="relative mb-2 sm:mb-3">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
             <input
               type="text"
@@ -907,12 +911,12 @@ export default function PublicProfile() {
       </div>
 
       {/* Category Selection Bar - Mobile Only */}
-      <div className="sticky top-[140px] z-10 lg:hidden bg-white/95 backdrop-blur-md border-b border-slate-200/50 shadow-sm">
-        <div className="max-w-4xl mx-auto px-4 py-4">
+      <div className="sticky top-[104px] sm:top-[120px] z-10 lg:hidden bg-white/95 backdrop-blur-md border-b border-slate-200/50 shadow-sm">
+        <div className="max-w-4xl mx-auto px-4 py-2 sm:py-3 safe-area-inset-left safe-area-inset-right">
           <div className="relative">
             <button
               onClick={() => setIsFilterMenuOpen(!isFilterMenuOpen)}
-              className="w-full flex items-center justify-between gap-3 px-4 py-4 bg-slate-50 border-2 border-slate-200 rounded-xl text-left focus:outline-none focus:border-blue-500 active:border-blue-600 transition-all"
+              className="w-full flex items-center justify-between gap-3 px-3 sm:px-4 py-3 sm:py-4 bg-slate-50 border-2 border-slate-200 rounded-xl text-left focus:outline-none focus:border-blue-500 active:border-blue-600 transition-all"
             >
               <div className="flex items-center gap-3">
                 <Filter className="w-5 h-5 text-slate-500 flex-shrink-0" />
@@ -1156,50 +1160,51 @@ export default function PublicProfile() {
                     </button>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
                     {categoryItems.map((item, itemIndex) => (
                       <motion.div
                         key={item.id}
-                        className="group bg-white rounded-2xl p-4 shadow-sm border border-slate-100 hover:shadow-lg hover:border-blue-200 hover:-translate-y-1 transition-all duration-300 cursor-pointer"
+                        className="group bg-white rounded-2xl p-3 sm:p-4 shadow-sm border border-slate-100 hover:shadow-lg hover:border-blue-200 hover:-translate-y-1 transition-all duration-300 cursor-pointer"
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: (catIndex * 0.05) + (itemIndex * 0.03) }}
+                        onClick={() => openItemDetail(item)}
                       >
-                        <div className="flex justify-between items-start gap-3">
-                          <div className="flex-1 flex gap-3">
-                            {item.image && (
-                              <div className="w-18 h-18 sm:w-20 sm:h-20 rounded-xl overflow-hidden bg-slate-100 border border-slate-200 flex-shrink-0">
-                                <img
-                                  src={resolveMediaUrl(item.image)}
-                                  alt={item.name}
-                                  className="w-full h-full object-cover"
-                                  loading="lazy"
-                                />
-                              </div>
-                            )}
-                            <div className="min-w-0 flex-1">
-                              <h3 className="font-bold text-base text-slate-900 group-hover:text-blue-600 transition-colors line-clamp-1">
-                                {item.name}
-                              </h3>
-                              <p className="text-slate-500 text-xs sm:text-sm mt-1 line-clamp-2">
-                                {item.description || 'Delicious item'}
-                              </p>
-                              <p className="font-black text-lg text-slate-900 mt-1">
+                        <div className="flex items-start gap-3">
+                          {item.image && (
+                            <div className="w-16 h-16 sm:w-18 sm:h-18 md:w-20 md:h-20 rounded-xl overflow-hidden bg-slate-100 border border-slate-200 flex-shrink-0">
+                              <img
+                                src={resolveMediaUrl(item.image)}
+                                alt={item.name}
+                                className="w-full h-full object-cover"
+                                loading="lazy"
+                              />
+                            </div>
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <h3 className="font-bold text-sm sm:text-base text-slate-900 group-hover:text-blue-600 transition-colors line-clamp-1">
+                              {item.name}
+                            </h3>
+                            <p className="text-slate-500 text-xs sm:text-sm mt-0.5 sm:mt-1 line-clamp-2">
+                              {item.description || 'Delicious item'}
+                            </p>
+                            <div className="flex items-center justify-between mt-1.5 sm:mt-2">
+                              <p className="font-black text-base sm:text-lg text-slate-900">
                                 {item.sizes && item.sizes.length > 0 ? (
                                   <>From ${item.fromPrice?.toFixed(2) || item.price.toFixed(2)}</>
                                 ) : (
                                   <>${item.price.toFixed(2)}</>
                                 )}
                               </p>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); openItemDetail(item); }}
+                                className="shrink-0 p-2 sm:p-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-600/20 min-w-[40px] min-h-[40px] sm:min-w-[44px] sm:min-h-[44px] flex items-center justify-center"
+                                aria-label={`Add ${item.name} to cart`}
+                              >
+                                <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
+                              </button>
                             </div>
                           </div>
-                          <button
-                            onClick={() => openItemDetail(item)}
-                            className="shrink-0 p-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-600/20 min-w-[44px] min-h-[44px] flex items-center justify-center"
-                            aria-label={`Add ${item.name} to cart`}
-                          >
-                            <Plus className="w-5 h-5" />
-                          </button>
                         </div>
                       </motion.div>
                     ))}
@@ -1270,29 +1275,30 @@ export default function PublicProfile() {
 
       {cart.length > 0 && (
         <motion.div
-          className="fixed bottom-0 left-0 right-0 w-full p-4 bg-white/90 backdrop-blur-xl border-t border-slate-200/50 shadow-2xl shadow-slate-900/10 z-50 safe-area-inset-bottom gpu-accelerated will-change-transform"
+          className="fixed bottom-0 left-0 right-0 w-full bg-white/95 backdrop-blur-xl border-t border-slate-200/50 shadow-2xl shadow-slate-900/10 z-50 gpu-accelerated will-change-transform"
+          style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}
           initial={{ y: 100 }}
           animate={{ y: 0 }}
           transition={{ type: "spring", bounce: 0.3 }}
         >
-          <div className="max-w-4xl mx-auto flex items-center justify-between gap-4">
-            <div className="flex items-center gap-4">
-              <div className="relative">
-                <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
-                  <ShoppingCart className="w-6 h-6 text-blue-600" />
+          <div className="max-w-4xl mx-auto flex items-center justify-between gap-3 px-4 pt-3 safe-area-inset-left safe-area-inset-right">
+            <div className="flex items-center gap-3 min-w-0 flex-1">
+              <div className="relative shrink-0">
+                <div className="w-11 h-11 sm:w-12 sm:h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+                  <ShoppingCart className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" />
                 </div>
                 <span className="absolute -top-1 -right-1 bg-blue-600 text-white text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center">
                   {cart.reduce((s, i) => s + i.quantity, 0)}
                 </span>
               </div>
-              <div>
-                <p className="text-sm text-slate-500 font-medium">Your Order</p>
-                <p className="text-xl font-black text-slate-900">${cartTotal.toFixed(2)}</p>
+              <div className="min-w-0">
+                <p className="text-xs sm:text-sm text-slate-500 font-medium">Your Order</p>
+                <p className="text-lg sm:text-xl font-black text-slate-900">${cartTotal.toFixed(2)}</p>
               </div>
             </div>
-            <button 
+            <button
               onClick={() => setIsCartOpen(true)}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-xl font-bold text-lg shadow-lg shadow-blue-600/30 transition-all active:scale-95"
+              className="shrink-0 bg-blue-600 hover:bg-blue-700 text-white px-5 sm:px-8 py-3 rounded-xl font-bold text-base sm:text-lg shadow-lg shadow-blue-600/30 transition-all active:scale-95"
             >
               View Cart
             </button>
@@ -1310,16 +1316,22 @@ export default function PublicProfile() {
             />
             <motion.div
               initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
-              className="fixed bottom-0 left-0 right-0 w-full bg-white rounded-t-3xl z-[70] p-6 safe-area-inset-bottom max-h-[90vh] overflow-y-auto gpu-accelerated will-change-transform"
-              style={{ maxHeight: 'calc(100vh - env(safe-area-inset-top, 0px))' }}
+              className="fixed bottom-0 left-0 right-0 w-full bg-white rounded-t-3xl z-[70] overflow-hidden gpu-accelerated will-change-transform"
+              style={{ maxHeight: 'calc(100dvh - env(safe-area-inset-top, 0px) - 2rem)' }}
             >
-              <div className="max-w-xl mx-auto">
+              <div className="overflow-y-auto overscroll-contain" style={{ maxHeight: 'calc(100dvh - env(safe-area-inset-top, 0px) - 2rem)' }}>
+              <div className="max-w-xl mx-auto px-5 sm:px-6 pt-6">
+                {/* Drag Handle */}
+                <div className="flex justify-center mb-4">
+                  <div className="w-10 h-1 bg-slate-300 rounded-full" />
+                </div>
+
                 {/* Step 1: Cart Review */}
                 {checkoutStep === 'cart' && (
                   <>
                     <div className="flex justify-between items-center mb-6">
-                      <h2 className="text-2xl font-bold">Your Order</h2>
-                      <button onClick={() => setIsCartOpen(false)} className="text-gray-400 font-bold">Close</button>
+                      <h2 className="text-xl sm:text-2xl font-bold">Your Order</h2>
+                      <button onClick={() => setIsCartOpen(false)} className="p-2 -mr-2 text-gray-400 hover:text-gray-600 font-bold">Close</button>
                     </div>
                     
                     <div className="space-y-4 mb-6">
@@ -1359,13 +1371,15 @@ export default function PublicProfile() {
                       </div>
                     </div>
 
-                    <button 
-                      onClick={() => setCheckoutStep('details')}
-                      className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-xl text-lg font-bold flex items-center justify-center gap-2"
-                    >
-                      Continue to Checkout
-                      <ArrowRight className="w-5 h-5" />
-                    </button>
+                    <div style={{ paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}>
+                      <button
+                        onClick={() => setCheckoutStep('details')}
+                        className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-xl text-base sm:text-lg font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
+                      >
+                        Continue to Checkout
+                        <ArrowRight className="w-5 h-5" />
+                      </button>
+                    </div>
                   </>
                 )}
 
@@ -1498,25 +1512,27 @@ export default function PublicProfile() {
                       </div>
                     </div>
 
-                    <button 
-                      disabled={isSubmitting}
-                      onClick={handleProceedToPayment}
-                      className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-xl text-lg font-bold flex items-center justify-center gap-2 disabled:opacity-50"
-                    >
-                      {isSubmitting ? (
-                        <Loader2 className="animate-spin" />
-                      ) : onlinePaymentsEnabled ? (
-                        <>
-                          Continue to Payment
-                          <ArrowRight className="w-5 h-5" />
-                        </>
-                      ) : (
-                        <>
-                          Place Order - Pay at Pickup
-                          <CheckCircle2 className="w-5 h-5" />
-                        </>
-                      )}
-                    </button>
+                    <div style={{ paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}>
+                      <button
+                        disabled={isSubmitting}
+                        onClick={handleProceedToPayment}
+                        className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-xl text-base sm:text-lg font-bold flex items-center justify-center gap-2 disabled:opacity-50 active:scale-[0.98] transition-transform"
+                      >
+                        {isSubmitting ? (
+                          <Loader2 className="animate-spin" />
+                        ) : onlinePaymentsEnabled ? (
+                          <>
+                            Continue to Payment
+                            <ArrowRight className="w-5 h-5" />
+                          </>
+                        ) : (
+                          <>
+                            Place Order - Pay at Pickup
+                            <CheckCircle2 className="w-5 h-5" />
+                          </>
+                        )}
+                      </button>
+                    </div>
                   </>
                 )}
 
@@ -1602,22 +1618,25 @@ export default function PublicProfile() {
                       </div>
                     </div>
 
-                    <button 
-                      disabled={isSubmitting || paymentMethod === 'online'}
-                      onClick={handlePlaceOrder}
-                      className="w-full bg-green-600 hover:bg-green-700 text-white py-4 rounded-xl text-lg font-bold flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {isSubmitting ? (
-                        <Loader2 className="animate-spin" />
-                      ) : (
-                        <>
-                          <CheckCircle2 className="w-5 h-5" />
-                          Place Order
-                        </>
-                      )}
-                    </button>
+                    <div style={{ paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}>
+                      <button
+                        disabled={isSubmitting || paymentMethod === 'online'}
+                        onClick={handlePlaceOrder}
+                        className="w-full bg-green-600 hover:bg-green-700 text-white py-4 rounded-xl text-base sm:text-lg font-bold flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] transition-transform"
+                      >
+                        {isSubmitting ? (
+                          <Loader2 className="animate-spin" />
+                        ) : (
+                          <>
+                            <CheckCircle2 className="w-5 h-5" />
+                            Place Order
+                          </>
+                        )}
+                      </button>
+                    </div>
                   </>
                 )}
+              </div>
               </div>
             </motion.div>
           </>
@@ -1635,19 +1654,26 @@ export default function PublicProfile() {
             />
             <motion.div
               initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
-              className="fixed bottom-0 left-0 right-0 w-full bg-white rounded-t-3xl z-[70] p-6 safe-area-inset-bottom max-h-[90vh] overflow-y-auto gpu-accelerated will-change-transform"
+              className="fixed bottom-0 left-0 right-0 w-full bg-white rounded-t-3xl z-[70] overflow-hidden gpu-accelerated will-change-transform"
+              style={{ maxHeight: 'calc(100dvh - env(safe-area-inset-top, 0px) - 2rem)' }}
             >
+              <div className="overflow-y-auto overscroll-contain px-5 sm:px-6 pt-6" style={{ maxHeight: 'calc(100dvh - env(safe-area-inset-top, 0px) - 2rem)' }}>
               <div className="max-w-xl mx-auto">
+                {/* Drag Handle */}
+                <div className="flex justify-center mb-4">
+                  <div className="w-10 h-1 bg-slate-300 rounded-full" />
+                </div>
+
                 <div className="flex justify-between items-start mb-4">
-                  <div className="flex-1">
-                    <h2 className="text-2xl font-bold">{selectedItem.name}</h2>
-                    <p className="text-gray-600 mt-1">{selectedItem.description}</p>
+                  <div className="flex-1 min-w-0">
+                    <h2 className="text-xl sm:text-2xl font-bold">{selectedItem.name}</h2>
+                    <p className="text-gray-600 mt-1 text-sm sm:text-base">{selectedItem.description}</p>
                   </div>
-                  <button onClick={() => setSelectedItem(null)} className="text-gray-400 font-bold ml-4">Close</button>
+                  <button onClick={() => setSelectedItem(null)} className="p-2 -mr-2 text-gray-400 hover:text-gray-600 font-bold ml-2 shrink-0">Close</button>
                 </div>
 
                 {selectedItem.image && (
-                  <div className="w-full h-48 rounded-xl overflow-hidden bg-gray-100 mb-6">
+                  <div className="w-full h-40 sm:h-48 rounded-xl overflow-hidden bg-gray-100 mb-6">
                     <img
                       src={resolveMediaUrl(selectedItem.image)}
                       alt={selectedItem.name}
@@ -1665,22 +1691,22 @@ export default function PublicProfile() {
                         <div className="flex items-center justify-between">
                           {steps.map((step, idx) => (
                             <React.Fragment key={idx}>
-                              <div className="flex flex-col items-center flex-1">
-                                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+                              <div className="flex flex-col items-center flex-1 min-w-0">
+                                <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-xs sm:text-sm font-bold shrink-0 ${
                                   idx < currentStep ? 'bg-green-600 text-white' :
                                   idx === currentStep ? 'bg-blue-600 text-white' :
                                   'bg-gray-200 text-gray-500'
                                 }`}>
-                                  {idx < currentStep ? '✓' : idx + 1}
+                                  {idx < currentStep ? <Check className="w-3.5 h-3.5" /> : idx + 1}
                                 </div>
-                                <div className={`text-xs mt-1 text-center ${
+                                <div className={`text-[10px] sm:text-xs mt-1 text-center truncate max-w-[60px] sm:max-w-[80px] ${
                                   idx === currentStep ? 'font-semibold text-blue-600' : 'text-gray-500'
                                 }`}>
                                   {step.type === 'size' ? 'Size' : step.data?.name}
                                 </div>
                               </div>
                               {idx < steps.length - 1 && (
-                                <div className={`h-0.5 flex-1 mx-2 mb-6 ${
+                                <div className={`h-0.5 flex-1 mx-1 sm:mx-2 mb-6 ${
                                   idx < currentStep ? 'bg-green-600' : 'bg-gray-200'
                                 }`} />
                               )}
@@ -2080,10 +2106,10 @@ export default function PublicProfile() {
                 ))}
 
                 {/* Price Summary and Navigation Buttons */}
-                <div className="border-t pt-4 sticky bottom-0 bg-white">
+                <div className="border-t pt-4 bg-white" style={{ paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}>
                   <div className="flex justify-between items-center mb-4">
-                    <span className="text-lg font-semibold">Item Total</span>
-                    <span className="text-2xl font-bold">
+                    <span className="text-base sm:text-lg font-semibold">Item Total</span>
+                    <span className="text-xl sm:text-2xl font-bold">
                       ${(
                         (selectedSize ? selectedSize.price : selectedItem.price) +
                         Object.values(selectedModifiers)
@@ -2103,15 +2129,15 @@ export default function PublicProfile() {
                         {!isFirstStep && (
                           <button
                             onClick={handlePrevious}
-                            className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-4 rounded-xl text-lg font-bold flex items-center justify-center gap-2"
+                            className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-3.5 sm:py-4 rounded-xl text-base sm:text-lg font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
                           >
                             <ArrowLeft className="w-5 h-5" />
-                            Previous
+                            Back
                           </button>
                         )}
                         <button
                           onClick={handleNext}
-                          className={`${isFirstStep ? 'w-full' : 'flex-1'} bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-xl text-lg font-bold flex items-center justify-center gap-2`}
+                          className={`${isFirstStep ? 'w-full' : 'flex-1'} bg-blue-600 hover:bg-blue-700 text-white py-3.5 sm:py-4 rounded-xl text-base sm:text-lg font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform`}
                         >
                           {isLastStep ? (
                             <>
@@ -2129,6 +2155,7 @@ export default function PublicProfile() {
                     );
                   })()}
                 </div>
+              </div>
               </div>
             </motion.div>
           </>
