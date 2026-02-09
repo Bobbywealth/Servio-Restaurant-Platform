@@ -4,8 +4,7 @@ import DashboardLayout from '../../components/Layout/DashboardLayout'
 import RealisticAvatar from '../../components/Assistant/RealisticAvatar'
 import MicrophoneButton from '../../components/Assistant/MicrophoneButton'
 import TranscriptFeed, { TranscriptMessage } from '../../components/Assistant/TranscriptFeed'
-import QuickCommands from '../../components/Assistant/QuickCommands'
-import ChatInput, { QuickSuggestions } from '../../components/Assistant/ChatInput'
+import ChatInput from '../../components/Assistant/ChatInput'
 import { useUser } from '../../contexts/UserContext'
 import { api } from '../../lib/api'
 import { WakeWordService, isWakeWordSupported, getDefaultWakeWordConfig } from '../../lib/WakeWordService'
@@ -37,7 +36,7 @@ interface AssistantState {
 }
 
 export default function AssistantPage() {
-  const { user, hasPermission } = useUser()
+  const { user } = useUser()
   const [state, setState] = useState<AssistantState>({
     isRecording: false,
     isProcessing: false,
@@ -1023,24 +1022,24 @@ export default function AssistantPage() {
       </Head>
 
       <DashboardLayout>
-        <div className="h-[calc(100vh-6rem)] flex flex-col overflow-hidden">
+        <div className="min-h-[calc(100dvh-6rem)] md:h-[calc(100vh-6rem)] flex flex-col overflow-hidden">
           {/* Header */}
-          <div className="flex-shrink-0 mb-4">
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+          <div className="flex-shrink-0 mb-3 md:mb-4">
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-3 md:gap-4">
               <div>
                 <div className="flex items-center gap-2 mb-2">
                   <span className="text-sm font-semibold text-surface-500 dark:text-surface-400 uppercase tracking-widest">AI Assistant</span>
                 </div>
-                <h1 className="text-2xl md:text-3xl font-black text-surface-900 dark:text-white tracking-tight">
+                <h1 className="text-xl md:text-3xl font-black text-surface-900 dark:text-white tracking-tight">
                   Talk to Servio
                 </h1>
-                <p className="mt-1 text-sm text-surface-600 dark:text-surface-400 max-w-lg">
+                <p className="mt-1 text-sm text-surface-600 dark:text-surface-400 max-w-md">
                   Manage orders, inventory, and tasks with natural voice commands.
                 </p>
               </div>
               
               {/* Status Pills */}
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-2 overflow-x-auto md:overflow-visible -mx-2 px-2 md:mx-0 md:px-0">
                 {/* History Toggle Button */}
                 <button
                   onClick={toggleHistory}
@@ -1092,7 +1091,7 @@ export default function AssistantPage() {
           <div className="flex-1 grid grid-cols-1 md:grid-cols-5 gap-4 min-h-0 overflow-hidden">
             {/* Conversation History Panel */}
             {state.showHistory && (
-              <div className="md:col-span-1 bg-white/80 dark:bg-surface-800/80 backdrop-blur-xl rounded-2xl shadow-xl border border-white/50 dark:border-surface-700/50 flex flex-col min-h-0">
+              <div className="md:col-span-1 bg-white/80 dark:bg-surface-800/80 backdrop-blur-xl rounded-2xl shadow-xl border border-white/50 dark:border-surface-700/50 flex flex-col min-h-0 max-h-64 md:max-h-none">
                 <div className="p-4 border-b border-surface-200/50 dark:border-surface-700/50">
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="font-bold text-surface-900 dark:text-white">Conversation History</h3>
@@ -1182,11 +1181,11 @@ export default function AssistantPage() {
             )}
 
             {/* Main Content - Adjust grid columns based on history visibility */}
-            <div className={`${state.showHistory ? 'md:col-span-4' : 'md:col-span-4'} grid grid-cols-1 lg:grid-cols-4 gap-4 min-h-0 overflow-hidden`}>
+            <div className={`${state.showHistory ? 'md:col-span-4' : 'md:col-span-5'} grid grid-cols-1 lg:grid-cols-4 gap-3 md:gap-4 min-h-0 overflow-hidden`}>
             {/* Left Panel - Controls */}
-            <div className="lg:col-span-1 space-y-3 min-h-0 overflow-hidden">
+            <div className="lg:col-span-1 grid grid-cols-1 sm:grid-cols-2 lg:flex lg:flex-col gap-3 min-h-0 overflow-hidden">
               {/* Avatar Card */}
-              <div className="relative bg-white/80 dark:bg-surface-800/80 backdrop-blur-xl rounded-2xl p-4 shadow-xl border border-white/50 dark:border-surface-700/50 overflow-hidden flex flex-col items-center">
+              <div className="relative bg-white/80 dark:bg-surface-800/80 backdrop-blur-xl rounded-2xl p-3 md:p-4 shadow-xl border border-white/50 dark:border-surface-700/50 overflow-hidden flex flex-col items-center">
                 <div className="absolute -top-10 -right-10 w-20 h-20 rounded-full bg-gradient-to-br from-teal-400/20 to-violet-400/20 blur-2xl" />
                 
                 <RealisticAvatar
@@ -1197,6 +1196,7 @@ export default function AssistantPage() {
                   gender="female"
                   name="Servio Assistant"
                   audioLevel={talkIntensity * 100}
+                  className="scale-90 sm:scale-100"
                 />
 
                 <div className="mt-3 w-full">
@@ -1212,7 +1212,7 @@ export default function AssistantPage() {
               </div>
 
               {/* Always Listening Card */}
-              <div className="relative bg-gradient-to-br from-violet-500/10 to-fuchsia-500/10 dark:from-violet-900/30 dark:to-fuchsia-900/30 backdrop-blur-xl rounded-3xl p-5 shadow-xl border border-violet-200/50 dark:border-violet-800/50 overflow-hidden">
+              <div className="relative bg-gradient-to-br from-violet-500/10 to-fuchsia-500/10 dark:from-violet-900/30 dark:to-fuchsia-900/30 backdrop-blur-xl rounded-3xl p-4 md:p-5 shadow-xl border border-violet-200/50 dark:border-violet-800/50 overflow-hidden">
                 <div className="absolute -bottom-10 -left-10 w-32 h-32 rounded-full bg-violet-500/20 blur-2xl" />
                 
                 <div className="relative">
@@ -1268,7 +1268,7 @@ export default function AssistantPage() {
                         });
                       }
                     }}
-                    disabled={state.isProcessing}
+                    disabled={state.isProcessing || !mediaRecorder}
                     className={`w-full py-3 text-sm font-bold rounded-xl transition-all ${
                       state.alwaysListening
                         ? 'bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 text-white shadow-lg shadow-rose-500/30'
@@ -1277,6 +1277,11 @@ export default function AssistantPage() {
                   >
                     {state.alwaysListening ? 'Disable' : 'Enable'}
                   </button>
+                  {!mediaRecorder && (
+                    <p className="mt-2 text-[11px] text-violet-700/80 dark:text-violet-200/80">
+                      Microphone access is required to enable hands-free mode.
+                    </p>
+                  )}
 
                   {state.alwaysListening && state.inConversationWindow && (
                     <div className="mt-3 p-3 bg-emerald-100 dark:bg-emerald-900/30 rounded-xl">
@@ -1290,7 +1295,7 @@ export default function AssistantPage() {
             </div>
 
             {/* Right Panel - Conversation */}
-            <div className="lg:col-span-3 space-y-4 flex flex-col min-h-0">
+            <div className="lg:col-span-3 flex flex-col min-h-0 gap-4">
               {/* Conversation History */}
               <div className="relative bg-white/80 dark:bg-surface-800/80 backdrop-blur-xl rounded-2xl p-4 shadow-xl border border-white/50 dark:border-surface-700/50 flex-1 flex flex-col min-h-0">
                 <div className="flex items-center justify-between mb-4">
@@ -1304,12 +1309,13 @@ export default function AssistantPage() {
 
                 <TranscriptFeed
                   messages={state.messages}
+                  isProcessing={state.isProcessing}
                   className="flex-1 overflow-y-auto"
                 />
               </div>
 
               {/* Chat Input */}
-              <div className="relative bg-white/80 dark:bg-surface-800/80 backdrop-blur-xl rounded-3xl p-5 shadow-xl border border-white/50 dark:border-surface-700/50">
+              <div className="relative bg-white/80 dark:bg-surface-800/80 backdrop-blur-xl rounded-3xl p-4 md:p-5 shadow-xl border border-white/50 dark:border-surface-700/50 mt-auto">
                 <ChatInput
                   onSendMessage={handleQuickCommand}
                   onSendVoice={async (audioBlob) => {
@@ -1381,7 +1387,7 @@ export default function AssistantPage() {
                 {/* Quick Commands */}
                 <div className="mt-4 pt-4 border-t border-surface-200/50 dark:border-surface-700/50">
                   <p className="text-xs font-semibold text-surface-500 dark:text-surface-400 uppercase tracking-wider mb-3">Quick Commands</p>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex gap-2 overflow-x-auto sm:flex-wrap">
                     <button 
                       onClick={() => handleQuickCommand('check current orders')} 
                       disabled={state.isProcessing || state.isRecording} 
