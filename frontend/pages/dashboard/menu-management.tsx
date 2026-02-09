@@ -1008,7 +1008,7 @@ const MenuManagement: React.FC = () => {
   ) => {
     
     // Build list of groups to attach
-    const attachmentsToCreate = [];
+    const attachmentsToCreate: any[] = [];
     for (const att of attachments) {
       attachmentsToCreate.push({
         groupId: att.groupId,
@@ -1031,23 +1031,27 @@ const MenuManagement: React.FC = () => {
 
     // If there were creation errors, log and potentially abort deletion
     if (creationErrors.length > 0) {
+      console.error('Creation errors:', creationErrors);
     }
 
     // Then, delete only the old attachments that aren't in the new list
     const newGroupIds = new Set(attachments.map(a => a.groupId));
+    const groupIdsInfo = {
       newGroupIds: Array.from(newGroupIds),
       existingGroupIds: existingAttachments.map(e => e.groupId)
-    });
-    
+    };
+    console.log('Group IDs info:', groupIdsInfo);
+
     for (const existing of existingAttachments) {
       if (existing.groupId && !newGroupIds.has(existing.groupId)) {
         try {
           await api.delete(`/api/menu-items/${itemId}/modifier-groups/${existing.groupId}`);
         } catch (error) {
+          console.error('Failed to delete modifier group:', error);
         }
       }
     }
-    
+
   };
 
   const handleImportFile = async (file: File) => {

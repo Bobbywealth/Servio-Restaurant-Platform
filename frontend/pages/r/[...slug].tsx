@@ -12,6 +12,7 @@ import {
   AlertTriangle,
   Loader2,
   CheckCircle2,
+  Check,
   CreditCard,
   Wallet,
   User,
@@ -24,7 +25,8 @@ import {
   Filter,
   Flame,
   Leaf,
-  DollarSign
+  DollarSign,
+  Tag
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import toast from 'react-hot-toast';
@@ -901,62 +903,118 @@ export default function PublicProfile() {
       {/* Category Selection Bar - Mobile Only */}
       <div className="sticky top-[140px] z-10 lg:hidden bg-white/95 backdrop-blur-md border-b border-slate-200/50 shadow-sm">
         <div className="max-w-4xl mx-auto px-4 py-4">
-          <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1">
-            {/* All Categories Button */}
+          <div className="relative">
             <button
-              onClick={() => scrollToCategory('all')}
-              className={`flex items-center gap-1.5 px-4 py-3 rounded-full text-sm font-medium whitespace-nowrap transition-all min-h-[44px] ${
-                !selectedCategory || selectedCategory === 'all'
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
+              onClick={() => setIsFilterMenuOpen(!isFilterMenuOpen)}
+              className="w-full flex items-center justify-between gap-3 px-4 py-4 bg-slate-50 border-2 border-slate-200 rounded-xl text-left focus:outline-none focus:border-blue-500 active:border-blue-600 transition-all"
             >
-              All
+              <div className="flex items-center gap-3">
+                <Filter className="w-5 h-5 text-slate-500 flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-semibold text-slate-900">
+                    {selectedCategory && selectedCategory !== 'all' ? selectedCategory : 'All Categories'}
+                  </div>
+                  <div className="text-xs text-slate-500 mt-0.5">
+                    {categories.length} categories available
+                  </div>
+                </div>
+              </div>
+              <ChevronDown className={`w-5 h-5 text-slate-500 flex-shrink-0 transition-transform ${isFilterMenuOpen ? 'rotate-180' : ''}`} />
             </button>
 
-            {/* Individual Category Buttons - Show top 2 or all based on state */}
-            {(showAllCategories ? categories : categories.slice(0, 2)).map(cat => {
-              const catLower = cat.toLowerCase();
-              const isPopular = catLower.includes('popular') || catLower.includes('hot') || catLower.includes('best');
-              const itemsByCat = getItemsByCategory();
-              const categoryItems = itemsByCat[cat] || [];
-
-              return (
-                <button
-                  key={cat}
-                  onClick={() => scrollToCategory(cat)}
-                  className={`flex items-center gap-1.5 px-4 py-3 rounded-full text-sm font-medium whitespace-nowrap transition-all min-h-[44px] ${
-                    selectedCategory === cat
-                      ? 'bg-blue-600 text-white'
-                      : isPopular
-                        ? 'bg-orange-500 text-white'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                  title={cat}
+            {/* Dropdown Menu */}
+            <AnimatePresence>
+              {isFilterMenuOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  transition={{ duration: 0.15 }}
+                  className="absolute top-full left-0 right-0 mt-2 z-50"
                 >
-                  <span className="truncate">{cat}</span>
-                  <span className={`text-xs flex-shrink-0 ${
-                    selectedCategory === cat ? 'text-white/70' : 'text-slate-400'
-                  }`}>
-                    ({categoryItems.length})
-                  </span>
-                </button>
-              );
-            })}
+                  <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-h-[70vh] overflow-y-auto">
+                    <div className="sticky top-0 bg-white border-b border-slate-100 px-4 py-3">
+                      <div className="text-sm font-bold text-slate-900">Select a Category</div>
+                    </div>
 
-            {/* More Button - Show if there are more categories */}
-            {categories.length > 2 && (
-              <button
-                onClick={() => setShowAllCategories(!showAllCategories)}
-                className={`flex items-center gap-1.5 px-3 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all flex-shrink-0 ${
-                  showAllCategories
-                    ? 'bg-blue-100 text-blue-700'
-                    : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
-                }`}
-              >
-                {showAllCategories ? 'Show less' : `+${categories.length - 2} more`}
-              </button>
-            )}
+                    {/* All Categories */}
+                    <button
+                      onClick={() => {
+                        scrollToCategory('all');
+                        setIsFilterMenuOpen(false);
+                      }}
+                      className="w-full flex items-center justify-between gap-3 px-4 py-4 hover:bg-slate-50 transition-colors border-b border-slate-100 last:border-0"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0">
+                          <CheckCircle2 className="w-4 h-4 text-blue-600" />
+                        </div>
+                        <div className="text-left">
+                          <div className="font-semibold text-slate-900">All Items</div>
+                          <div className="text-xs text-slate-500 mt-0.5">View all categories</div>
+                        </div>
+                      </div>
+                      {(!selectedCategory || selectedCategory === 'all') && (
+                        <Check className="w-5 h-5 text-blue-600 flex-shrink-0" />
+                      )}
+                    </button>
+
+                    {/* Individual Categories */}
+                    {categories.map(cat => {
+                      const catLower = cat.toLowerCase();
+                      const isPopular = catLower.includes('popular') || catLower.includes('hot') || catLower.includes('best');
+                      const itemsByCat = getItemsByCategory();
+                      const categoryItems = itemsByCat[cat] || [];
+
+                      return (
+                        <button
+                          key={cat}
+                          onClick={() => {
+                            scrollToCategory(cat);
+                            setIsFilterMenuOpen(false);
+                          }}
+                          className="w-full flex items-center justify-between gap-3 px-4 py-4 hover:bg-slate-50 transition-colors border-b border-slate-100 last:border-0"
+                        >
+                          <div className="flex items-center gap-3">
+                            {isPopular ? (
+                              <div className="w-8 h-8 rounded-lg bg-orange-100 flex items-center justify-center flex-shrink-0">
+                                <Flame className="w-4 h-4 text-orange-600" />
+                              </div>
+                            ) : (
+                              <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center flex-shrink-0">
+                                <Tag className="w-4 h-4 text-slate-600" />
+                              </div>
+                            )}
+                            <div className="text-left min-w-0">
+                              <div className="font-semibold text-slate-900 truncate">{cat}</div>
+                              <div className="text-xs text-slate-500 mt-0.5">
+                                {categoryItems.length} {categoryItems.length === 1 ? 'item' : 'items'}
+                              </div>
+                            </div>
+                          </div>
+                          {selectedCategory === cat && (
+                            <Check className="w-5 h-5 text-blue-600 flex-shrink-0" />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Backdrop */}
+            <AnimatePresence>
+              {isFilterMenuOpen && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  onClick={() => setIsFilterMenuOpen(false)}
+                  className="fixed inset-0 bg-black/50 z-40"
+                />
+              )}
+            </AnimatePresence>
           </div>
         </div>
       </div>
