@@ -9,7 +9,7 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
   const base64 = (base64String + padding)
     .replace(/-/g, '+')
     .replace(/_/g, '/');
-  const rawData = window.atob(base64);
+  const rawData = typeof window !== 'undefined' ? window.atob(base64) : atob(base64);
   // Use Array.from to create a proper Uint8Array with the correct buffer type
   return Uint8Array.from(rawData, (char) => char.charCodeAt(0));
 }
@@ -19,6 +19,7 @@ export function usePerformanceMonitor() {
 
   useEffect(() => {
     if (initialized.current) return;
+    if (typeof window === 'undefined') return;
 
     // Mark initialization
     initialized.current = true;
@@ -130,6 +131,8 @@ export function useWindowSize() {
   const [size, setSize] = React.useState({ width: 0, height: 0 });
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+
     const handleResize = () => {
       setSize({ width: window.innerWidth, height: window.innerHeight });
     };
@@ -155,6 +158,8 @@ export function useMediaQuery(query: string) {
   const [matches, setMatches] = React.useState(false);
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+
     const media = window.matchMedia(query);
     setMatches(media.matches);
 
@@ -189,6 +194,11 @@ export function usePushSubscription() {
 
   // Check if push notifications are supported
   useEffect(() => {
+    if (typeof window === 'undefined' || typeof navigator === 'undefined') {
+      setState(prev => ({ ...prev, isLoading: false, error: 'Not in browser environment' }));
+      return;
+    }
+
     const isSupported = 'serviceWorker' in navigator && 'PushManager' in window;
     setState(prev => ({ ...prev, isSupported }));
 
@@ -198,7 +208,9 @@ export function usePushSubscription() {
     }
 
     // Get current permission status
-    setState(prev => ({ ...prev, permission: Notification.permission }));
+    if (typeof Notification !== 'undefined') {
+      setState(prev => ({ ...prev, permission: Notification.permission }));
+    }
   }, []);
 
   // Get VAPID key and existing subscription

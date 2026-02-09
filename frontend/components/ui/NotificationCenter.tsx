@@ -61,6 +61,7 @@ export default function NotificationCenter({ className = '' }: NotificationCente
 
   // Detect mobile viewport
   useEffect(() => {
+    if (typeof window === 'undefined') return
     const checkMobile = () => setIsMobile(window.innerWidth < 640)
     checkMobile()
     window.addEventListener('resize', checkMobile)
@@ -152,7 +153,9 @@ export default function NotificationCenter({ className = '' }: NotificationCente
   }, [])
 
   useEffect(() => {
-    const accessToken = localStorage.getItem('servio_access_token')
+    if (typeof window === 'undefined') return
+    let accessToken: string | null = null
+    try { accessToken = localStorage.getItem('servio_access_token') } catch {}
     if (!accessToken) {
       setIsLoading(false)
       return

@@ -24,6 +24,7 @@ export const PullToRefresh: React.FC<PullToRefreshProps> = ({
 
   useEffect(() => {
     if (disabled) return
+    if (typeof window === 'undefined' || typeof document === 'undefined') return
 
     const handleTouchStart = (e: TouchEvent) => {
       // Only allow pull-to-refresh at the top of the page

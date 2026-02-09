@@ -46,6 +46,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
   // Detect desktop screen size (lg breakpoint = 1024px)
   React.useEffect(() => {
+    if (typeof window === 'undefined') return;
     const checkIsDesktop = () => setIsDesktop(window.innerWidth >= 1024);
     checkIsDesktop();
     window.addEventListener('resize', checkIsDesktop);
