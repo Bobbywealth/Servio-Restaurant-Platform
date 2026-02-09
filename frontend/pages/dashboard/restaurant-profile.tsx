@@ -21,7 +21,9 @@ import {
   Eye,
   Settings,
   Image as ImageIcon,
-  Share2
+  Share2,
+  X,
+  CheckCircle
 } from 'lucide-react';
 import { useDropzone } from 'react-dropzone';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
@@ -362,6 +364,10 @@ export default function RestaurantProfile() {
   const [saving, setSaving] = useState(false);
   const [showLinkForm, setShowLinkForm] = useState(false);
   const [editingLink, setEditingLink] = useState<RestaurantLink | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [coverPreview, setCoverPreview] = useState<string | null>(null);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [uploadingCover, setUploadingCover] = useState(false);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -499,6 +505,16 @@ export default function RestaurantProfile() {
   const handleImageUpload = async (files: File[], type: 'logo' | 'cover') => {
     if (files.length === 0) return;
 
+    // Show instant local preview
+    const previewUrl = URL.createObjectURL(files[0]);
+    if (type === 'logo') {
+      setLogoPreview(previewUrl);
+      setUploadingLogo(true);
+    } else {
+      setCoverPreview(previewUrl);
+      setUploadingCover(true);
+    }
+
     const formData = new FormData();
     formData.append(type === 'logo' ? 'logo' : 'coverImage', files[0]);
 
@@ -512,6 +528,12 @@ export default function RestaurantProfile() {
       if (data.success) {
         toast.success(`${type === 'logo' ? 'Logo' : 'Cover image'} updated successfully`);
         await fetchProfile();
+        // Clear local preview since the stored image is now updated
+        if (type === 'logo') {
+          setLogoPreview(null);
+        } else {
+          setCoverPreview(null);
+        }
       } else {
         toast.error(data.error?.message || `Failed to update ${type}`);
       }
@@ -519,6 +541,13 @@ export default function RestaurantProfile() {
       console.error(`Error uploading ${type}:`, error);
       const errorMessage = error.response?.data?.error?.message || error.message || `Failed to update ${type}`;
       toast.error(errorMessage);
+    } finally {
+      if (type === 'logo') {
+        setUploadingLogo(false);
+      } else {
+        setUploadingCover(false);
+      }
+      URL.revokeObjectURL(previewUrl);
     }
   };
 
@@ -788,50 +817,138 @@ export default function RestaurantProfile() {
                 </h2>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Restaurant Logo */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
                       Restaurant Logo
                     </label>
-                    <div
-                      {...getLogoProps()}
-                      className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-6 text-center cursor-pointer hover:border-gray-400 dark:hover:border-gray-500 transition-colors"
-                    >
-                      <input {...getLogoInputProps()} />
-                      {profile?.logo_url ? (
+
+                    {/* Current stored logo preview */}
+                    {profile?.logo_url && !logoPreview && (
+                      <div className="mb-3 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                        <div className="flex items-center space-x-2 mb-2">
+                          <CheckCircle className="h-4 w-4 text-green-500" />
+                          <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+                            Current Logo
+                          </span>
+                        </div>
                         <img
                           src={resolveMediaUrl(profile.logo_url)}
                           alt="Restaurant logo"
-                          className="w-24 h-24 object-cover rounded-lg mx-auto mb-3"
+                          className="w-32 h-32 object-cover rounded-lg border border-gray-200 dark:border-gray-600"
                         />
-                      ) : (
-                        <ImageIcon className="h-12 w-12 text-gray-400 mx-auto mb-3" />
-                      )}
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
-                        Click or drag to upload logo
+                      </div>
+                    )}
+
+                    {/* Upload preview for logo */}
+                    {logoPreview && (
+                      <div className="mb-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center space-x-2">
+                            {uploadingLogo ? (
+                              <div className="h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                            ) : (
+                              <CheckCircle className="h-4 w-4 text-green-500" />
+                            )}
+                            <span className="text-xs font-medium text-blue-600 dark:text-blue-400 uppercase tracking-wide">
+                              {uploadingLogo ? 'Uploading...' : 'Upload Complete'}
+                            </span>
+                          </div>
+                          <button
+                            onClick={() => setLogoPreview(null)}
+                            className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                        <img
+                          src={logoPreview}
+                          alt="Logo preview"
+                          className="w-32 h-32 object-cover rounded-lg border border-blue-200 dark:border-blue-700"
+                        />
+                      </div>
+                    )}
+
+                    {/* Dropzone for logo upload */}
+                    <div
+                      {...getLogoProps()}
+                      className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-6 text-center cursor-pointer hover:border-primary-400 dark:hover:border-primary-500 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors"
+                    >
+                      <input {...getLogoInputProps()} />
+                      <Upload className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+                      <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                        {profile?.logo_url ? 'Click or drag to replace logo' : 'Click or drag to upload logo'}
+                      </p>
+                      <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                        PNG, JPG, or WebP up to 50MB
                       </p>
                     </div>
                   </div>
 
+                  {/* Header / Cover Image */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
                       Header / Hero Image
                     </label>
-                    <div
-                      {...getCoverProps()}
-                      className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-6 text-center cursor-pointer hover:border-gray-400 dark:hover:border-gray-500 transition-colors"
-                    >
-                      <input {...getCoverInputProps()} />
-                      {profile?.cover_image_url ? (
+
+                    {/* Current stored cover preview */}
+                    {profile?.cover_image_url && !coverPreview && (
+                      <div className="mb-3 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                        <div className="flex items-center space-x-2 mb-2">
+                          <CheckCircle className="h-4 w-4 text-green-500" />
+                          <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+                            Current Header Image
+                          </span>
+                        </div>
                         <img
                           src={resolveMediaUrl(profile.cover_image_url)}
                           alt="Restaurant header"
-                          className="w-full h-32 object-cover rounded-lg mb-3"
+                          className="w-full h-40 object-cover rounded-lg border border-gray-200 dark:border-gray-600"
                         />
-                      ) : (
-                        <ImageIcon className="h-12 w-12 text-gray-400 mx-auto mb-3" />
-                      )}
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
-                        Click or drag to upload header image
+                      </div>
+                    )}
+
+                    {/* Upload preview for cover */}
+                    {coverPreview && (
+                      <div className="mb-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center space-x-2">
+                            {uploadingCover ? (
+                              <div className="h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                            ) : (
+                              <CheckCircle className="h-4 w-4 text-green-500" />
+                            )}
+                            <span className="text-xs font-medium text-blue-600 dark:text-blue-400 uppercase tracking-wide">
+                              {uploadingCover ? 'Uploading...' : 'Upload Complete'}
+                            </span>
+                          </div>
+                          <button
+                            onClick={() => setCoverPreview(null)}
+                            className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                        <img
+                          src={coverPreview}
+                          alt="Cover preview"
+                          className="w-full h-40 object-cover rounded-lg border border-blue-200 dark:border-blue-700"
+                        />
+                      </div>
+                    )}
+
+                    {/* Dropzone for cover upload */}
+                    <div
+                      {...getCoverProps()}
+                      className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-6 text-center cursor-pointer hover:border-primary-400 dark:hover:border-primary-500 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors"
+                    >
+                      <input {...getCoverInputProps()} />
+                      <Upload className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+                      <p className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                        {profile?.cover_image_url ? 'Click or drag to replace header image' : 'Click or drag to upload header image'}
+                      </p>
+                      <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                        PNG, JPG, or WebP up to 50MB (1200x600 recommended)
                       </p>
                     </div>
                   </div>
