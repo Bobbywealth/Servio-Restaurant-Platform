@@ -70,6 +70,7 @@ interface ReceiptAnalysisResult {
   imageUrl?: string
 }
 
+// Extended Cost Feature Added
 export default function InventoryPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('all')
@@ -569,6 +570,9 @@ export default function InventoryPage() {
                       Unit Cost
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-surface-500 dark:text-surface-400 uppercase tracking-wider">
+                      Extended Cost
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-surface-500 dark:text-surface-400 uppercase tracking-wider">
                       Status
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-surface-500 dark:text-surface-400 uppercase tracking-wider">
@@ -610,6 +614,9 @@ export default function InventoryPage() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-surface-900 dark:text-surface-100">
                         {item.unit_cost !== undefined ? `${Number(item.unit_cost).toFixed(2)}` : '—'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-surface-900 dark:text-surface-100">
+                        {item.unit_cost !== undefined ? `${((item.on_hand_qty || 0) * item.unit_cost).toFixed(2)}` : '—'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`status-badge ${
@@ -703,6 +710,14 @@ export default function InventoryPage() {
                       <div className="text-xs text-surface-500 dark:text-surface-400 mb-1">Low Stock Threshold</div>
                       <div className="text-sm font-medium text-surface-900 dark:text-surface-100">
                         {item.low_stock_threshold} {item.unit}
+                      </div>
+                    </div>
+                    <div className="col-span-2 bg-amber-50 dark:bg-amber-900/20 rounded-lg p-3">
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm text-amber-700 dark:text-amber-300 font-medium">Extended Cost</span>
+                        <span className="text-lg font-bold text-amber-900 dark:text-amber-100">
+                          {item.unit_cost !== undefined ? `$${((item.on_hand_qty || 0) * item.unit_cost).toFixed(2)}` : '—'}
+                        </span>
                       </div>
                     </div>
                   </div>
