@@ -190,6 +190,7 @@ export default function PublicProfile() {
     orderType: 'pickup', // 'pickup' or 'dine-in'
     specialInstructions: ''
   });
+  const [marketingConsent, setMarketingConsent] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<'pickup' | 'online'>('pickup');
   const [onlinePaymentsEnabled, setOnlinePaymentsEnabled] = useState(false);
 
@@ -616,7 +617,8 @@ export default function PublicProfile() {
         customerPhone: customerInfo.phone.trim(),
         orderType: customerInfo.orderType,
         specialInstructions: customerInfo.specialInstructions.trim() || null,
-        paymentMethod: paymentMethod
+        paymentMethod: paymentMethod,
+        marketingConsent: marketingConsent
       });
       setOrderComplete(resp.data.data.orderId);
       setOrderStatus(resp.data.data.status || null);
@@ -624,6 +626,7 @@ export default function PublicProfile() {
       setIsCartOpen(false);
       setCheckoutStep('cart');
       setCustomerInfo({ name: '', phone: '', orderType: 'pickup', specialInstructions: '' });
+      setMarketingConsent(false);
     } catch (err) {
       toast.error('Failed to place order');
     } finally {
@@ -1384,22 +1387,43 @@ export default function PublicProfile() {
                         </div>
                       </div>
 
-                      <div>
-                        <label className="block text-xs font-medium text-gray-500 mb-1">
-                          Special Instructions (optional)
+                       <div>
+                         <label className="block text-xs font-medium text-gray-500 mb-1">
+                           Special Instructions (optional)
+                         </label>
+                         <textarea
+                           value={customerInfo.specialInstructions}
+                           onChange={(e) => setCustomerInfo(prev => ({ ...prev, specialInstructions: e.target.value }))}
+                           onFocus={(e) => {
+                             setTimeout(() => {
+                               e.target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                             }, 300);
+                           }}
+                           placeholder="Allergies, dietary requests, etc."
+                           rows={2}
+                           className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:border-blue-400 focus:outline-none resize-none text-sm scroll-mt-24"
+                         />
+                       </div>
+
+                      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                        <label className="flex items-start gap-3 cursor-pointer">
+                          <div className="relative flex items-center pt-0.5">
+                            <input
+                              type="checkbox"
+                              checked={marketingConsent}
+                              onChange={(e) => setMarketingConsent(e.target.checked)}
+                              className="w-5 h-5 text-blue-600 border-2 border-blue-300 rounded focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 cursor-pointer"
+                            />
+                          </div>
+                          <div className="flex-1">
+                            <span className="text-sm text-gray-800 font-medium leading-snug">
+                              I agree to receive text messages about my order status, promotions, and special offers from this restaurant.
+                            </span>
+                            <p className="text-xs text-gray-500 mt-1">
+                              Message and data rates may apply. You can opt out at any time by replying STOP to any message.
+                            </p>
+                          </div>
                         </label>
-                        <textarea
-                          value={customerInfo.specialInstructions}
-                          onChange={(e) => setCustomerInfo(prev => ({ ...prev, specialInstructions: e.target.value }))}
-                          onFocus={(e) => {
-                            setTimeout(() => {
-                              e.target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                            }, 300);
-                          }}
-                          placeholder="Allergies, dietary requests, etc."
-                          rows={2}
-                          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:border-blue-400 focus:outline-none resize-none text-sm scroll-mt-24"
-                        />
                       </div>
                     </div>
 
