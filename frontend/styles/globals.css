@@ -108,11 +108,13 @@ img, video {
   html {
     scroll-behavior: smooth;
     overflow-x: hidden;
+    overflow-y: auto;
   }
 
   body {
     @apply bg-surface-50 text-surface-900 transition-colors duration-300;
     overflow-x: hidden;
+    overflow-y: auto;
     width: 100%;
     position: relative;
   }
