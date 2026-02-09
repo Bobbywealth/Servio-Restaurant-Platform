@@ -280,7 +280,7 @@ router.get('/public/:slug', asyncHandler(async (req: Request, res: Response) => 
   }
 
   const items = await db.all(`
-    SELECT mi.*, mc.name as category_name
+    SELECT mi.*, mc.name as category_name, mc.sort_order as category_sort_order
     FROM menu_items mi
     LEFT JOIN menu_categories mc ON mi.category_id = mc.id
     WHERE mi.restaurant_id = ?
@@ -606,26 +606,23 @@ router.put('/categories/reorder', asyncHandler(async (req: Request, res: Respons
   ];
 
   // Update sort_order for each category
+  // Note: Using sequential updates with auto-commit per statement.
+  // pool.query() acquires a different connection for each call, so
+  // BEGIN/COMMIT across separate pool.query() calls do not form a
+  // real transaction. Individual UPDATEs auto-commit and are safe here.
   let updatedCount = 0;
-  await db.run('BEGIN TRANSACTION');
-  try {
-    for (let i = 0; i < orderedIds.length; i++) {
-      const categoryId = orderedIds[i];
-      if (!allExistingIds.has(categoryId)) continue;
+  for (let i = 0; i < orderedIds.length; i++) {
+    const categoryId = orderedIds[i];
+    if (!allExistingIds.has(categoryId)) continue;
 
-      const result = await db.run(
-        'UPDATE menu_categories SET sort_order = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND restaurant_id = ?',
-        [i, categoryId, restaurantId]
-      );
+    const result = await db.run(
+      'UPDATE menu_categories SET sort_order = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND restaurant_id = ?',
+      [i, categoryId, restaurantId]
+    );
 
-      if (result.changes > 0) {
-        updatedCount++;
-      }
+    if (result.changes > 0) {
+      updatedCount++;
     }
-    await db.run('COMMIT');
-  } catch (error) {
-    await db.run('ROLLBACK');
-    throw error;
   }
 
   logger.info(`Category reorder: updated ${updatedCount}/${orderedIds.length} categories for restaurant ${restaurantId}`);
