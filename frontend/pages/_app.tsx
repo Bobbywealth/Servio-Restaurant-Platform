@@ -293,10 +293,11 @@ export default function App({ Component, pageProps }: AppProps) {
         <link rel="preconnect" href="https://fonts.googleapis.com" crossOrigin="anonymous" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
 
-        {/* PRELOAD CRITICAL RESOURCES - omit 'as' to let browser detect type */}
+        {/* PRELOAD CRITICAL RESOURCES */}
         {!isStaffRoute && (
           <link
             rel="preload"
+            as="manifest"
             href={isTabletRoute ? '/manifest-tablet.webmanifest' : '/manifest.json'}
             crossOrigin="anonymous"
           />

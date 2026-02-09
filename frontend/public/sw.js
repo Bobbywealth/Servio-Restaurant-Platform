@@ -280,6 +280,7 @@ async function getTokenFromIndexedDB() {
 async function saveTokenToIndexedDB(token) {
   return new Promise((resolve) => {
     try {
+      // First try to open existing database
       const request = indexedDB.open('servioAuth', 1)
 
       request.onerror = () => {
@@ -290,10 +291,22 @@ async function saveTokenToIndexedDB(token) {
       request.onsuccess = () => {
         const db = request.result
 
-        // Check if object store exists
+        // Check if object store exists, if not create it
         if (!db.objectStoreNames.contains('tokens')) {
-          console.warn('SW: Cannot save token - tokens object store not found')
-          resolve(false)
+          console.warn('SW: Creating tokens object store...')
+          // Close current connection and reopen with version bump
+          db.close()
+          const upgradeRequest = indexedDB.open('servioAuth', 2)
+          upgradeRequest.onsuccess = () => {
+            const upgradeDb = upgradeRequest.result
+            if (!upgradeDb.objectStoreNames.contains('tokens')) {
+              upgradeDb.createObjectStore('tokens', { keyPath: 'id' })
+            }
+            upgradeDb.close()
+            // Now try to save the token
+            saveTokenToIndexedDB(token).then(resolve)
+          }
+          upgradeRequest.onerror = () => resolve(false)
           return
         }
 
