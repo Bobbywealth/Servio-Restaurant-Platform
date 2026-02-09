@@ -143,6 +143,7 @@ export default function PublicProfile() {
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
   const [showStickyNav, setShowStickyNav] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [showAllCategories, setShowAllCategories] = useState(false);
 
   // Scroll listener for sticky navigation
   useEffect(() => {
@@ -808,7 +809,7 @@ export default function PublicProfile() {
           <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide pb-1 -mx-4 px-4" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}>
             {/* All Categories Button */}
             <button
-              onClick={() => scrollToCategory('all')}
+              onClick={() => { scrollToCategory('all'); setShowAllCategories(true); }}
               className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all flex-shrink-0 ${
                 !selectedCategory || selectedCategory === 'all'
                   ? 'bg-blue-600 text-white'
@@ -818,8 +819,8 @@ export default function PublicProfile() {
               All
             </button>
 
-            {/* Individual Category Buttons */}
-            {categories.map(cat => {
+            {/* Individual Category Buttons - Show top 2 or all based on state */}
+            {(showAllCategories ? categories : categories.slice(0, 2)).map(cat => {
               const catLower = cat.toLowerCase();
               const isPopular = catLower.includes('popular') || catLower.includes('hot') || catLower.includes('best');
               const itemsByCat = getItemsByCategory();
@@ -847,6 +848,20 @@ export default function PublicProfile() {
                 </button>
               );
             })}
+
+            {/* More Button - Show if there are more categories */}
+            {categories.length > 2 && (
+              <button
+                onClick={() => setShowAllCategories(!showAllCategories)}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all flex-shrink-0 ${
+                  showAllCategories
+                    ? 'bg-blue-100 text-blue-700'
+                    : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
+                }`}
+              >
+                {showAllCategories ? 'Show less' : `+${categories.length - 2} more`}
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -862,13 +877,14 @@ export default function PublicProfile() {
             <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-2 -mx-4 px-4" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}>
               {/* All Categories Button for sticky nav */}
               <button
-                onClick={() => scrollToCategory('all')}
+                onClick={() => { scrollToCategory('all'); setShowAllCategories(true); }}
                 className="flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-all bg-blue-600 text-white flex-shrink-0"
               >
                 All
               </button>
 
-              {categories.map(cat => {
+              {/* Show top 2 or all categories based on state */}
+              {(showAllCategories ? categories : categories.slice(0, 2)).map(cat => {
                 const catLower = cat.toLowerCase();
                 const isPopular = catLower.includes('popular') || catLower.includes('hot') || catLower.includes('best');
                 return (
@@ -886,6 +902,20 @@ export default function PublicProfile() {
                   </button>
                 );
               })}
+
+              {/* More Button for sticky nav */}
+              {categories.length > 2 && (
+                <button
+                  onClick={() => setShowAllCategories(!showAllCategories)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-all flex-shrink-0 ${
+                    showAllCategories
+                      ? 'bg-blue-100 text-blue-700'
+                      : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
+                  }`}
+                >
+                  {showAllCategories ? 'Less' : `+${categories.length - 2}`}
+                </button>
+              )}
             </div>
           </div>
         </motion.div>
