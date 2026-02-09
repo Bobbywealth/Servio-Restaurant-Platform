@@ -108,13 +108,10 @@ img, video {
   html {
     scroll-behavior: smooth;
     overflow-x: hidden;
-    overflow-y: auto;
   }
 
   body {
     @apply bg-surface-50 text-surface-900 transition-colors duration-300;
-    overflow-x: hidden;
-    overflow-y: auto;
     width: 100%;
     position: relative;
   }
@@ -500,669 +497,315 @@ img, video {
            border-l-4 border-servio-orange-500;
   }
 
-  /* ANIMATED BORDER */
-  .animated-border {
-    @apply relative rounded-2xl;
+  /* PREMIUM SECTIONS */
+  .section-glass {
+    @apply relative overflow-hidden rounded-3xl
+           bg-gradient-to-br from-white/90 to-white/70
+           dark:from-surface-800/90 dark:to-surface-800/70
+           backdrop-blur-xl border border-white/20 dark:border-surface-700/50
+           shadow-soft-lg;
   }
 
-  .animated-border::before {
-    content: '';
-    @apply absolute -inset-px rounded-2xl bg-gradient-to-r from-primary-500 via-servio-orange-500 to-primary-500
-           -z-10 opacity-75 blur transition-opacity duration-500;
-    background-size: 200% 200%;
-    animation: gradient 3s linear infinite;
+  /* SCROLLABLE PANELS */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: theme('colors.surface.300') transparent;
   }
 
-  /* GLOW EFFECTS */
-  .glow-primary {
-    box-shadow: 0 0 20px rgba(20, 184, 166, 0.4), 0 0 40px rgba(20, 184, 166, 0.2);
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
   }
 
-  .glow-orange {
-    box-shadow: 0 0 20px rgba(255, 107, 53, 0.4), 0 0 40px rgba(255, 107, 53, 0.2);
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
   }
 
-  .glow-purple {
-    box-shadow: 0 0 20px rgba(168, 85, 247, 0.4), 0 0 40px rgba(168, 85, 247, 0.2);
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: theme('colors.surface.300');
+    border-radius: 4px;
   }
 
-  /* FLOATING ANIMATION */
-  .float-animation {
-    animation: float 6s ease-in-out infinite;
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background-color: theme('colors.surface.400');
   }
 
-  @keyframes float {
-    0%, 100% { transform: translateY(0px); }
-    50% { transform: translateY(-20px); }
+  /* ANIMATED SHIMMER */
+  .shimmer {
+    @apply relative overflow-hidden;
   }
 
-  /* SPARKLE EFFECT */
-  .sparkle {
-    @apply absolute w-2 h-2 bg-white rounded-full;
-    animation: sparkle 1.5s ease-out forwards;
-  }
-
-  /* STAGGER ANIMATION */
-  .stagger-1 { animation-delay: 0.1s; }
-  .stagger-2 { animation-delay: 0.2s; }
-  .stagger-3 { animation-delay: 0.3s; }
-  .stagger-4 { animation-delay: 0.4s; }
-  .stagger-5 { animation-delay: 0.5s; }
-
-  /* PREMIUM SKELETON */
-  .skeleton {
-    @apply relative overflow-hidden bg-surface-200 dark:bg-surface-700 rounded-lg;
-  }
-
-  .skeleton::after {
+  .shimmer::after {
     content: '';
     @apply absolute inset-0 -translate-x-full;
-    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.2),
+      transparent
+    );
     animation: shimmer 2s infinite;
   }
 
-  /* MOBILE-OPTIMIZED COMPONENTS */
-  .btn-mobile {
-    @apply min-h-[44px] min-w-[44px] text-base font-medium touch-manipulation mobile-tap-highlight;
+  @keyframes shimmer {
+    100% {
+      transform: translateX(100%);
+    }
   }
 
-  .btn-mobile-primary {
-    @apply btn-primary btn-mobile py-3 px-6;
-  }
-
-  .btn-mobile-secondary {
-    @apply btn-secondary btn-mobile py-3 px-6;
-  }
-
-  .card-mobile {
-    @apply card p-4 mx-2 sm:mx-0 rounded-2xl;
-  }
-
-  .input-mobile {
-    @apply input-field min-h-[44px] text-base px-4 py-3 touch-manipulation;
-  }
-
-  .nav-mobile {
-    @apply touch-manipulation mobile-tap-highlight min-h-[44px] flex items-center;
-  }
-
-  .sidebar-mobile {
-    @apply transform transition-transform duration-300 ease-in-out lg:translate-x-0;
-  }
-
-  .overlay-mobile {
-    @apply fixed inset-0 bg-gray-600 bg-opacity-75 transition-opacity lg:hidden;
-  }
-
-  /* PREMIUM STAT CARD */
+  /* STAT CARDS */
   .stat-card {
     @apply relative overflow-hidden rounded-2xl p-6
-           bg-gradient-to-br from-white to-surface-50
-           dark:from-surface-800 dark:to-surface-900
-           shadow-soft-lg border border-surface-200/50 dark:border-surface-700/50
-           transition-all duration-300 hover:shadow-glow hover:-translate-y-1;
+           bg-white dark:bg-surface-800
+           border border-surface-200/50 dark:border-surface-700/50
+           shadow-soft hover:shadow-soft-lg transition-all duration-300;
   }
 
-  .stat-card::before {
-    content: '';
-    @apply absolute inset-0 opacity-20;
-    background: linear-gradient(135deg, transparent 0%, theme('colors.primary.400') 100%);
+  /* FORM GROUPS */
+  .form-group {
+    @apply space-y-2;
   }
 
-  .stat-card-primary {
-    @apply stat-card;
+  .form-label {
+    @apply block text-sm font-medium text-surface-700 dark:text-surface-300;
   }
 
-  .stat-card-primary::before {
-    background: linear-gradient(135deg, transparent 0%, theme('colors.primary.500') 100%);
+  .form-helper {
+    @apply text-xs text-surface-500 dark:text-surface-400;
   }
 
-  .stat-card-orange {
-    @apply stat-card;
+  /* TOOLTIPS */
+  .tooltip {
+    @apply relative inline-block;
   }
 
-  .stat-card-orange::before {
-    background: linear-gradient(135deg, transparent 0%, theme('colors.servio.orange.500') 100%);
+  .tooltip .tooltip-text {
+    @apply absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-1.5
+           text-xs font-medium text-white bg-surface-900 dark:bg-surface-700
+           rounded-lg shadow-lg opacity-0 invisible transition-all duration-200;
+    white-space: nowrap;
+    z-index: 50;
   }
 
-  .stat-card-green {
-    @apply stat-card;
+  .tooltip:hover .tooltip-text {
+    @apply opacity-100 visible;
   }
 
-  .stat-card-green::before {
-    background: linear-gradient(135deg, transparent 0%, theme('colors.servio.green.500') 100%);
+  /* EMPTY STATES */
+  .empty-state {
+    @apply flex flex-col items-center justify-center py-16 px-4 text-center;
   }
 
-  .stat-card-blue {
-    @apply stat-card;
+  .empty-state-icon {
+    @apply w-16 h-16 rounded-full bg-surface-100 dark:bg-surface-800 flex items-center justify-center mb-4;
   }
 
-  .stat-card-blue::before {
-    background: linear-gradient(135deg, transparent 0%, theme('colors.servio.blue.500') 100%);
-  }
-}
-
-/* Avatar animation keyframes */
-@keyframes talk {
-  0%, 100% {
-    transform: scaleY(1);
-  }
-  50% {
-    transform: scaleY(1.1);
-  }
-}
-
-.avatar-talking .mouth {
-  animation: talk 0.3s ease-in-out infinite;
-}
-
-/* Microphone pulse animation */
-@keyframes mic-pulse {
-  0% {
-    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
-  }
-  70% {
-    box-shadow: 0 0 0 10px rgba(239, 68, 68, 0);
-  }
-  100% {
-    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
-  }
-}
-
-.mic-recording {
-  animation: mic-pulse 1.5s infinite;
-}
-
-/* Prep time countdown animations */
-@keyframes prep-time-critical {
-  0%, 100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.8;
-    transform: scale(1.02);
-  }
-}
-
-@keyframes prep-time-progress {
-  0% {
-    width: 100%;
-  }
-  100% {
-    width: 0%;
-  }
-}
-
-.prep-time-critical {
-  animation: prep-time-critical 1s ease-in-out infinite;
-}
-
-.prep-time-progress-bar {
-  transition: width 1s linear;
-}
-
-/* Pulse animation for overdue orders */
-@keyframes overdue-pulse {
-  0%, 100% {
-    box-shadow: 0 0 0 0 rgba(196, 69, 54, 0.4);
-  }
-  50% {
-    box-shadow: 0 0 0 8px rgba(196, 69, 54, 0);
-  }
-}
-
-.order-overdue {
-  animation: overdue-pulse 2s ease-in-out infinite;
-}
-
-/* Search input focus animation */
-@keyframes search-focus {
-  0% {
-    box-shadow: 0 0 0 0 var(--tablet-accent);
-  }
-  70% {
-    box-shadow: 0 0 0 6px rgba(0, 0, 0, 0);
-  }
-  100% {
-    box-shadow: 0 0 0 0 rgba(0, 0, 0, 0);
-  }
-}
-
-.search-input-focus {
-  animation: search-focus 0.5s ease-out;
-}
-
-/* Order card entrance animation */
-@keyframes order-card-enter {
-  0% {
-    opacity: 0;
-    transform: translateY(-10px) scale(0.98);
-  }
-  100% {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-.order-card-enter {
-  animation: order-card-enter 0.3s ease-out;
-}
-
-/* Fade in animation */
-@keyframes fade-in {
-  from {
-    opacity: 0;
-    transform: translateY(-8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.animate-fade-in {
-  animation: fade-in 0.2s ease-out;
-}
-
-@keyframes route-progress {
-  0% {
-    transform: translateX(-100%);
-  }
-  50% {
-    transform: translateX(-10%);
-  }
-  100% {
-    transform: translateX(0%);
-  }
-}
-
-.animate-route-progress {
-  animation: route-progress 1.2s ease-in-out infinite;
-}
-
-/* Shimmer effect for skeleton loaders */
-@keyframes shimmer {
-  0% {
-    transform: translateX(-100%);
-  }
-  100% {
-    transform: translateX(100%);
-  }
-}
-
-@layer utilities {
-  .bg-gray-850 {
-    background-color: rgb(26 32 44);
+  .empty-state-title {
+    @apply text-lg font-semibold text-surface-900 dark:text-white mb-2;
   }
 
-  .line-clamp-2 {
+  .empty-state-description {
+    @apply text-sm text-surface-500 dark:text-surface-400 max-w-sm;
+  }
+
+  /* BADGE VARIANTS */
+  .badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+  }
+
+  .badge-primary {
+    @apply badge bg-primary-100 text-primary-800 dark:bg-primary-900/30 dark:text-primary-300;
+  }
+
+  .badge-secondary {
+    @apply badge bg-surface-100 text-surface-800 dark:bg-surface-800 dark:text-surface-200;
+  }
+
+  .badge-success {
+    @apply badge bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300;
+  }
+
+  .badge-warning {
+    @apply badge bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300;
+  }
+
+  .badge-danger {
+    @apply badge bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300;
+  }
+
+  /* TEXT ELLIPSIS */
+  .truncate-2 {
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
   }
 
-  .line-clamp-3 {
+  .truncate-3 {
     display: -webkit-box;
     -webkit-line-clamp: 3;
     -webkit-box-orient: vertical;
     overflow: hidden;
   }
 
-  /* Mobile-specific utilities */
+  /* TOUCH OPTIMIZATION */
   .touch-manipulation {
     touch-action: manipulation;
   }
 
-  .mobile-tap-highlight {
-    -webkit-tap-highlight-color: rgba(59, 130, 246, 0.1);
+  /* FOCUS VISIBLE */
+  .focus-ring {
+    @apply focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2;
   }
 
-  .mobile-scrolling {
-    -webkit-overflow-scrolling: touch;
+  /* CONTAINMENT */
+  .contain-layout {
+    contain: layout;
   }
 
-  .safe-area-inset-top {
-    padding-top: env(safe-area-inset-top);
-  }
-
-  .safe-area-inset-bottom {
-    padding-bottom: env(safe-area-inset-bottom);
-  }
-
-  .safe-area-inset-left {
-    padding-left: env(safe-area-inset-left);
-  }
-
-  .safe-area-inset-right {
-    padding-right: env(safe-area-inset-right);
-  }
-
-  /* Mobile viewport utilities */
-  .min-h-mobile {
-    min-height: 100vh;
-    min-height: 100dvh; /* Dynamic viewport height for mobile */
-  }
-
-  .h-mobile {
-    height: 100vh;
-    height: 100dvh;
-  }
-
-  /* Bottom sheet modals - prevent content from being hidden behind home indicator */
-  .bottom-sheet-safe {
-    padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
-  }
-
-  /* Prevent body scroll when modal is open */
-  .body-scroll-lock {
-    overflow: hidden;
-    position: fixed;
-    width: 100%;
-    height: 100%;
-  }
-
-  /* Touch-friendly scrolling for modal content */
-  .overscroll-contain {
-    overscroll-behavior: contain;
-    -webkit-overflow-scrolling: touch;
-  }
-
-  /* Hide scrollbar utilities */
-  .scrollbar-hide {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
-  }
-
-  .scrollbar-hide::-webkit-scrollbar {
-    display: none;
-  }
-
-  /* Premium text utilities */
-  .text-balance {
-    text-wrap: balance;
-  }
-
-  /* Gradient clip */
-  .gradient-clip-text {
-    background-clip: text;
-    -webkit-background-clip: text;
-  }
-
-  /* Glass effect utilities */
-  .glass {
-    background: rgba(255, 255, 255, 0.1);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-  }
-
-  .glass-dark {
-    background: rgba(0, 0, 0, 0.2);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
+  .contain-paint {
+    contain: paint;
   }
 }
 
-@media (max-width: 640px) {
-  table {
-    display: block;
-    width: 100%;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-  }
+/* SHADOW VARIANTS */
+.shadow-glow {
+  box-shadow: 0 0 20px rgba(20, 184, 166, 0.15);
 }
 
-/* NATIVE APP FEEL - MOBILE OPTIMIZATIONS */
-@layer utilities {
-  /* Smooth scroll behavior for iOS */
-  html {
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-    text-rendering: optimizeLegibility;
-  }
-
-  /* Prevent pull-to-refresh on desktop */
-  @media (hover: hover) and (pointer: fine) {
-    body {
-      overscroll-behavior-y: contain;
-    }
-  }
-
-  /* Enable smooth scrolling on mobile */
-  @media (hover: none) and (pointer: coarse) {
-    * {
-      -webkit-overflow-scrolling: touch;
-      scroll-behavior: smooth;
-    }
-
-    /* Disable iOS bounce on fixed elements */
-    .fixed,
-    .sticky {
-      will-change: transform;
-    }
-  }
-
-  /* Performance: GPU acceleration for transitions */
-  .will-change-transform {
-    will-change: transform;
-  }
-
-  .will-change-opacity {
-    will-change: opacity;
-  }
-
-  /* Native app transitions */
-  .transition-native {
-    transition-timing-function: cubic-bezier(0.61, 1, 0.88, 1);
-  }
-
-  /* iOS-style momentum scrolling */
-  .momentum-scroll {
-    overflow-y: scroll;
-    -webkit-overflow-scrolling: touch;
-    overscroll-behavior-y: contain;
-  }
-
-  /* Prevent text selection on interactive elements */
-  .no-select {
-    -webkit-user-select: none;
-    -moz-user-select: none;
-    -ms-user-select: none;
-    user-select: none;
-    -webkit-touch-callout: none;
-  }
-
-  /* Active state for touch */
-  .active-state:active {
-    transform: scale(0.97);
-    opacity: 0.9;
-  }
-
-  /* Backdrop blur for modals */
-  .backdrop-blur-native {
-    -webkit-backdrop-filter: blur(10px);
-    backdrop-filter: blur(10px);
-  }
+.shadow-glow-lg {
+  box-shadow: 0 0 30px rgba(20, 184, 166, 0.25);
 }
 
-/* LOADING STATE OPTIMIZATIONS */
-@layer components {
-  /* Skeleton pulse animation */
-  @keyframes skeleton-pulse {
-    0%, 100% {
-      opacity: 0.5;
-    }
-    50% {
-      opacity: 0.8;
-    }
-  }
-
-  .skeleton-animate {
-    animation: skeleton-pulse 1.5s ease-in-out infinite;
-  }
-
-  /* Shimmer effect for loading */
-  @keyframes shimmer {
-    0% {
-      background-position: -1000px 0;
-    }
-    100% {
-      background-position: 1000px 0;
-    }
-  }
-
-  .shimmer {
-    background: linear-gradient(
-      90deg,
-      transparent 0%,
-      rgba(255, 255, 255, 0.1) 50%,
-      transparent 100%
-    );
-    background-size: 1000px 100%;
-    animation: shimmer 2s infinite;
-  }
+.shadow-glow-orange {
+  box-shadow: 0 0 20px rgba(249, 115, 22, 0.15);
 }
 
-/* PERFORMANCE: Reduce repaints */
-@layer base {
-  /* Contain layout for better performance */
-  .card,
-  .card-hover {
-    contain: layout style paint;
+.shadow-glow-red {
+  box-shadow: 0 0 20px rgba(239, 68, 68, 0.15);
+}
+
+.shadow-glass {
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+}
+
+.shadow-soft {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.04);
+}
+
+.shadow-soft-lg {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06), 0 16px 32px rgba(0, 0, 0, 0.06);
+}
+
+/* TABLET SPECIFIC */
+.tablet-theme {
+  /* Already defined in @layer base, adding fallback */
+  --tablet-bg: #1a1a1a;
+  --tablet-surface: #1c1c1c;
+  --tablet-surface-alt: #242424;
+  --tablet-card: #202020;
+  --tablet-border: #2a2a2a;
+  --tablet-border-strong: #3a3a3a;
+  --tablet-sidebar: #161616;
+  --tablet-sidebar-border: #202020;
+  --tablet-muted: #6a6a6a;
+  --tablet-muted-strong: #8a8a8a;
+  --tablet-text: #ffffff;
+  --tablet-accent: #c4a661;
+  --tablet-accent-contrast: #1a1a1a;
+  --tablet-success: #4a7c59;
+  --tablet-warning: #b8860b;
+  --tablet-danger: #c44536;
+  --tablet-info: #4a5f8c;
+}
+
+/* ORDER STATUS BADGES */
+.order-status-new {
+  @apply bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 border-blue-200 dark:border-blue-800;
+}
+
+.order-status-preparing {
+  @apply bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300 border-yellow-200 dark:border-yellow-800;
+}
+
+.order-status-ready {
+  @apply bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 border-green-200 dark:border-green-800;
+}
+
+.order-status-delivered {
+  @apply bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300 border-gray-200 dark:border-gray-700;
+}
+
+.order-status-cancelled {
+  @apply bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300 border-red-200 dark:border-red-800;
+}
+
+/* PRIORITY BADGES */
+.priority-high {
+  @apply bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300;
+}
+
+.priority-medium {
+  @apply bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300;
+}
+
+.priority-low {
+  @apply bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300;
+}
+
+/* DATA VIZ COLORS */
+.chart-primary {
+  --chart-color: 20, 184, 166;
+}
+
+.chart-secondary {
+  --chart-color: 99, 102, 241;
+}
+
+.chart-tertiary {
+  --chart-color: 249, 115, 22;
+}
+
+.chart-quaternary {
+  --chart-color: 236, 72, 153;
+}
+
+/* PRINT STYLES */
+@media print {
+  .no-print {
+    display: none !important;
   }
 
-  /* Optimize font rendering */
+  .print-break {
+    page-break-before: always;
+  }
+
   body {
-    font-feature-settings: "kern" 1;
-    font-kerning: normal;
-    text-size-adjust: 100%;
-    -webkit-text-size-adjust: 100%;
-  }
-
-  /* Optimize images */
-  img {
-    content-visibility: auto;
+    @apply bg-white text-black;
   }
 }
 
-/* MOBILE: Improve tap targets */
-@media (max-width: 768px) {
-  /* Ensure minimum tap target size */
-  button,
-  a,
-  input[type="button"],
-  input[type="submit"],
-  select {
-    min-height: 44px;
-    min-width: 44px;
-  }
-
-  /* Larger text inputs on mobile */
-  input[type="text"],
-  input[type="email"],
-  input[type="password"],
-  input[type="tel"],
-  input[type="number"],
-  textarea {
-    font-size: 16px; /* Prevents zoom on iOS */
+/* ACCESSIBILITY */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }
 
-/* DARK MODE: Prevent flash */
+/* DARK MODE PREFERENCES */
 @media (prefers-color-scheme: dark) {
-  :root {
-    color-scheme: dark;
+  /* Automatically applied via dark class on html */
+}
+
+/* HIGH CONTRAST MODE */
+@media (prefers-contrast: high) {
+  .card {
+    @apply border-2 border-surface-900 dark:border-surface-100;
   }
-}
 
-/* PERFORMANCE: Content visibility */
-.content-auto {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 500px;
-}
-
-/* BLOB ANIMATIONS */
-.blob {
-  position: absolute;
-  filter: blur(80px);
-  z-index: 0;
-  opacity: 0.5;
-  animation: blob 7s infinite;
-}
-
-.blob-1 {
-  top: 10%;
-  left: 10%;
-  background: theme('colors.primary.400');
-  animation-delay: 0s;
-}
-
-.blob-2 {
-  top: 20%;
-  right: 10%;
-  background: theme('colors.servio.orange.400');
-  animation-delay: 1s;
-}
-
-.blob-3 {
-  bottom: 20%;
-  left: 20%;
-  background: theme('colors.servio.purple.500');
-  animation-delay: 2s;
-}
-
-.blob-4 {
-  bottom: 10%;
-  right: 20%;
-  background: theme('colors.servio.blue.500');
-  animation-delay: 3s;
-}
-
-/* SPOTLIGHT EFFECT */
-.spotlight {
-  position: relative;
-  overflow: hidden;
-}
-
-.spotlight::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: -100%;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    rgba(255, 255, 255, 0.1),
-    transparent
-  );
-  transition: left 0.5s;
-}
-
-.spotlight:hover::before {
-  left: 100%;
-}
-
-/* BORDER GLOW */
-.border-glow {
-  position: relative;
-}
-
-.border-glow::after {
-  content: '';
-  position: absolute;
-  inset: -2px;
-  border-radius: inherit;
-  background: linear-gradient(45deg, theme('colors.primary.500'), theme('colors.servio.orange.500'), theme('colors.primary.500'));
-  background-size: 400% 400%;
-  z-index: -1;
-  opacity: 0;
-  transition: opacity 0.3s;
-  animation: gradient 3s ease infinite;
-}
-
-.border-glow:hover::after {
-  opacity: 1;
+  .btn-primary {
+    @apply border-2 border-transparent;
+  }
 }

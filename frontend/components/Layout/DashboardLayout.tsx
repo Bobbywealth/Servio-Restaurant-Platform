@@ -471,8 +471,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         )}
       </AnimatePresence>
 
-      <div className="pl-0 lg:pl-72 transition-all duration-300 min-h-screen flex flex-col">
-        <div className="flex-1 flex flex-col min-h-0">
+      <div className="pl-0 lg:pl-72 transition-all duration-300">
         <div className="bg-white/95 dark:bg-gray-900/95 sticky top-0 z-30 border-b border-gray-200 dark:border-gray-700 backdrop-blur-md safe-area-inset-top">
           <div className="px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between items-center h-16">
@@ -498,14 +497,13 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           </div>
         </div>
         <motion.main
-          className="px-4 sm:px-6 lg:px-8 py-6 pb-28 sm:pb-8 min-h-[calc(100vh-4rem)] overflow-y-auto"
+          className="px-4 sm:px-6 lg:px-8 py-6 pb-28 sm:pb-8"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3 }}
         >
           {children}
         </motion.main>
-        </div>
       </div>
 
       {/* Mobile bottom navigation */}

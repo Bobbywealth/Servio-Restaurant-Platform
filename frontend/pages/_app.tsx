@@ -310,13 +310,7 @@ export default function App({ Component, pageProps }: AppProps) {
         html {
           font-family: ${inter.style.fontFamily};
         }
-        /* CRITICAL: Prevent layout shift */
-        html {
-          overflow-x: hidden;
-          scroll-behavior: smooth;
-        }
         body {
-          scroll-behavior: smooth;
           overscroll-behavior-y: contain;
         }
         /* GPU acceleration for animations */
