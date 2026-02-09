@@ -848,6 +848,25 @@ img, video {
     height: 100dvh;
   }
 
+  /* Bottom sheet modals - prevent content from being hidden behind home indicator */
+  .bottom-sheet-safe {
+    padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
+  }
+
+  /* Prevent body scroll when modal is open */
+  .body-scroll-lock {
+    overflow: hidden;
+    position: fixed;
+    width: 100%;
+    height: 100%;
+  }
+
+  /* Touch-friendly scrolling for modal content */
+  .overscroll-contain {
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
   /* Hide scrollbar utilities */
   .scrollbar-hide {
     -ms-overflow-style: none;
