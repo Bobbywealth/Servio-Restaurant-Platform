@@ -449,11 +449,11 @@ export function OrderAnalytics({ restaurantId, onRefresh }: OrderAnalyticsProps)
       fetchAnalytics();
     };
 
-    socket.on('order:created', handleOrderUpdate);
+    socket.on('order:new', handleOrderUpdate);
     socket.on('order:status_changed', handleOrderUpdate);
     
     return () => {
-      socket.off('order:created', handleOrderUpdate);
+      socket.off('order:new', handleOrderUpdate);
       socket.off('order:status_changed', handleOrderUpdate);
     };
   }, [socket]);
