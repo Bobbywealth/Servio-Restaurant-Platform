@@ -17,7 +17,15 @@ import {
   Eye,
   Calendar,
   ArrowUpDown,
-  Zap
+  Zap,
+  Bell,
+  BellOff,
+  Maximize2,
+  Minimize2,
+  Volume2,
+  VolumeX,
+  LayoutGrid,
+  List
 } from 'lucide-react';
 import { useSocket } from '../../lib/socket';
 import { PrintReceipt } from '../../components/PrintReceipt';
@@ -350,6 +358,11 @@ export default function TabletOrdersPage() {
   const [isOnline, setIsOnline] = useState<boolean>(true);
   const [socketConnected, setSocketConnected] = useState<boolean>(false);
   const [showUpdateBanner, setShowUpdateBanner] = useState(false);
+  
+  // New feature toggles
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
   // Search and filter state
   const [searchQuery, setSearchQuery] = useState('');
@@ -522,6 +535,24 @@ export default function TabletOrdersPage() {
         // ignore
       }
     }
+    
+    // Load sound setting
+    const storedSound = safeLocalStorage.getItem('servio_sound_enabled');
+    if (storedSound !== null) {
+      setSoundEnabled(storedSound === 'true');
+    }
+  }, []);
+
+  // Fullscreen toggle effect
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
 
   useEffect(() => {
@@ -1081,7 +1112,7 @@ export default function TabletOrdersPage() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    if (receivedOrders.length > 0) {
+    if (receivedOrders.length > 0 && soundEnabled) {
       if (alarmIntervalRef.current === null) {
         playAlarmTone();
         alarmIntervalRef.current = window.setInterval(() => {
@@ -1092,7 +1123,7 @@ export default function TabletOrdersPage() {
       window.clearInterval(alarmIntervalRef.current);
       alarmIntervalRef.current = null;
     }
-  }, [receivedOrders.length]);
+  }, [receivedOrders.length, soundEnabled]);
 
   useEffect(() => {
     // Avoid printing everything on initial load; mark existing active orders as already-seen.
@@ -1170,6 +1201,40 @@ export default function TabletOrdersPage() {
                       Cached: {new Date(cachedAt).toLocaleTimeString()}
                     </div>
                   )}
+                  
+                  {/* Sound Toggle */}
+                  <button
+                    onClick={() => {
+                      const newValue = !soundEnabled;
+                      setSoundEnabled(newValue);
+                      safeLocalStorage.setItem('servio_sound_enabled', newValue ? 'true' : 'false');
+                    }}
+                    className={clsx(
+                      'p-2.5 rounded-full transition touch-manipulation',
+                      soundEnabled 
+                        ? 'bg-[var(--tablet-success)] text-white' 
+                        : 'bg-[var(--tablet-surface-alt)] text-[var(--tablet-muted)]'
+                    )}
+                    aria-label={soundEnabled ? 'Mute sounds' : 'Enable sounds'}
+                  >
+                    {soundEnabled ? <Volume2 className="h-5 w-5" /> : <VolumeX className="h-5 w-5" />}
+                  </button>
+                  
+                  {/* Fullscreen Toggle */}
+                  <button
+                    onClick={() => {
+                      if (!document.fullscreenElement) {
+                        document.documentElement.requestFullscreen();
+                      } else {
+                        document.exitFullscreen();
+                      }
+                    }}
+                    className="bg-[var(--tablet-surface-alt)] hover:brightness-110 p-2.5 rounded-full transition shadow-[0_2px_8px_rgba(0,0,0,0.3)] touch-manipulation"
+                    aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+                  >
+                    {isFullscreen ? <Minimize2 className="h-5 w-5" /> : <Maximize2 className="h-5 w-5" />}
+                  </button>
+                  
                   <div className="text-right">
                     <div className="text-xl md:text-2xl font-semibold tabular-nums">
                       {now ? new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}
@@ -1182,6 +1247,22 @@ export default function TabletOrdersPage() {
                   >
                     <RefreshCcw className={clsx('h-5 w-5', loading && 'animate-spin')} />
                   </button>
+                </div>
+              </div>
+
+              {/* Quick Stats Bar */}
+              <div className="flex flex-wrap gap-2">
+                <div className="px-3 py-1.5 rounded-lg bg-[var(--tablet-accent)] text-[var(--tablet-accent-contrast)] text-xs font-semibold">
+                  {activeOrders.length} Active
+                </div>
+                <div className="px-3 py-1.5 rounded-lg bg-[var(--tablet-accent)]/50 text-[var(--tablet-text)] text-xs font-semibold">
+                  {receivedOrders.length} New
+                </div>
+                <div className="px-3 py-1.5 rounded-lg bg-[var(--tablet-info)]/30 text-[var(--tablet-text)] text-xs font-semibold">
+                  {activeOrders.filter(o => normalizeStatus(o.status) === 'preparing').length} In Progress
+                </div>
+                <div className="px-3 py-1.5 rounded-lg bg-[var(--tablet-success)]/30 text-[var(--tablet-text)] text-xs font-semibold">
+                  {activeOrders.filter(o => normalizeStatus(o.status) === 'ready').length} Ready
                 </div>
               </div>
 
@@ -1236,6 +1317,54 @@ export default function TabletOrdersPage() {
                   <option value="oldest">Oldest First</option>
                   <option value="prep-time">Prep Time</option>
                 </select>
+              </div>
+
+              {/* Quick Filter Chips */}
+              <div className="flex flex-wrap gap-2 mt-2">
+                <button
+                  onClick={() => setStatusFilter('all')}
+                  className={clsx(
+                    'px-3 py-1.5 rounded-lg text-xs font-semibold transition touch-manipulation',
+                    statusFilter === 'all'
+                      ? 'bg-[var(--tablet-accent)] text-[var(--tablet-accent-contrast)]'
+                      : 'bg-[var(--tablet-surface)] border border-[var(--tablet-border)] text-[var(--tablet-text)] hover:bg-[var(--tablet-surface-alt)]'
+                  )}
+                >
+                  All
+                </button>
+                <button
+                  onClick={() => setStatusFilter('received')}
+                  className={clsx(
+                    'px-3 py-1.5 rounded-lg text-xs font-semibold transition touch-manipulation',
+                    statusFilter === 'received'
+                      ? 'bg-[var(--tablet-accent)] text-[var(--tablet-accent-contrast)]'
+                      : 'bg-[var(--tablet-surface)] border border-[var(--tablet-border)] text-[var(--tablet-text)] hover:bg-[var(--tablet-surface-alt)]'
+                  )}
+                >
+                  New ({receivedOrders.length})
+                </button>
+                <button
+                  onClick={() => setStatusFilter('preparing')}
+                  className={clsx(
+                    'px-3 py-1.5 rounded-lg text-xs font-semibold transition touch-manipulation',
+                    statusFilter === 'preparing'
+                      ? 'bg-[var(--tablet-accent)] text-[var(--tablet-accent-contrast)]'
+                      : 'bg-[var(--tablet-surface)] border border-[var(--tablet-border)] text-[var(--tablet-text)] hover:bg-[var(--tablet-surface-alt)]'
+                  )}
+                >
+                  In Progress
+                </button>
+                <button
+                  onClick={() => setStatusFilter('ready')}
+                  className={clsx(
+                    'px-3 py-1.5 rounded-lg text-xs font-semibold transition touch-manipulation',
+                    statusFilter === 'ready'
+                      ? 'bg-[var(--tablet-accent)] text-[var(--tablet-accent-contrast)]'
+                      : 'bg-[var(--tablet-surface)] border border-[var(--tablet-border)] text-[var(--tablet-text)] hover:bg-[var(--tablet-surface-alt)]'
+                  )}
+                >
+                  Ready
+                </button>
               </div>
 
               {/* Expanded Filters Panel */}
