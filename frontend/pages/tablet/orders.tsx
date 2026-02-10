@@ -23,7 +23,7 @@ import { useSocket } from '../../lib/socket';
 import { PrintReceipt } from '../../components/PrintReceipt';
 import { TabletSidebar } from '../../components/tablet/TabletSidebar';
 import type { ReceiptPaperWidth, ReceiptOrder, ReceiptRestaurant } from '../../utils/receiptGenerator';
-import { generateReceiptHtml } from '../../utils/receiptGenerator';
+import { generateReceiptHtml, generateStandaloneReceiptHtml } from '../../utils/receiptGenerator';
 import { api } from '../../lib/api'
 import { safeLocalStorage } from '../../lib/utils';
 import { generatePlainTextReceipt, printViaRawBT } from '../../utils/escpos';
@@ -718,7 +718,9 @@ export default function TabletOrdersPage() {
       }
 
       if (printMode === 'system') {
-        const html = generateReceiptHtml({
+        // Open a popup window with only the receipt content so the printer
+        // gets a clean rendered page (not the full orders UI).
+        const standaloneHtml = generateStandaloneReceiptHtml({
           restaurant: restaurant || null,
           order: order as ReceiptOrder,
           paperWidth,
@@ -727,12 +729,25 @@ export default function TabletOrdersPage() {
           fontSize
         });
 
-        setReceiptHtml(html);
-
-        // Wait for receipt DOM to render before invoking print
-        await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
-
-        window.print();
+        const printWindow = window.open('', '_blank', 'width=400,height=600');
+        if (printWindow) {
+          printWindow.document.write(standaloneHtml);
+          printWindow.document.close();
+          printWindow.onload = () => {
+            printWindow.focus();
+            printWindow.print();
+            printWindow.close();
+          };
+        } else {
+          // Fallback if popup blocked: print current page
+          setReceiptHtml(generateReceiptHtml({
+            restaurant: restaurant || null,
+            order: order as ReceiptOrder,
+            paperWidth, headerText, footerText, fontSize
+          }));
+          await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+          window.print();
+        }
 
         if (opts?.markAsPrinted !== false) {
           setPrintedOrders((prev) => {
@@ -834,7 +849,7 @@ export default function TabletOrdersPage() {
       }
 
       if (printMode === 'system') {
-        const html = generateReceiptHtml({
+        const standaloneHtml = generateStandaloneReceiptHtml({
           restaurant: restaurant || null,
           order: testOrder,
           paperWidth,
@@ -843,9 +858,23 @@ export default function TabletOrdersPage() {
           fontSize
         });
 
-        setReceiptHtml(html);
-        await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
-        window.print();
+        const printWindow = window.open('', '_blank', 'width=400,height=600');
+        if (printWindow) {
+          printWindow.document.write(standaloneHtml);
+          printWindow.document.close();
+          printWindow.onload = () => {
+            printWindow.focus();
+            printWindow.print();
+            printWindow.close();
+          };
+        } else {
+          setReceiptHtml(generateReceiptHtml({
+            restaurant: restaurant || null, order: testOrder,
+            paperWidth, headerText, footerText, fontSize
+          }));
+          await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+          window.print();
+        }
         setLastPrintResult({ status: 'success' });
         safeLocalStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'success' }));
         return;

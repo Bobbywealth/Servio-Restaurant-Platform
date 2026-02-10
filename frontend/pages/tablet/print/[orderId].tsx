@@ -5,7 +5,7 @@ import { PrintReceipt } from '../../../components/PrintReceipt';
 import { api } from '../../../lib/api';
 import { safeLocalStorage } from '../../../lib/utils';
 import type { ReceiptOrder, ReceiptPaperWidth, ReceiptRestaurant } from '../../../utils/receiptGenerator';
-import { generateReceiptHtml } from '../../../utils/receiptGenerator';
+import { generateReceiptHtml, generateStandaloneReceiptHtml } from '../../../utils/receiptGenerator';
 import { generatePlainTextReceipt, printViaRawBT } from '../../../utils/escpos';
 
 type PrintMode = 'bluetooth' | 'system' | 'bridge' | 'rawbt';
@@ -131,8 +131,25 @@ export default function TabletPrintPage() {
       return;
     }
 
-    // System print mode
-    window.print();
+    // System print mode - open a popup with only the receipt so the printer
+    // gets clean rendered HTML (with logo), not the full page source
+    const standaloneHtml = generateStandaloneReceiptHtml({
+      restaurant, order, paperWidth, headerText, footerText, fontSize
+    });
+
+    const printWindow = window.open('', '_blank', 'width=400,height=600');
+    if (printWindow) {
+      printWindow.document.write(standaloneHtml);
+      printWindow.document.close();
+      printWindow.onload = () => {
+        printWindow.focus();
+        printWindow.print();
+        printWindow.close();
+      };
+    } else {
+      // Fallback if popup blocked
+      window.print();
+    }
     safeLocalStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'success' }));
   };
 
