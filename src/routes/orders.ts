@@ -326,6 +326,136 @@ router.get('/stats/summary', asyncHandler(async (req: Request, res: Response) =>
 }));
 
 /**
+ * GET /api/orders/analytics
+ * Get comprehensive order analytics
+ */
+router.get('/analytics', asyncHandler(async (req: Request, res: Response) => {
+  const db = DatabaseService.getInstance().getDatabase();
+  const restaurantId = req.user?.restaurantId;
+  
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const weekAgo = new Date(today);
+  weekAgo.setDate(weekAgo.getDate() - 7);
+  const monthAgo = new Date(today);
+  monthAgo.setDate(monthAgo.getDate() - 30);
+  
+  const todayStr = today.toISOString();
+  const yesterdayStr = yesterday.toISOString();
+  const weekStr = weekAgo.toISOString();
+  const monthStr = monthAgo.toISOString();
+  
+  // Revenue and orders for different periods
+  const [
+    todayRevenue,
+    yesterdayRevenue,
+    weekRevenue,
+    monthRevenue,
+    todayOrders,
+    yesterdayOrders,
+    weekOrders,
+    monthOrders,
+    avgOrderValue,
+    ordersByStatus,
+    ordersByChannel,
+    recentOrders,
+    hourlyDistribution
+  ] = await Promise.all([
+    // Today revenue
+    db.get(`SELECT COALESCE(SUM(total_amount), 0) as sum FROM orders WHERE restaurant_id = ? AND created_at >= ?`, [restaurantId, todayStr]),
+    // Yesterday revenue
+    db.get(`SELECT COALESCE(SUM(total_amount), 0) as sum FROM orders WHERE restaurant_id = ? AND created_at >= ? AND created_at < ?`, [restaurantId, yesterdayStr, todayStr]),
+    // Week revenue
+    db.get(`SELECT COALESCE(SUM(total_amount), 0) as sum FROM orders WHERE restaurant_id = ? AND created_at >= ?`, [restaurantId, weekStr]),
+    // Month revenue
+    db.get(`SELECT COALESCE(SUM(total_amount), 0) as sum FROM orders WHERE restaurant_id = ? AND created_at >= ?`, [restaurantId, monthStr]),
+    // Today orders
+    db.get(`SELECT COUNT(*) as count FROM orders WHERE restaurant_id = ? AND created_at >= ?`, [restaurantId, todayStr]),
+    // Yesterday orders
+    db.get(`SELECT COUNT(*) as count FROM orders WHERE restaurant_id = ? AND created_at >= ? AND created_at < ?`, [restaurantId, yesterdayStr, todayStr]),
+    // Week orders
+    db.get(`SELECT COUNT(*) as count FROM orders WHERE restaurant_id = ? AND created_at >= ?`, [restaurantId, weekStr]),
+    // Month orders
+    db.get(`SELECT COUNT(*) as count FROM orders WHERE restaurant_id = ? AND created_at >= ?`, [restaurantId, monthStr]),
+    // Average order value
+    db.get(`SELECT AVG(total_amount) as avg FROM orders WHERE restaurant_id = ? AND status = 'completed'`, [restaurantId]),
+    // Orders by status
+    db.all('SELECT status, COUNT(*) as count FROM orders WHERE restaurant_id = ? GROUP BY status', [restaurantId]),
+    // Orders by channel
+    db.all('SELECT channel, COUNT(*) as count FROM orders WHERE restaurant_id = ? GROUP BY channel', [restaurantId]),
+    // Recent orders (last 50)
+    db.all('SELECT * FROM orders WHERE restaurant_id = ? ORDER BY created_at DESC LIMIT 50', [restaurantId]),
+    // Hourly distribution (today)
+    db.all(`SELECT strftime('%H', created_at) as hour, COUNT(*) as count FROM orders WHERE restaurant_id = ? AND created_at >= ? GROUP BY hour ORDER BY hour`, [restaurantId, todayStr])
+  ]);
+  
+  // Calculate top items from recent orders
+  const itemCounts: Record<string, { count: number; revenue: number }> = {};
+  for (const order of recentOrders as any[]) {
+    if (Array.isArray(order.items)) {
+      for (const item of order.items) {
+        if (item.name) {
+          if (!itemCounts[item.name]) {
+            itemCounts[item.name] = { count: 0, revenue: 0 };
+          }
+          itemCounts[item.name].count += item.quantity || 1;
+          itemCounts[item.name].revenue += (item.price || 0) * (item.quantity || 1);
+        }
+      }
+    }
+  }
+  
+  const topItems = Object.entries(itemCounts)
+    .map(([name, data]) => ({ name, ...data }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 10);
+  
+  // Format hourly distribution
+  const hourlyData = Array.from({ length: 24 }, (_, i) => {
+    const hour = i.toString().padStart(2, '0');
+    const found = (hourlyDistribution as any[]).find((h: any) => h.hour === hour);
+    return { hour: i, count: found ? found.count : 0 };
+  });
+  
+  // Format recent orders
+  const formattedRecentOrders = (recentOrders as any[]).map((order: any) => ({
+    ...order,
+    items: JSON.parse(order.items || '[]')
+  }));
+  
+  const analytics = {
+    todayRevenue: parseFloat((todayRevenue.sum || 0).toFixed(2)),
+    yesterdayRevenue: parseFloat((yesterdayRevenue.sum || 0).toFixed(2)),
+    weekRevenue: parseFloat((weekRevenue.sum || 0).toFixed(2)),
+    monthRevenue: parseFloat((monthRevenue.sum || 0).toFixed(2)),
+    todayOrders: num(todayOrders.count),
+    yesterdayOrders: num(yesterdayOrders.count),
+    weekOrders: num(weekOrders.count),
+    monthOrders: num(monthOrders.count),
+    avgOrderValue: parseFloat((avgOrderValue.avg || 0).toFixed(2)),
+    avgPrepTime: 12, // Would need additional tracking
+    ordersByStatus: (ordersByStatus as any[]).reduce((acc: any, row: any) => {
+      acc[row.status] = num(row.count);
+      return acc;
+    }, {}),
+    ordersByChannel: (ordersByChannel as any[]).reduce((acc: any, row: any) => {
+      acc[row.channel] = num(row.count);
+      return acc;
+    }, {}),
+    hourlyDistribution: hourlyData,
+    recentOrders: formattedRecentOrders,
+    topItems
+  };
+  
+  res.json({
+    success: true,
+    data: analytics
+  });
+}));
+
+/**
  * POST /api/orders/public/:slug
  * Create a new order via public site
  */

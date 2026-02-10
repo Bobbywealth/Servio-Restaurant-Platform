@@ -4,11 +4,12 @@ import DashboardLayout from '../../components/Layout/DashboardLayout'
 import { useUser } from '../../contexts/UserContext'
 import { api } from '../../lib/api'
 import { useSocket } from '../../lib/socket'
-import { RefreshCw, Filter, ClipboardList, Search, Clock, Phone, Globe, Smartphone, ChevronRight, X, Printer, CheckCircle, PlayCircle, Check } from 'lucide-react'
+import { RefreshCw, Filter, ClipboardList, Search, Clock, Phone, Globe, Smartphone, ChevronRight, X, Printer, CheckCircle, PlayCircle, Check, BarChart3 } from 'lucide-react'
 import { OrderCardSkeleton, StatCardSkeleton, TableRowSkeleton } from '../../components/ui/Skeleton'
 import { PullToRefresh } from '../../components/ui/PullToRefresh'
 import { useHaptic } from '../../lib/haptics'
 import { AnimatePresence, motion } from 'framer-motion'
+import { OrderAnalytics } from '../../components/OrderAnalytics'
 
 type OrderStatus = 'received' | 'preparing' | 'ready' | 'completed' | 'cancelled'
 
@@ -65,11 +66,26 @@ function getChannelConfig(channel: string) {
   return channelConfig[channel.toLowerCase()] || { label: channel, color: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300', icon: <Globe className="w-3 h-3" /> }
 }
 
-function OrderTimer({ createdAt }: { createdAt: string }) {
+function OrderTimer({ createdAt, status }: { createdAt: string; status?: string }) {
   const [elapsed, setElapsed] = useState('')
   const [minutes, setMinutes] = useState(0)
 
+  // Don't update timer if order is completed or cancelled
+  const isFinalStatus = status === 'completed' || status === 'cancelled'
+
   useEffect(() => {
+    // Skip interval setup for final statuses
+    if (isFinalStatus) {
+      const created = new Date(createdAt).getTime()
+      const now = Date.now()
+      const diff = Math.floor((now - created) / 1000)
+      const mins = Math.floor(diff / 60)
+      const secs = diff % 60
+      setMinutes(mins)
+      setElapsed(mins > 0 ? `${mins}m ${secs}s` : `${secs}s`)
+      return
+    }
+
     const updateElapsed = () => {
       const created = new Date(createdAt).getTime()
       const now = Date.now()
@@ -84,14 +100,25 @@ function OrderTimer({ createdAt }: { createdAt: string }) {
     updateElapsed()
     const interval = setInterval(updateElapsed, 1000)
     return () => clearInterval(interval)
-  }, [createdAt])
+  }, [createdAt, isFinalStatus])
 
-  const timerColor = minutes > 15 ? 'text-red-600 dark:text-red-400' : minutes > 10 ? 'text-amber-600 dark:text-amber-400' : 'text-surface-600 dark:text-surface-400'
+  const timerColor = isFinalStatus 
+    ? 'text-gray-400 dark:text-gray-500' 
+    : minutes > 15 
+      ? 'text-red-600 dark:text-red-400' 
+      : minutes > 10 
+        ? 'text-amber-600 dark:text-amber-400' 
+        : 'text-surface-600 dark:text-surface-400'
 
   return (
     <div className={`flex items-center gap-1 text-sm font-mono ${timerColor}`}>
       <Clock className="w-3.5 h-3.5" />
       <span>{elapsed}</span>
+      {isFinalStatus && (
+        <span className="text-xs opacity-50 ml-1">
+          ({status === 'completed' ? 'Done' : 'Cancelled'})
+        </span>
+      )}
     </div>
   )
 }
@@ -146,7 +173,7 @@ function OrderDetailModal({ order, onClose }: { order: Order | null; onClose: ()
           <div className="px-6 py-4 overflow-y-auto max-h-[calc(90vh-200px)]">
             {/* Timer & Time */}
             <div className="flex items-center justify-between mb-4">
-              <OrderTimer createdAt={order.created_at || ''} />
+              <OrderTimer createdAt={order.created_at || ''} status={order.status} />
               <span className="text-sm text-gray-500 dark:text-gray-400">
                 {order.created_at && new Date(order.created_at).toLocaleString()}
               </span>
@@ -256,6 +283,7 @@ export default function OrdersPage() {
   const [error, setError] = useState<string | null>(null)
   const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null)
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
+  const [showAnalytics, setShowAnalytics] = useState(false)
 
   const canUpdateOrders = hasPermission('orders', 'update')
 
@@ -433,8 +461,29 @@ export default function OrdersPage() {
                 <RefreshCw className={`w-4 h-4 sm:mr-2 ${isLoading ? 'animate-spin' : ''}`} />
                 <span className="hidden sm:inline">Refresh</span>
               </button>
+
+              <button
+                className={`inline-flex items-center justify-center min-h-[44px] px-4 ${showAnalytics ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => setShowAnalytics(!showAnalytics)}
+              >
+                <BarChart3 className="w-4 h-4 mr-2" />
+                <span className="hidden sm:inline">{showAnalytics ? 'Hide' : 'Show'} Analytics</span>
+                <span className="sm:hidden">{showAnalytics ? 'Stats' : 'Analytics'}</span>
+              </button>
             </div>
           </div>
+
+          {/* Analytics Section */}
+          {showAnalytics && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="overflow-hidden"
+            >
+              <OrderAnalytics onRefresh={fetchData} />
+            </motion.div>
+          )}
 
           {error && (
             <div className="card border-servio-red-200 dark:border-servio-red-800">
@@ -589,7 +638,7 @@ export default function OrdersPage() {
                           )}
                         </td>
                         <td className="py-3 px-2">
-                          <OrderTimer createdAt={o.created_at || ''} />
+                          <OrderTimer createdAt={o.created_at || ''} status={o.status} />
                         </td>
                         <td className="py-3 px-2 text-surface-700 dark:text-surface-300">
                           {o.customer_name || '—'}
@@ -682,7 +731,7 @@ export default function OrdersPage() {
                           </div>
                         )}
                       </div>
-                      <OrderTimer createdAt={o.created_at || ''} />
+                      <OrderTimer createdAt={o.created_at || ''} status={o.status} />
                     </div>
 
                     <div className="grid grid-cols-2 gap-3 mb-3">
