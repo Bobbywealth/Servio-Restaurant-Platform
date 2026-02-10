@@ -916,6 +916,17 @@ export default function SettingsPage() {
               )}
             </div>
 
+            {/* Receipt Logo Info */}
+            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
+              <h4 className="text-sm font-medium text-amber-900 dark:text-amber-300 mb-1">Receipt Logo</h4>
+              <p className="text-xs text-amber-700 dark:text-amber-400">
+                Your restaurant logo appears at the top of printed receipts. To upload or change your logo, go to{' '}
+                <a href="/dashboard/restaurant-profile" className="underline font-semibold hover:text-amber-900 dark:hover:text-amber-200">
+                  Restaurant Profile
+                </a>.
+              </p>
+            </div>
+
             {/* Help Section */}
             <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
               <h4 className="text-sm font-medium text-blue-900 dark:text-blue-300 mb-2">Need Help?</h4>

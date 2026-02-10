@@ -23,10 +23,10 @@ import { useSocket } from '../../lib/socket';
 import { PrintReceipt } from '../../components/PrintReceipt';
 import { TabletSidebar } from '../../components/tablet/TabletSidebar';
 import type { ReceiptPaperWidth, ReceiptOrder, ReceiptRestaurant } from '../../utils/receiptGenerator';
-import { generateReceiptHtml } from '../../utils/receiptGenerator';
+import { generateReceiptHtml, generateStandaloneReceiptHtml } from '../../utils/receiptGenerator';
 import { api } from '../../lib/api'
 import { safeLocalStorage } from '../../lib/utils';
-import { generateEscPosReceipt, printViaRawBT, type ReceiptData } from '../../utils/escpos';
+import { printViaRawBT } from '../../utils/escpos';
 import { useUser } from '../../contexts/UserContext';
 
 type OrderItem = {
@@ -660,35 +660,14 @@ export default function TabletOrdersPage() {
       }
 
       if (printMode === 'rawbt') {
-        // RawBT auto-print mode - no dialogs!
-        const items = (order.items || []).map((it: any) => ({
-          name: it.name || 'Item',
-          quantity: it.quantity || 1,
-          price: it.unit_price || it.price || 0,
-          modifiers: it.modifiers || []
-        }));
-
-        const orderAny = order as any;
-        const receiptData: ReceiptData = {
-          restaurantName: restaurant?.name || undefined,
-          restaurantPhone: restaurant?.phone || undefined,
-          restaurantAddress: restaurant?.address || undefined,
-          orderId: order.id,
-          orderNumber: orderAny.external_id?.slice(-4).toUpperCase() || order.id.slice(-4).toUpperCase(),
-          customerName: order.customer_name || undefined,
-          customerPhone: orderAny.customer_phone || undefined,
-          orderType: orderAny.order_type || undefined,
-          items,
-          subtotal: orderAny.subtotal || undefined,
-          tax: orderAny.tax || undefined,
-          total: order.total_amount || 0,
-          pickupTime: orderAny.pickup_time || undefined,
-          createdAt: order.created_at || undefined,
-          specialInstructions: orderAny.special_instructions || undefined
-        };
-
-        const escPosData = generateEscPosReceipt(receiptData, paperWidth);
-        const success = printViaRawBT(escPosData);
+        // RawBT auto-print mode - send full HTML receipt so logo and styling are preserved
+        const standaloneHtml = generateStandaloneReceiptHtml({
+          restaurant: restaurant || null,
+          order: order as ReceiptOrder,
+          paperWidth,
+          fontSize
+        });
+        const success = printViaRawBT(standaloneHtml);
 
         if (success) {
           if (opts?.markAsPrinted !== false) {
@@ -785,32 +764,14 @@ export default function TabletOrdersPage() {
       };
 
       if (printMode === 'rawbt') {
-        const receiptData: ReceiptData = {
-          restaurantName: restaurant?.name || undefined,
-          restaurantPhone: restaurant?.phone || undefined,
-          restaurantAddress: restaurant?.address || undefined,
-          orderId: testOrder.id,
-          orderNumber: testOrder.external_id || testOrder.id.slice(-4).toUpperCase(),
-          customerName: testOrder.customer_name || undefined,
-          customerPhone: testOrder.customer_phone || undefined,
-          orderType: testOrder.order_type || undefined,
-          items: (testOrder.items || []).map((it: any) => ({
-            name: it.name,
-            quantity: it.quantity || 1,
-            price: it.unit_price || it.price || 0,
-            modifiers: it.modifiers || []
-          })),
-          total: (testOrder.items || []).reduce((sum: number, it: any) => {
-            const qty = it.quantity || 1;
-            const price = it.unit_price || it.price || 0;
-            return sum + qty * price;
-          }, 0),
-          createdAt: testOrder.created_at || undefined,
-          specialInstructions: testOrder.special_instructions || undefined
-        };
-
-        const escPosData = generateEscPosReceipt(receiptData, paperWidth);
-        const success = printViaRawBT(escPosData);
+        // RawBT test print - send full HTML receipt so logo and styling are preserved
+        const standaloneHtml = generateStandaloneReceiptHtml({
+          restaurant: restaurant || null,
+          order: testOrder,
+          paperWidth,
+          fontSize
+        });
+        const success = printViaRawBT(standaloneHtml);
         if (success) {
           setLastPrintResult({ status: 'success' });
           safeLocalStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'success' }));

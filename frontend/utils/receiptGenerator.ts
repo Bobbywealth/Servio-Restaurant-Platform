@@ -212,3 +212,77 @@ export function generateReceiptHtml(args: {
   `;
 }
 
+/**
+ * Embedded receipt CSS for standalone HTML documents (e.g. RawBT HTML printing).
+ * This is a subset of thermal-print.css needed for rendering the receipt outside the app.
+ */
+const RECEIPT_CSS = `
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #fff; }
+  .receipt {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+    color: #000; background: #fff; padding: 10px 10px 14px;
+  }
+  .receipt.paper-80mm { width: 80mm; }
+  .receipt.paper-58mm { width: 58mm; }
+  .receipt-header { text-align: center; }
+  .receipt-logo { display: block; width: 64px; height: 64px; margin: 0 auto 6px; object-fit: contain; }
+  .receipt-title { font-size: 18px; font-weight: 900; letter-spacing: 0.04em; text-transform: uppercase; }
+  .receipt-subtitle { font-size: 11px; font-weight: 700; margin-top: 2px; }
+  .receipt-divider { border-top: 2px dashed #000; margin: 10px 0; }
+  .receipt-row { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; font-weight: 700; text-transform: uppercase; margin: 4px 0; }
+  .receipt-row-strong { font-size: 14px; font-weight: 900; }
+  .receipt-items { margin-top: 6px; }
+  .receipt-item { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin: 8px 0; }
+  .receipt-item-left { display: flex; gap: 8px; min-width: 0; flex: 1; }
+  .receipt-item-qty { width: 34px; font-size: 14px; font-weight: 900; }
+  .receipt-item-name { font-size: 13px; font-weight: 800; word-break: break-word; min-width: 0; text-transform: uppercase; }
+  .receipt-item-right { flex: none; }
+  .receipt-item-total { font-size: 13px; font-weight: 900; }
+  .receipt-item-modifiers { font-size: 11px; font-weight: 700; margin-top: 2px; padding-left: 0; color: #333; }
+  .receipt-muted { font-size: 12px; font-weight: 700; text-transform: uppercase; }
+  .receipt-totals .receipt-row { margin: 3px 0; }
+  .receipt-notes-title { font-size: 12px; font-weight: 900; text-transform: uppercase; margin-bottom: 4px; }
+  .receipt-notes-body { font-size: 12px; font-weight: 800; white-space: pre-wrap; word-break: break-word; }
+  .receipt-footer { text-align: center; font-size: 12px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em; }
+  .receipt-custom-header { text-align: center; font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; padding: 4px 0; }
+  /* Font size variants */
+  .receipt.font-small { font-size: 10px; }
+  .receipt.font-small .receipt-title { font-size: 16px; }
+  .receipt.font-small .receipt-logo { width: 48px; height: 48px; }
+  .receipt.font-small .receipt-row-strong, .receipt.font-small .receipt-item-qty { font-size: 12px; }
+  .receipt.font-medium { font-size: 12px; }
+  .receipt.font-medium .receipt-title { font-size: 18px; }
+  .receipt.font-medium .receipt-logo { width: 64px; height: 64px; }
+  .receipt.font-medium .receipt-row-strong, .receipt.font-medium .receipt-item-qty { font-size: 14px; }
+  .receipt.font-large { font-size: 14px; }
+  .receipt.font-large .receipt-title { font-size: 22px; }
+  .receipt.font-large .receipt-logo { width: 80px; height: 80px; }
+  .receipt.font-large .receipt-row-strong, .receipt.font-large .receipt-item-qty { font-size: 16px; }
+  .receipt.font-xlarge { font-size: 16px; }
+  .receipt.font-xlarge .receipt-title { font-size: 28px; }
+  .receipt.font-xlarge .receipt-logo { width: 96px; height: 96px; }
+  .receipt.font-xlarge .receipt-row-strong, .receipt.font-xlarge .receipt-item-qty { font-size: 18px; }
+`;
+
+/**
+ * Generate a fully standalone HTML document for the receipt.
+ * Includes embedded CSS so the receipt renders correctly outside the app
+ * (e.g. when sent to RawBT for thermal printing with logo support).
+ */
+export function generateStandaloneReceiptHtml(args: {
+  restaurant: ReceiptRestaurant | null;
+  order: ReceiptOrder;
+  paperWidth: ReceiptPaperWidth;
+  headerText?: string;
+  footerText?: string;
+  fontSize?: string;
+}) {
+  const receiptBody = generateReceiptHtml(args);
+  return `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${RECEIPT_CSS}</style></head>
+<body>${receiptBody}</body>
+</html>`;
+}
+
