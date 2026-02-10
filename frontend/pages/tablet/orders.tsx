@@ -23,10 +23,10 @@ import { useSocket } from '../../lib/socket';
 import { PrintReceipt } from '../../components/PrintReceipt';
 import { TabletSidebar } from '../../components/tablet/TabletSidebar';
 import type { ReceiptPaperWidth, ReceiptOrder, ReceiptRestaurant } from '../../utils/receiptGenerator';
-import { generateReceiptHtml, generateStandaloneReceiptHtml } from '../../utils/receiptGenerator';
+import { generateReceiptHtml } from '../../utils/receiptGenerator';
 import { api } from '../../lib/api'
 import { safeLocalStorage } from '../../lib/utils';
-import { printViaRawBT } from '../../utils/escpos';
+import { generatePlainTextReceipt, printViaRawBT } from '../../utils/escpos';
 import { useUser } from '../../contexts/UserContext';
 
 type OrderItem = {
@@ -330,6 +330,9 @@ export default function TabletOrdersPage() {
   const [paperWidth, setPaperWidth] = useState<ReceiptPaperWidth>('80mm');
   const [printMode, setPrintMode] = useState<'bluetooth' | 'system' | 'bridge' | 'rawbt'>('system');
   const [fontSize, setFontSize] = useState<string>('medium');
+  const [headerText, setHeaderText] = useState<string>('');
+  const [footerText, setFooterText] = useState<string>('');
+
   const [lastPrintResult, setLastPrintResult] = useState<{ status: 'success' | 'error'; message?: string } | null>(null);
   const [autoPrintPendingId, setAutoPrintPendingId] = useState<string | null>(null);
   const lastAutoPromptedId = useRef<string | null>(null);
@@ -549,6 +552,12 @@ export default function TabletOrdersPage() {
           setFontSize(size);
           safeLocalStorage.setItem('servio_font_size', size);
         }
+        if (settings.printer_receipt_header_text !== undefined) {
+          setHeaderText(settings.printer_receipt_header_text || '');
+        }
+        if (settings.printer_receipt_footer_text !== undefined) {
+          setFooterText(settings.printer_receipt_footer_text || '');
+        }
       } catch (e) {
         // ignore printer settings load failures
       }
@@ -660,14 +669,35 @@ export default function TabletOrdersPage() {
       }
 
       if (printMode === 'rawbt') {
-        // RawBT auto-print mode - send full HTML receipt so logo and styling are preserved
-        const standaloneHtml = generateStandaloneReceiptHtml({
-          restaurant: restaurant || null,
-          order: order as ReceiptOrder,
-          paperWidth,
-          fontSize
-        });
-        const success = printViaRawBT(standaloneHtml);
+        // RawBT auto-print mode - plain text for thermal printer compatibility
+        const items = (order.items || []).map((it: any) => ({
+          name: it.name || 'Item',
+          quantity: it.quantity || 1,
+          price: it.unit_price || it.price || 0,
+          modifiers: it.modifiers || []
+        }));
+
+        const orderAny = order as any;
+        const plainText = generatePlainTextReceipt({
+          restaurantName: restaurant?.name || undefined,
+          restaurantPhone: restaurant?.phone || undefined,
+          restaurantAddress: restaurant?.address || undefined,
+          orderId: order.id,
+          orderNumber: orderAny.external_id?.slice(-4).toUpperCase() || order.id.slice(-4).toUpperCase(),
+          customerName: order.customer_name || undefined,
+          customerPhone: orderAny.customer_phone || undefined,
+          orderType: orderAny.order_type || undefined,
+          items,
+          subtotal: orderAny.subtotal || undefined,
+          tax: orderAny.tax || undefined,
+          total: order.total_amount || 0,
+          pickupTime: orderAny.pickup_time || undefined,
+          createdAt: order.created_at || undefined,
+          specialInstructions: orderAny.special_instructions || undefined,
+          headerText: headerText || undefined,
+          footerText: footerText || undefined
+        }, paperWidth);
+        const success = printViaRawBT(plainText);
 
         if (success) {
           if (opts?.markAsPrinted !== false) {
@@ -692,6 +722,8 @@ export default function TabletOrdersPage() {
           restaurant: restaurant || null,
           order: order as ReceiptOrder,
           paperWidth,
+          headerText,
+          footerText,
           fontSize
         });
 
@@ -764,14 +796,33 @@ export default function TabletOrdersPage() {
       };
 
       if (printMode === 'rawbt') {
-        // RawBT test print - send full HTML receipt so logo and styling are preserved
-        const standaloneHtml = generateStandaloneReceiptHtml({
-          restaurant: restaurant || null,
-          order: testOrder,
-          paperWidth,
-          fontSize
-        });
-        const success = printViaRawBT(standaloneHtml);
+        // RawBT test print - plain text for thermal printer compatibility
+        const plainText = generatePlainTextReceipt({
+          restaurantName: restaurant?.name || undefined,
+          restaurantPhone: restaurant?.phone || undefined,
+          restaurantAddress: restaurant?.address || undefined,
+          orderId: testOrder.id,
+          orderNumber: testOrder.external_id || testOrder.id.slice(-4).toUpperCase(),
+          customerName: testOrder.customer_name || undefined,
+          customerPhone: testOrder.customer_phone || undefined,
+          orderType: testOrder.order_type || undefined,
+          items: (testOrder.items || []).map((it: any) => ({
+            name: it.name,
+            quantity: it.quantity || 1,
+            price: it.unit_price || it.price || 0,
+            modifiers: it.modifiers || []
+          })),
+          total: (testOrder.items || []).reduce((sum: number, it: any) => {
+            const qty = it.quantity || 1;
+            const price = it.unit_price || it.price || 0;
+            return sum + qty * price;
+          }, 0),
+          createdAt: testOrder.created_at || undefined,
+          specialInstructions: testOrder.special_instructions || undefined,
+          headerText: headerText || undefined,
+          footerText: footerText || undefined
+        }, paperWidth);
+        const success = printViaRawBT(plainText);
         if (success) {
           setLastPrintResult({ status: 'success' });
           safeLocalStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'success' }));
@@ -787,6 +838,8 @@ export default function TabletOrdersPage() {
           restaurant: restaurant || null,
           order: testOrder,
           paperWidth,
+          headerText,
+          footerText,
           fontSize
         });
 
