@@ -6,7 +6,7 @@ import { api } from '../../../lib/api';
 import { safeLocalStorage } from '../../../lib/utils';
 import type { ReceiptOrder, ReceiptPaperWidth, ReceiptRestaurant } from '../../../utils/receiptGenerator';
 import { generateReceiptHtml, generateStandaloneReceiptHtml } from '../../../utils/receiptGenerator';
-import { printViaRawBT } from '../../../utils/escpos';
+import { generatePlainTextReceipt, printViaRawBT } from '../../../utils/escpos';
 
 type PrintMode = 'bluetooth' | 'system' | 'bridge' | 'rawbt';
 
@@ -89,11 +89,35 @@ export default function TabletPrintPage() {
     if (!order) return;
 
     if (printMode === 'rawbt') {
-      // RawBT auto-print mode - send full HTML receipt so logo and styling are preserved
-      const standaloneHtml = generateStandaloneReceiptHtml({
-        restaurant, order, paperWidth, headerText, footerText, fontSize
-      });
-      const success = printViaRawBT(standaloneHtml);
+      // RawBT auto-print mode - plain text for thermal printer compatibility
+      const items = ((order as any).items || []).map((it: any) => ({
+        name: it.name || 'Item',
+        quantity: it.quantity || 1,
+        price: it.unit_price || it.price || 0,
+        modifiers: it.modifiers || []
+      }));
+
+      const orderAny = order as any;
+      const plainText = generatePlainTextReceipt({
+        restaurantName: restaurant?.name || undefined,
+        restaurantPhone: restaurant?.phone || undefined,
+        restaurantAddress: restaurant?.address || undefined,
+        orderId: order.id || 'test',
+        orderNumber: orderAny.external_id?.slice(-4).toUpperCase() || order.id?.slice(-4).toUpperCase() || 'TEST',
+        customerName: order.customer_name || undefined,
+        customerPhone: orderAny.customer_phone || undefined,
+        orderType: orderAny.order_type || undefined,
+        items,
+        subtotal: orderAny.subtotal || undefined,
+        tax: orderAny.tax || undefined,
+        total: order.total_amount || 0,
+        pickupTime: orderAny.pickup_time || undefined,
+        createdAt: order.created_at || undefined,
+        specialInstructions: orderAny.special_instructions || undefined,
+        headerText: headerText || undefined,
+        footerText: footerText || undefined
+      }, paperWidth);
+      const success = printViaRawBT(plainText);
       
       if (success) {
         setPrintStatus('Sent to RawBT!');
@@ -107,8 +131,25 @@ export default function TabletPrintPage() {
       return;
     }
 
-    // System print mode
-    window.print();
+    // System print mode - open a popup with only the receipt so the printer
+    // gets clean rendered HTML (with logo), not the full page source
+    const standaloneHtml = generateStandaloneReceiptHtml({
+      restaurant, order, paperWidth, headerText, footerText, fontSize
+    });
+
+    const printWindow = window.open('', '_blank', 'width=400,height=600');
+    if (printWindow) {
+      printWindow.document.write(standaloneHtml);
+      printWindow.document.close();
+      printWindow.onload = () => {
+        printWindow.focus();
+        printWindow.print();
+        printWindow.close();
+      };
+    } else {
+      // Fallback if popup blocked
+      window.print();
+    }
     safeLocalStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'success' }));
   };
 

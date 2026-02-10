@@ -13,7 +13,7 @@ export interface ReceiptItem {
 export interface ReceiptData {
   restaurantName?: string;
   restaurantPhone?: string;
-  restaurantAddress?: string;
+  restaurantAddress?: string | { line1?: string; line2?: string; city?: string; state?: string; zip?: string } | null;
   orderId: string;
   orderNumber: string;
   customerName?: string;
@@ -28,6 +28,13 @@ export interface ReceiptData {
   specialInstructions?: string;
   headerText?: string;
   footerText?: string;
+}
+
+function formatAddress(address: ReceiptData['restaurantAddress']): string {
+  if (!address) return '';
+  if (typeof address === 'string') return address;
+  const parts = [address.line1, address.line2, address.city, address.state, address.zip].filter(Boolean);
+  return parts.join(', ');
 }
 
 function centerText(text: string, width: number): string {
@@ -76,8 +83,9 @@ export function generatePlainTextReceipt(data: ReceiptData, paperWidth: '80mm' |
   if (data.restaurantPhone) {
     receipt += centerText(data.restaurantPhone, charWidth) + '\n';
   }
-  if (data.restaurantAddress) {
-    receipt += centerText(data.restaurantAddress, charWidth) + '\n';
+  const addressStr = formatAddress(data.restaurantAddress);
+  if (addressStr) {
+    receipt += centerText(addressStr, charWidth) + '\n';
   }
 
   receipt += '\n';
