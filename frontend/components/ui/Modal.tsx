@@ -43,13 +43,19 @@ export const Modal: React.FC<ModalProps> = ({
     if (typeof document === 'undefined') return
 
     if (isOpen) {
+      // Track how many modals are currently locking scroll
+      const count = parseInt(document.body.dataset.modalCount || '0', 10)
+      document.body.dataset.modalCount = String(count + 1)
       document.body.style.overflow = 'hidden'
-    } else {
-      document.body.style.overflow = 'unset'
     }
 
     return () => {
-      document.body.style.overflow = 'unset'
+      const count = parseInt(document.body.dataset.modalCount || '0', 10)
+      const next = Math.max(count - 1, 0)
+      document.body.dataset.modalCount = String(next)
+      if (next === 0) {
+        document.body.style.overflow = ''
+      }
     }
   }, [isOpen])
 

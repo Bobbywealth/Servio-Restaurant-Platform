@@ -107,13 +107,13 @@ img, video {
 
   html {
     scroll-behavior: smooth;
-    overflow-x: hidden;
   }
 
   body {
     @apply bg-surface-50 text-surface-900 transition-colors duration-300;
     width: 100%;
     position: relative;
+    overflow-x: hidden;
   }
 
   .dark body {
