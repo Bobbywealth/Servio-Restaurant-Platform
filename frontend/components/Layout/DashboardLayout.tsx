@@ -348,79 +348,99 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         </div>
 
         <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
-          {navigation.map((item, index) => {
-            const isActive = currentPath === normalizePath(item.href);
+          {/* Group navigation items by section */}
+          {(() => {
+            const sections: Record<string, typeof navigation> = {};
+            const sectionsOrder = ['operations', 'team', 'ai', 'admin'];
             
             // Group items by section
-            const section = item.section || 'default';
+            navigation.forEach((item) => {
+              const section = item.section || 'other';
+              if (!sections[section]) {
+                sections[section] = [];
+              }
+              sections[section].push(item);
+            });
             
-            return (
-              <React.Fragment key={item.name}>
-                {/* Section Header */}
-                {section !== 'default' && (
+            // Render sections in order
+            return sectionsOrder.map((sectionName) => {
+              const sectionItems = sections[sectionName];
+              if (!sectionItems || sectionItems.length === 0) return null;
+              
+              return (
+                <React.Fragment key={sectionName}>
+                  {/* Section Header */}
                   <div className="px-4 py-2 mt-2">
                     <p className="text-xs font-semibold text-gray-400 dark:text-surface-500 uppercase tracking-wider">
-                      {section.charAt(0).toUpperCase() + section.slice(1)}
+                      {sectionName.charAt(0).toUpperCase() + sectionName.slice(1)}
                     </p>
                   </div>
-                )}
-                
-                <motion.div
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: index * 0.1 }}
-                >
-                  <Link
-                    href={item.href}
-                    onClick={closeSidebar}
-                    className={`
-                      group relative flex items-center px-4 py-3 text-sm font-medium rounded-xl
-                      transition-all duration-200 hover:bg-gray-200 dark:hover:bg-surface-800
-                      ${isActive
-                        ? 'bg-white text-primary-700 dark:bg-primary-900/30 dark:text-primary-300'
-                        : 'text-gray-700 dark:text-surface-400 hover:text-gray-900 dark:hover:text-surface-200'
-                      }
-                    `}
-                  >
-                    <div className={`
-                      flex items-center justify-center w-10 h-10 rounded-lg mr-3 transition-colors
-                      ${isActive
-                        ? 'bg-primary-100 dark:bg-primary-800/50'
-                        : 'bg-white dark:bg-surface-800 group-hover:bg-gray-200 dark:group-hover:bg-surface-700'
-                      }
-                    `}>
-                      <item.icon className={`w-5 h-5 ${isActive ? item.color : 'text-surface-500 dark:text-surface-400'}`} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between">
-                        <span className="font-medium">{item.name}</span>
-                        {item.highlight && (
-                          <motion.div
-                            className="ml-2"
-                            animate={{ rotate: 360 }}
-                            transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
-                          >
-                            <Sparkles className="w-4 h-4 text-servio-orange-500" />
-                          </motion.div>
-                        )}
-                      </div>
-                      <p className="text-2xs text-gray-500 dark:text-surface-400 truncate">{item.description}</p>
-                    </div>
-                    {isActive && (
+                  
+                  {/* Section Items */}
+                  {sectionItems.map((item, index) => {
+                    const isActive = currentPath === normalizePath(item.href);
+                    
+                    return (
                       <motion.div
-                        className="absolute right-2"
-                        initial={{ scale: 0 }}
-                        animate={{ scale: 1 }}
-                        transition={{ type: "spring", bounce: 0.3 }}
+                        key={item.name}
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: index * 0.1 }}
                       >
-                        <ChevronRight className="w-4 h-4 text-primary-500" />
+                        <Link
+                          href={item.href}
+                          onClick={closeSidebar}
+                          className={`
+                            group relative flex items-center px-4 py-3 text-sm font-medium rounded-xl
+                            transition-all duration-200 hover:bg-gray-200 dark:hover:bg-surface-800
+                            ${isActive
+                              ? 'bg-white text-primary-700 dark:bg-primary-900/30 dark:text-primary-300'
+                              : 'text-gray-700 dark:text-surface-400 hover:text-gray-900 dark:hover:text-surface-200'
+                            }
+                          `}
+                        >
+                          <div className={`
+                            flex items-center justify-center w-10 h-10 rounded-lg mr-3 transition-colors
+                            ${isActive
+                              ? 'bg-primary-100 dark:bg-primary-800/50'
+                              : 'bg-white dark:bg-surface-800 group-hover:bg-gray-200 dark:group-hover:bg-surface-700'
+                            }
+                          `}>
+                            <item.icon className={`w-5 h-5 ${isActive ? item.color : 'text-surface-500 dark:text-surface-400'}`} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between">
+                              <span className="font-medium">{item.name}</span>
+                              {item.highlight && (
+                                <motion.div
+                                  className="ml-2"
+                                  animate={{ rotate: 360 }}
+                                  transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
+                                >
+                                  <Sparkles className="w-4 h-4 text-servio-orange-500" />
+                                </motion.div>
+                              )}
+                            </div>
+                            <p className="text-2xs text-gray-500 dark:text-surface-400 truncate">{item.description}</p>
+                          </div>
+                          {isActive && (
+                            <motion.div
+                              className="absolute right-2"
+                              initial={{ scale: 0 }}
+                              animate={{ scale: 1 }}
+                              transition={{ type: "spring", bounce: 0.3 }}
+                            >
+                              <ChevronRight className="w-4 h-4 text-primary-500" />
+                            </motion.div>
+                          )}
+                        </Link>
                       </motion.div>
-                    )}
-                  </Link>
-                </motion.div>
-              </React.Fragment>
-            );
-          })}
+                    );
+                  })}
+                </React.Fragment>
+              );
+            });
+          })()}
         </nav>
         
         {/* Logout Button - Always visible at bottom of sidebar */}
