@@ -3961,6 +3961,51 @@ interface CategorySectionProps {
   onReorderItems: (categoryId: string, orderedItemIds: string[]) => void;
 }
 
+// Sortable Menu Item Row Component
+const SortableMenuItemRow: React.FC<{
+  item: MenuItem;
+  onEdit: (item: MenuItem) => void;
+  onToggleAvailability: (item: MenuItem) => void;
+  onDelete: (item: MenuItem) => void;
+  isDeleting: boolean;
+}> = ({ item, onEdit, onToggleAvailability, onDelete, isDeleting }) => {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={clsx(isDragging && 'opacity-70')}
+    >
+      <div className="flex items-start gap-2">
+        <button
+          type="button"
+          className="mt-2 p-2 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
+          aria-label="Drag to reorder"
+          title="Drag to reorder"
+          {...attributes}
+          {...listeners}
+        >
+          <GripVertical className="w-5 h-5" />
+        </button>
+        <div className="flex-1">
+          <MenuItemCard
+            item={item}
+            onEdit={onEdit}
+            onToggleAvailability={onToggleAvailability}
+            onDelete={onDelete}
+            isDeleting={isDeleting}
+          />
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const CategorySection: React.FC<CategorySectionProps> = ({
   category,
   isExpanded,
@@ -4085,50 +4130,6 @@ const CategorySection: React.FC<CategorySectionProps> = ({
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
-  );
-};
-
-const SortableMenuItemRow: React.FC<{
-  item: MenuItem;
-  onEdit: (item: MenuItem) => void;
-  onToggleAvailability: (item: MenuItem) => void;
-  onDelete: (item: MenuItem) => void;
-  isDeleting: boolean;
-}> = ({ item, onEdit, onToggleAvailability, onDelete, isDeleting }) => {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
-  const style: React.CSSProperties = {
-    transform: CSS.Transform.toString(transform),
-    transition
-  };
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className={clsx(isDragging && 'opacity-70')}
-    >
-      <div className="flex items-start gap-2">
-        <button
-          type="button"
-          className="mt-2 p-2 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"
-          aria-label="Drag to reorder"
-          title="Drag to reorder"
-          {...attributes}
-          {...listeners}
-        >
-          <GripVertical className="w-5 h-5" />
-        </button>
-        <div className="flex-1">
-          <MenuItemCard
-            item={item}
-            onEdit={onEdit}
-            onToggleAvailability={onToggleAvailability}
-            onDelete={onDelete}
-            isDeleting={isDeleting}
-          />
-        </div>
-      </div>
     </div>
   );
 };
