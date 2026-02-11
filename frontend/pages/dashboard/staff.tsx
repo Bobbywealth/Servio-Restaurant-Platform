@@ -575,12 +575,29 @@ export default function StaffPage() {
   const [shiftModalTime, setShiftModalTime] = useState<string | undefined>(undefined)
   const [scheduleLoading, setScheduleLoading] = useState(false)
 
+  // DEBUG: Log date handling to validate timezone assumptions
+  useEffect(() => {
+    console.log('[DEBUG-DATE] Week navigation state:', {
+      selectedWeekStart: selectedWeekStart?.toISOString(),
+      selectedWeekStartLocal: selectedWeekStart?.toLocaleString(),
+      isCurrentWeek: isCurrentWeek,
+      selectedWeekDatesCount: selectedWeekDates?.length,
+      selectedWeekDatesSample: selectedWeekDates?.slice(0, 3)
+    })
+  }, [selectedWeekStart, isCurrentWeek, selectedWeekDates])
+
   // Format date as YYYY-MM-DD using local timezone (not UTC)
   const formatLocalDate = (date: Date): string => {
     const year = date.getFullYear()
     const month = String(date.getMonth() + 1).padStart(2, '0')
     const day = String(date.getDate()).padStart(2, '0')
-    return `${year}-${month}-${day}`
+    const result = `${year}-${month}-${day}`
+    console.log('[DEBUG-DATE] formatLocalDate:', {
+      input: date.toISOString(),
+      output: result,
+      localDate: date.toLocaleDateString('en-CA') // en-CA gives YYYY-MM-DD format
+    })
+    return result
   }
 
   const normalizeScheduleDate = (value?: string) => {
@@ -649,6 +666,62 @@ export default function StaffPage() {
     return totals
   }, [dailyHours, selectedWeekDates])
 
+  // DEBUG: Add logging to validate API assumptions
+  useEffect(() => {
+    console.log('[DEBUG] Staff state:', {
+      staffCount: staff.length,
+      currentStaffCount: currentStaff.length,
+      schedulesCount: schedules.length,
+      error: error,
+      isLoading: isLoading
+    })
+  }, [staff, currentStaff, schedules, error, isLoading])
+
+  // DEBUG: Log API responses to validate structure assumptions
+  useEffect(() => {
+    let isMounted = true
+
+    const validateApi = async () => {
+      try {
+        console.log('[DEBUG] Fetching staff data...')
+        const staffResp = await api.get('/api/restaurant/staff')
+        console.log('[DEBUG] Staff API response:', {
+          hasData: !!staffResp.data,
+          hasDataProperty: !!staffResp.data?.data,
+          hasStaffProperty: !!staffResp.data?.data?.staff,
+          staffType: typeof staffResp.data?.data?.staff,
+          isArray: Array.isArray(staffResp.data?.data?.staff),
+          responseKeys: Object.keys(staffResp.data || {})
+        })
+        
+        console.log('[DEBUG] Fetching timeclock data...')
+        const timeclockResp = await api.get('/api/timeclock/current-staff')
+        console.log('[DEBUG] Timeclock API response:', {
+          hasData: !!timeclockResp.data,
+          hasDataProperty: !!timeclockResp.data?.data,
+          hasCurrentStaffProperty: !!timeclockResp.data?.data?.currentStaff,
+          responseKeys: Object.keys(timeclockResp.data || {})
+        })
+        
+        console.log('[DEBUG] Fetching schedule data...')
+        const scheduleResp = await api.get('/api/staff/scheduling/schedules', {
+          params: getCurrentWeekRange()
+        })
+        console.log('[DEBUG] Schedule API response:', {
+          hasData: !!scheduleResp.data,
+          hasDataProperty: !!scheduleResp.data?.data,
+          hasSchedulesProperty: !!scheduleResp.data?.data?.schedules,
+          responseKeys: Object.keys(scheduleResp.data || {})
+        })
+      } catch (e) {
+        console.error('[DEBUG] API validation error:', e)
+      }
+    }
+
+    validateApi()
+    return () => { isMounted = false }
+  }, [])
+
   useEffect(() => {
     let isMounted = true
 
@@ -658,7 +731,12 @@ export default function StaffPage() {
       try {
         // Fetch staff data
         const staffResp = await api.get('/api/restaurant/staff')
+        console.log('[DEBUG] Staff response structure:', {
+          fullResponse: JSON.stringify(staffResp.data).substring(0, 500)
+        })
+        
         const staffList = (staffResp.data?.data?.staff || []) as StaffUser[]
+        console.log('[DEBUG] Parsed staff list:', { count: staffList.length, isArray: Array.isArray(staffList) })
 
         if (!isMounted) return
         setStaff(staffList)
@@ -727,40 +805,50 @@ export default function StaffPage() {
 
   // Socket listeners for real-time updates
   useEffect(() => {
+    console.log('[DEBUG] Setting up socket listeners...')
+    
     const handleTimeEntryCreated = (data: { userId: string; entry?: any }) => {
-      console.log('Time entry created:', data)
+      console.log('[DEBUG-SOCKET] Time entry created received:', data)
+      console.log('[DEBUG-SOCKET] Validating data before processing:', {
+        hasUserId: !!data?.userId,
+        hasEntry: !!data?.entry,
+        userId: data?.userId
+      })
       showToast.success('Staff clock in recorded')
       // Refresh current staff and hours
       refreshStaffData()
     }
 
     const handleTimeEntryUpdated = (data: { userId: string; entry?: any }) => {
-      console.log('Time entry updated:', data)
+      console.log('[DEBUG-SOCKET] Time entry updated received:', data)
       // Refresh hours data
       refreshHoursData()
     }
 
     const handleScheduleUpdated = () => {
-      console.log('Schedule updated')
+      console.log('[DEBUG-SOCKET] Schedule updated event received')
       showToast.info('Schedule has been updated')
       refreshStaffData()
     }
 
     const handleBreakStarted = (data: { userId: string }) => {
-      console.log('Break started:', data)
+      console.log('[DEBUG-SOCKET] Break started event received:', data)
       showToast.success('Break started')
       refreshStaffData()
     }
 
     const handleBreakEnded = (data: { userId: string }) => {
-      console.log('Break ended:', data)
+      console.log('[DEBUG-SOCKET] Break ended event received:', data)
       showToast.success('Break ended')
       refreshStaffData()
     }
 
     // Connect and listen
     if (!socketManager.connected) {
+      console.log('[DEBUG] Socket not connected, connecting...')
       socketManager.connect()
+    } else {
+      console.log('[DEBUG] Socket already connected')
     }
 
     socketManager.on('staff:clock_in', handleTimeEntryCreated)
@@ -769,7 +857,10 @@ export default function StaffPage() {
     socketManager.on('staff:break_start', handleBreakStarted)
     socketManager.on('staff:break_end', handleBreakEnded)
 
+    console.log('[DEBUG] Socket listeners registered')
+
     return () => {
+      console.log('[DEBUG] Cleaning up socket listeners...')
       socketManager.off('staff:clock_in', handleTimeEntryCreated)
       socketManager.off('staff:clock_out', handleTimeEntryUpdated)
       socketManager.off('staff.schedule_updated', handleScheduleUpdated)
@@ -778,13 +869,18 @@ export default function StaffPage() {
     }
   }, [])
 
-  // Helper functions to refresh data
+  // Helper functions to refresh data with error handling
   const refreshStaffData = async () => {
     try {
+      console.log('[DEBUG] Refreshing current staff data...')
       const currentResp = await api.get('/api/timeclock/current-staff')
+      console.log('[DEBUG] Current staff refresh response:', {
+        hasData: !!currentResp.data,
+        currentStaffLength: currentResp.data?.data?.currentStaff?.length
+      })
       setCurrentStaff(currentResp.data?.data?.currentStaff || [])
     } catch (e) {
-      console.error('Failed to refresh current staff:', e)
+      console.error('[DEBUG] Failed to refresh current staff:', e)
     }
   }
 
