@@ -575,16 +575,6 @@ export default function StaffPage() {
   const [shiftModalTime, setShiftModalTime] = useState<string | undefined>(undefined)
   const [scheduleLoading, setScheduleLoading] = useState(false)
 
-  // DEBUG: Log date handling to validate timezone assumptions
-  useEffect(() => {
-    console.log('[DEBUG-DATE] Week navigation state:', {
-      selectedWeekStart: selectedWeekStart?.toISOString(),
-      selectedWeekStartLocal: selectedWeekStart?.toLocaleString(),
-      selectedWeekDatesCount: selectedWeekDates?.length,
-      selectedWeekDatesSample: selectedWeekDates?.slice(0, 3)
-    })
-  }, [selectedWeekStart, selectedWeekDates])
-
   // Format date as YYYY-MM-DD using local timezone (not UTC)
   const formatLocalDate = (date: Date): string => {
     const year = date.getFullYear()
@@ -664,62 +654,6 @@ export default function StaffPage() {
     }
     return totals
   }, [dailyHours, selectedWeekDates])
-
-  // DEBUG: Add logging to validate API assumptions
-  useEffect(() => {
-    console.log('[DEBUG] Staff state:', {
-      staffCount: staff.length,
-      currentStaffCount: currentStaff.length,
-      schedulesCount: schedules.length,
-      error: error,
-      isLoading: isLoading
-    })
-  }, [staff, currentStaff, schedules, error, isLoading])
-
-  // DEBUG: Log API responses to validate structure assumptions
-  useEffect(() => {
-    let isMounted = true
-
-    const validateApi = async () => {
-      try {
-        console.log('[DEBUG] Fetching staff data...')
-        const staffResp = await api.get('/api/restaurant/staff')
-        console.log('[DEBUG] Staff API response:', {
-          hasData: !!staffResp.data,
-          hasDataProperty: !!staffResp.data?.data,
-          hasStaffProperty: !!staffResp.data?.data?.staff,
-          staffType: typeof staffResp.data?.data?.staff,
-          isArray: Array.isArray(staffResp.data?.data?.staff),
-          responseKeys: Object.keys(staffResp.data || {})
-        })
-        
-        console.log('[DEBUG] Fetching timeclock data...')
-        const timeclockResp = await api.get('/api/timeclock/current-staff')
-        console.log('[DEBUG] Timeclock API response:', {
-          hasData: !!timeclockResp.data,
-          hasDataProperty: !!timeclockResp.data?.data,
-          hasCurrentStaffProperty: !!timeclockResp.data?.data?.currentStaff,
-          responseKeys: Object.keys(timeclockResp.data || {})
-        })
-        
-        console.log('[DEBUG] Fetching schedule data...')
-        const scheduleResp = await api.get('/api/staff/scheduling/schedules', {
-          params: getCurrentWeekRange()
-        })
-        console.log('[DEBUG] Schedule API response:', {
-          hasData: !!scheduleResp.data,
-          hasDataProperty: !!scheduleResp.data?.data,
-          hasSchedulesProperty: !!scheduleResp.data?.data?.schedules,
-          responseKeys: Object.keys(scheduleResp.data || {})
-        })
-      } catch (e) {
-        console.error('[DEBUG] API validation error:', e)
-      }
-    }
-
-    validateApi()
-    return () => { isMounted = false }
-  }, [])
 
   useEffect(() => {
     let isMounted = true
