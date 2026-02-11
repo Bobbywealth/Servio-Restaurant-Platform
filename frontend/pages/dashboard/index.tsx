@@ -1,11 +1,12 @@
 import React, { memo, useMemo, useEffect, useState } from 'react'
 import Head from 'next/head'
 import Link from 'next/link'
+import { useRouter } from 'next/router'
 import { motion } from 'framer-motion'
 import { useUser } from '../../contexts/UserContext'
 import { api } from '../../lib/api'
 import { useSocket } from '../../lib/socket'
-import { MessageCircle, ShoppingCart, Package, TrendingUp, Sparkles, ArrowRight, Mic, Zap, Activity, Clock, Star } from 'lucide-react'
+import { MessageCircle, ShoppingCart, Package, TrendingUp, Sparkles, ArrowRight, Mic, Zap, Activity, Clock, Star, Home, UtensilsCrossed, Users, CheckCircle, FileText, Settings, Wifi, Menu, X, ChevronRight, Utensils, Phone, ShoppingBag } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 import DashboardLayout from '../../components/Layout/DashboardLayout'
@@ -87,6 +88,7 @@ SkeletonCard.displayName = 'SkeletonCard'
 
 const DashboardIndex = memo(() => {
   const { user, isManagerOrOwner } = useUser()
+  const router = useRouter()
   const socket = useSocket()
   const [activeOrders, setActiveOrders] = useState(0)
   const [totalOrders, setTotalOrders] = useState(0)
@@ -103,7 +105,8 @@ const DashboardIndex = memo(() => {
     setIsFetching(true)
     try {
       const [ordersRes, summaryRes, profileRes] = await Promise.all([
-        api.get('/api/orders', { params: { limit: 5 } }),
+        // Get recent orders, prioritizing active/in-progress orders
+        api.get('/api/orders', { params: { limit: 5, status: 'active' } }),
         api.get('/api/orders/stats/summary'),
         api.get('/api/restaurant/profile'),
       ])
@@ -132,6 +135,30 @@ const DashboardIndex = memo(() => {
     }
   }
 
+  // Helper function to get channel icon
+  const getChannelIcon = (channel?: string) => {
+    if (!channel) return <Utensils className="w-3.5 h-3.5" />
+    
+    const channelLower = channel.toLowerCase()
+    if (channelLower.includes('door') || channelLower.includes('dd')) return <ShoppingBag className="w-3.5 h-3.5" />
+    if (channelLower.includes('uber') || channelLower.includes('eat')) return <ShoppingBag className="w-3.5 h-3.5" />
+    if (channelLower.includes('phone')) return <Phone className="w-3.5 h-3.5" />
+    if (channelLower.includes('dine')) return <Utensils className="w-3.5 h-3.5" />
+    return <Utensils className="w-3.5 h-3.5" />
+  }
+
+  // Helper function to get channel label
+  const getChannelLabel = (channel?: string) => {
+    if (!channel) return 'In-house'
+    
+    const channelLower = channel.toLowerCase()
+    if (channelLower.includes('door') || channelLower.includes('dd')) return 'DoorDash'
+    if (channelLower.includes('uber') || channelLower.includes('eat')) return 'Uber Eats'
+    if (channelLower.includes('phone')) return 'Phone'
+    if (channelLower.includes('dine')) return 'Dine-in'
+    return 'In-house'
+  }
+
   useEffect(() => {
     fetchStats()
 
@@ -150,7 +177,7 @@ const DashboardIndex = memo(() => {
   // STATS DATA WITH PREMIUM STYLING
   const stats = useMemo(() => [
     {
-      name: 'Pending Orders',
+      name: 'New Orders',
       value: pendingOrders.toString(),
       change: pendingOrders > 0 ? `${pendingOrders} waiting` : 'All clear',
       icon: Clock,
@@ -166,12 +193,12 @@ const DashboardIndex = memo(() => {
       glowColor: 'from-violet-500/40 to-purple-600/40'
     },
     {
-      name: 'Active Orders',
+      name: 'In Kitchen',
       value: activeOrders.toString(),
       change: activeOrders > 0 ? 'In progress' : 'No active',
       icon: Activity,
-      color: 'bg-gradient-to-br from-orange-500 to-amber-600',
-      glowColor: 'from-orange-500/40 to-amber-600/40'
+      color: activeOrders > 5 ? 'bg-gradient-to-br from-red-500 to-orange-600' : 'bg-gradient-to-br from-orange-500 to-amber-600',
+      glowColor: activeOrders > 5 ? 'from-red-500/40 to-orange-600/40' : 'from-orange-500/40 to-amber-600/40'
     },
     {
       name: 'Today\'s Sales',
@@ -184,30 +211,79 @@ const DashboardIndex = memo(() => {
   ], [activeOrders, totalOrders, todaySales, pendingOrders, todayOrderCount])
 
   // MEMOIZED QUICK ACTIONS FOR PERFORMANCE
-  const quickActions = useMemo(() => [
-    {
-      href: "/dashboard/assistant",
-      icon: MessageCircle,
-      iconColor: "text-servio-orange-500",
-      title: "Talk to Servio",
-      description: "Get help with orders, inventory, and tasks",
-      highlight: true
-    },
-    {
-      href: "/dashboard/orders",
-      icon: ShoppingCart,
-      iconColor: "text-primary-500",
-      title: "View All Orders",
-      description: "Check order status and update progress"
-    },
-    {
-      href: "/dashboard/inventory",
-      icon: Package,
-      iconColor: "text-servio-green-500",
-      title: "Update Inventory",
-      description: "Adjust stock levels and receive items"
+  const quickActions = useMemo(() => {
+    const now = new Date()
+    const hours = now.getHours()
+    const isPeakHours = (hours >= 11 && hours < 14) || (hours >= 17 && hours < 21)
+    const hasRevenue = todaySales > 0
+    
+    if (isPeakHours) {
+      return [
+        {
+          href: "/dashboard/orders",
+          icon: ShoppingCart,
+          iconColor: "text-primary-500",
+          title: "Check Late Orders",
+          description: "Review orders that are running behind schedule"
+        },
+        {
+          href: "/dashboard/orders",
+          icon: Activity,
+          iconColor: "text-orange-500",
+          title: "View Active Orders",
+          description: "See all orders being prepared right now"
+        },
+        {
+          href: "/dashboard/menu-management",
+          icon: UtensilsCrossed,
+          iconColor: "text-amber-500",
+          title: "86 Low Stock Items",
+          description: "Quickly mark items with low inventory"
+        }
+      ]
+    } else if (hasRevenue) {
+      return [
+        {
+          href: "/dashboard",
+          icon: TrendingUp,
+          iconColor: "text-emerald-500",
+          title: "Review Today's Sales",
+          description: "Analyze today's revenue and performance"
+        },
+        {
+          href: "/dashboard/menu-management",
+          icon: UtensilsCrossed,
+          iconColor: "text-amber-500",
+          title: "Update Menu",
+          description: "Modify menu items and categories"
+        },
+        {
+          href: "/dashboard/staff",
+          icon: Users,
+          iconColor: "text-purple-500",
+          title: "Schedule Staff",
+          description: "Manage staff schedules for today"
+        }
+      ]
+    } else {
+      return [
+        {
+          href: "/dashboard/integrations",
+          icon: Wifi,
+          iconColor: "text-cyan-500",
+          title: "Verify Integrations",
+          description: "Check DoorDash, Uber Eats, and other connections"
+        },
+        {
+          href: "/dashboard/orders",
+          icon: ShoppingCart,
+          iconColor: "text-primary-500",
+          title: "Check Order Sync",
+          description: "Verify orders are syncing correctly"
+        }
+      ]
     }
-  ], [])
+  }, [todaySales])
 
   return (
     <>
@@ -343,6 +419,12 @@ const DashboardIndex = memo(() => {
                     />
                     <span className="text-sm font-semibold text-white/90">AI Assistant Online</span>
                     <Zap className="w-4 h-4 text-amber-400" />
+                    
+                    {/* Microphone permission status */}
+                    <div className="ml-2 flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/30">
+                      <Mic className="w-3 h-3 text-emerald-400" />
+                      <span className="text-xs font-medium text-emerald-300">Mic ready</span>
+                    </div>
                   </motion.div>
 
                   <motion.h2
@@ -360,7 +442,7 @@ const DashboardIndex = memo(() => {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.4 }}
                   >
-                    Talk naturally to manage orders, check inventory, update menus, and run your restaurant hands-free.
+                    Control everything by voice during rush - 86 items, check stock, update orders without touching the screen.
                   </motion.p>
 
                   <motion.div
@@ -501,9 +583,26 @@ const DashboardIndex = memo(() => {
                   <span className="text-xs font-semibold text-primary-700 dark:text-primary-300">Live</span>
                 </motion.div>
               </div>
+              
+              {/* Real-time indicator */}
+              {socket && (
+                <motion.div
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 mb-4"
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                >
+                  <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+                  <span className="text-xs font-medium text-emerald-700 dark:text-emerald-300">Real-time updates enabled</span>
+                </motion.div>
+              )}
 
               <div className="space-y-4">
-                {recentOrders.length === 0 ? (
+                {isFetching ? (
+                  <div className="text-center py-12">
+                    <div className="w-16 h-16 border-4 border-primary-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+                    <p className="text-surface-600 dark:text-surface-400 font-medium">Revenue syncing...</p>
+                  </div>
+                ) : recentOrders.length === 0 ? (
                   <motion.div
                     className="text-center py-12"
                     initial={{ opacity: 0, scale: 0.9 }}
@@ -513,18 +612,19 @@ const DashboardIndex = memo(() => {
                     <div className="w-20 h-20 bg-gradient-to-br from-surface-100 to-surface-200 dark:from-surface-700 dark:to-surface-600 rounded-3xl flex items-center justify-center mx-auto mb-4 shadow-inner">
                       <ShoppingCart className="w-10 h-10 text-surface-400 dark:text-surface-500" />
                     </div>
-                    <p className="text-surface-600 dark:text-surface-400 font-semibold">No recent orders</p>
+                    <p className="text-surface-600 dark:text-surface-400 font-semibold">No orders yet today</p>
                     <p className="text-sm text-surface-500 dark:text-surface-500 mt-2">Orders will appear here as they come in</p>
                   </motion.div>
                 ) : (
                   recentOrders.map((order, index) => (
                     <motion.div
                       key={order.id}
-                      className="group flex items-center justify-between p-5 rounded-2xl bg-gradient-to-r from-surface-50 to-surface-100/50 dark:from-surface-800/50 dark:to-surface-700/50 hover:from-primary-50 hover:to-primary-100/50 dark:hover:from-primary-900/20 dark:hover:to-primary-800/20 transition-all duration-300 cursor-pointer border border-surface-200/50 dark:border-surface-700/50 hover:border-primary-200 dark:hover:border-primary-800 hover:shadow-lg hover:shadow-primary-200/20 dark:hover:shadow-primary-900/20"
+                      className="group flex items-center justify-between p-4 rounded-2xl bg-gradient-to-r from-surface-50 to-surface-100/50 dark:from-surface-800/50 dark:to-surface-700/50 hover:from-primary-50 hover:to-primary-100/50 dark:hover:from-primary-900/20 dark:hover:to-primary-800/20 transition-all duration-300 cursor-pointer border border-surface-200/50 dark:border-surface-700/50 hover:border-primary-200 dark:hover:border-primary-800 hover:shadow-lg hover:shadow-primary-200/20 dark:hover:shadow-primary-900/20"
                       initial={{ opacity: 0, x: -20 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: 0.7 + index * 0.1 }}
                       whileHover={{ x: 6, scale: 1.01 }}
+                      onClick={() => router.push(`/dashboard/orders/${order.id}`)}
                     >
                       <div className="flex items-center space-x-4">
                         <div className="w-14 h-14 bg-gradient-to-br from-primary-500 to-primary-600 rounded-2xl flex items-center justify-center shadow-lg group-hover:shadow-xl group-hover:shadow-primary-300 dark:group-hover:shadow-primary-900/50 transition-all">
@@ -535,18 +635,29 @@ const DashboardIndex = memo(() => {
                             Order #{order.external_id || order.id.substring(0, 8)}
                           </p>
                           <p className="text-sm text-surface-600 dark:text-surface-400">
-                            ${order.total_amount?.toFixed(2)} • {new Date(order.created_at).toLocaleTimeString()}
+                            ${order.total_amount?.toFixed(2)} • {new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </p>
                         </div>
                       </div>
 
                       <div className="flex items-center space-x-3">
+                        {/* Channel badge */}
+                        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-100 dark:bg-surface-800 text-xs font-medium text-surface-600 dark:text-surface-400">
+                          {getChannelIcon(order.channel)}
+                          <span>{getChannelLabel(order.channel)}</span>
+                        </div>
+                        
+                        {/* Status badge with color coding */}
                         <span className={`status-badge ${
                           order.status === 'ready'
                             ? 'status-success'
                             : order.status === 'preparing'
                             ? 'status-warning'
-                            : 'status-info'
+                            : order.status === 'received'
+                            ? 'status-info'
+                            : order.status === 'cancelled'
+                            ? 'status-danger'
+                            : 'status-neutral'
                         }`}>
                           {order.status}
                         </span>

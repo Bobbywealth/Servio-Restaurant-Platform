@@ -171,30 +171,15 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   }
 
   const allNavigation = [
+    // OPERATIONS SECTION
     {
       name: 'Dashboard',
       href: '/dashboard',
       icon: Home,
       description: 'Overview & quick actions',
       color: 'text-servio-blue-500',
-      roles: ['staff', 'manager', 'owner', 'admin']
-    },
-    {
-      name: 'Assistant',
-      href: '/dashboard/assistant',
-      icon: Mic,
-      description: 'AI voice assistant',
-      color: 'text-servio-orange-500',
-      highlight: true,
-      roles: ['manager', 'owner', 'admin']
-    },
-    {
-      name: 'Conversations',
-      href: '/dashboard/conversations',
-      icon: FileText,
-      description: 'Call transcripts & insights',
-      color: 'text-indigo-500',
-      roles: ['manager', 'owner', 'admin']
+      roles: ['staff', 'manager', 'owner', 'admin'],
+      section: 'operations'
     },
     {
       name: 'Orders',
@@ -202,7 +187,8 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       icon: ClipboardList,
       description: 'Manage all orders',
       color: 'text-primary-500',
-      roles: ['staff', 'manager', 'owner', 'admin']
+      roles: ['staff', 'manager', 'owner', 'admin'],
+      section: 'operations'
     },
     {
       name: 'Menu',
@@ -210,15 +196,8 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       icon: UtensilsCrossed,
       description: 'Menu & categories',
       color: 'text-amber-500',
-      roles: ['manager', 'owner', 'admin']
-    },
-    {
-      name: 'Marketing',
-      href: '/dashboard/marketing',
-      icon: Mail,
-      description: 'SMS & email campaigns',
-      color: 'text-pink-500',
-      roles: ['manager', 'owner', 'admin']
+      roles: ['manager', 'owner', 'admin'],
+      section: 'operations'
     },
     {
       name: 'Inventory',
@@ -226,23 +205,19 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       icon: Package,
       description: 'Stock management',
       color: 'text-servio-green-500',
-      roles: ['manager', 'owner', 'admin']
+      roles: ['manager', 'owner', 'admin'],
+      section: 'operations'
     },
-    {
-      name: 'Receipts',
-      href: '/dashboard/inventory/receipts',
-      icon: FileText,
-      description: 'Upload & track invoices',
-      color: 'text-blue-500',
-      roles: ['manager', 'owner', 'admin']
-    },
+    
+    // TEAM SECTION
     {
       name: 'Staff',
       href: '/dashboard/staff',
       icon: Users,
       description: 'Team & schedules',
       color: 'text-purple-500',
-      roles: ['manager', 'owner', 'admin']
+      roles: ['manager', 'owner', 'admin'],
+      section: 'team'
     },
     {
       name: 'Tasks',
@@ -250,15 +225,58 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       icon: CheckCircle,
       description: 'Team task manager',
       color: 'text-servio-green-500',
-      roles: ['manager', 'owner', 'admin']
+      roles: ['manager', 'owner', 'admin'],
+      section: 'team'
     },
+    
+    // AI & COMMUNICATION SECTION
+    {
+      name: 'Assistant',
+      href: '/dashboard/assistant',
+      icon: Mic,
+      description: 'AI voice assistant',
+      color: 'text-servio-orange-500',
+      highlight: true,
+      roles: ['manager', 'owner', 'admin'],
+      section: 'ai'
+    },
+    {
+      name: 'Conversations',
+      href: '/dashboard/conversations',
+      icon: FileText,
+      description: 'Call transcripts & insights',
+      color: 'text-indigo-500',
+      roles: ['manager', 'owner', 'admin'],
+      section: 'ai'
+    },
+    {
+      name: 'Marketing',
+      href: '/dashboard/marketing',
+      icon: Mail,
+      description: 'SMS & email campaigns',
+      color: 'text-pink-500',
+      roles: ['manager', 'owner', 'admin'],
+      section: 'ai'
+    },
+    
+    // ADMIN SECTION
     {
       name: 'Integrations',
       href: '/dashboard/integrations',
       icon: Wifi,
       description: 'API connections',
       color: 'text-cyan-500',
-      roles: ['owner', 'admin']
+      roles: ['owner', 'admin'],
+      section: 'admin'
+    },
+    {
+      name: 'Invoices',
+      href: '/dashboard/inventory/receipts',
+      icon: FileText,
+      description: 'Upload & track invoices',
+      color: 'text-blue-500',
+      roles: ['manager', 'owner', 'admin'],
+      section: 'admin'
     },
     {
       name: 'Settings',
@@ -266,7 +284,8 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       icon: Settings,
       description: 'System settings',
       color: 'text-surface-500',
-      roles: ['staff', 'manager', 'owner', 'admin']
+      roles: ['staff', 'manager', 'owner', 'admin'],
+      section: 'admin'
     },
   ];
 
@@ -331,61 +350,75 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
           {navigation.map((item, index) => {
             const isActive = currentPath === normalizePath(item.href);
+            
+            // Group items by section
+            const section = item.section || 'default';
+            
             return (
-              <motion.div
-                key={item.name}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: index * 0.1 }}
-              >
-                <Link
-                  href={item.href}
-                  onClick={closeSidebar}
-                  className={`
-                    group relative flex items-center px-4 py-3 text-sm font-medium rounded-xl
-                    transition-all duration-200 hover:bg-gray-200 dark:hover:bg-surface-800
-                    ${isActive
-                      ? 'bg-white text-primary-700 dark:bg-primary-900/30 dark:text-primary-300'
-                      : 'text-gray-700 dark:text-surface-400 hover:text-gray-900 dark:hover:text-surface-200'
-                    }
-                  `}
+              <React.Fragment key={item.name}>
+                {/* Section Header */}
+                {section !== 'default' && (
+                  <div className="px-4 py-2 mt-2">
+                    <p className="text-xs font-semibold text-gray-400 dark:text-surface-500 uppercase tracking-wider">
+                      {section.charAt(0).toUpperCase() + section.slice(1)}
+                    </p>
+                  </div>
+                )}
+                
+                <motion.div
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: index * 0.1 }}
                 >
-                  <div className={`
-                    flex items-center justify-center w-10 h-10 rounded-lg mr-3 transition-colors
-                    ${isActive
-                      ? 'bg-primary-100 dark:bg-primary-800/50'
-                      : 'bg-white dark:bg-surface-800 group-hover:bg-gray-200 dark:group-hover:bg-surface-700'
-                    }
-                  `}>
-                    <item.icon className={`w-5 h-5 ${isActive ? item.color : 'text-surface-500 dark:text-surface-400'}`} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium">{item.name}</span>
-                      {item.highlight && (
-                        <motion.div
-                          className="ml-2"
-                          animate={{ rotate: 360 }}
-                          transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
-                        >
-                          <Sparkles className="w-4 h-4 text-servio-orange-500" />
-                        </motion.div>
-                      )}
+                  <Link
+                    href={item.href}
+                    onClick={closeSidebar}
+                    className={`
+                      group relative flex items-center px-4 py-3 text-sm font-medium rounded-xl
+                      transition-all duration-200 hover:bg-gray-200 dark:hover:bg-surface-800
+                      ${isActive
+                        ? 'bg-white text-primary-700 dark:bg-primary-900/30 dark:text-primary-300'
+                        : 'text-gray-700 dark:text-surface-400 hover:text-gray-900 dark:hover:text-surface-200'
+                      }
+                    `}
+                  >
+                    <div className={`
+                      flex items-center justify-center w-10 h-10 rounded-lg mr-3 transition-colors
+                      ${isActive
+                        ? 'bg-primary-100 dark:bg-primary-800/50'
+                        : 'bg-white dark:bg-surface-800 group-hover:bg-gray-200 dark:group-hover:bg-surface-700'
+                      }
+                    `}>
+                      <item.icon className={`w-5 h-5 ${isActive ? item.color : 'text-surface-500 dark:text-surface-400'}`} />
                     </div>
-                    <p className="text-2xs text-gray-500 dark:text-surface-400 truncate">{item.description}</p>
-                  </div>
-                  {isActive && (
-                    <motion.div
-                      className="absolute right-2"
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                      transition={{ type: "spring", bounce: 0.3 }}
-                    >
-                      <ChevronRight className="w-4 h-4 text-primary-500" />
-                    </motion.div>
-                  )}
-                </Link>
-              </motion.div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium">{item.name}</span>
+                        {item.highlight && (
+                          <motion.div
+                            className="ml-2"
+                            animate={{ rotate: 360 }}
+                            transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
+                          >
+                            <Sparkles className="w-4 h-4 text-servio-orange-500" />
+                          </motion.div>
+                        )}
+                      </div>
+                      <p className="text-2xs text-gray-500 dark:text-surface-400 truncate">{item.description}</p>
+                    </div>
+                    {isActive && (
+                      <motion.div
+                        className="absolute right-2"
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        transition={{ type: "spring", bounce: 0.3 }}
+                      >
+                        <ChevronRight className="w-4 h-4 text-primary-500" />
+                      </motion.div>
+                    )}
+                  </Link>
+                </motion.div>
+              </React.Fragment>
             );
           })}
         </nav>
