@@ -580,11 +580,10 @@ export default function StaffPage() {
     console.log('[DEBUG-DATE] Week navigation state:', {
       selectedWeekStart: selectedWeekStart?.toISOString(),
       selectedWeekStartLocal: selectedWeekStart?.toLocaleString(),
-      isCurrentWeek: isCurrentWeek,
       selectedWeekDatesCount: selectedWeekDates?.length,
       selectedWeekDatesSample: selectedWeekDates?.slice(0, 3)
     })
-  }, [selectedWeekStart, isCurrentWeek, selectedWeekDates])
+  }, [selectedWeekStart, selectedWeekDates])
 
   // Format date as YYYY-MM-DD using local timezone (not UTC)
   const formatLocalDate = (date: Date): string => {

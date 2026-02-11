@@ -3,8 +3,16 @@
  * Provides requestId generation, propagation, and structured logging
  */
 
-import { Request, Response, NextFunction } from 'express'
+import express, { Request, Response, NextFunction } from 'express'
 import { v4 as uuidv4 } from 'uuid'
+
+/**
+ * Extended Express Request with custom properties
+ */
+interface ExtendedRequest extends Request {
+  requestId?: string
+  context?: RequestContext
+}
 
 /**
  * Request Context - holds requestId and other request-specific data
@@ -23,13 +31,13 @@ export interface RequestContext {
  */
 export function getRequestId(req: Request): string {
   // Check if requestId already exists in headers
-  if (req.headers['x-request-id']) {
-    return req.headers['x-request-id'] as string
+  const headerId = req.headers['x-request-id']
+  if (headerId && typeof headerId === 'string') {
+    return headerId
   }
 
   // Generate new requestId
-  const requestId = uuidv4()
-  return requestId
+  return uuidv4()
 }
 
 /**
@@ -41,7 +49,7 @@ export function createRequestContext(req: Request): RequestContext {
     startTime: Date.now(),
     method: req.method,
     path: req.path,
-    userId: req.user?.id as string | undefined,
+    userId: (req as any).user?.id as string | undefined,
     userAgent: req.headers['user-agent'] as string | undefined
   }
 }
@@ -53,8 +61,8 @@ export function logError(
   context: RequestContext,
   error: any,
   additionalInfo?: Record<string, any>
-) {
-  const errorData = {
+): Record<string, any> {
+  const errorData: Record<string, any> = {
     level: 'error',
     timestamp: new Date().toISOString(),
     env: process.env.NODE_ENV || 'development',
@@ -72,13 +80,13 @@ export function logError(
     ...additionalInfo
   }
 
-  // Log to console with structured format
-  console.error(JSON.stringify(errorData))
-
   // If error has status code, include it
   if (error.response?.status) {
     errorData.statusCode = error.response.status
   }
+
+  // Log to console with structured format
+  console.error(JSON.stringify(errorData))
 
   // In production, send to error tracking service (Sentry, etc.)
   if (process.env.NODE_ENV === 'production') {
@@ -95,8 +103,8 @@ export function logInfo(
   context: RequestContext,
   message: string,
   additionalInfo?: Record<string, any>
-) {
-  const infoData = {
+): Record<string, any> {
+  const infoData: Record<string, any> = {
     level: 'info',
     timestamp: new Date().toISOString(),
     env: process.env.NODE_ENV || 'development',
@@ -120,8 +128,8 @@ export function logWarning(
   context: RequestContext,
   message: string,
   additionalInfo?: Record<string, any>
-) {
-  const warningData = {
+): Record<string, any> {
+  const warningData: Record<string, any> = {
     level: 'warn',
     timestamp: new Date().toISOString(),
     env: process.env.NODE_ENV || 'development',
@@ -145,10 +153,10 @@ export function logDebug(
   context: RequestContext,
   message: string,
   additionalInfo?: Record<string, any>
-) {
+): void {
   // Only log debug in development
   if (process.env.NODE_ENV === 'development') {
-    const debugData = {
+    const debugData: Record<string, any> = {
       level: 'debug',
       timestamp: new Date().toISOString(),
       env: process.env.NODE_ENV || 'development',
@@ -163,27 +171,25 @@ export function logDebug(
 
     console.debug(JSON.stringify(debugData))
   }
-
-  return null
 }
 
 /**
  * Middleware to add requestId to all requests
  */
-export function requestIdMiddleware(req: Request, res: Response, next: NextFunction) {
+export function requestIdMiddleware(req: Request, res: Response, next: NextFunction): void {
   const requestId = getRequestId(req)
 
   // Add requestId to response headers
   res.setHeader('X-Request-ID', requestId)
 
   // Attach requestId to request object for use in handlers
-  req.requestId = requestId
+  ;(req as ExtendedRequest).requestId = requestId
 
   // Create request context
   const context = createRequestContext(req)
 
   // Attach context to request
-  req.context = context
+  ;(req as ExtendedRequest).context = context
 
   // Log incoming request
   logDebug(context, 'Incoming request', {
@@ -210,8 +216,9 @@ export function errorLoggingMiddleware(
   req: Request,
   res: Response,
   next: NextFunction
-) {
-  const context = req.context || createRequestContext(req)
+): void {
+  const extReq = req as ExtendedRequest
+  const context = extReq.context || createRequestContext(req)
 
   // Log the error
   logError(context, err, {
@@ -240,18 +247,8 @@ export function errorLoggingMiddleware(
  * Send error to error tracking service (placeholder)
  * In production, this would integrate with Sentry, Rollbar, etc.
  */
-function sendToErrorTracking(errorData: any) {
+function sendToErrorTracking(errorData: Record<string, any>): void {
   // TODO: Integrate with Sentry, Rollbar, or similar service
-  // Example:
-  // Sentry.captureException(new Error(errorData.error.message), {
-  //   extra: {
-  //     requestId: errorData.requestId,
-  //     userId: errorData.userId,
-  //     path: errorData.path,
-  //     durationMs: errorData.durationMs
-  //   }
-  // })
-
   // For now, just log to console
   console.error('[ERROR TRACKING] Would send to service:', errorData.requestId)
 }
@@ -264,7 +261,7 @@ export function formatLogEntry(
   message: string,
   data?: Record<string, any>
 ): string {
-  const entry = {
+  const entry: Record<string, any> = {
     level,
     timestamp: new Date().toISOString(),
     env: process.env.NODE_ENV || 'development',
@@ -282,8 +279,8 @@ export function formatApiResponse(
   statusCode: number,
   data?: any,
   error?: string
-) {
-  const entry = {
+): string {
+  const entry: Record<string, any> = {
     level: statusCode >= 400 ? 'warn' : 'info',
     timestamp: new Date().toISOString(),
     env: process.env.NODE_ENV || 'development',
@@ -297,4 +294,17 @@ export function formatApiResponse(
     error: error || undefined
   }
   return JSON.stringify(entry)
+}
+
+export default {
+  getRequestId,
+  createRequestContext,
+  logError,
+  logInfo,
+  logWarning,
+  logDebug,
+  requestIdMiddleware,
+  errorLoggingMiddleware,
+  formatLogEntry,
+  formatApiResponse
 }
