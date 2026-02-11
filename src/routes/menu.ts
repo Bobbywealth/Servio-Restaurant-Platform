@@ -605,24 +605,33 @@ router.put('/categories/reorder', asyncHandler(async (req: Request, res: Respons
     ...missingOrderedIds
   ];
 
-  // Update sort_order for each category
-  // Note: Using sequential updates with auto-commit per statement.
-  // pool.query() acquires a different connection for each call, so
-  // BEGIN/COMMIT across separate pool.query() calls do not form a
-  // real transaction. Individual UPDATEs auto-commit and are safe here.
-  let updatedCount = 0;
+  // Build a single atomic batch UPDATE using FROM (VALUES ...) so all
+  // sort_order changes are applied in one statement on one connection.
+  const updates: Array<[string, number]> = [];
   for (let i = 0; i < orderedIds.length; i++) {
     const categoryId = orderedIds[i];
     if (!allExistingIds.has(categoryId)) continue;
+    updates.push([categoryId, i]);
+  }
+
+  let updatedCount = 0;
+  if (updates.length > 0) {
+    const valuesClauses = updates.map(() => '(?::TEXT, ?::INTEGER)').join(', ');
+    const params: any[] = [];
+    for (const [id, order] of updates) {
+      params.push(id, order);
+    }
+    params.push(restaurantId);
 
     const result = await db.run(
-      'UPDATE menu_categories SET sort_order = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND restaurant_id = ?',
-      [i, categoryId, restaurantId]
+      `UPDATE menu_categories AS mc
+       SET sort_order = v.new_order,
+           updated_at = CURRENT_TIMESTAMP
+       FROM (VALUES ${valuesClauses}) AS v(cat_id, new_order)
+       WHERE mc.id = v.cat_id AND mc.restaurant_id = ?`,
+      params
     );
-
-    if (result.changes > 0) {
-      updatedCount++;
-    }
+    updatedCount = result.changes;
   }
 
   logger.info(`Category reorder: updated ${updatedCount}/${orderedIds.length} categories for restaurant ${restaurantId}`);
