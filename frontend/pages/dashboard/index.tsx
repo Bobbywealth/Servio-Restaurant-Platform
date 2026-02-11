@@ -224,21 +224,24 @@ const DashboardIndex = memo(() => {
           icon: ShoppingCart,
           iconColor: "text-primary-500",
           title: "Check Late Orders",
-          description: "Review orders that are running behind schedule"
+          description: "Review orders that are running behind schedule",
+          highlight: false
         },
         {
           href: "/dashboard/orders",
           icon: Activity,
           iconColor: "text-orange-500",
           title: "View Active Orders",
-          description: "See all orders being prepared right now"
+          description: "See all orders being prepared right now",
+          highlight: false
         },
         {
           href: "/dashboard/menu-management",
           icon: UtensilsCrossed,
           iconColor: "text-amber-500",
           title: "86 Low Stock Items",
-          description: "Quickly mark items with low inventory"
+          description: "Quickly mark items with low inventory",
+          highlight: false
         }
       ]
     } else if (hasRevenue) {
@@ -248,21 +251,24 @@ const DashboardIndex = memo(() => {
           icon: TrendingUp,
           iconColor: "text-emerald-500",
           title: "Review Today's Sales",
-          description: "Analyze today's revenue and performance"
+          description: "Analyze today's revenue and performance",
+          highlight: false
         },
         {
           href: "/dashboard/menu-management",
           icon: UtensilsCrossed,
           iconColor: "text-amber-500",
           title: "Update Menu",
-          description: "Modify menu items and categories"
+          description: "Modify menu items and categories",
+          highlight: false
         },
         {
           href: "/dashboard/staff",
           icon: Users,
           iconColor: "text-purple-500",
           title: "Schedule Staff",
-          description: "Manage staff schedules for today"
+          description: "Manage staff schedules for today",
+          highlight: false
         }
       ]
     } else {
@@ -272,14 +278,16 @@ const DashboardIndex = memo(() => {
           icon: Wifi,
           iconColor: "text-cyan-500",
           title: "Verify Integrations",
-          description: "Check DoorDash, Uber Eats, and other connections"
+          description: "Check DoorDash, Uber Eats, and other connections",
+          highlight: false
         },
         {
           href: "/dashboard/orders",
           icon: ShoppingCart,
           iconColor: "text-primary-500",
           title: "Check Order Sync",
-          description: "Verify orders are syncing correctly"
+          description: "Verify orders are syncing correctly",
+          highlight: false
         }
       ]
     }
