@@ -676,8 +676,12 @@ const MenuManagement: React.FC = () => {
       });
       const { updated } = response.data || {};
       console.log('[handleReorderCategories] Category order saved:', { requested: orderedIds.length, updated });
-      await loadMenuData();
       toast.success('Category order saved');
+      // Refresh data in background — don't revert if this fails since the
+      // PUT already persisted the new order to the database.
+      loadMenuData().catch((err) => {
+        console.warn('[handleReorderCategories] Background refresh failed (order was saved):', err);
+      });
     } catch (error) {
       console.error('Failed to persist category order', error);
       setCategories(previousCategories);
