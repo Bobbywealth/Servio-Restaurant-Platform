@@ -6,13 +6,15 @@ interface LiveClockProps {
   showIcon?: boolean
   className?: string
   format?: 'full' | 'time' | 'date'
+  showTimezone?: boolean
 }
 
 export const LiveClock: React.FC<LiveClockProps> = ({
   timezone = 'America/New_York',
   showIcon = true,
   className = '',
-  format = 'full'
+  format = 'full',
+  showTimezone = false
 }) => {
   const [time, setTime] = useState<Date>(new Date())
 
@@ -47,10 +49,26 @@ export const LiveClock: React.FC<LiveClockProps> = ({
     return `${dateString} • ${timeString}`
   }
 
+  // Get short timezone name
+  const getTimezoneShort = (tz: string) => {
+    try {
+      const now = new Date();
+      const shortTz = now.toLocaleString('en-US', { timeZone: tz, timeZoneName: 'short' }).split(' ').pop();
+      return shortTz || tz;
+    } catch {
+      return tz;
+    }
+  }
+
   return (
     <div className={`flex items-center gap-2 ${className}`}>
       {showIcon && <Clock className="w-4 h-4" />}
       <span className="font-medium tabular-nums">{formatTime()}</span>
+      {showTimezone && (
+        <span className="text-xs text-surface-400 dark:text-surface-500">
+          ({getTimezoneShort(timezone)})
+        </span>
+      )}
     </div>
   )
 }

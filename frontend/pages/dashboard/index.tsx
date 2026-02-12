@@ -105,13 +105,23 @@ const DashboardIndex = memo(() => {
     setIsFetching(true)
     try {
       const [ordersRes, summaryRes, profileRes] = await Promise.all([
-        // Get recent orders, prioritizing active/in-progress orders
-        api.get('/api/orders', { params: { limit: 5, status: 'active' } }),
+        // Get recent orders (all orders, let frontend sort by status)
+        api.get('/api/orders', { params: { limit: 10 } }),
         api.get('/api/orders/stats/summary'),
         api.get('/api/restaurant/profile'),
       ])
 
-      setRecentOrders(ordersRes.data.data.orders)
+      // Sort orders: active first (received, preparing, ready), then completed
+      const orders = (ordersRes.data.data.orders || []).sort((a: any, b: any) => {
+        const activeStatuses = ['received', 'preparing', 'ready'];
+        const aActive = activeStatuses.includes(a.status);
+        const bActive = activeStatuses.includes(b.status);
+        if (aActive && !bActive) return -1;
+        if (!aActive && bActive) return 1;
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      });
+
+      setRecentOrders(orders)
       setActiveOrders(summaryRes.data.data.activeOrders || 0)
       setTotalOrders(summaryRes.data.data.totalOrders || 0)
       setTodaySales(summaryRes.data.data.completedTodaySales || 0)
@@ -323,6 +333,7 @@ const DashboardIndex = memo(() => {
                     timezone={restaurantTimezone}
                     showIcon={false}
                     className="text-sm text-surface-400 dark:text-surface-500"
+                    showTimezone={true}
                   />
                 </motion.div>
                 <motion.h1
@@ -664,7 +675,7 @@ const DashboardIndex = memo(() => {
                             : order.status === 'received'
                             ? 'status-info'
                             : order.status === 'cancelled'
-                            ? 'status-danger'
+                            ? 'status-error'
                             : 'status-neutral'
                         }`}>
                           {order.status}

@@ -283,38 +283,53 @@ router.get('/stats/summary', asyncHandler(async (req: Request, res: Response) =>
 
   const restaurantId = req.user?.restaurantId;
 
-  // Use CURRENT_DATE for UTC-based comparison, then convert to restaurant timezone
-  const todayStr = new Date().toISOString().split('T')[0];
+  // Get today's date in local timezone
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
   
-  // Include all non-cancelled orders in revenue (not just completed)
-  // This ensures revenue shows even for orders that are being processed
-  const revenueCondition = "status NOT IN ('cancelled', 'refunded') AND created_at::date = CURRENT_DATE";
-  const completedRevenueCondition = "status = 'completed' AND created_at::date = CURRENT_DATE";
+  const todayStartStr = todayStart.toISOString();
+  const todayEndStr = todayEnd.toISOString();
 
+  // Include all orders (including completed and in-progress) for revenue
+  // Revenue = all orders that are not cancelled
+  const allOrdersCondition = "restaurant_id = ? AND created_at >= ? AND created_at < ? AND status NOT IN ('cancelled', 'refunded')";
+  const completedCondition = "restaurant_id = ? AND created_at >= ? AND created_at < ? AND status = 'completed'";
+  
   const [
-    totalOrders,
+    totalOrdersResult,
     activeOrders,
     completedToday,
     completedTodaySales,
     avgOrderValue,
+    todayOrders,
     ordersByStatus,
     ordersByChannel
   ] = await Promise.all([
+    // Total orders (all time)
     db.get('SELECT COUNT(*) as count FROM orders WHERE restaurant_id = ?', [restaurantId]),
-    db.get('SELECT COUNT(*) as count FROM orders WHERE status IN (\'received\', \'preparing\', \'ready\') AND restaurant_id = ?', [restaurantId]),
-    db.get(`SELECT COUNT(*) as count FROM orders WHERE ${completedRevenueCondition} AND restaurant_id = ?`, [restaurantId]),
-    // Use revenueCondition to include all non-cancelled orders for today's revenue
-    db.get(`SELECT COALESCE(SUM(total_amount), 0) as sum FROM orders WHERE ${revenueCondition} AND restaurant_id = ?`, [restaurantId]),
-    db.get(`SELECT AVG(total_amount) as avg FROM orders WHERE ${completedRevenueCondition} AND restaurant_id = ?`, [restaurantId]),
+    // Active orders (in progress)
+    db.get('SELECT COUNT(*) as count FROM orders WHERE restaurant_id = ? AND status IN (\'received\', \'preparing\', \'ready\')', [restaurantId]),
+    // Completed today
+    db.get(`SELECT COUNT(*) as count FROM orders WHERE ${completedCondition}`, [restaurantId, todayStartStr, todayEndStr]),
+    // Revenue from all non-cancelled orders today
+    db.get(`SELECT COALESCE(SUM(total_amount), 0) as sum FROM orders WHERE ${allOrdersCondition}`, [restaurantId, todayStartStr, todayEndStr]),
+    // Average order value for completed orders today
+    db.get(`SELECT AVG(total_amount) as avg FROM orders WHERE ${completedCondition}`, [restaurantId, todayStartStr, todayEndStr]),
+    // Total orders today (all statuses)
+    db.get(`SELECT COUNT(*) as count FROM orders WHERE ${allOrdersCondition}`, [restaurantId, todayStartStr, todayEndStr]),
+    // Orders grouped by status
     db.all('SELECT status, COUNT(*) as count FROM orders WHERE restaurant_id = ? GROUP BY status', [restaurantId]),
+    // Orders grouped by channel
     db.all('SELECT channel, COUNT(*) as count FROM orders WHERE restaurant_id = ? GROUP BY channel', [restaurantId])
   ]);
 
   const stats = {
-    totalOrders: num(totalOrders.count),
+    totalOrders: num(totalOrdersResult.count),
     activeOrders: num(activeOrders.count),
     completedToday: num(completedToday.count),
     completedTodaySales: parseFloat((completedTodaySales.sum || 0).toFixed(2)),
+    todayOrders: num(todayOrders.count),
     avgOrderValue: parseFloat((avgOrderValue.avg || 0).toFixed(2)),
     ordersByStatus: ordersByStatus.reduce((acc: any, row: any) => {
       acc[row.status] = num(row.count);

@@ -262,25 +262,34 @@ export default function NotificationCenter({ className = '' }: NotificationCente
   return (
     <div className={`relative ${className}`}>
       {/* Notification Bell */}
-      <motion.button
-        onClick={() => setIsOpen(!isOpen)}
-        className="relative p-2 rounded-xl bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-        whileTap={{ scale: 0.95 }}
-        whileHover={{ scale: 1.02 }}
-        title={`You have ${unreadCount} new notifications`}
-      >
-        <Bell className="w-5 h-5 text-gray-700 dark:text-gray-300" />
+      <div className="relative group">
+        <motion.button
+          onClick={() => setIsOpen(!isOpen)}
+          className="relative p-2 rounded-xl bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+          whileTap={{ scale: 0.95 }}
+          whileHover={{ scale: 1.02 }}
+        >
+          <Bell className="w-5 h-5 text-gray-700 dark:text-gray-300" />
+          
+          {unreadCount > 0 && (
+            <motion.span
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-gradient-to-br from-red-500 to-red-600 text-white text-xs font-bold rounded-full flex items-center justify-center shadow-lg"
+            >
+              {unreadCount > 99 ? '99+' : unreadCount}
+            </motion.span>
+          )}
+        </motion.button>
         
+        {/* Tooltip */}
         {unreadCount > 0 && (
-          <motion.span
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-gradient-to-br from-red-500 to-red-600 text-white text-xs font-bold rounded-full flex items-center justify-center shadow-lg"
-          >
-            {unreadCount > 99 ? '99+' : unreadCount}
-          </motion.span>
+          <div className="absolute right-0 top-full mt-2 px-3 py-2 bg-gray-900 dark:bg-gray-700 text-white text-xs rounded-lg shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 whitespace-nowrap z-50">
+            {unreadCount} new notifications
+            <div className="absolute -top-1 right-4 w-2 h-2 bg-gray-900 dark:bg-gray-700 rotate-45" />
+          </div>
         )}
-      </motion.button>
+      </div>
 
       {/* Notification Panel */}
       <AnimatePresence mode="wait">
