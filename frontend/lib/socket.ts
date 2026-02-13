@@ -21,7 +21,7 @@ export interface SocketEvents {
 
   // Menu collaboration events
   'menu:user:joined': (data: { userId: string; userName: string; timestamp: Date }) => void
-  'menu:user:left': (data: { userId: string; timestamp: Date }) => void
+  'menu:user:left': (data: { userId: string; userName: string; timestamp: Date }) => void
   'menu:active:edits': (sessions: any[]) => void
   'menu:edit:started': (data: { itemType: string; itemId: string; userId: string; userName: string; startedAt: Date }) => void
   'menu:edit:ended': (data: { itemType: string; itemId: string; userId: string }) => void
