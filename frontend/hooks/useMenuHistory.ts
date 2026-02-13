@@ -3,7 +3,7 @@ import { useState, useCallback, useRef } from 'react';
 /**
  * History entry for undo/redo functionality
  */
-interface HistoryEntry<T> {
+export interface HistoryEntry<T> {
   state: T;
   timestamp: number;
   action: string;
