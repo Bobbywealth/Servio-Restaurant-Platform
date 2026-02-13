@@ -4,7 +4,7 @@
  */
 
 import { useEffect, useCallback, useState, useRef } from 'react';
-import { useSocket } from '../lib/socket';
+import { socketManager } from '../lib/socket';
 
 export interface CollaboratorInfo {
   userId: string;
@@ -86,8 +86,7 @@ export function useMenuCollaboration(
     onEditConflict
   } = options;
 
-  const { socket, isConnected } = useSocket();
-  
+  const [isConnected, setIsConnected] = useState(socketManager.connected);
   const [onlineUsers, setOnlineUsers] = useState<CollaboratorInfo[]>([]);
   const [activeEditSessions, setActiveEditSessions] = useState<EditSessionInfo[]>([]);
   const [cursorPositions, setCursorPositions] = useState<Map<string, CursorUpdateEvent>>(new Map());
@@ -95,14 +94,28 @@ export function useMenuCollaboration(
   // Track current editing state
   const currentEditRef = useRef<{ itemType: string; itemId: string } | null>(null);
 
+  // Track connection status
+  useEffect(() => {
+    if (!enabled) return;
+
+    const handleConnectionChange = (status: boolean) => {
+      setIsConnected(status);
+    };
+
+    const cleanup = socketManager.onConnectionChange(handleConnectionChange);
+    setIsConnected(socketManager.connected);
+
+    return cleanup;
+  }, [enabled]);
+
   // Join/leave room when restaurant changes
   useEffect(() => {
-    if (!enabled || !socket || !isConnected || !restaurantId || !userId) {
+    if (!enabled || !restaurantId || !userId || !isConnected) {
       return;
     }
 
     // Join the menu room
-    socket.emit('menu:join', {
+    socketManager.emit('menu:join', {
       restaurantId,
       userId,
       userName: userName || 'Unknown User'
@@ -110,25 +123,25 @@ export function useMenuCollaboration(
 
     return () => {
       // Leave the menu room
-      socket.emit('menu:leave', {
+      socketManager.emit('menu:leave', {
         restaurantId,
         userId
       });
       
       // End any active edit session
       if (currentEditRef.current) {
-        socket.emit('menu:edit:end', {
+        socketManager.emit('menu:edit:end', {
           restaurantId,
           userId,
           ...currentEditRef.current
         });
       }
     };
-  }, [socket, isConnected, restaurantId, userId, userName, enabled]);
+  }, [isConnected, restaurantId, userId, userName, enabled]);
 
   // Set up event listeners
   useEffect(() => {
-    if (!enabled || !socket) return;
+    if (!enabled) return;
 
     // Handle user joined
     const handleUserJoined = (data: CollaboratorInfo) => {
@@ -195,26 +208,26 @@ export function useMenuCollaboration(
     };
 
     // Register listeners
-    socket.on('menu:user:joined', handleUserJoined);
-    socket.on('menu:user:left', handleUserLeft);
-    socket.on('menu:active:edits', handleActiveEdits);
-    socket.on('menu:edit:started', handleEditStarted);
-    socket.on('menu:edit:ended', handleEditEnded);
-    socket.on('menu:edit:conflict', handleEditConflict);
-    socket.on('menu:updated', handleMenuUpdate);
-    socket.on('menu:cursor:update', handleCursorUpdate);
+    socketManager.on('menu:user:joined', handleUserJoined);
+    socketManager.on('menu:user:left', handleUserLeft);
+    socketManager.on('menu:active:edits', handleActiveEdits);
+    socketManager.on('menu:edit:started', handleEditStarted);
+    socketManager.on('menu:edit:ended', handleEditEnded);
+    socketManager.on('menu:edit:conflict', handleEditConflict);
+    socketManager.on('menu:updated', handleMenuUpdate);
+    socketManager.on('menu:cursor:update', handleCursorUpdate);
 
     return () => {
-      socket.off('menu:user:joined', handleUserJoined);
-      socket.off('menu:user:left', handleUserLeft);
-      socket.off('menu:active:edits', handleActiveEdits);
-      socket.off('menu:edit:started', handleEditStarted);
-      socket.off('menu:edit:ended', handleEditEnded);
-      socket.off('menu:edit:conflict', handleEditConflict);
-      socket.off('menu:updated', handleMenuUpdate);
-      socket.off('menu:cursor:update', handleCursorUpdate);
+      socketManager.off('menu:user:joined', handleUserJoined);
+      socketManager.off('menu:user:left', handleUserLeft);
+      socketManager.off('menu:active:edits', handleActiveEdits);
+      socketManager.off('menu:edit:started', handleEditStarted);
+      socketManager.off('menu:edit:ended', handleEditEnded);
+      socketManager.off('menu:edit:conflict', handleEditConflict);
+      socketManager.off('menu:updated', handleMenuUpdate);
+      socketManager.off('menu:cursor:update', handleCursorUpdate);
     };
-  }, [socket, enabled, onUpdate, onUserJoin, onUserLeave, onEditStart, onEditEnd, onEditConflict]);
+  }, [enabled, onUpdate, onUserJoin, onUserLeave, onEditStart, onEditEnd, onEditConflict]);
 
   /**
    * Start editing an item
@@ -223,18 +236,18 @@ export function useMenuCollaboration(
     itemType: 'category' | 'item' | 'modifier',
     itemId: string
   ) => {
-    if (!enabled || !socket || !restaurantId || !userId) return;
+    if (!enabled || !restaurantId || !userId) return;
 
     currentEditRef.current = { itemType, itemId };
     
-    socket.emit('menu:edit:start', {
+    socketManager.emit('menu:edit:start', {
       restaurantId,
       userId,
       userName: userName || 'Unknown User',
       itemType,
       itemId
     });
-  }, [socket, restaurantId, userId, userName, enabled]);
+  }, [restaurantId, userId, userName, enabled]);
 
   /**
    * Stop editing an item
@@ -243,17 +256,17 @@ export function useMenuCollaboration(
     itemType: 'category' | 'item' | 'modifier',
     itemId: string
   ) => {
-    if (!enabled || !socket || !restaurantId || !userId) return;
+    if (!enabled || !restaurantId || !userId) return;
 
     currentEditRef.current = null;
     
-    socket.emit('menu:edit:end', {
+    socketManager.emit('menu:edit:end', {
       restaurantId,
       userId,
       itemType,
       itemId
     });
-  }, [socket, restaurantId, userId, enabled]);
+  }, [restaurantId, userId, enabled]);
 
   /**
    * Broadcast a menu update
@@ -264,9 +277,9 @@ export function useMenuCollaboration(
     entityId: string,
     data?: any
   ) => {
-    if (!enabled || !socket || !restaurantId || !userId) return;
+    if (!enabled || !restaurantId || !userId) return;
 
-    socket.emit('menu:update', {
+    socketManager.emit('menu:update', {
       type,
       entityType,
       entityId,
@@ -275,22 +288,22 @@ export function useMenuCollaboration(
       userName: userName || 'Unknown User',
       data
     });
-  }, [socket, restaurantId, userId, userName, enabled]);
+  }, [restaurantId, userId, userName, enabled]);
 
   /**
    * Send cursor position for collaborative editing
    */
   const sendCursorPosition = useCallback((field: string, position: number) => {
-    if (!enabled || !socket || !restaurantId || !userId) return;
+    if (!enabled || !restaurantId || !userId) return;
 
-    socket.emit('menu:cursor', {
+    socketManager.emit('menu:cursor', {
       restaurantId,
       userId,
       userName: userName || 'Unknown User',
       field,
       position
     });
-  }, [socket, restaurantId, userId, userName, enabled]);
+  }, [restaurantId, userId, userName, enabled]);
 
   /**
    * Check if an item is being edited by someone else
