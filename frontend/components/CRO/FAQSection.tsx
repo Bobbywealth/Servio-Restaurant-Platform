@@ -1,411 +1,340 @@
-/**
- * FAQ Section Component with Schema Markup
- * Provides an accessible FAQ section with structured data for SEO
- * 
- * FAQ schema can increase CTR by 30% through rich snippets
- */
+import React, { useState, useMemo, useCallback } from 'react'
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
+import { ChevronDown, Search, HelpCircle, MessageCircle } from 'lucide-react'
+import Link from 'next/link'
+import Head from 'next/head'
 
-import React, { useState, useCallback } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { ChevronDown, HelpCircle, Search, MessageCircle } from 'lucide-react'
-import { FAQSchema } from '../SEO/StructuredData'
-
-// ============================================================================
-// Types
-// ============================================================================
-
-interface FAQItem {
+export interface FAQItem {
   id: string
   question: string
   answer: string
   category?: string
 }
 
-interface FAQSectionProps {
-  /** FAQ items to display */
-  items?: FAQItem[]
-  /** Show search bar */
+export interface FAQSectionProps {
+  title?: string
+  subtitle?: string
+  faqs?: FAQItem[]
   showSearch?: boolean
-  /** Group by category */
   groupByCategory?: boolean
-  /** Show contact CTA */
   showContactCTA?: boolean
-  /** Allow multiple open */
-  allowMultipleOpen?: boolean
-  /** Additional className */
   className?: string
 }
 
-// ============================================================================
-// Default FAQ Items
-// ============================================================================
-
-const DEFAULT_FAQ_ITEMS: FAQItem[] = [
+const defaultFaqs: FAQItem[] = [
   {
     id: '1',
     question: 'What is Servio?',
-    answer: 'Servio is a comprehensive restaurant operating system that unifies orders, menu management, marketing, inventory, staff operations, and integrations in one dashboard. It features an AI assistant for fast, hands-free execution of daily tasks.',
-    category: 'General'
+    answer: 'Servio is a restaurant operating system that unifies orders, menu updates, marketing, inventory, staff operations, and integrations in one dashboard—with an AI assistant for fast, hands-free execution.',
+    category: 'General',
   },
   {
     id: '2',
-    question: 'How does the AI voice assistant work?',
-    answer: 'Our AI voice assistant uses natural language processing to understand and execute commands. Simply speak to add orders, update menu items, check inventory levels, or generate reports. It works 24/7 and can handle multiple requests simultaneously.',
-    category: 'Features'
+    question: 'How does the voice assistant work?',
+    answer: 'Our AI voice assistant understands natural language commands. Simply speak to update menus, check inventory, manage orders, and more—all hands-free while you focus on running your restaurant. The assistant learns your menu and operations to provide accurate, contextual responses.',
+    category: 'Features',
   },
   {
     id: '3',
-    question: 'Can I try Servio before committing?',
-    answer: 'Yes! We offer a free 14-day trial with full access to all features. No credit card required. You can also book a personalized demo with our team to see how Servio can work for your restaurant.',
-    category: 'Pricing'
+    question: 'What integrations does Servio support?',
+    answer: 'Servio integrates with major POS systems (Toast, Square, Clover), delivery platforms (UberEats, DoorDash, Grubhub), payment processors (Stripe, Square), and accounting software (QuickBooks, Xero). We also offer an API for custom integrations.',
+    category: 'Integrations',
   },
   {
     id: '4',
-    question: 'What integrations does Servio support?',
-    answer: 'Servio integrates with popular POS systems (Toast, Square, Clover), payment processors (Stripe, PayPal), delivery platforms (DoorDash, UberEats, Grubhub), accounting software (QuickBooks, Xero), and many more. We also offer an API for custom integrations.',
-    category: 'Integrations'
+    question: 'Is there a free trial?',
+    answer: 'Yes! We offer a 14-day free trial with full access to all features. No credit card required to start. You can explore all features and see how Servio fits your restaurant operations before committing.',
+    category: 'Pricing',
   },
   {
     id: '5',
-    question: 'Is my data secure with Servio?',
-    answer: 'Absolutely. We use bank-level encryption (AES-256) for all data, are SOC 2 Type II compliant, and never share your data with third parties. We also offer two-factor authentication and role-based access controls.',
-    category: 'Security'
+    question: 'How much does Servio cost?',
+    answer: 'Servio offers flexible pricing starting at $49/month for single locations (Starter plan). Our Pro plan is $99/month for multi-location restaurants, and we offer custom Enterprise pricing for large restaurant groups. All plans include the voice assistant, order management, and basic analytics.',
+    category: 'Pricing',
   },
   {
     id: '6',
-    question: 'How long does implementation take?',
-    answer: 'Most restaurants are up and running within 24-48 hours. Our team handles data migration, menu setup, and staff training. For larger operations with custom integrations, implementation typically takes 1-2 weeks.',
-    category: 'Getting Started'
+    question: 'Can I use Servio on multiple devices?',
+    answer: 'Absolutely! Servio works on any device with a web browser—tablets, phones, and computers. We also offer a Progressive Web App (PWA) for an app-like experience on mobile devices without needing to download anything from the app store.',
+    category: 'Technical',
   },
   {
     id: '7',
-    question: 'What kind of support do you offer?',
-    answer: 'We provide 24/7 support via chat, email, and phone for all plans. Pro and Enterprise customers get a dedicated account manager and priority support. We also have an extensive knowledge base and video tutorials.',
-    category: 'Support'
+    question: 'How does the AI phone answering work?',
+    answer: 'Our AI voice agent answers calls within two rings, speaks naturally with customers, takes orders accurately, respects your business hours, syncs with your menu availability, and pushes orders directly into your POS and delivery platforms. You never miss a call or order.',
+    category: 'Features',
   },
   {
     id: '8',
-    question: 'Can I cancel my subscription anytime?',
-    answer: 'Yes, you can cancel your subscription at any time with no cancellation fees. Your data will be available for export for 30 days after cancellation. We also offer a 30-day money-back guarantee for new customers.',
-    category: 'Pricing'
+    question: 'Is my data secure?',
+    answer: 'Yes, security is our top priority. We use bank-level encryption for all data, are SOC 2 Type II certified, and are fully GDPR compliant. Your data is stored securely in the cloud with automatic backups and strict access controls.',
+    category: 'Security',
   },
   {
     id: '9',
-    question: 'Does Servio work on mobile devices?',
-    answer: 'Yes! Servio is fully responsive and works on any device with a web browser. We also offer native iOS and Android apps for staff time clock, order management, and real-time notifications.',
-    category: 'Features'
+    question: 'What kind of support do you offer?',
+    answer: 'All plans include email and chat support. Pro plans get priority support with faster response times. Enterprise plans include a dedicated account manager, phone support, and custom training for your team. Our support team is available 24/7.',
+    category: 'Support',
   },
   {
     id: '10',
-    question: 'How does pricing work?',
-    answer: 'We offer three plans: Starter ($49/month for single location), Pro ($99/month for up to 3 locations), and Enterprise (custom pricing for unlimited locations). All plans include core features, with advanced analytics and integrations available on higher tiers.',
-    category: 'Pricing'
-  }
+    question: 'Can I cancel anytime?',
+    answer: 'Yes, you can cancel your subscription at any time with no cancellation fees. Your access will continue until the end of your current billing period. We also offer a 30-day money-back guarantee if you\'re not satisfied.',
+    category: 'Pricing',
+  },
 ]
 
-// ============================================================================
-// FAQ Accordion Item Component
-// ============================================================================
-
-interface FAQAccordionItemProps {
-  item: FAQItem
-  isOpen: boolean
-  onToggle: () => void
-}
-
-function FAQAccordionItem({ item, isOpen, onToggle }: FAQAccordionItemProps) {
-  return (
-    <div className="border-b border-gray-800 last:border-b-0">
-      <button
-        onClick={onToggle}
-        className="w-full flex items-start justify-between py-5 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900 rounded-lg px-2 -mx-2"
-        aria-expanded={isOpen}
-        aria-controls={`faq-answer-${item.id}`}
-      >
-        <span className="font-medium text-white pr-4">
-          {item.question}
-        </span>
-        <motion.span
-          animate={{ rotate: isOpen ? 180 : 0 }}
-          transition={{ duration: 0.2 }}
-          className="flex-shrink-0 text-primary-500"
-        >
-          <ChevronDown className="w-5 h-5" />
-        </motion.span>
-      </button>
-      
-      <AnimatePresence initial={false}>
-        {isOpen && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2, ease: 'easeInOut' }}
-            className="overflow-hidden"
-          >
-            <div
-              id={`faq-answer-${item.id}`}
-              className="pb-5 text-gray-400 leading-relaxed"
-            >
-              {item.answer}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  )
-}
-
-// ============================================================================
-// Main FAQ Section Component
-// ============================================================================
-
+/**
+ * FAQSection Component
+ * 
+ * Displays frequently asked questions with:
+ * - Searchable interface
+ * - Category grouping
+ * - Accordion animations
+ * - SEO-friendly JSON-LD schema
+ * - Contact CTA
+ * 
+ * Best practices:
+ * - Use real customer questions
+ * - Keep answers concise but complete
+ * - Include internal links where relevant
+ * - Update regularly based on support tickets
+ */
 export function FAQSection({
-  items = DEFAULT_FAQ_ITEMS,
+  title = 'Frequently Asked Questions',
+  subtitle = 'Everything you need to know about Servio',
+  faqs = defaultFaqs,
   showSearch = true,
-  groupByCategory = false,
+  groupByCategory = true,
   showContactCTA = true,
-  allowMultipleOpen = false,
-  className = ''
+  className = '',
 }: FAQSectionProps) {
-  const [openItems, setOpenItems] = useState<Set<string>>(new Set())
   const [searchQuery, setSearchQuery] = useState('')
+  const [openItems, setOpenItems] = useState<string[]>([])
+  const shouldReduceMotion = useReducedMotion()
 
-  // Toggle item
-  const handleToggle = useCallback((itemId: string) => {
-    setOpenItems(prev => {
-      const newSet = new Set(prev)
-      if (newSet.has(itemId)) {
-        newSet.delete(itemId)
-      } else {
-        if (!allowMultipleOpen) {
-          newSet.clear()
-        }
-        newSet.add(itemId)
+  // Filter FAQs based on search
+  const filteredFaqs = useMemo(() => {
+    if (!searchQuery.trim()) return faqs
+    
+    const query = searchQuery.toLowerCase()
+    return faqs.filter(
+      (faq) =>
+        faq.question.toLowerCase().includes(query) ||
+        faq.answer.toLowerCase().includes(query) ||
+        faq.category?.toLowerCase().includes(query)
+    )
+  }, [faqs, searchQuery])
+
+  // Group FAQs by category
+  const groupedFaqs = useMemo(() => {
+    if (!groupByCategory) {
+      return { 'All Questions': filteredFaqs }
+    }
+
+    return filteredFaqs.reduce((acc, faq) => {
+      const category = faq.category || 'General'
+      if (!acc[category]) {
+        acc[category] = []
       }
-      return newSet
-    })
-  }, [allowMultipleOpen])
+      acc[category].push(faq)
+      return acc
+    }, {} as Record<string, FAQItem[]>)
+  }, [filteredFaqs, groupByCategory])
 
-  // Filter items by search
-  const filteredItems = items.filter(item =>
-    item.question.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    item.answer.toLowerCase().includes(searchQuery.toLowerCase())
-  )
+  const toggleItem = useCallback((id: string) => {
+    setOpenItems((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    )
+  }, [])
 
-  // Group items by category
-  const groupedItems = groupByCategory
-    ? filteredItems.reduce((acc, item) => {
-        const category = item.category || 'General'
-        if (!acc[category]) acc[category] = []
-        acc[category].push(item)
-        return acc
-      }, {} as Record<string, FAQItem[]>)
-    : null
+  // Generate JSON-LD schema for SEO
+  const faqSchema = {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: faqs.map((faq) => ({
+      '@type': 'Question',
+      name: faq.question,
+      acceptedAnswer: {
+        '@type': 'Answer',
+        text: faq.answer,
+      },
+    })),
+  }
 
   return (
     <>
-      {/* Schema markup for SEO */}
-      <FAQSchema items={items} />
+      {/* JSON-LD Schema for SEO */}
+      <Head>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema) }}
+        />
+      </Head>
 
       <section
-        className={`py-16 md:py-24 ${className}`}
+        id="faq"
+        className={`py-20 md:py-32 bg-gray-800/50 ${className}`}
         aria-labelledby="faq-heading"
       >
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           {/* Header */}
           <div className="text-center mb-12">
-            <div className="inline-flex items-center gap-2 text-primary-500 mb-4">
-              <HelpCircle className="w-6 h-6" />
-              <span className="text-sm font-semibold uppercase tracking-wider">
-                FAQ
-              </span>
-            </div>
-            <h2 
-              id="faq-heading"
-              className="text-3xl md:text-4xl font-bold text-white mb-4"
+            <motion.div
+              initial={shouldReduceMotion ? undefined : { opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
             >
-              Frequently Asked Questions
-            </h2>
-            <p className="text-gray-400 max-w-2xl mx-auto">
-              Everything you need to know about Servio. Can't find what you're looking for? 
-              <a href="#contact" className="text-primary-500 hover:text-primary-400 ml-1">
-                Contact our team
-              </a>
-            </p>
+              <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary-500/20 mb-6">
+                <HelpCircle className="w-7 h-7 text-primary-400" />
+              </div>
+              <h2 id="faq-heading" className="text-3xl sm:text-4xl font-bold text-white mb-4">
+                {title}
+              </h2>
+              <p className="text-gray-400 text-lg">{subtitle}</p>
+            </motion.div>
           </div>
 
           {/* Search */}
           {showSearch && (
-            <div className="relative mb-8">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
-              <input
-                type="search"
-                placeholder="Search questions..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-12 pr-4 py-3 bg-gray-800 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-              />
-            </div>
+            <motion.div
+              initial={shouldReduceMotion ? undefined : { opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              className="mb-8"
+            >
+              <div className="relative">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <input
+                  type="search"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search questions..."
+                  className="w-full pl-12 pr-4 py-4 bg-white/5 border border-white/10 rounded-2xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  aria-label="Search frequently asked questions"
+                />
+              </div>
+            </motion.div>
           )}
 
-          {/* FAQ Items */}
-          {groupedItems ? (
-            <div className="space-y-8">
-              {Object.entries(groupedItems).map(([category, categoryItems]) => (
-                <div key={category}>
-                  <h3 className="text-lg font-semibold text-white mb-4">
+          {/* FAQ Categories */}
+          <div className="space-y-8">
+            {Object.entries(groupedFaqs).map(([category, categoryFaqs], categoryIndex) => (
+              <motion.div
+                key={category}
+                initial={shouldReduceMotion ? undefined : { opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: categoryIndex * 0.1 }}
+              >
+                {groupByCategory && (
+                  <h3 className="text-lg font-semibold text-gray-300 mb-4 flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-primary-500" />
                     {category}
                   </h3>
-                  <div className="bg-gray-900/50 rounded-xl p-6 border border-gray-800">
-                    {categoryItems.map(item => (
-                      <FAQAccordionItem
-                        key={item.id}
-                        item={item}
-                        isOpen={openItems.has(item.id)}
-                        onToggle={() => handleToggle(item.id)}
-                      />
-                    ))}
-                  </div>
+                )}
+
+                <div className="space-y-3">
+                  {categoryFaqs.map((faq, faqIndex) => {
+                    const isOpen = openItems.includes(faq.id)
+                    
+                    return (
+                      <div
+                        key={faq.id}
+                        className="bg-white/5 border border-white/10 rounded-xl overflow-hidden"
+                      >
+                        <button
+                          onClick={() => toggleItem(faq.id)}
+                          className="w-full px-6 py-4 flex items-center justify-between text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-inset"
+                          aria-expanded={isOpen}
+                          aria-controls={`faq-answer-${faq.id}`}
+                        >
+                          <span className="font-medium text-white pr-4">
+                            {faq.question}
+                          </span>
+                          <motion.span
+                            animate={{ rotate: isOpen ? 180 : 0 }}
+                            transition={{ duration: 0.2 }}
+                            className="flex-shrink-0"
+                          >
+                            <ChevronDown className="w-5 h-5 text-gray-400" />
+                          </motion.span>
+                        </button>
+                        
+                        <AnimatePresence initial={false}>
+                          {isOpen && (
+                            <motion.div
+                              id={`faq-answer-${faq.id}`}
+                              initial={shouldReduceMotion ? undefined : { height: 0, opacity: 0 }}
+                              animate={{ height: 'auto', opacity: 1 }}
+                              exit={shouldReduceMotion ? undefined : { height: 0, opacity: 0 }}
+                              transition={{ duration: 0.2 }}
+                              className="overflow-hidden"
+                            >
+                              <div className="px-6 pb-4 text-gray-300 leading-relaxed">
+                                {faq.answer}
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+                    )
+                  })}
                 </div>
-              ))}
-            </div>
-          ) : (
-            <div className="bg-gray-900/50 rounded-xl p-6 border border-gray-800">
-              {filteredItems.length > 0 ? (
-                filteredItems.map(item => (
-                  <FAQAccordionItem
-                    key={item.id}
-                    item={item}
-                    isOpen={openItems.has(item.id)}
-                    onToggle={() => handleToggle(item.id)}
-                  />
-                ))
-              ) : (
-                <div className="text-center py-8">
-                  <p className="text-gray-400 mb-4">
-                    No questions found matching "{searchQuery}"
-                  </p>
-                  <button
-                    onClick={() => setSearchQuery('')}
-                    className="text-primary-500 hover:text-primary-400"
-                  >
-                    Clear search
-                  </button>
-                </div>
-              )}
+              </motion.div>
+            ))}
+          </div>
+
+          {/* No results */}
+          {filteredFaqs.length === 0 && (
+            <div className="text-center py-12">
+              <p className="text-gray-400 mb-4">No questions found matching your search.</p>
+              <button
+                onClick={() => setSearchQuery('')}
+                className="text-primary-400 hover:text-primary-300 font-medium"
+              >
+                Clear search
+              </button>
             </div>
           )}
 
           {/* Contact CTA */}
           {showContactCTA && (
-            <div className="mt-12 text-center">
-              <div className="inline-flex items-center gap-4 bg-gray-800/50 rounded-2xl p-6 border border-gray-700">
-                <div className="w-12 h-12 rounded-full bg-primary-500/10 flex items-center justify-center">
-                  <MessageCircle className="w-6 h-6 text-primary-500" />
+            <motion.div
+              initial={shouldReduceMotion ? undefined : { opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              className="mt-12 text-center"
+            >
+              <div className="bg-gradient-to-br from-primary-500/10 to-servio-purple-500/10 rounded-2xl p-8 border border-white/10">
+                <MessageCircle className="w-10 h-10 text-primary-400 mx-auto mb-4" />
+                <h3 className="text-xl font-semibold text-white mb-2">
+                  Still have questions?
+                </h3>
+                <p className="text-gray-400 mb-6">
+                  Can't find what you're looking for? Our team is here to help.
+                </p>
+                <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                  <Link
+                    href="/book-demo"
+                    className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700 text-white px-6 py-3 rounded-xl font-semibold transition-all shadow-lg shadow-primary-500/25"
+                  >
+                    Book a Demo
+                  </Link>
+                  <a
+                    href="mailto:hello@servio.app"
+                    className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-semibold text-white border border-white/20 hover:bg-white/10 transition-colors"
+                  >
+                    Contact Support
+                  </a>
                 </div>
-                <div className="text-left">
-                  <p className="text-white font-medium">Still have questions?</p>
-                  <p className="text-gray-400 text-sm">
-                    Our team is here to help 24/7
-                  </p>
-                </div>
-                <a
-                  href="/book-demo"
-                  className="ml-4 bg-primary-500 hover:bg-primary-600 text-white px-5 py-2.5 rounded-lg font-medium transition-colors"
-                >
-                  Contact Us
-                </a>
               </div>
-            </div>
+            </motion.div>
           )}
         </div>
       </section>
     </>
   )
 }
-
-// ============================================================================
-// Compact FAQ Variant
-// ============================================================================
-
-interface CompactFAQProps {
-  items?: FAQItem[]
-  maxItems?: number
-  className?: string
-}
-
-export function CompactFAQ({ 
-  items = DEFAULT_FAQ_ITEMS, 
-  maxItems = 5,
-  className = '' 
-}: CompactFAQProps) {
-  const [openItems, setOpenItems] = useState<Set<string>>(new Set())
-
-  const handleToggle = (itemId: string) => {
-    setOpenItems(prev => {
-      const newSet = new Set(prev)
-      if (newSet.has(itemId)) {
-        newSet.delete(itemId)
-      } else {
-        newSet.clear()
-        newSet.add(itemId)
-      }
-      return newSet
-    })
-  }
-
-  const displayItems = items.slice(0, maxItems)
-
-  return (
-    <>
-      <FAQSchema items={displayItems} />
-      
-      <div className={className}>
-        <h3 className="text-lg font-semibold text-white mb-4">
-          Common Questions
-        </h3>
-        <div className="space-y-2">
-          {displayItems.map(item => (
-            <div key={item.id} className="bg-gray-800/50 rounded-lg">
-              <button
-                onClick={() => handleToggle(item.id)}
-                className="w-full flex items-center justify-between p-4 text-left"
-                aria-expanded={openItems.has(item.id)}
-              >
-                <span className="text-sm font-medium text-white">
-                  {item.question}
-                </span>
-                <ChevronDown 
-                  className={`w-4 h-4 text-gray-400 transition-transform ${
-                    openItems.has(item.id) ? 'rotate-180' : ''
-                  }`}
-                />
-              </button>
-              <AnimatePresence initial={false}>
-                {openItems.has(item.id) && (
-                  <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    className="overflow-hidden"
-                  >
-                    <p className="px-4 pb-4 text-sm text-gray-400">
-                      {item.answer}
-                    </p>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          ))}
-        </div>
-      </div>
-    </>
-  )
-}
-
-// ============================================================================
-// Export
-// ============================================================================
 
 export default FAQSection

@@ -1,249 +1,161 @@
+import React, { useState, useCallback, useEffect, useRef } from 'react'
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
+import { MessageCircle, X, Send, Minimize2, Maximize2, Bot, User } from 'lucide-react'
+
+export interface LiveChatProps {
+  title?: string
+  subtitle?: string
+  placeholder?: string
+  welcomeMessage?: string
+  onSendMessage?: (message: string) => Promise<string | void>
+  className?: string
+}
+
+interface Message {
+  id: string
+  content: string
+  sender: 'user' | 'bot'
+  timestamp: Date
+}
+
 /**
- * Live Chat Widget Integration
- * Provides customer support through live chat
+ * LiveChat Component
  * 
- * Live chat can increase high-value conversions by 40%
+ * A floating chat widget for customer support:
+ * - Expandable/collapsible interface
+ * - Auto-responses for common questions
+ * - Typing indicators
+ * - Message history
+ * 
+ * Best practices:
+ * - Respond quickly to inquiries
+ * - Use friendly, helpful tone
+ * - Offer human handoff option
+ * - Store chat history
  */
-
-import React, { useState, useEffect, useCallback } from 'react'
-import Script from 'next/script'
-import { motion, AnimatePresence } from 'framer-motion'
-import { MessageCircle, X, Send, Minimize2 } from 'lucide-react'
-
-// ============================================================================
-// Types
-// ============================================================================
-
-interface LiveChatProps {
-  /** Chat provider: 'tawk' | 'intercom' | 'crisp' | 'custom' */
-  provider?: 'tawk' | 'intercom' | 'crisp' | 'custom'
-  /** Property ID from chat provider */
-  propertyId?: string
-  /** Show after delay (ms) */
-  showAfterDelay?: number
-  /** Show on exit intent */
-  showOnExitIntent?: boolean
-  /** Custom widget for 'custom' provider */
-  customWidget?: React.ReactNode
-  /** Position on screen */
-  position?: 'bottom-right' | 'bottom-left'
-  /** Z-index */
-  zIndex?: number
-  /** Auto-open */
-  autoOpen?: boolean
-  /** Auto-open delay */
-  autoOpenDelay?: number
-}
-
-// ============================================================================
-// Tawk.to Integration
-// ============================================================================
-
-interface TawkChatProps {
-  propertyId: string
-  widgetId?: string
-}
-
-export function TawkChat({ propertyId, widgetId = 'default' }: TawkChatProps) {
-  return (
-    <>
-      <Script
-        src={`https://embed.tawk.to/${propertyId}/${widgetId}`}
-        strategy="lazyOnload"
-        onLoad={() => {
-          if (typeof window !== 'undefined' && (window as any).Tawk_API) {
-            (window as any).Tawk_API.onLoad = function() {
-              console.log('[Tawk] Chat loaded')
-            }
-          }
-        }}
-      />
-    </>
-  )
-}
-
-// ============================================================================
-// Intercom Integration
-// ============================================================================
-
-interface IntercomChatProps {
-  appId: string
-  userId?: string
-  userName?: string
-  userEmail?: string
-}
-
-export function IntercomChat({ 
-  appId, 
-  userId, 
-  userName, 
-  userEmail 
-}: IntercomChatProps) {
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-
-    // Initialize Intercom
-    (window as any).intercomSettings = {
-      app_id: appId,
-      user_id: userId,
-      name: userName,
-      email: userEmail
-    }
-
-    // Load Intercom script
-    const script = document.createElement('script')
-    script.src = `https://widget.intercom.io/widget/${appId}`
-    script.async = true
-    document.body.appendChild(script)
-
-    return () => {
-      // Cleanup
-      const intercomWidget = document.querySelector('.intercom-lightweight-app')
-      if (intercomWidget) {
-        intercomWidget.remove()
-      }
-    }
-  }, [appId, userId, userName, userEmail])
-
-  return null
-}
-
-// ============================================================================
-// Crisp Integration
-// ============================================================================
-
-interface CrispChatProps {
-  websiteId: string
-  userEmail?: string
-  userName?: string
-}
-
-export function CrispChat({ websiteId, userEmail, userName }: CrispChatProps) {
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-
-    // Initialize Crisp
-    (window as any).CRISP_WEBSITE_ID = websiteId
-    
-    // Set user info
-    if (userEmail) {
-      (window as any).$crisp = (window as any).$crisp || []
-      ;(window as any).$crisp.push(['set', 'user:email', userEmail])
-      if (userName) {
-        ;(window as any).$crisp.push(['set', 'user:nickname', userName])
-      }
-    }
-
-    // Load Crisp script
-    const script = document.createElement('script')
-    script.src = 'https://client.crisp.chat/l.js'
-    script.async = true
-    document.head.appendChild(script)
-
-    return () => {
-      const crispWidget = document.querySelector('#crisp-chatbox')
-      if (crispWidget) {
-        crispWidget.remove()
-      }
-    }
-  }, [websiteId, userEmail, userName])
-
-  return null
-}
-
-// ============================================================================
-// Custom Chat Widget
-// ============================================================================
-
-interface CustomChatWidgetProps {
-  position?: 'bottom-right' | 'bottom-left'
-  zIndex?: number
-  showAfterDelay?: number
-  showOnExitIntent?: boolean
-  autoOpen?: boolean
-  autoOpenDelay?: number
-  onSendMessage?: (message: string) => void | Promise<void>
-}
-
-export function CustomChatWidget({
-  position = 'bottom-right',
-  zIndex = 50,
-  showAfterDelay = 3000,
-  showOnExitIntent = true,
-  autoOpen = false,
-  autoOpenDelay = 10000,
-  onSendMessage
-}: CustomChatWidgetProps) {
-  const [isVisible, setIsVisible] = useState(false)
+export function LiveChat({
+  title = 'Chat with us',
+  subtitle = 'We typically reply in a few minutes',
+  placeholder = 'Type your message...',
+  welcomeMessage = "Hi! 👋 How can we help you today? I'm here to answer questions about Servio and help you get started.",
+  onSendMessage,
+  className = '',
+}: LiveChatProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [isMinimized, setIsMinimized] = useState(false)
-  const [message, setMessage] = useState('')
-  const [messages, setMessages] = useState<{ text: string; isUser: boolean; time: Date }[]>([
+  const [messages, setMessages] = useState<Message[]>([
     {
-      text: "Hi! 👋 How can we help you today?",
-      isUser: false,
-      time: new Date()
-    }
+      id: '1',
+      content: welcomeMessage,
+      sender: 'bot',
+      timestamp: new Date(),
+    },
   ])
+  const [inputValue, setInputValue] = useState('')
   const [isTyping, setIsTyping] = useState(false)
+  const [hasUnread, setHasUnread] = useState(false)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const shouldReduceMotion = useReducedMotion()
 
-  // Show after delay
+  // Auto-scroll to bottom
   useEffect(() => {
-    const timeout = setTimeout(() => {
-      setIsVisible(true)
-    }, showAfterDelay)
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages])
 
-    return () => clearTimeout(timeout)
-  }, [showAfterDelay])
-
-  // Show on exit intent
+  // Focus input when opened
   useEffect(() => {
-    if (!showOnExitIntent) return
+    if (isOpen && !isMinimized) {
+      inputRef.current?.focus()
+    }
+  }, [isOpen, isMinimized])
 
-    const handleMouseLeave = (e: MouseEvent) => {
-      if (e.clientY <= 0 && isVisible && !isOpen) {
-        setIsOpen(true)
-      }
+  // Mark as unread when closed and new message arrives
+  useEffect(() => {
+    if (!isOpen && messages.length > 1) {
+      setHasUnread(true)
+    }
+  }, [messages, isOpen])
+
+  const getAutoResponse = useCallback((message: string): string => {
+    const lowerMessage = message.toLowerCase()
+    
+    if (lowerMessage.includes('price') || lowerMessage.includes('cost') || lowerMessage.includes('pricing')) {
+      return "Our pricing starts at $49/month for the Starter plan. We also offer a Pro plan at $99/month for multi-location restaurants. Would you like me to tell you more about what's included?"
+    }
+    
+    if (lowerMessage.includes('demo') || lowerMessage.includes('trial')) {
+      return "You can start a free 14-day trial right now! No credit card required. Would you like me to help you get started, or would you prefer to book a personalized demo with our team?"
+    }
+    
+    if (lowerMessage.includes('feature') || lowerMessage.includes('what can')) {
+      return "Servio offers voice-activated commands, order management, staff scheduling, inventory tracking, analytics, and much more! What specific feature are you most interested in learning about?"
+    }
+    
+    if (lowerMessage.includes('integrat') || lowerMessage.includes('pos') || lowerMessage.includes('doordash') || lowerMessage.includes('ubereats')) {
+      return "We integrate with major POS systems and delivery platforms including Toast, Square, DoorDash, UberEats, and Grubhub. We also have an API for custom integrations!"
+    }
+    
+    if (lowerMessage.includes('support') || lowerMessage.includes('help')) {
+      return "Our support team is available 24/7 via email and chat. Pro and Enterprise plans also include phone support and a dedicated account manager. How can I help you right now?"
+    }
+    
+    if (lowerMessage.includes('thank')) {
+      return "You're welcome! 😊 Is there anything else I can help you with?"
+    }
+    
+    return "Thanks for your message! A member of our team will get back to you shortly. In the meantime, feel free to ask me about pricing, features, or integrations!"
+  }, [])
+
+  const handleSend = async () => {
+    if (!inputValue.trim()) return
+
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      content: inputValue,
+      sender: 'user',
+      timestamp: new Date(),
     }
 
-    document.addEventListener('mouseleave', handleMouseLeave)
-    return () => document.removeEventListener('mouseleave', handleMouseLeave)
-  }, [showOnExitIntent, isVisible, isOpen])
-
-  // Auto-open
-  useEffect(() => {
-    if (!autoOpen || !isVisible) return
-
-    const timeout = setTimeout(() => {
-      setIsOpen(true)
-    }, autoOpenDelay)
-
-    return () => clearTimeout(timeout)
-  }, [autoOpen, autoOpenDelay, isVisible])
-
-  // Handle send message
-  const handleSend = async () => {
-    if (!message.trim()) return
-
-    const userMessage = message.trim()
-    setMessage('')
-    setMessages(prev => [...prev, { text: userMessage, isUser: true, time: new Date() }])
-
-    // Simulate response
+    setMessages((prev) => [...prev, userMessage])
+    setInputValue('')
     setIsTyping(true)
-    setTimeout(() => {
-      setMessages(prev => [...prev, {
-        text: "Thanks for your message! Our team will respond shortly. In the meantime, check out our documentation at docs.servio.com",
-        isUser: false,
-        time: new Date()
-      }])
-      setIsTyping(false)
-    }, 1500)
 
-    onSendMessage?.(userMessage)
+    try {
+      if (onSendMessage) {
+        const response = await onSendMessage(inputValue)
+        if (response) {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: (Date.now() + 1).toString(),
+              content: response,
+              sender: 'bot',
+              timestamp: new Date(),
+            },
+          ])
+        }
+      } else {
+        // Simulate typing delay
+        await new Promise((resolve) => setTimeout(resolve, 1000 + Math.random() * 1000))
+        const autoResponse = getAutoResponse(userMessage.content)
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: (Date.now() + 1).toString(),
+            content: autoResponse,
+            sender: 'bot',
+            timestamp: new Date(),
+          },
+        ])
+      }
+    } catch (error) {
+      console.error('Chat error:', error)
+    } finally {
+      setIsTyping(false)
+    }
   }
 
-  // Handle key press
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
@@ -251,82 +163,92 @@ export function CustomChatWidget({
     }
   }
 
-  const positionClasses = {
-    'bottom-right': 'right-4 md:right-6',
-    'bottom-left': 'left-4 md:left-6'
-  }
-
-  if (!isVisible) return null
-
   return (
-    <div 
-      className={`fixed bottom-4 md:bottom-6 ${positionClasses[position]}`}
-      style={{ zIndex }}
-    >
+    <div className={`fixed bottom-4 right-4 z-50 ${className}`}>
       <AnimatePresence>
         {isOpen && !isMinimized && (
           <motion.div
-            initial={{ opacity: 0, y: 20, scale: 0.95 }}
+            initial={shouldReduceMotion ? undefined : { opacity: 0, y: 20, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 20, scale: 0.95 }}
-            className="mb-4 w-[350px] max-w-[calc(100vw-2rem)] bg-white rounded-2xl shadow-2xl overflow-hidden"
+            exit={shouldReduceMotion ? undefined : { opacity: 0, y: 20, scale: 0.95 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+            className="absolute bottom-16 right-0 w-[350px] max-w-[calc(100vw-2rem)] bg-white rounded-2xl shadow-2xl overflow-hidden"
+            role="dialog"
+            aria-label="Chat window"
           >
             {/* Header */}
-            <div className="bg-gradient-to-r from-primary-500 to-primary-600 text-white p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
-                    <MessageCircle className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold">Servio Support</h3>
-                    <p className="text-xs text-white/80">We typically reply in minutes</p>
-                  </div>
+            <div className="bg-gradient-to-r from-primary-500 to-primary-600 px-4 py-3 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
+                  <Bot className="w-5 h-5 text-white" />
                 </div>
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => setIsMinimized(true)}
-                    className="p-2 hover:bg-white/10 rounded-lg transition-colors"
-                    aria-label="Minimize"
-                  >
-                    <Minimize2 className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => setIsOpen(false)}
-                    className="p-2 hover:bg-white/10 rounded-lg transition-colors"
-                    aria-label="Close"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
+                <div>
+                  <h3 className="text-white font-semibold">{title}</h3>
+                  <p className="text-white/80 text-xs">{subtitle}</p>
                 </div>
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setIsMinimized(true)}
+                  className="p-1.5 rounded-lg hover:bg-white/20 transition-colors"
+                  aria-label="Minimize chat"
+                >
+                  <Minimize2 className="w-4 h-4 text-white" />
+                </button>
+                <button
+                  onClick={() => setIsOpen(false)}
+                  className="p-1.5 rounded-lg hover:bg-white/20 transition-colors"
+                  aria-label="Close chat"
+                >
+                  <X className="w-4 h-4 text-white" />
+                </button>
               </div>
             </div>
 
             {/* Messages */}
             <div className="h-80 overflow-y-auto p-4 space-y-4 bg-gray-50">
-              {messages.map((msg, index) => (
+              {messages.map((message) => (
                 <div
-                  key={index}
-                  className={`flex ${msg.isUser ? 'justify-end' : 'justify-start'}`}
+                  key={message.id}
+                  className={`flex ${message.sender === 'user' ? 'justify-end' : 'justify-start'}`}
                 >
                   <div
-                    className={`max-w-[80%] p-3 rounded-2xl ${
-                      msg.isUser
-                        ? 'bg-primary-500 text-white rounded-br-md'
-                        : 'bg-white text-gray-800 rounded-bl-md shadow'
+                    className={`flex items-start gap-2 max-w-[80%] ${
+                      message.sender === 'user' ? 'flex-row-reverse' : ''
                     }`}
                   >
-                    <p className="text-sm">{msg.text}</p>
-                    <p className={`text-xs mt-1 ${msg.isUser ? 'text-white/70' : 'text-gray-400'}`}>
-                      {msg.time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </p>
+                    <div
+                      className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                        message.sender === 'user'
+                          ? 'bg-primary-500'
+                          : 'bg-gray-200'
+                      }`}
+                    >
+                      {message.sender === 'user' ? (
+                        <User className="w-4 h-4 text-white" />
+                      ) : (
+                        <Bot className="w-4 h-4 text-gray-600" />
+                      )}
+                    </div>
+                    <div
+                      className={`px-4 py-2 rounded-2xl ${
+                        message.sender === 'user'
+                          ? 'bg-primary-500 text-white rounded-br-md'
+                          : 'bg-white text-gray-800 rounded-bl-md shadow-sm'
+                      }`}
+                    >
+                      <p className="text-sm">{message.content}</p>
+                    </div>
                   </div>
                 </div>
               ))}
               
               {isTyping && (
-                <div className="flex justify-start">
-                  <div className="bg-white text-gray-800 p-3 rounded-2xl rounded-bl-md shadow">
+                <div className="flex items-start gap-2">
+                  <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center">
+                    <Bot className="w-4 h-4 text-gray-600" />
+                  </div>
+                  <div className="bg-white px-4 py-2 rounded-2xl rounded-bl-md shadow-sm">
                     <div className="flex gap-1">
                       <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
                       <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
@@ -335,23 +257,26 @@ export function CustomChatWidget({
                   </div>
                 </div>
               )}
+              
+              <div ref={messagesEndRef} />
             </div>
 
             {/* Input */}
             <div className="p-4 border-t border-gray-200 bg-white">
               <div className="flex items-center gap-2">
                 <input
+                  ref={inputRef}
                   type="text"
-                  value={message}
-                  onChange={(e) => setMessage(e.target.value)}
+                  value={inputValue}
+                  onChange={(e) => setInputValue(e.target.value)}
                   onKeyPress={handleKeyPress}
-                  placeholder="Type a message..."
-                  className="flex-1 px-4 py-2 bg-gray-100 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  placeholder={placeholder}
+                  className="flex-1 px-4 py-2.5 bg-gray-100 rounded-xl text-gray-800 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
                 <button
                   onClick={handleSend}
-                  disabled={!message.trim()}
-                  className="p-2 bg-primary-500 text-white rounded-full hover:bg-primary-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={!inputValue.trim()}
+                  className="p-2.5 bg-primary-500 hover:bg-primary-600 disabled:bg-gray-300 text-white rounded-xl transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
                   aria-label="Send message"
                 >
                   <Send className="w-5 h-5" />
@@ -362,84 +287,58 @@ export function CustomChatWidget({
         )}
       </AnimatePresence>
 
-      {/* Chat button */}
+      {/* Minimized bar */}
+      <AnimatePresence>
+        {isOpen && isMinimized && (
+          <motion.div
+            initial={shouldReduceMotion ? undefined : { opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={shouldReduceMotion ? undefined : { opacity: 0, y: 20 }}
+            onClick={() => setIsMinimized(false)}
+            className="absolute bottom-16 right-0 bg-gradient-to-r from-primary-500 to-primary-600 px-4 py-3 rounded-full shadow-lg cursor-pointer flex items-center gap-3"
+          >
+            <Bot className="w-5 h-5 text-white" />
+            <span className="text-white font-medium text-sm">{title}</span>
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                setIsOpen(false)
+              }}
+              className="p-1 rounded-full hover:bg-white/20"
+              aria-label="Close chat"
+            >
+              <X className="w-4 h-4 text-white" />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Floating button */}
       <motion.button
-        initial={{ scale: 0 }}
-        animate={{ scale: 1 }}
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.95 }}
         onClick={() => {
-          if (isMinimized) {
-            setIsMinimized(false)
-            setIsOpen(true)
-          } else {
-            setIsOpen(!isOpen)
-          }
+          setIsOpen(true)
+          setIsMinimized(false)
+          setHasUnread(false)
         }}
-        className="w-14 h-14 bg-gradient-to-r from-primary-500 to-primary-600 text-white rounded-full shadow-lg flex items-center justify-center hover:shadow-xl transition-shadow"
+        className="w-14 h-14 bg-gradient-to-r from-primary-500 to-primary-600 rounded-full shadow-lg flex items-center justify-center hover:shadow-xl transition-shadow focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
+        whileHover={shouldReduceMotion ? undefined : { scale: 1.05 }}
+        whileTap={shouldReduceMotion ? undefined : { scale: 0.95 }}
         aria-label={isOpen ? 'Close chat' : 'Open chat'}
+        aria-expanded={isOpen}
       >
-        {isOpen && !isMinimized ? (
-          <X className="w-6 h-6" />
+        {isOpen ? (
+          <X className="w-6 h-6 text-white" />
         ) : (
-          <MessageCircle className="w-6 h-6" />
+          <>
+            <MessageCircle className="w-6 h-6 text-white" />
+            {hasUnread && (
+              <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full border-2 border-white" />
+            )}
+          </>
         )}
       </motion.button>
-
-      {/* Unread indicator */}
-      {!isOpen && (
-        <span className="absolute top-0 right-0 w-4 h-4 bg-red-500 rounded-full border-2 border-white" />
-      )}
     </div>
   )
 }
-
-// ============================================================================
-// Main Export Component
-// ============================================================================
-
-export function LiveChat({
-  provider = 'custom',
-  propertyId,
-  showAfterDelay = 3000,
-  showOnExitIntent = true,
-  position = 'bottom-right',
-  zIndex = 50,
-  autoOpen = false,
-  autoOpenDelay = 10000,
-  customWidget
-}: LiveChatProps) {
-  // Render provider-specific widget
-  switch (provider) {
-    case 'tawk':
-      return propertyId ? <TawkChat propertyId={propertyId} /> : null
-    
-    case 'intercom':
-      return propertyId ? <IntercomChat appId={propertyId} /> : null
-    
-    case 'crisp':
-      return propertyId ? <CrispChat websiteId={propertyId} /> : null
-    
-    case 'custom':
-    default:
-      if (customWidget) {
-        return <>{customWidget}</>
-      }
-      return (
-        <CustomChatWidget
-          position={position}
-          zIndex={zIndex}
-          showAfterDelay={showAfterDelay}
-          showOnExitIntent={showOnExitIntent}
-          autoOpen={autoOpen}
-          autoOpenDelay={autoOpenDelay}
-        />
-      )
-  }
-}
-
-// ============================================================================
-// Export
-// ============================================================================
 
 export default LiveChat

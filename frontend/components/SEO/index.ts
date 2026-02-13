@@ -1,23 +1,15 @@
 /**
- * SEO Components Index
- * Export all SEO-related components
+ * SEO Components
+ * 
+ * Components for search engine optimization including:
+ * - JSON-LD structured data schemas
+ * - Enhanced meta tags
+ * - Open Graph and Twitter Card support
  */
 
-export {
-  OrganizationSchema,
-  SoftwareSchema,
-  RestaurantSchema,
-  FAQSchema,
-  BreadcrumbSchema,
-  ProductSchema,
-  WebSiteSchema,
-  HomepageSchemas
-} from './StructuredData'
+export { StructuredData, LocalBusinessSchema, RestaurantSchema, FAQPageSchema, ProductSchema, BreadcrumbSchema } from './StructuredData'
+export { EnhancedSEO, HomepageSchemas } from './EnhancedHead'
 
-export {
-  EnhancedSEO,
-  ArticleSEO,
-  ProductSEO,
-  HomepageSEO,
-  DashboardSEO
-} from './EnhancedHead'
+// Type exports
+export type { StructuredDataProps, BaseSchemaProps } from './StructuredData'
+export type { EnhancedSEOProps } from './EnhancedHead'

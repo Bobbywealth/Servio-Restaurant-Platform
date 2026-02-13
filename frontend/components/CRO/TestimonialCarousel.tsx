@@ -1,491 +1,334 @@
-/**
- * Testimonial Carousel Component
- * Displays customer testimonials with auto-play and navigation
- * 
- * Testimonials can increase conversions by 34%
- */
-
 import React, { useState, useEffect, useCallback } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { ChevronLeft, ChevronRight, Quote, Star, Play, Pause } from 'lucide-react'
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
+import { Star, ChevronLeft, ChevronRight, Quote } from 'lucide-react'
 
-// ============================================================================
-// Types
-// ============================================================================
-
-interface Testimonial {
+export interface Testimonial {
   id: string
-  quote: string
-  author: string
+  name: string
   role: string
-  company: string
+  restaurant: string
+  content: string
+  rating: number
   image?: string
-  rating?: number
-  videoUrl?: string
-  result?: string // e.g., "30% more orders"
+  location?: string
 }
 
-interface TestimonialCarouselProps {
-  testimonials: Testimonial[]
-  /** Auto-play interval in ms */
+export interface TestimonialCarouselProps {
+  testimonials?: Testimonial[]
+  variant?: 'cards' | 'carousel' | 'featured'
+  autoPlay?: boolean
   autoPlayInterval?: number
-  /** Show navigation arrows */
-  showArrows?: boolean
-  /** Show dot indicators */
+  showNavigation?: boolean
   showDots?: boolean
-  /** Show play/pause button */
-  showPlayPause?: boolean
-  /** Variant style */
-  variant?: 'cards' | 'quotes' | 'minimal'
-  /** Number of items to show at once */
-  itemsPerView?: 1 | 2 | 3
-  /** Additional className */
   className?: string
 }
 
-// ============================================================================
-// Default Testimonials Data
-// ============================================================================
-
-export const DEFAULT_TESTIMONIALS: Testimonial[] = [
+const defaultTestimonials: Testimonial[] = [
   {
     id: '1',
-    quote: "Servio cut our order processing time by 60%. It's been a game changer for our busy Friday nights.",
-    author: "Maria Chen",
-    role: "Owner",
-    company: "Golden Dragon Restaurant",
+    name: 'Maria Chen',
+    role: 'Owner',
+    restaurant: 'Golden Dragon Bistro',
+    content: 'Servio has transformed how we run our restaurant. The voice assistant is incredible - I can update menus and check inventory while cooking. Game changer!',
     rating: 5,
-    result: "60% faster orders"
+    location: 'San Francisco, CA',
   },
   {
     id: '2',
-    quote: "The AI assistant is like having an extra staff member who never calls in sick. Our customers love the voice ordering.",
-    author: "James Wilson",
-    role: "General Manager",
-    company: "Bella Italia",
+    name: 'James Rodriguez',
+    role: 'General Manager',
+    restaurant: 'Taco Fiesta',
+    content: 'We used to miss 20+ calls during dinner rush. Now Servio answers every call and takes orders flawlessly. Our revenue is up 15% in just 3 months.',
     rating: 5,
-    result: "40% more orders"
+    location: 'Austin, TX',
   },
   {
     id: '3',
-    quote: "We used to spend hours on inventory management. Now it's automated. I actually have time to focus on growing the business.",
-    author: "Sarah Johnson",
-    role: "Owner",
-    company: "The Burger Joint",
+    name: 'Sarah Thompson',
+    role: 'Operations Director',
+    restaurant: 'The Hungry Fork',
+    content: 'The staff scheduling alone is worth the price. Combined with inventory tracking and the AI assistant, Servio is essential for any modern restaurant.',
     rating: 5,
-    result: "15 hours saved/week"
+    location: 'New York, NY',
   },
   {
     id: '4',
-    quote: "The staff scheduling feature alone is worth the subscription. No more scheduling conflicts or missed shifts.",
-    author: "David Park",
-    role: "Operations Director",
-    company: "Seoul Kitchen",
+    name: 'Michael Park',
+    role: 'Executive Chef',
+    restaurant: 'Seoul Kitchen',
+    content: 'As a chef, I love that I can just say "86 the special" and it updates everywhere instantly. No more running between POS systems.',
     rating: 5,
-    result: "Zero scheduling errors"
+    location: 'Seattle, WA',
   },
   {
     id: '5',
-    quote: "Implementation was seamless. The team had us up and running in less than a day. Outstanding support.",
-    author: "Emily Rodriguez",
-    role: "Owner",
-    company: "Casa Mexicana",
+    name: 'Emily Watson',
+    role: 'Owner',
+    restaurant: 'Sweet & Savory Café',
+    content: 'The analytics helped us identify our best-selling items and optimize our menu. We increased profits by 23% in the first quarter.',
     rating: 5,
-    result: "Live in 1 day"
-  }
+    location: 'Portland, OR',
+  },
 ]
 
-// ============================================================================
-// Animation Variants
-// ============================================================================
+/**
+ * TestimonialCarousel Component
+ * 
+ * Displays customer testimonials with multiple layouts:
+ * - Cards: Grid of testimonial cards
+ * - Carousel: Sliding carousel with navigation
+ * - Featured: Large featured testimonial
+ * 
+ * Best practices:
+ * - Use real testimonials with photos
+ * - Include specific results/numbers
+ * - Show recognizable restaurant names
+ * - Keep content concise
+ */
+export function TestimonialCarousel({
+  testimonials = defaultTestimonials,
+  variant = 'cards',
+  autoPlay = true,
+  autoPlayInterval = 5000,
+  showNavigation = true,
+  showDots = true,
+  className = '',
+}: TestimonialCarouselProps) {
+  const [currentIndex, setCurrentIndex] = useState(0)
+  const [isPaused, setIsPaused] = useState(false)
+  const shouldReduceMotion = useReducedMotion()
 
-const slideVariants = {
-  enter: (direction: number) => ({
-    x: direction > 0 ? 1000 : -1000,
-    opacity: 0
-  }),
-  center: {
-    x: 0,
-    opacity: 1
-  },
-  exit: (direction: number) => ({
-    x: direction < 0 ? 1000 : -1000,
-    opacity: 0
-  })
-}
+  const nextSlide = useCallback(() => {
+    setCurrentIndex((prev) => (prev + 1) % testimonials.length)
+  }, [testimonials.length])
 
-const swipeConfidenceThreshold = 10000
-const swipePower = (offset: number, velocity: number) => {
-  return Math.abs(offset) * velocity
-}
+  const prevSlide = useCallback(() => {
+    setCurrentIndex((prev) => (prev - 1 + testimonials.length) % testimonials.length)
+  }, [testimonials.length])
 
-// ============================================================================
-// Rating Stars Component
-// ============================================================================
+  const goToSlide = useCallback((index: number) => {
+    setCurrentIndex(index)
+  }, [])
 
-function RatingStars({ rating }: { rating: number }) {
-  return (
-    <div className="flex gap-0.5" aria-label={`${rating} out of 5 stars`}>
-      {[...Array(5)].map((_, i) => (
+  // Auto-play
+  useEffect(() => {
+    if (!autoPlay || isPaused || variant === 'cards') return
+
+    const interval = setInterval(nextSlide, autoPlayInterval)
+    return () => clearInterval(interval)
+  }, [autoPlay, autoPlayInterval, isPaused, nextSlide, variant])
+
+  const renderStars = (rating: number) => (
+    <div className="flex items-center gap-1" aria-label={`${rating} out of 5 stars`}>
+      {[1, 2, 3, 4, 5].map((star) => (
         <Star
-          key={i}
-          className={`w-4 h-4 ${
-            i < rating
-              ? 'text-yellow-400 fill-current'
-              : 'text-gray-400'
+          key={star}
+          className={`w-5 h-5 ${
+            star <= rating ? 'text-yellow-400 fill-yellow-400' : 'text-gray-600'
           }`}
+          aria-hidden="true"
         />
       ))}
     </div>
   )
-}
 
-// ============================================================================
-// Cards Variant
-// ============================================================================
-
-function TestimonialCards({ 
-  testimonial,
-  isActive 
-}: { 
-  testimonial: Testimonial
-  isActive: boolean 
-}) {
-  return (
-    <motion.div
-      layout
-      initial={{ opacity: 0, scale: 0.9 }}
-      animate={{ opacity: isActive ? 1 : 0.7, scale: isActive ? 1 : 0.95 }}
-      transition={{ duration: 0.3 }}
-      className={`bg-white rounded-2xl p-6 md:p-8 shadow-lg border border-gray-100 ${
-        isActive ? '' : 'blur-[1px]'
-      }`}
-    >
-      {/* Result badge */}
-      {testimonial.result && (
-        <div className="inline-flex items-center gap-1 bg-green-100 text-green-700 text-sm font-medium px-3 py-1 rounded-full mb-4">
-          <span>📈</span>
-          <span>{testimonial.result}</span>
-        </div>
-      )}
-
-      {/* Rating */}
-      {testimonial.rating && (
-        <div className="mb-4">
-          <RatingStars rating={testimonial.rating} />
-        </div>
-      )}
-
-      {/* Quote */}
-      <blockquote className="text-gray-700 text-lg md:text-xl leading-relaxed mb-6">
-        "{testimonial.quote}"
-      </blockquote>
-
-      {/* Author */}
-      <div className="flex items-center gap-4">
-        {testimonial.image ? (
-          <img
-            src={testimonial.image}
-            alt={testimonial.author}
-            className="w-12 h-12 rounded-full object-cover"
-          />
-        ) : (
-          <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary-400 to-primary-600 flex items-center justify-center text-white font-bold text-lg">
-            {testimonial.author.charAt(0)}
-          </div>
-        )}
-        <div>
-          <p className="font-semibold text-gray-900">{testimonial.author}</p>
-          <p className="text-sm text-gray-500">
-            {testimonial.role} at {testimonial.company}
-          </p>
-        </div>
+  // Cards variant
+  if (variant === 'cards') {
+    return (
+      <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 ${className}`}>
+        {testimonials.slice(0, 6).map((testimonial, index) => (
+          <motion.div
+            key={testimonial.id}
+            initial={shouldReduceMotion ? undefined : { opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ delay: index * 0.1 }}
+            className="bg-white/5 border border-white/10 rounded-2xl p-6 hover:bg-white/10 transition-colors"
+          >
+            <div className="flex items-start justify-between mb-4">
+              {renderStars(testimonial.rating)}
+              <Quote className="w-8 h-8 text-primary-500/30" aria-hidden="true" />
+            </div>
+            <p className="text-gray-300 mb-6 line-clamp-4">{testimonial.content}</p>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-500 to-servio-purple-500 flex items-center justify-center text-white font-semibold">
+                {testimonial.name.charAt(0)}
+              </div>
+              <div>
+                <p className="text-white font-medium">{testimonial.name}</p>
+                <p className="text-sm text-gray-400">
+                  {testimonial.role}, {testimonial.restaurant}
+                </p>
+              </div>
+            </div>
+          </motion.div>
+        ))}
       </div>
-    </motion.div>
-  )
-}
-
-// ============================================================================
-// Quotes Variant
-// ============================================================================
-
-function TestimonialQuote({ 
-  testimonial 
-}: { 
-  testimonial: Testimonial 
-}) {
-  return (
-    <div className="text-center max-w-3xl mx-auto">
-      <Quote className="w-12 h-12 text-primary-500/20 mx-auto mb-6" />
-      
-      <blockquote className="text-2xl md:text-3xl font-medium text-white leading-relaxed mb-8">
-        "{testimonial.quote}"
-      </blockquote>
-
-      {testimonial.rating && (
-        <div className="flex justify-center mb-6">
-          <RatingStars rating={testimonial.rating} />
-        </div>
-      )}
-
-      <div className="flex items-center justify-center gap-4">
-        {testimonial.image ? (
-          <img
-            src={testimonial.image}
-            alt={testimonial.author}
-            className="w-14 h-14 rounded-full object-cover"
-          />
-        ) : (
-          <div className="w-14 h-14 rounded-full bg-gradient-to-br from-primary-400 to-primary-600 flex items-center justify-center text-white font-bold text-xl">
-            {testimonial.author.charAt(0)}
-          </div>
-        )}
-        <div className="text-left">
-          <p className="font-semibold text-white">{testimonial.author}</p>
-          <p className="text-sm text-gray-400">
-            {testimonial.role}, {testimonial.company}
-          </p>
-        </div>
-      </div>
-
-      {testimonial.result && (
-        <div className="mt-6 inline-flex items-center gap-2 bg-primary-500/10 text-primary-400 text-sm font-medium px-4 py-2 rounded-full">
-          <span>✨</span>
-          <span>{testimonial.result}</span>
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ============================================================================
-// Minimal Variant
-// ============================================================================
-
-function TestimonialMinimal({ 
-  testimonial 
-}: { 
-  testimonial: Testimonial 
-}) {
-  return (
-    <div className="flex items-center gap-6">
-      {testimonial.image ? (
-        <img
-          src={testimonial.image}
-          alt={testimonial.author}
-          className="w-16 h-16 rounded-full object-cover flex-shrink-0"
-        />
-      ) : (
-        <div className="w-16 h-16 rounded-full bg-gray-200 flex items-center justify-center text-gray-600 font-bold text-xl flex-shrink-0">
-          {testimonial.author.charAt(0)}
-        </div>
-      )}
-      
-      <div>
-        <blockquote className="text-gray-700 italic mb-2">
-          "{testimonial.quote}"
-        </blockquote>
-        <p className="text-sm text-gray-500">
-          — {testimonial.author}, {testimonial.company}
-        </p>
-      </div>
-    </div>
-  )
-}
-
-// ============================================================================
-// Main Carousel Component
-// ============================================================================
-
-export function TestimonialCarousel({
-  testimonials = DEFAULT_TESTIMONIALS,
-  autoPlayInterval = 5000,
-  showArrows = true,
-  showDots = true,
-  showPlayPause = true,
-  variant = 'cards',
-  itemsPerView = 1,
-  className = ''
-}: TestimonialCarouselProps) {
-  const [[page, direction], setPage] = useState([0, 0])
-  const [isPlaying, setIsPlaying] = useState(true)
-
-  const testimonialIndex = ((page % testimonials.length) + testimonials.length) % testimonials.length
-  const currentTestimonial = testimonials[testimonialIndex]
-
-  const paginate = useCallback((newDirection: number) => {
-    setPage([page + newDirection, newDirection])
-  }, [page])
-
-  // Auto-play
-  useEffect(() => {
-    if (!isPlaying) return
-
-    const interval = setInterval(() => {
-      paginate(1)
-    }, autoPlayInterval)
-
-    return () => clearInterval(interval)
-  }, [isPlaying, autoPlayInterval, paginate])
-
-  // Keyboard navigation
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowLeft') paginate(-1)
-      if (e.key === 'ArrowRight') paginate(1)
-    }
-
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [paginate])
-
-  const renderTestimonial = () => {
-    switch (variant) {
-      case 'quotes':
-        return <TestimonialQuote testimonial={currentTestimonial} />
-      case 'minimal':
-        return <TestimonialMinimal testimonial={currentTestimonial} />
-      case 'cards':
-      default:
-        return (
-          <TestimonialCards 
-            testimonial={currentTestimonial} 
-            isActive={true} 
-          />
-        )
-    }
+    )
   }
 
-  return (
-    <section 
-      className={`relative ${className}`}
-      aria-label="Customer testimonials"
-      aria-roledescription="carousel"
-    >
-      {/* Main content */}
-      <div className="relative overflow-hidden">
-        <AnimatePresence initial={false} custom={direction} mode="wait">
+  // Featured variant
+  if (variant === 'featured') {
+    const featured = testimonials[currentIndex]
+    return (
+      <div
+        className={`relative bg-gradient-to-br from-primary-500/10 to-servio-purple-500/10 rounded-3xl p-8 md:p-12 ${className}`}
+        onMouseEnter={() => setIsPaused(true)}
+        onMouseLeave={() => setIsPaused(false)}
+      >
+        <Quote className="absolute top-8 left-8 w-16 h-16 text-primary-500/20" aria-hidden="true" />
+
+        <AnimatePresence mode="wait">
           <motion.div
-            key={page}
-            custom={direction}
-            variants={slideVariants}
-            initial="enter"
-            animate="center"
-            exit="exit"
-            transition={{
-              x: { type: 'spring', stiffness: 300, damping: 30 },
-              opacity: { duration: 0.2 }
-            }}
-            drag="x"
-            dragConstraints={{ left: 0, right: 0 }}
-            dragElastic={1}
-            onDragEnd={(e, { offset, velocity }) => {
-              const swipe = swipePower(offset.x, velocity.x)
-              if (swipe < -swipeConfidenceThreshold) {
-                paginate(1)
-              } else if (swipe > swipeConfidenceThreshold) {
-                paginate(-1)
-              }
-            }}
-            className="px-4"
+            key={featured.id}
+            initial={shouldReduceMotion ? undefined : { opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={shouldReduceMotion ? undefined : { opacity: 0, x: -20 }}
+            transition={{ duration: 0.3 }}
+            className="text-center max-w-3xl mx-auto"
           >
-            {renderTestimonial()}
+            <div className="flex justify-center mb-6">
+              {renderStars(featured.rating)}
+            </div>
+            <blockquote className="text-xl md:text-2xl text-white font-medium mb-8 leading-relaxed">
+              "{featured.content}"
+            </blockquote>
+            <div className="flex flex-col items-center">
+              <div className="w-16 h-16 rounded-full bg-gradient-to-br from-primary-500 to-servio-purple-500 flex items-center justify-center text-white text-xl font-bold mb-3">
+                {featured.name.charAt(0)}
+              </div>
+              <p className="text-white font-semibold text-lg">{featured.name}</p>
+              <p className="text-gray-400">
+                {featured.role} at {featured.restaurant}
+              </p>
+              {featured.location && (
+                <p className="text-gray-500 text-sm mt-1">{featured.location}</p>
+              )}
+            </div>
           </motion.div>
         </AnimatePresence>
-      </div>
 
-      {/* Navigation */}
-      <div className="flex items-center justify-center gap-4 mt-8">
-        {/* Previous button */}
-        {showArrows && (
-          <button
-            onClick={() => paginate(-1)}
-            className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
-            aria-label="Previous testimonial"
-          >
-            <ChevronLeft className="w-5 h-5" />
-          </button>
+        {/* Navigation */}
+        {showNavigation && (
+          <div className="absolute top-1/2 -translate-y-1/2 left-4 right-4 flex justify-between pointer-events-none">
+            <button
+              onClick={prevSlide}
+              className="p-3 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors pointer-events-auto focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+              aria-label="Previous testimonial"
+            >
+              <ChevronLeft className="w-6 h-6" />
+            </button>
+            <button
+              onClick={nextSlide}
+              className="p-3 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors pointer-events-auto focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+              aria-label="Next testimonial"
+            >
+              <ChevronRight className="w-6 h-6" />
+            </button>
+          </div>
         )}
 
         {/* Dots */}
         {showDots && (
-          <div className="flex items-center gap-2">
+          <div className="flex justify-center gap-2 mt-8">
             {testimonials.map((_, index) => (
               <button
                 key={index}
-                onClick={() => setPage([index, index > testimonialIndex ? 1 : -1])}
+                onClick={() => goToSlide(index)}
                 className={`w-2 h-2 rounded-full transition-all ${
-                  index === testimonialIndex
-                    ? 'bg-primary-500 w-4'
-                    : 'bg-gray-400 hover:bg-gray-300'
+                  index === currentIndex
+                    ? 'bg-primary-500 w-6'
+                    : 'bg-white/30 hover:bg-white/50'
                 }`}
                 aria-label={`Go to testimonial ${index + 1}`}
-                aria-current={index === testimonialIndex ? 'true' : 'false'}
+                aria-current={index === currentIndex ? 'true' : undefined}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // Carousel variant
+  return (
+    <div
+      className={`relative overflow-hidden ${className}`}
+      onMouseEnter={() => setIsPaused(true)}
+      onMouseLeave={() => setIsPaused(false)}
+    >
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={testimonials[currentIndex].id}
+          initial={shouldReduceMotion ? undefined : { opacity: 0, x: 100 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={shouldReduceMotion ? undefined : { opacity: 0, x: -100 }}
+          transition={{ duration: 0.3 }}
+          className="bg-white/5 border border-white/10 rounded-2xl p-6 md:p-8"
+        >
+          <div className="flex flex-col md:flex-row gap-6 items-start">
+            <div className="flex-shrink-0">
+              <div className="w-16 h-16 md:w-20 md:h-20 rounded-2xl bg-gradient-to-br from-primary-500 to-servio-purple-500 flex items-center justify-center text-white text-2xl font-bold">
+                {testimonials[currentIndex].name.charAt(0)}
+              </div>
+            </div>
+            <div className="flex-1">
+              <div className="mb-4">{renderStars(testimonials[currentIndex].rating)}</div>
+              <blockquote className="text-lg text-gray-300 mb-4">
+                "{testimonials[currentIndex].content}"
+              </blockquote>
+              <div>
+                <p className="text-white font-semibold">{testimonials[currentIndex].name}</p>
+                <p className="text-gray-400 text-sm">
+                  {testimonials[currentIndex].role} at {testimonials[currentIndex].restaurant}
+                </p>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      </AnimatePresence>
+
+      {/* Navigation */}
+      <div className="flex items-center justify-center gap-4 mt-6">
+        {showNavigation && (
+          <>
+            <button
+              onClick={prevSlide}
+              className="p-2 rounded-full bg-white/5 hover:bg-white/10 text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+              aria-label="Previous testimonial"
+            >
+              <ChevronLeft className="w-5 h-5" />
+            </button>
+          </>
+        )}
+
+        {showDots && (
+          <div className="flex gap-2">
+            {testimonials.map((_, index) => (
+              <button
+                key={index}
+                onClick={() => goToSlide(index)}
+                className={`w-2 h-2 rounded-full transition-all ${
+                  index === currentIndex ? 'bg-primary-500 w-4' : 'bg-white/30'
+                }`}
+                aria-label={`Go to testimonial ${index + 1}`}
               />
             ))}
           </div>
         )}
 
-        {/* Next button */}
-        {showArrows && (
+        {showNavigation && (
           <button
-            onClick={() => paginate(1)}
-            className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
+            onClick={nextSlide}
+            className="p-2 rounded-full bg-white/5 hover:bg-white/10 text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
             aria-label="Next testimonial"
           >
             <ChevronRight className="w-5 h-5" />
           </button>
         )}
-
-        {/* Play/Pause */}
-        {showPlayPause && (
-          <button
-            onClick={() => setIsPlaying(!isPlaying)}
-            className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors ml-2"
-            aria-label={isPlaying ? 'Pause auto-play' : 'Resume auto-play'}
-          >
-            {isPlaying ? (
-              <Pause className="w-4 h-4" />
-            ) : (
-              <Play className="w-4 h-4" />
-            )}
-          </button>
-        )}
       </div>
-    </section>
-  )
-}
-
-// ============================================================================
-// Grid Display (Non-carousel alternative)
-// ============================================================================
-
-interface TestimonialGridProps {
-  testimonials?: Testimonial[]
-  columns?: 2 | 3
-  className?: string
-}
-
-export function TestimonialGrid({
-  testimonials = DEFAULT_TESTIMONIALS.slice(0, 3),
-  columns = 3,
-  className = ''
-}: TestimonialGridProps) {
-  return (
-    <div className={`grid md:grid-cols-${columns} gap-6 ${className}`}>
-      {testimonials.map((testimonial) => (
-        <TestimonialCards
-          key={testimonial.id}
-          testimonial={testimonial}
-          isActive={true}
-        />
-      ))}
     </div>
   )
 }
-
-// ============================================================================
-// Export
-// ============================================================================
 
 export default TestimonialCarousel

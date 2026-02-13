@@ -1,343 +1,167 @@
-/**
- * Trust Signals Component
- * Displays social proof elements to increase conversion rates
- * 
- * Research shows trust signals can increase conversions by 34%
- */
-
 import React from 'react'
-import { motion } from 'framer-motion'
-import { 
-  Users, Star, Shield, Clock, Award, 
-  CheckCircle, TrendingUp, Globe 
-} from 'lucide-react'
+import { motion, useReducedMotion } from 'framer-motion'
+import { Shield, Clock, Award, Users, CheckCircle2, Star, TrendingUp, Zap } from 'lucide-react'
 
-// ============================================================================
-// Types
-// ============================================================================
-
-interface TrustSignal {
-  icon: React.ReactNode
-  value: string
-  label: string
-  sublabel?: string
-}
-
-interface TrustSignalsProps {
-  variant?: 'full' | 'compact' | 'inline'
+export interface TrustSignalsProps {
+  variant?: 'compact' | 'full' | 'minimal'
   className?: string
 }
 
-// ============================================================================
-// Animation Variants
-// ============================================================================
-
-const containerVariants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: {
-      staggerChildren: 0.1
-    }
-  }
+interface TrustItem {
+  icon: React.ElementType
+  label: string
+  value: string
+  color: string
 }
 
-const itemVariants = {
-  hidden: { opacity: 0, y: 20 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    transition: {
-      type: 'spring',
-      stiffness: 300,
-      damping: 24
-    }
-  }
-}
-
-// ============================================================================
-// Default Trust Signals Data
-// ============================================================================
-
-const DEFAULT_SIGNALS: TrustSignal[] = [
+const trustItems: TrustItem[] = [
   {
-    icon: <Users className="w-5 h-5" />,
-    value: '500+',
-    label: 'Restaurants',
-    sublabel: 'Trust Servio daily'
+    icon: Users,
+    label: 'Active Restaurants',
+    value: '200+',
+    color: 'text-primary-400',
   },
   {
-    icon: <Star className="w-5 h-5" />,
-    value: '4.9/5',
+    icon: Star,
     label: 'Average Rating',
-    sublabel: 'From 150+ reviews'
+    value: '4.9/5',
+    color: 'text-yellow-400',
   },
   {
-    icon: <Shield className="w-5 h-5" />,
-    value: '99.9%',
-    label: 'Uptime',
-    sublabel: 'Enterprise-grade reliability'
+    icon: Clock,
+    label: 'Time Saved Weekly',
+    value: '15+ hrs',
+    color: 'text-servio-green-400',
   },
   {
-    icon: <Clock className="w-5 h-5" />,
-    value: '24/7',
-    label: 'Support',
-    sublabel: 'Always here to help'
+    icon: TrendingUp,
+    label: 'Revenue Increase',
+    value: '23%',
+    color: 'text-servio-orange-400',
   },
-  {
-    icon: <TrendingUp className="w-5 h-5" />,
-    value: '30%',
-    label: 'More Orders',
-    sublabel: 'Average increase'
-  },
-  {
-    icon: <Globe className="w-5 h-5" />,
-    value: '15+',
-    label: 'Countries',
-    sublabel: 'Worldwide presence'
-  }
 ]
 
-// ============================================================================
-// Full Variant Component
-// ============================================================================
+const certifications = [
+  { name: 'SOC 2 Type II', icon: Shield },
+  { name: 'GDPR Compliant', icon: CheckCircle2 },
+  { name: '99.9% Uptime', icon: Zap },
+  { name: '24/7 Support', icon: Award },
+]
 
-export function TrustSignalsFull({ 
-  signals = DEFAULT_SIGNALS,
-  className = '' 
-}: { signals?: TrustSignal[]; className?: string }) {
-  return (
-    <motion.section
-      initial="hidden"
-      whileInView="visible"
-      viewport={{ once: true, margin: '-100px' }}
-      variants={containerVariants}
-      className={`py-12 ${className}`}
-      aria-label="Trust signals"
-    >
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <motion.div 
-          variants={itemVariants}
-          className="text-center mb-8"
-        >
-          <h2 className="text-lg font-medium text-gray-400 mb-2">
-            Trusted by restaurants worldwide
-          </h2>
-        </motion.div>
-        
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6">
-          {signals.map((signal, index) => (
+/**
+ * TrustSignals Component
+ * 
+ * Displays trust indicators to improve conversion rates:
+ * - User statistics
+ * - Ratings and reviews
+ * - Certifications and compliance
+ * - Performance metrics
+ * 
+ * Best practices:
+ * - Use real, verifiable numbers
+ * - Keep metrics up-to-date
+ * - Include recognizable certifications
+ * - Show social proof prominently
+ */
+export function TrustSignals({ variant = 'full', className = '' }: TrustSignalsProps) {
+  const shouldReduceMotion = useReducedMotion()
+
+  if (variant === 'minimal') {
+    return (
+      <div className={`flex items-center justify-center gap-6 py-4 ${className}`}>
+        {trustItems.slice(0, 3).map((item, index) => (
+          <div key={index} className="flex items-center gap-2">
+            <item.icon className={`w-5 h-5 ${item.color}`} aria-hidden="true" />
+            <span className="text-white font-semibold">{item.value}</span>
+            <span className="text-gray-400 text-sm hidden sm:inline">{item.label}</span>
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  if (variant === 'compact') {
+    return (
+      <div className={`bg-gray-800/50 border border-white/10 rounded-2xl p-6 ${className}`}>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+          {trustItems.map((item, index) => (
             <motion.div
               key={index}
-              variants={itemVariants}
-              className="flex flex-col items-center text-center p-4 rounded-xl bg-white/5 hover:bg-white/10 transition-colors"
+              className="text-center"
+              initial={shouldReduceMotion ? undefined : { opacity: 0, y: 10 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: index * 0.1 }}
             >
-              <div className="w-12 h-12 rounded-full bg-primary-500/10 flex items-center justify-center text-primary-500 mb-3">
-                {signal.icon}
-              </div>
-              <div className="text-2xl font-bold text-white mb-1">
-                {signal.value}
-              </div>
-              <div className="text-sm font-medium text-gray-300">
-                {signal.label}
-              </div>
-              {signal.sublabel && (
-                <div className="text-xs text-gray-500 mt-1">
-                  {signal.sublabel}
-                </div>
-              )}
+              <item.icon className={`w-8 h-8 ${item.color} mx-auto mb-2`} aria-hidden="true" />
+              <div className="text-2xl font-bold text-white">{item.value}</div>
+              <div className="text-sm text-gray-400">{item.label}</div>
             </motion.div>
           ))}
         </div>
       </div>
-    </motion.section>
-  )
-}
+    )
+  }
 
-// ============================================================================
-// Compact Variant Component
-// ============================================================================
-
-export function TrustSignalsCompact({ 
-  className = '' 
-}: TrustSignalsProps) {
+  // Full variant
   return (
-    <div 
-      className={`flex flex-wrap items-center justify-center gap-6 md:gap-8 py-6 ${className}`}
-      role="group"
-      aria-label="Trust signals"
-    >
-      <div className="flex items-center gap-2">
-        <Users className="w-5 h-5 text-primary-500" />
-        <span className="font-semibold text-white">500+ Restaurants</span>
-      </div>
-      
-      <div className="flex items-center gap-2">
-        <div className="flex" aria-label="5 star rating">
-          {[...Array(5)].map((_, i) => (
-            <Star 
-              key={i} 
-              className="w-4 h-4 text-yellow-400 fill-current" 
-            />
+    <section className={`py-16 bg-gray-800/30 ${className}`} aria-label="Trust indicators">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        {/* Stats Grid */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-12">
+          {trustItems.map((item, index) => (
+            <motion.div
+              key={index}
+              className="text-center"
+              initial={shouldReduceMotion ? undefined : { opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: index * 0.1 }}
+            >
+              <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-white/5 border border-white/10 mb-4">
+                <item.icon className={`w-7 h-7 ${item.color}`} aria-hidden="true" />
+              </div>
+              <div className="text-3xl md:text-4xl font-bold text-white mb-1">{item.value}</div>
+              <div className="text-gray-400">{item.label}</div>
+            </motion.div>
           ))}
         </div>
-        <span className="font-semibold text-white">4.9/5</span>
-      </div>
-      
-      <div className="flex items-center gap-2">
-        <Shield className="w-5 h-5 text-green-500" />
-        <span className="font-semibold text-white">99.9% Uptime</span>
-      </div>
-      
-      <div className="flex items-center gap-2">
-        <Award className="w-5 h-5 text-servio-orange-500" />
-        <span className="font-semibold text-white">SOC 2 Compliant</span>
-      </div>
-    </div>
-  )
-}
 
-// ============================================================================
-// Inline Variant Component
-// ============================================================================
+        {/* Certifications Bar */}
+        <div className="flex flex-wrap items-center justify-center gap-6 md:gap-12 pt-8 border-t border-white/10">
+          {certifications.map((cert, index) => (
+            <motion.div
+              key={index}
+              className="flex items-center gap-2 text-gray-300"
+              initial={shouldReduceMotion ? undefined : { opacity: 0 }}
+              whileInView={{ opacity: 1 }}
+              viewport={{ once: true }}
+              transition={{ delay: 0.4 + index * 0.1 }}
+            >
+              <cert.icon className="w-5 h-5 text-primary-400" aria-hidden="true" />
+              <span className="text-sm font-medium">{cert.name}</span>
+            </motion.div>
+          ))}
+        </div>
 
-export function TrustSignalsInline({ 
-  className = '' 
-}: TrustSignalsProps) {
-  return (
-    <div 
-      className={`flex items-center gap-4 text-sm text-gray-400 ${className}`}
-      role="group"
-      aria-label="Trust signals"
-    >
-      <span className="flex items-center gap-1">
-        <CheckCircle className="w-4 h-4 text-green-500" />
-        Free 14-day trial
-      </span>
-      <span className="hidden sm:inline">•</span>
-      <span className="hidden sm:flex items-center gap-1">
-        <CheckCircle className="w-4 h-4 text-green-500" />
-        No credit card required
-      </span>
-      <span className="hidden md:inline">•</span>
-      <span className="hidden md:flex items-center gap-1">
-        <CheckCircle className="w-4 h-4 text-green-500" />
-        Cancel anytime
-      </span>
-    </div>
-  )
-}
-
-// ============================================================================
-// Client Logos Component
-// ============================================================================
-
-interface ClientLogosProps {
-  className?: string
-}
-
-export function ClientLogos({ className = '' }: ClientLogosProps) {
-  // Placeholder logos - replace with actual client logos
-  const logos = [
-    { name: 'Restaurant 1', src: '/images/clients/client1.svg' },
-    { name: 'Restaurant 2', src: '/images/clients/client2.svg' },
-    { name: 'Restaurant 3', src: '/images/clients/client3.svg' },
-    { name: 'Restaurant 4', src: '/images/clients/client4.svg' },
-    { name: 'Restaurant 5', src: '/images/clients/client5.svg' },
-  ]
-
-  return (
-    <div className={`py-8 ${className}`}>
-      <p className="text-center text-sm text-gray-500 mb-6">
-        Trusted by leading restaurants
-      </p>
-      <div className="flex flex-wrap items-center justify-center gap-8 md:gap-12 opacity-60">
-        {logos.map((logo, index) => (
-          <div 
-            key={index}
-            className="h-8 w-24 bg-gray-400 rounded flex items-center justify-center text-gray-600 text-xs"
-          >
-            {logo.name}
+        {/* Customer Logos (placeholder) */}
+        <div className="mt-12 text-center">
+          <p className="text-gray-500 text-sm mb-6">Trusted by leading restaurants nationwide</p>
+          <div className="flex flex-wrap items-center justify-center gap-8 opacity-50">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div
+                key={i}
+                className="w-24 h-8 bg-white/10 rounded-lg flex items-center justify-center"
+                aria-hidden="true"
+              >
+                <span className="text-xs text-gray-400">Logo {i}</span>
+              </div>
+            ))}
           </div>
-        ))}
+        </div>
       </div>
-    </div>
+    </section>
   )
 }
-
-// ============================================================================
-// Rating Stars Component
-// ============================================================================
-
-interface RatingStarsProps {
-  rating: number
-  maxRating?: number
-  showValue?: boolean
-  size?: 'sm' | 'md' | 'lg'
-  className?: string
-}
-
-export function RatingStars({ 
-  rating, 
-  maxRating = 5, 
-  showValue = true,
-  size = 'md',
-  className = '' 
-}: RatingStarsProps) {
-  const sizeClasses = {
-    sm: 'w-3 h-3',
-    md: 'w-4 h-4',
-    lg: 'w-5 h-5'
-  }
-
-  return (
-    <div 
-      className={`flex items-center gap-1 ${className}`}
-      role="img"
-      aria-label={`${rating} out of ${maxRating} stars`}
-    >
-      {[...Array(maxRating)].map((_, i) => (
-        <Star
-          key={i}
-          className={`${sizeClasses[size]} ${
-            i < Math.floor(rating)
-              ? 'text-yellow-400 fill-current'
-              : i < rating
-                ? 'text-yellow-400 fill-current opacity-50'
-                : 'text-gray-400'
-          }`}
-        />
-      ))}
-      {showValue && (
-        <span className="ml-1 text-sm font-medium text-gray-300">
-          {rating.toFixed(1)}
-        </span>
-      )}
-    </div>
-  )
-}
-
-// ============================================================================
-// Main Export Component
-// ============================================================================
-
-export function TrustSignals({ 
-  variant = 'full', 
-  className = '' 
-}: TrustSignalsProps) {
-  switch (variant) {
-    case 'compact':
-      return <TrustSignalsCompact className={className} />
-    case 'inline':
-      return <TrustSignalsInline className={className} />
-    case 'full':
-    default:
-      return <TrustSignalsFull className={className} />
-  }
-}
-
-// ============================================================================
-// Export
-// ============================================================================
 
 export default TrustSignals

@@ -1,22 +1,18 @@
-/**
- * Structured Data Components for SEO
- * Implements JSON-LD schema markup for rich snippets
- * 
- * @see https://developers.google.com/search/docs/advanced/structured-data/intro-structured-data
- */
-
+import React from 'react'
 import Head from 'next/head'
 
-// ============================================================================
-// Type Definitions
-// ============================================================================
+export interface BaseSchemaProps {
+  '@context'?: string
+}
 
-interface LocalBusinessSchema {
+export interface LocalBusinessSchema extends BaseSchemaProps {
   name: string
-  description: string
-  url: string
-  logo: string
+  description?: string
+  url?: string
+  logo?: string
+  image?: string
   telephone?: string
+  email?: string
   address?: {
     streetAddress: string
     addressLocality: string
@@ -30,317 +26,214 @@ interface LocalBusinessSchema {
   }
   openingHours?: string[]
   priceRange?: string
-  aggregateRating?: {
-    ratingValue: string
-    reviewCount: string
-  }
   sameAs?: string[]
 }
 
-interface SoftwareApplicationSchema {
+export interface RestaurantSchema extends LocalBusinessSchema {
+  servesCuisine?: string[]
+  menu?: string
+  acceptsReservations?: boolean
+  aggregateRating?: {
+    ratingValue: number
+    reviewCount: number
+  }
+}
+
+export interface FAQPageSchema extends BaseSchemaProps {
+  questions: Array<{
+    question: string
+    answer: string
+  }>
+}
+
+export interface ProductSchema extends BaseSchemaProps {
   name: string
   description: string
-  applicationCategory: string
-  operatingSystem: string
-  offers: {
-    price: string
+  image?: string
+  brand?: string
+  offers?: {
+    price: number
     priceCurrency: string
+    availability: 'InStock' | 'OutOfStock' | 'PreOrder'
+    url?: string
   }
   aggregateRating?: {
-    ratingValue: string
-    reviewCount: string
+    ratingValue: number
+    reviewCount: number
   }
 }
 
-interface FAQItem {
-  question: string
-  answer: string
+export interface BreadcrumbSchema extends BaseSchemaProps {
+  items: Array<{
+    name: string
+    url: string
+  }>
 }
 
-interface BreadcrumbItem {
-  name: string
-  url: string
+export interface StructuredDataProps {
+  type: 'localBusiness' | 'restaurant' | 'faq' | 'product' | 'breadcrumb'
+  data: LocalBusinessSchema | RestaurantSchema | FAQPageSchema | ProductSchema | BreadcrumbSchema
 }
 
-// ============================================================================
-// Organization Schema
-// ============================================================================
+/**
+ * StructuredData Component
+ * 
+ * Renders JSON-LD structured data for SEO
+ * Supports multiple schema types for rich snippets
+ */
+export function StructuredData({ type, data }: StructuredDataProps) {
+  const generateSchema = () => {
+    const baseContext = 'https://schema.org'
 
-interface OrganizationSchemaProps {
-  name?: string
-  url?: string
-  logo?: string
-  sameAs?: string[]
-}
-
-export function OrganizationSchema({
-  name = 'Servio',
-  url = 'https://servio.com',
-  logo = 'https://servio.com/images/servio_icon_tight.png',
-  sameAs = [
-    'https://twitter.com/servio',
-    'https://linkedin.com/company/servio',
-    'https://facebook.com/servio'
-  ]
-}: OrganizationSchemaProps = {}) {
-  const schema = {
-    '@context': 'https://schema.org',
-    '@type': 'Organization',
-    name,
-    url,
-    logo,
-    sameAs,
-    contactPoint: {
-      '@type': 'ContactPoint',
-      telephone: '+1-888-SERVIO',
-      contactType: 'sales',
-      availableLanguage: ['English']
-    }
-  }
-
-  return (
-    <Head>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
-      />
-    </Head>
-  )
-}
-
-// ============================================================================
-// Software Application Schema
-// ============================================================================
-
-interface SoftwareSchemaProps {
-  name?: string
-  description?: string
-  price?: string
-  currency?: string
-  ratingValue?: string
-  reviewCount?: string
-}
-
-export function SoftwareSchema({
-  name = 'Servio',
-  description = 'Restaurant Operating System with AI Assistant - Unify orders, menu updates, marketing, inventory, staff operations, and integrations in one dashboard.',
-  price = '49.00',
-  currency = 'USD',
-  ratingValue = '4.9',
-  reviewCount = '150'
-}: SoftwareSchemaProps = {}) {
-  const schema: SoftwareApplicationSchema = {
-    '@context': 'https://schema.org',
-    '@type': 'SoftwareApplication',
-    name,
-    description,
-    applicationCategory: 'BusinessApplication',
-    operatingSystem: 'Web, iOS, Android',
-    offers: {
-      price,
-      priceCurrency: currency
-    },
-    aggregateRating: {
-      ratingValue,
-      reviewCount
-    }
-  }
-
-  return (
-    <Head>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
-      />
-    </Head>
-  )
-}
-
-// ============================================================================
-// Local Business / Restaurant Schema
-// ============================================================================
-
-interface RestaurantSchemaProps {
-  name?: string
-  description?: string
-  url?: string
-  logo?: string
-  priceRange?: string
-}
-
-export function RestaurantSchema({
-  name = 'Servio',
-  description = 'Restaurant Operating System with AI Assistant',
-  url = 'https://servio.com',
-  logo = 'https://servio.com/images/servio_icon_tight.png',
-  priceRange = '$$'
-}: RestaurantSchemaProps = {}) {
-  const schema: LocalBusinessSchema = {
-    '@context': 'https://schema.org',
-    '@type': 'Restaurant',
-    name,
-    description,
-    url,
-    logo,
-    priceRange,
-    aggregateRating: {
-      ratingValue: '4.9',
-      reviewCount: '150'
-    }
-  }
-
-  return (
-    <Head>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
-      />
-    </Head>
-  )
-}
-
-// ============================================================================
-// FAQ Schema
-// ============================================================================
-
-interface FAQSchemaProps {
-  items: FAQItem[]
-}
-
-export function FAQSchema({ items }: FAQSchemaProps) {
-  const schema = {
-    '@context': 'https://schema.org',
-    '@type': 'FAQPage',
-    mainEntity: items.map(item => ({
-      '@type': 'Question',
-      name: item.question,
-      acceptedAnswer: {
-        '@type': 'Answer',
-        text: item.answer
+    switch (type) {
+      case 'localBusiness': {
+        const businessData = data as LocalBusinessSchema
+        return {
+          '@context': baseContext,
+          '@type': 'LocalBusiness',
+          name: businessData.name,
+          ...(businessData.description && { description: businessData.description }),
+          ...(businessData.url && { url: businessData.url }),
+          ...(businessData.logo && { logo: businessData.logo }),
+          ...(businessData.image && { image: businessData.image }),
+          ...(businessData.telephone && { telephone: businessData.telephone }),
+          ...(businessData.email && { email: businessData.email }),
+          ...(businessData.address && {
+            address: {
+              '@type': 'PostalAddress',
+              streetAddress: businessData.address.streetAddress,
+              addressLocality: businessData.address.addressLocality,
+              addressRegion: businessData.address.addressRegion,
+              postalCode: businessData.address.postalCode,
+              addressCountry: businessData.address.addressCountry,
+            },
+          }),
+          ...(businessData.geo && {
+            geo: {
+              '@type': 'GeoCoordinates',
+              latitude: businessData.geo.latitude,
+              longitude: businessData.geo.longitude,
+            },
+          }),
+          ...(businessData.openingHours && { openingHours: businessData.openingHours }),
+          ...(businessData.priceRange && { priceRange: businessData.priceRange }),
+          ...(businessData.sameAs && { sameAs: businessData.sameAs }),
+        }
       }
-    }))
-  }
 
-  return (
-    <Head>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
-      />
-    </Head>
-  )
-}
+      case 'restaurant': {
+        const restaurantData = data as RestaurantSchema
+        return {
+          '@context': baseContext,
+          '@type': 'Restaurant',
+          name: restaurantData.name,
+          ...(restaurantData.description && { description: restaurantData.description }),
+          ...(restaurantData.url && { url: restaurantData.url }),
+          ...(restaurantData.logo && { logo: restaurantData.logo }),
+          ...(restaurantData.image && { image: restaurantData.image }),
+          ...(restaurantData.telephone && { telephone: restaurantData.telephone }),
+          ...(restaurantData.email && { email: restaurantData.email }),
+          ...(restaurantData.address && {
+            address: {
+              '@type': 'PostalAddress',
+              streetAddress: restaurantData.address.streetAddress,
+              addressLocality: restaurantData.address.addressLocality,
+              addressRegion: restaurantData.address.addressRegion,
+              postalCode: restaurantData.address.postalCode,
+              addressCountry: restaurantData.address.addressCountry,
+            },
+          }),
+          ...(restaurantData.geo && {
+            geo: {
+              '@type': 'GeoCoordinates',
+              latitude: restaurantData.geo.latitude,
+              longitude: restaurantData.geo.longitude,
+            },
+          }),
+          ...(restaurantData.openingHours && { openingHours: restaurantData.openingHours }),
+          ...(restaurantData.priceRange && { priceRange: restaurantData.priceRange }),
+          ...(restaurantData.servesCuisine && { servesCuisine: restaurantData.servesCuisine }),
+          ...(restaurantData.menu && { menu: restaurantData.menu }),
+          ...(restaurantData.acceptsReservations !== undefined && {
+            acceptsReservations: restaurantData.acceptsReservations,
+          }),
+          ...(restaurantData.aggregateRating && {
+            aggregateRating: {
+              '@type': 'AggregateRating',
+              ratingValue: restaurantData.aggregateRating.ratingValue,
+              reviewCount: restaurantData.aggregateRating.reviewCount,
+            },
+          }),
+          ...(restaurantData.sameAs && { sameAs: restaurantData.sameAs }),
+        }
+      }
 
-// ============================================================================
-// Breadcrumb Schema
-// ============================================================================
+      case 'faq': {
+        const faqData = data as FAQPageSchema
+        return {
+          '@context': baseContext,
+          '@type': 'FAQPage',
+          mainEntity: faqData.questions.map((q) => ({
+            '@type': 'Question',
+            name: q.question,
+            acceptedAnswer: {
+              '@type': 'Answer',
+              text: q.answer,
+            },
+          })),
+        }
+      }
 
-interface BreadcrumbSchemaProps {
-  items: BreadcrumbItem[]
-}
+      case 'product': {
+        const productData = data as ProductSchema
+        return {
+          '@context': baseContext,
+          '@type': 'Product',
+          name: productData.name,
+          description: productData.description,
+          ...(productData.image && { image: productData.image }),
+          ...(productData.brand && { brand: { '@type': 'Brand', name: productData.brand } }),
+          ...(productData.offers && {
+            offers: {
+              '@type': 'Offer',
+              price: productData.offers.price,
+              priceCurrency: productData.offers.priceCurrency,
+              availability: `https://schema.org/${productData.offers.availability}`,
+              ...(productData.offers.url && { url: productData.offers.url }),
+            },
+          }),
+          ...(productData.aggregateRating && {
+            aggregateRating: {
+              '@type': 'AggregateRating',
+              ratingValue: productData.aggregateRating.ratingValue,
+              reviewCount: productData.aggregateRating.reviewCount,
+            },
+          }),
+        }
+      }
 
-export function BreadcrumbSchema({ items }: BreadcrumbSchemaProps) {
-  const schema = {
-    '@context': 'https://schema.org',
-    '@type': 'BreadcrumbList',
-    itemListElement: items.map((item, index) => ({
-      '@type': 'ListItem',
-      position: index + 1,
-      name: item.name,
-      item: item.url
-    }))
-  }
+      case 'breadcrumb': {
+        const breadcrumbData = data as BreadcrumbSchema
+        return {
+          '@context': baseContext,
+          '@type': 'BreadcrumbList',
+          itemListElement: breadcrumbData.items.map((item, index) => ({
+            '@type': 'ListItem',
+            position: index + 1,
+            name: item.name,
+            item: item.url,
+          })),
+        }
+      }
 
-  return (
-    <Head>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
-      />
-    </Head>
-  )
-}
-
-// ============================================================================
-// Product Schema (for pricing plans)
-// ============================================================================
-
-interface ProductSchemaProps {
-  name: string
-  description: string
-  price: string
-  currency?: string
-  priceValidUntil?: string
-}
-
-export function ProductSchema({
-  name,
-  description,
-  price,
-  currency = 'USD',
-  priceValidUntil
-}: ProductSchemaProps) {
-  const schema = {
-    '@context': 'https://schema.org',
-    '@type': 'Product',
-    name,
-    description,
-    offers: {
-      '@type': 'Offer',
-      price,
-      priceCurrency: currency,
-      availability: 'https://schema.org/InStock',
-      priceValidUntil: priceValidUntil || new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
-    },
-    aggregateRating: {
-      '@type': 'AggregateRating',
-      ratingValue: '4.9',
-      reviewCount: '150'
+      default:
+        return null
     }
   }
 
-  return (
-    <Head>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
-      />
-    </Head>
-  )
-}
+  const schema = generateSchema()
 
-// ============================================================================
-// WebSite Schema (for sitelinks search box)
-// ============================================================================
-
-interface WebSiteSchemaProps {
-  name?: string
-  url?: string
-  potentialAction?: {
-    target: string
-    queryInput: string
-  }
-}
-
-export function WebSiteSchema({
-  name = 'Servio',
-  url = 'https://servio.com',
-  potentialAction = {
-    target: 'https://servio.com/search?q={search_term_string}',
-    queryInput: 'required name=search_term_string'
-  }
-}: WebSiteSchemaProps = {}) {
-  const schema = {
-    '@context': 'https://schema.org',
-    '@type': 'WebSite',
-    name,
-    url,
-    potentialAction: {
-      '@type': 'SearchAction',
-      target: potentialAction.target,
-      'query-input': potentialAction.queryInput
-    }
-  }
+  if (!schema) return null
 
   return (
     <Head>
@@ -352,31 +245,4 @@ export function WebSiteSchema({
   )
 }
 
-// ============================================================================
-// Combined Schema for Homepage
-// ============================================================================
-
-export function HomepageSchemas() {
-  return (
-    <>
-      <OrganizationSchema />
-      <WebSiteSchema />
-      <SoftwareSchema />
-    </>
-  )
-}
-
-// ============================================================================
-// Export all schemas
-// ============================================================================
-
-export default {
-  OrganizationSchema,
-  SoftwareSchema,
-  RestaurantSchema,
-  FAQSchema,
-  BreadcrumbSchema,
-  ProductSchema,
-  WebSiteSchema,
-  HomepageSchemas
-}
+export { StructuredData as default }

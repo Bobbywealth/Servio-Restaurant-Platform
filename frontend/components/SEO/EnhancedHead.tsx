@@ -1,293 +1,232 @@
-/**
- * Enhanced SEO Head Component
- * Comprehensive meta tags for SEO, Open Graph, and Twitter Cards
- * 
- * @see https://developers.google.com/search/docs/advanced/appearance/good-titles-snippets
- * @see https://ogp.me/
- */
-
+import React from 'react'
 import Head from 'next/head'
-import { useRouter } from 'next/router'
+import { StructuredData, RestaurantSchema, FAQPageSchema, BreadcrumbSchema } from './StructuredData'
 
-// ============================================================================
-// Type Definitions
-// ============================================================================
-
-interface SEOProps {
-  /** Page title (50-60 characters recommended) */
-  title?: string
-  /** Page description (150-160 characters recommended) */
-  description?: string
-  /** Canonical URL override */
-  canonicalUrl?: string
-  /** OG image URL (1200x630 recommended) */
-  image?: string
-  /** Page type for OG */
-  type?: 'website' | 'article' | 'product' | 'profile'
-  /** Article published time (for articles) */
-  publishedTime?: string
-  /** Article modified time (for articles) */
-  modifiedTime?: string
-  /** Author name */
-  author?: string
-  /** Keywords (less important but still useful) */
+export interface EnhancedSEOProps {
+  title: string
+  description: string
   keywords?: string[]
-  /** Noindex flag */
-  noindex?: boolean
-  /** No follow flag */
-  nofollow?: boolean
-  /** Site name override */
-  siteName?: string
-  /** Twitter card type */
-  twitterCard?: 'summary' | 'summary_large_image' | 'app' | 'player'
-  /** Locale override */
-  locale?: string
-  /** Alternate locales */
-  alternateLocales?: string[]
-  /** Site theme color */
-  themeColor?: string
+  canonicalUrl?: string
+  ogImage?: string
+  ogType?: 'website' | 'article' | 'product'
+  twitterCard?: 'summary' | 'summary_large_image'
+  noIndex?: boolean
+  noFollow?: boolean
+  author?: string
+  publishedTime?: string
+  modifiedTime?: string
+  section?: string
+  tags?: string[]
 }
 
-// ============================================================================
-// Default Values
-// ============================================================================
-
-const DEFAULTS = {
-  siteName: 'Servio',
-  siteUrl: 'https://servio.com',
-  defaultTitle: 'Servio - Restaurant Operating System | Voice-First Operations',
-  defaultDescription: 'Servio is a restaurant operating system that unifies orders, menu updates, marketing, inventory + receipts, staff operations, and integrations in one dashboard—with an AI assistant for fast, hands-free execution.',
-  defaultImage: '/images/servio_logo_transparent_tight.png',
-  twitterSite: '@servio',
-  themeColor: '#14b8a6',
-  locale: 'en_US'
-}
-
-// ============================================================================
-// Main SEO Component
-// ============================================================================
-
+/**
+ * EnhancedSEO Component
+ * 
+ * Provides comprehensive SEO meta tags including:
+ * - Basic meta tags (title, description, keywords)
+ * - Open Graph tags for social sharing
+ * - Twitter Card tags
+ * - Canonical URL
+ * - Robots directives
+ * - Article-specific metadata
+ */
 export function EnhancedSEO({
   title,
-  description = DEFAULTS.defaultDescription,
+  description,
+  keywords = [],
   canonicalUrl,
-  image,
-  type = 'website',
+  ogImage = '/images/og-default.png',
+  ogType = 'website',
+  twitterCard = 'summary_large_image',
+  noIndex = false,
+  noFollow = false,
+  author,
   publishedTime,
   modifiedTime,
-  author,
-  keywords,
-  noindex = false,
-  nofollow = false,
-  siteName = DEFAULTS.siteName,
-  twitterCard = 'summary_large_image',
-  locale = DEFAULTS.locale,
-  alternateLocales = [],
-  themeColor = DEFAULTS.themeColor
-}: SEOProps = {}) {
-  const router = useRouter()
-  
-  // Construct full URLs
-  const pageUrl = canonicalUrl || `${DEFAULTS.siteUrl}${router.asPath}`
-  const imageUrl = image?.startsWith('http') ? image : `${DEFAULTS.siteUrl}${image || DEFAULTS.defaultImage}`
-  
-  // Construct title with site name
-  const fullTitle = title 
-    ? `${title} | ${siteName}`
-    : DEFAULTS.defaultTitle
-  
-  // Construct robots directive
+  section,
+  tags = [],
+}: EnhancedSEOProps) {
+  const siteName = 'Servio'
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://servio.app'
+  const fullTitle = `${title} | ${siteName}`
+  const fullCanonicalUrl = canonicalUrl ? `${baseUrl}${canonicalUrl}` : undefined
+  const fullOgImage = ogImage.startsWith('http') ? ogImage : `${baseUrl}${ogImage}`
+
   const robotsContent = [
-    noindex ? 'noindex' : 'index',
-    nofollow ? 'nofollow' : 'follow',
+    noIndex ? 'noindex' : 'index',
+    noFollow ? 'nofollow' : 'follow',
     'max-snippet:-1',
     'max-image-preview:large',
-    'max-video-preview:-1'
+    'max-video-preview:-1',
   ].join(', ')
-  
+
   return (
     <Head>
       {/* Basic Meta Tags */}
       <title>{fullTitle}</title>
       <meta name="description" content={description} />
-      {keywords && keywords.length > 0 && (
+      {keywords.length > 0 && (
         <meta name="keywords" content={keywords.join(', ')} />
       )}
       {author && <meta name="author" content={author} />}
-      
-      {/* Robots */}
       <meta name="robots" content={robotsContent} />
-      <meta name="googlebot" content={robotsContent} />
       
       {/* Canonical URL */}
-      <link rel="canonical" href={pageUrl} />
-      
-      {/* Theme Color */}
-      <meta name="theme-color" content={themeColor} />
-      <meta name="msapplication-TileColor" content={themeColor} />
+      {fullCanonicalUrl && <link rel="canonical" href={fullCanonicalUrl} />}
       
       {/* Open Graph Tags */}
       <meta property="og:title" content={fullTitle} />
       <meta property="og:description" content={description} />
-      <meta property="og:type" content={type} />
-      <meta property="og:url" content={pageUrl} />
-      <meta property="og:image" content={imageUrl} />
+      <meta property="og:type" content={ogType} />
+      <meta property="og:site_name" content={siteName} />
+      <meta property="og:image" content={fullOgImage} />
       <meta property="og:image:width" content="1200" />
       <meta property="og:image:height" content="630" />
-      <meta property="og:site_name" content={siteName} />
-      <meta property="og:locale" content={locale} />
+      <meta property="og:image:alt" content={title} />
+      {fullCanonicalUrl && <meta property="og:url" content={fullCanonicalUrl} />}
       
-      {/* Article specific OG tags */}
-      {type === 'article' && publishedTime && (
+      {/* Article-specific OG tags */}
+      {ogType === 'article' && publishedTime && (
         <meta property="article:published_time" content={publishedTime} />
       )}
-      {type === 'article' && modifiedTime && (
+      {ogType === 'article' && modifiedTime && (
         <meta property="article:modified_time" content={modifiedTime} />
       )}
-      {type === 'article' && author && (
-        <meta property="article:author" content={author} />
+      {ogType === 'article' && section && (
+        <meta property="article:section" content={section} />
       )}
-      
-      {/* Alternate locales */}
-      {alternateLocales.map(locale => (
-        <link 
-          key={locale}
-          rel="alternate" 
-          hrefLang={locale} 
-          href={`${DEFAULTS.siteUrl}${router.pathname}`}
-        />
-      ))}
+      {ogType === 'article' && tags.length > 0 && (
+        tags.map((tag, index) => (
+          <meta key={index} property="article:tag" content={tag} />
+        ))
+      )}
       
       {/* Twitter Card Tags */}
       <meta name="twitter:card" content={twitterCard} />
-      <meta name="twitter:site" content={DEFAULTS.twitterSite} />
       <meta name="twitter:title" content={fullTitle} />
       <meta name="twitter:description" content={description} />
-      <meta name="twitter:image" content={imageUrl} />
+      <meta name="twitter:image" content={fullOgImage} />
+      <meta name="twitter:site" content="@servioapp" />
+      <meta name="twitter:creator" content="@servioapp" />
       
-      {/* Additional SEO Tags */}
-      <meta name="format-detection" content="telephone=no" />
-      <meta name="mobile-web-app-capable" content="yes" />
+      {/* Additional Meta Tags */}
+      <meta name="theme-color" content="#6366f1" />
+      <meta name="msapplication-TileColor" content="#6366f1" />
       <meta name="apple-mobile-web-app-capable" content="yes" />
       <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
       <meta name="apple-mobile-web-app-title" content={siteName} />
       
-      {/* Geo Tags (for local SEO) */}
-      <meta name="geo.region" content="US" />
-      <meta name="geo.placename" content="United States" />
+      {/* Preconnect to external domains */}
+      <link rel="preconnect" href="https://fonts.googleapis.com" />
+      <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+      
+      {/* DNS Prefetch */}
+      <link rel="dns-prefetch" href="https://www.googletagmanager.com" />
+      <link rel="dns-prefetch" href="https://www.google-analytics.com" />
     </Head>
   )
 }
 
-// ============================================================================
-// Specialized SEO Components
-// ============================================================================
+/**
+ * HomepageSchemas Component
+ * 
+ * Renders all relevant JSON-LD structured data schemas for the homepage
+ */
+export function HomepageSchemas() {
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://servio.app'
 
-interface ArticleSEOProps extends SEOProps {
-  publishedTime: string
-  modifiedTime?: string
-  author: string
-  section?: string
-  tags?: string[]
-}
+  const restaurantSchema: RestaurantSchema = {
+    name: 'Servio',
+    description: 'The premium, voice-first platform for restaurant teams. Servio unifies orders, inventory, staff operations, and communications into a single, beautiful app-like system.',
+    url: baseUrl,
+    logo: `${baseUrl}/images/servio_icon_tight.png`,
+    image: `${baseUrl}/images/og-default.png`,
+    telephone: '+1-555-123-4567',
+    email: 'hello@servio.app',
+    address: {
+      streetAddress: '123 Restaurant Way',
+      addressLocality: 'San Francisco',
+      addressRegion: 'CA',
+      postalCode: '94102',
+      addressCountry: 'US',
+    },
+    geo: {
+      latitude: 37.7749,
+      longitude: -122.4194,
+    },
+    openingHours: ['Mo-Fr 09:00-18:00'],
+    priceRange: '$$',
+    servesCuisine: ['Software', 'Restaurant Technology'],
+    aggregateRating: {
+      ratingValue: 4.9,
+      reviewCount: 200,
+    },
+    sameAs: [
+      'https://twitter.com/servioapp',
+      'https://linkedin.com/company/servio',
+      'https://facebook.com/servioapp',
+    ],
+  }
 
-export function ArticleSEO({
-  section,
-  tags = [],
-  ...props
-}: ArticleSEOProps) {
+  const breadcrumbSchema: BreadcrumbSchema = {
+    items: [
+      { name: 'Home', url: baseUrl },
+    ],
+  }
+
+  const faqSchema: FAQPageSchema = {
+    questions: [
+      {
+        question: 'What is Servio?',
+        answer: 'Servio is a restaurant operating system that unifies orders, menu updates, marketing, inventory, staff operations, and integrations in one dashboard—with an AI assistant for fast, hands-free execution.',
+      },
+      {
+        question: 'How does the voice assistant work?',
+        answer: 'Our AI voice assistant understands natural language commands. Simply speak to update menus, check inventory, manage orders, and more—all hands-free while you focus on running your restaurant.',
+      },
+      {
+        question: 'What integrations does Servio support?',
+        answer: 'Servio integrates with major POS systems, delivery platforms (UberEats, DoorDash, Grubhub), payment processors, and accounting software. We also offer an API for custom integrations.',
+      },
+      {
+        question: 'Is there a free trial?',
+        answer: 'Yes! We offer a 14-day free trial with full access to all features. No credit card required to start.',
+      },
+      {
+        question: 'How much does Servio cost?',
+        answer: 'Servio offers flexible pricing starting at $49/month for single locations. We also have Pro and Enterprise plans for growing restaurants and chains. Contact us for custom pricing.',
+      },
+    ],
+  }
+
   return (
     <>
-      <EnhancedSEO type="article" {...props} />
-      {section && (
-        <Head>
-          <meta property="article:section" content={section} />
-        </Head>
-      )}
-      {tags.map(tag => (
-        <Head key={tag}>
-          <meta property="article:tag" content={tag} />
-        </Head>
-      ))}
-    </>
-  )
-}
-
-interface ProductSEOProps extends SEOProps {
-  price: string
-  currency: string
-  availability: 'in_stock' | 'out_of_stock' | 'preorder'
-  brand?: string
-  sku?: string
-}
-
-export function ProductSEO({
-  price,
-  currency,
-  availability,
-  brand,
-  sku,
-  ...props
-}: ProductSEOProps) {
-  return (
-    <>
-      <EnhancedSEO type="product" {...props} />
+      <StructuredData type="restaurant" data={restaurantSchema} />
+      <StructuredData type="breadcrumb" data={breadcrumbSchema} />
+      <StructuredData type="faq" data={faqSchema} />
       <Head>
-        <meta property="product:price:amount" content={price} />
-        <meta property="product:price:currency" content={currency} />
-        <meta property="product:availability" content={availability} />
-        {brand && <meta property="product:brand" content={brand} />}
-        {sku && <meta property="product:retailer_item_id" content={sku} />}
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              '@context': 'https://schema.org',
+              '@type': 'WebSite',
+              name: 'Servio',
+              url: baseUrl,
+              potentialAction: {
+                '@type': 'SearchAction',
+                target: {
+                  '@type': 'EntryPoint',
+                  urlTemplate: `${baseUrl}/search?q={search_term_string}`,
+                },
+                'query-input': 'required name=search_term_string',
+              },
+            }),
+          }}
+        />
       </Head>
     </>
   )
 }
-
-// ============================================================================
-// Homepage SEO
-// ============================================================================
-
-export function HomepageSEO() {
-  return (
-    <EnhancedSEO
-      title="Restaurant Operating System | Voice-First Operations"
-      description="Servio is a restaurant operating system that unifies orders, menu updates, marketing, inventory, staff operations, and integrations in one dashboard—with an AI assistant for fast, hands-free execution."
-      keywords={[
-        'restaurant management software',
-        'restaurant POS',
-        'voice assistant for restaurants',
-        'restaurant operations',
-        'AI restaurant assistant',
-        'restaurant inventory management',
-        'staff scheduling software',
-        'restaurant marketing'
-      ]}
-    />
-  )
-}
-
-// ============================================================================
-// Dashboard Page SEO
-// ============================================================================
-
-interface DashboardSEOProps {
-  title: string
-  description?: string
-}
-
-export function DashboardSEO({ title, description }: DashboardSEOProps) {
-  return (
-    <EnhancedSEO
-      title={title}
-      description={description || `Manage ${title.toLowerCase()} with Servio's restaurant operating system.`}
-      noindex={true}
-      nofollow={true}
-    />
-  )
-}
-
-// ============================================================================
-// Export
-// ============================================================================
 
 export default EnhancedSEO
