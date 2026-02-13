@@ -23,10 +23,10 @@ export interface SocketEvents {
   'menu:user:joined': (data: { userId: string; userName: string; timestamp: Date }) => void
   'menu:user:left': (data: { userId: string; userName: string; timestamp: Date }) => void
   'menu:active:edits': (sessions: any[]) => void
-  'menu:edit:started': (data: { itemType: string; itemId: string; userId: string; userName: string; startedAt: Date }) => void
-  'menu:edit:ended': (data: { itemType: string; itemId: string; userId: string }) => void
-  'menu:edit:conflict': (data: { itemType: string; itemId: string; editingBy: { userId: string; userName: string }; startedAt: Date }) => void
-  'menu:updated': (data: { type: string; entityType: string; entityId: string; restaurantId: string; userId: string; userName: string; data?: any; timestamp: Date }) => void
+  'menu:edit:started': (data: { itemType: 'category' | 'item' | 'modifier'; itemId: string; userId: string; userName: string; startedAt: Date }) => void
+  'menu:edit:ended': (data: { itemType: 'category' | 'item' | 'modifier'; itemId: string; userId: string }) => void
+  'menu:edit:conflict': (data: { itemType: 'category' | 'item' | 'modifier'; itemId: string; editingBy: { userId: string; userName: string }; startedAt: Date }) => void
+  'menu:updated': (data: { type: 'create' | 'update' | 'delete' | 'reorder'; entityType: 'category' | 'item' | 'modifier'; entityId: string; restaurantId: string; userId: string; userName: string; data?: any; timestamp: Date }) => void
   'menu:cursor:update': (data: { userId: string; userName: string; field: string; position: number; timestamp: Date }) => void
 
   // Staff events
