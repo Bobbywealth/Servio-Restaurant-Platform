@@ -170,7 +170,19 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     return null;
   }
 
-  const allNavigation = [
+  // Navigation item type definition
+  interface NavItem {
+    name: string;
+    href: string;
+    icon: React.ComponentType<{ className?: string }>;
+    description: string;
+    color: string;
+    roles: string[];
+    section: string;
+    highlight?: boolean;
+  }
+
+  const allNavigation: NavItem[] = [
     // OPERATIONS SECTION
     {
       name: 'Dashboard',
