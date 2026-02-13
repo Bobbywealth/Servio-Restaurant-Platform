@@ -19,6 +19,16 @@ export interface SocketEvents {
   'inventory:low_stock': (data: { itemId: string; currentLevel: number; threshold: number }) => void
   'inventory:updated': (data: { itemId: string; newQuantity: number }) => void
 
+  // Menu collaboration events
+  'menu:user:joined': (data: { userId: string; userName: string; timestamp: Date }) => void
+  'menu:user:left': (data: { userId: string; timestamp: Date }) => void
+  'menu:active:edits': (sessions: any[]) => void
+  'menu:edit:started': (data: { itemType: string; itemId: string; userId: string; userName: string; startedAt: Date }) => void
+  'menu:edit:ended': (data: { itemType: string; itemId: string; userId: string }) => void
+  'menu:edit:conflict': (data: { itemType: string; itemId: string; editingBy: { userId: string; userName: string }; startedAt: Date }) => void
+  'menu:updated': (data: { type: string; entityType: string; entityId: string; restaurantId: string; userId: string; userName: string; data?: any; timestamp: Date }) => void
+  'menu:cursor:update': (data: { userId: string; userName: string; field: string; position: number; timestamp: Date }) => void
+
   // Staff events
   'staff:clock_in': (data: { userId: string; timestamp: Date }) => void
   'staff:clock_out': (data: { userId: string; timestamp: Date }) => void
