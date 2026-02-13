@@ -124,12 +124,16 @@ export interface ItemSizeResponse {
 }
 
 export interface CategoriesApiResponse {
-  data: MenuCategory[];
+  data: {
+    data: MenuCategory[];
+  };
 }
 
 export interface ItemsApiResponse {
   data: {
-    categories: CategoryGroupResponse[];
+    data: {
+      categories: CategoryGroupResponse[];
+    };
   };
 }
 
