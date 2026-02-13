@@ -200,35 +200,43 @@ export function useMenuData(options: UseMenuDataOptions = {}): UseMenuDataReturn
         }))
       : [],
     modifierGroups: Array.isArray(item.modifierGroups)
-      ? item.modifierGroups.map((mg: ModifierGroupResponse, mgIdx: number) => ({
-          ...mg,
-          id: mg.id,
-          name: mg.name,
-          selectionType: mg.selectionType || mg.selection_type || 'single',
-          minSelections: mg.minSelections ?? mg.min_selections ?? 0,
-          maxSelections: mg.maxSelections ?? mg.max_selections ?? null,
-          isRequired: mg.isRequired ?? mg.is_required ?? false,
-          displayOrder: mg.displayOrder ?? mgIdx,
-          assignmentLevel: mg.assignmentLevel || mg.assignment_level,
-          overrides: mg.overrides || {
-            overrideMin: mg.overrides?.overrideMin ?? null,
-            overrideMax: mg.overrides?.overrideMax ?? null,
-            overrideRequired: mg.overrides?.overrideRequired ?? null,
-            displayOrder: mg.displayOrder ?? mgIdx
-          },
-          options: Array.isArray(mg.options)
-            ? mg.options.map((opt: ModifierOptionResponse) => ({
-                id: opt.id,
-                name: opt.name,
-                description: opt.description,
-                priceDelta: Number(opt.price_delta ?? opt.priceDelta ?? 0),
-                isActive: opt.is_active ?? opt.isActive ?? true,
-                isSoldOut: Boolean(opt.isSoldOut ?? opt.is_sold_out),
-                isPreselected: Boolean(opt.isPreselected ?? opt.is_preselected),
-                displayOrder: opt.displayOrder ?? opt.display_order ?? 0
-              }))
-            : []
-        }))
+      ? item.modifierGroups.map((mg: ModifierGroupResponse, mgIdx: number) => {
+          const overrides = mg.overrides || {
+            overrideMin: null as number | null,
+            overrideMax: null as number | null,
+            overrideRequired: null as boolean | null,
+            displayOrder: mgIdx
+          };
+          return {
+            ...mg,
+            id: mg.id,
+            name: mg.name,
+            selectionType: mg.selectionType || mg.selection_type || 'single',
+            minSelections: mg.minSelections ?? mg.min_selections ?? 0,
+            maxSelections: mg.maxSelections ?? mg.max_selections ?? null,
+            isRequired: mg.isRequired ?? mg.is_required ?? false,
+            displayOrder: mg.displayOrder ?? mgIdx,
+            assignmentLevel: mg.assignmentLevel || mg.assignment_level,
+            overrides: {
+              overrideMin: overrides.overrideMin ?? null,
+              overrideMax: overrides.overrideMax ?? null,
+              overrideRequired: overrides.overrideRequired ?? null,
+              displayOrder: mg.displayOrder ?? mgIdx
+            },
+            options: Array.isArray(mg.options)
+              ? mg.options.map((opt: ModifierOptionResponse) => ({
+                  id: opt.id,
+                  name: opt.name,
+                  description: opt.description,
+                  priceDelta: Number(opt.price_delta ?? opt.priceDelta ?? 0),
+                  isActive: opt.is_active ?? opt.isActive ?? true,
+                  isSoldOut: Boolean(opt.isSoldOut ?? opt.is_sold_out),
+                  isPreselected: Boolean(opt.isPreselected ?? opt.is_preselected),
+                  displayOrder: opt.displayOrder ?? opt.display_order ?? 0
+                }))
+              : []
+          };
+        })
       : []
   }), []);
 
