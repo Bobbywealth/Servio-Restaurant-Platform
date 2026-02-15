@@ -222,13 +222,13 @@ interface StatusMessageProps {
   children?: React.ReactNode
 }
 
-export function StatusMessage({ 
-  message, 
-  type = 'info', 
+export function StatusMessage({
+  message,
+  type = 'info',
   announce = true,
-  children 
+  children
 }: StatusMessageProps) {
-  const { announce: doAnnounce } = useAnnounce()
+  const { announce: doAnnounce } = useAnnouncer()
   
   useEffect(() => {
     if (announce) {
