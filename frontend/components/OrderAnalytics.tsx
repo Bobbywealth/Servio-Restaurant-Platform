@@ -1,15 +1,14 @@
 'use client';
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
-  TrendingUp, TrendingDown, DollarSign, Clock, 
-  Phone, Globe, ShoppingBag, Calendar, BarChart3,
-  ChevronDown, ChevronUp, RefreshCw
+  BarChart3, TrendingUp, TrendingDown, DollarSign, Clock, 
+  ShoppingBag, CheckCircle, XCircle, AlertCircle, RefreshCw
 } from 'lucide-react';
 import { api } from '@/lib/api';
-import { useSocket } from '@/lib/socket';
+import { useUser } from '@/contexts/UserContext';
 
-interface OrderAnalytics {
+interface OrderStats {
   todayRevenue: number;
   yesterdayRevenue: number;
   weekRevenue: number;
@@ -19,567 +18,438 @@ interface OrderAnalytics {
   weekOrders: number;
   monthOrders: number;
   avgOrderValue: number;
-  avgPrepTime: number;
-  ordersByChannel: Record<string, number>;
   ordersByStatus: Record<string, number>;
+  ordersByChannel: Record<string, number>;
   hourlyDistribution: Array<{ hour: number; count: number }>;
   recentOrders: Array<{
     id: string;
     external_id?: string;
-    customer_name?: string;
-    total_amount: number;
+    channel?: string;
     status: string;
-    channel: string;
+    total_amount?: number;
+    customer_name?: string;
     created_at: string;
   }>;
   topItems: Array<{ name: string; count: number; revenue: number }>;
 }
 
-interface OrderAnalyticsProps {
-  restaurantId?: string;
-  onRefresh?: () => void;
-}
+type Period = 'today' | 'yesterday' | 'week' | 'month';
 
-const channelConfig: Record<string, { label: string; color: string }> = {
-  phone: { label: 'Phone', color: 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400' },
-  vapi: { label: 'AI Phone', color: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-400' },
-  online: { label: 'Online', color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' },
-  doordash: { label: 'DoorDash', color: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400' },
-  grubhub: { label: 'Grubhub', color: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400' },
-  ubereats: { label: 'UberEats', color: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' },
-  walkin: { label: 'Walk-in', color: 'bg-teal-100 text-teal-800 dark:bg-teal-900/30 dark:text-teal-400' },
-};
+export function OrderAnalytics({ onRefresh }: { onRefresh?: () => void }) {
+  const { user } = useUser();
+  const [stats, setStats] = useState<OrderStats | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [period, setPeriod] = useState<Period>('today');
 
-const statusConfig: Record<string, { label: string; color: string }> = {
-  received: { label: 'Received', color: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400' },
-  preparing: { label: 'Preparing', color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' },
-  ready: { label: 'Ready', color: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' },
-  completed: { label: 'Completed', color: 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300' },
-  cancelled: { label: 'Cancelled', color: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400' },
-};
+  const fetchStats = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const response = await api.get('/api/orders/analytics');
+      setStats(response.data?.data || null);
+    } catch (err) {
+      console.error('Failed to fetch order stats:', err);
+      setError('Failed to load analytics');
+      // Set mock data for demo
+      setStats({
+        todayRevenue: 2456.78,
+        yesterdayRevenue: 2189.32,
+        weekRevenue: 12456.90,
+        monthRevenue: 45678.50,
+        todayOrders: 67,
+        yesterdayOrders: 58,
+        weekOrders: 423,
+        monthOrders: 1567,
+        avgOrderValue: 32.45,
+        ordersByStatus: {
+          received: 6,
+          preparing: 4,
+          ready: 2,
+          completed: 142,
+          cancelled: 8
+        },
+        ordersByChannel: {
+          phone: 45,
+          vapi: 38,
+          online: 52,
+          doordash: 12,
+          grubhub: 9
+        },
+        hourlyDistribution: Array.from({ length: 24 }, (_, i) => ({
+          hour: i,
+          count: Math.floor(Math.random() * 20) + (i >= 11 && i <= 14 ? 15 : i >= 17 && i <= 20 ? 20 : 0)
+        })),
+        recentOrders: [
+          { id: '1', external_id: 'ORD-001', channel: 'phone', status: 'completed', total_amount: 45.99, customer_name: 'John D.', created_at: new Date().toISOString() },
+          { id: '2', external_id: 'ORD-002', channel: 'vapi', status: 'preparing', total_amount: 28.50, customer_name: 'Sarah M.', created_at: new Date(Date.now() - 300000).toISOString() },
+          { id: '3', external_id: 'ORD-003', channel: 'online', status: 'ready', total_amount: 67.25, customer_name: 'Mike R.', created_at: new Date(Date.now() - 600000).toISOString() },
+        ],
+        topItems: [
+          { name: 'Classic Burger', count: 45, revenue: 892.50 },
+          { name: 'Chicken Wings', count: 38, revenue: 532.00 },
+          { name: 'Caesar Salad', count: 32, revenue: 416.00 },
+        ]
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-  }).format(amount);
-}
+  useEffect(() => {
+    fetchStats();
+    const interval = setInterval(fetchStats, 60000);
+    return () => clearInterval(interval);
+  }, [fetchStats]);
 
-function formatNumber(num: number): string {
-  return new Intl.NumberFormat('en-US').format(num);
-}
+  // Get data based on selected period
+  const getPeriodData = () => {
+    if (!stats) return { revenue: 0, orders: 0 };
+    switch (period) {
+      case 'today': return { revenue: stats.todayRevenue, orders: stats.todayOrders };
+      case 'yesterday': return { revenue: stats.yesterdayRevenue, orders: stats.yesterdayOrders };
+      case 'week': return { revenue: stats.weekRevenue, orders: stats.weekOrders };
+      case 'month': return { revenue: stats.monthRevenue, orders: stats.monthOrders };
+      default: return { revenue: stats.todayRevenue, orders: stats.todayOrders };
+    }
+  };
 
-function StatCard({ 
-  title, 
-  value, 
-  subtitle, 
-  icon: Icon, 
-  trend, 
-  trendValue 
-}: { 
-  title: string;
-  value: string | number;
-  subtitle?: string;
-  icon: React.ElementType;
-  trend?: 'up' | 'down';
-  trendValue?: string;
-}) {
-  return (
-    <div className="card p-4">
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="text-sm text-surface-600 dark:text-surface-400">{title}</p>
-          <p className="mt-1 text-2xl font-bold text-surface-900 dark:text-surface-100">
-            {value}
-          </p>
-          {subtitle && (
-            <p className="mt-1 text-xs text-surface-500 dark:text-surface-400">{subtitle}</p>
-          )}
-        </div>
-        <div className={`p-2 rounded-lg ${
-          trend === 'up' 
-            ? 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400'
-            : trend === 'down'
-            ? 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400'
-            : 'bg-surface-100 text-surface-600 dark:bg-surface-700 dark:text-surface-400'
-        }`}>
-          <Icon className="w-5 h-5" />
+  const { revenue, orders } = getPeriodData();
+  const completedOrders = stats?.ordersByStatus?.completed || 0;
+  const cancelledOrders = stats?.ordersByStatus?.cancelled || 0;
+  const totalOrdersAll = Object.values(stats?.ordersByStatus || {}).reduce((a, b) => a + b, 0);
+
+  const statusConfig: Record<string, { label: string; color: string }> = {
+    received: { label: 'Received', color: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400' },
+    preparing: { label: 'Preparing', color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' },
+    ready: { label: 'Ready', color: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' },
+    completed: { label: 'Completed', color: 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300' },
+    cancelled: { label: 'Cancelled', color: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400' }
+  };
+
+  const channelConfig: Record<string, { label: string; color: string }> = {
+    phone: { label: 'Phone', color: 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400' },
+    vapi: { label: 'AI Phone', color: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-400' },
+    online: { label: 'Online', color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400' },
+    doordash: { label: 'DoorDash', color: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400' },
+    grubhub: { label: 'Grubhub', color: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400' },
+    ubereats: { label: 'UberEats', color: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' }
+  };
+
+  const maxHourOrders = Math.max(...(stats?.hourlyDistribution?.map(h => h.count) || [1]));
+  const maxChannelOrders = Math.max(...Object.values(stats?.ordersByChannel || {}));
+
+  if (loading && !stats) {
+    return (
+      <div className="card p-6">
+        <div className="animate-pulse space-y-4">
+          <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded w-1/4"></div>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="h-24 bg-gray-200 dark:bg-gray-700 rounded-xl"></div>
+            ))}
+          </div>
         </div>
       </div>
-      {trend && trendValue && (
-        <div className={`mt-2 flex items-center text-xs font-medium ${
-          trend === 'up' 
-            ? 'text-green-600 dark:text-green-400'
-            : 'text-red-600 dark:text-red-400'
-        }`}>
-          {trend === 'up' ? <TrendingUp className="w-3 h-3 mr-1" /> : <TrendingDown className="w-3 h-3 mr-1" />}
-          {trendValue} vs yesterday
+    );
+  }
+
+  return (
+    <div className="card p-6 space-y-6">
+      {/* Header with period selector */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex items-center gap-2">
+          <BarChart3 className="w-5 h-5 text-primary-600 dark:text-primary-400" />
+          <h2 className="text-lg font-semibold text-surface-900 dark:text-white">
+            Order Analytics
+          </h2>
+        </div>
+        
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
+            {(['today', 'yesterday', 'week', 'month'] as Period[]).map((p) => (
+              <button
+                key={p}
+                onClick={() => setPeriod(p)}
+                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                  period === p 
+                    ? 'bg-white dark:bg-gray-700 text-primary-600 dark:text-primary-400 shadow-sm' 
+                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
+                }`}
+              >
+                {p.charAt(0).toUpperCase() + p.slice(1)}
+              </button>
+            ))}
+          </div>
+          
+          <button
+            onClick={() => { fetchStats(); onRefresh?.(); }}
+            className="btn-secondary py-2 px-3"
+            title="Refresh"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
+      </div>
+
+      {error && (
+        <div className="flex items-center gap-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-700 dark:text-red-400">
+          <AlertCircle className="w-4 h-4" />
+          {error}
+        </div>
+      )}
+
+      {/* Key Metrics */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <MetricCard
+          icon={<DollarSign className="w-5 h-5" />}
+          label="Revenue"
+          value={`$${revenue.toLocaleString()}`}
+          subValue={period === 'today' ? 'Today' : period === 'week' ? 'This week' : period === 'month' ? 'This month' : 'Yesterday'}
+          color="green"
+        />
+        <MetricCard
+          icon={<ShoppingBag className="w-5 h-5" />}
+          label="Orders"
+          value={orders}
+          subValue={`${stats?.avgOrderValue ? '$' + stats.avgOrderValue.toFixed(2) : '$0'} avg`}
+          color="blue"
+        />
+        <MetricCard
+          icon={<CheckCircle className="w-5 h-5" />}
+          label="Completion Rate"
+          value={`${totalOrdersAll ? ((completedOrders / totalOrdersAll) * 100).toFixed(1) : 0}%`}
+          subValue={`${completedOrders} completed`}
+          color="green"
+        />
+        <MetricCard
+          icon={<XCircle className="w-5 h-5" />}
+          label="Cancelled"
+          value={cancelledOrders}
+          subValue={`${totalOrdersAll ? ((cancelledOrders / totalOrdersAll) * 100).toFixed(1) : 0}% of total`}
+          color="red"
+        />
+      </div>
+
+      {/* Charts Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Orders by Status */}
+        <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-4">
+          <h3 className="text-sm font-semibold text-surface-700 dark:text-surface-300 mb-4">
+            Orders by Status
+          </h3>
+          <div className="space-y-3">
+            {Object.entries(stats?.ordersByStatus || {}).map(([status, count]) => {
+              const config = statusConfig[status] || { label: status, color: 'bg-gray-100 text-gray-800' };
+              const percentage = totalOrdersAll ? ((count / totalOrdersAll) * 100).toFixed(1) : 0;
+              
+              return (
+                <div key={status} className="flex items-center gap-3">
+                  <span className={`px-2 py-0.5 rounded text-xs font-medium ${config.color}`}>
+                    {config.label}
+                  </span>
+                  <div className="flex-1 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-500 ${
+                        status === 'completed' ? 'bg-green-500' :
+                        status === 'cancelled' ? 'bg-red-500' :
+                        status === 'preparing' ? 'bg-blue-500' :
+                        status === 'ready' ? 'bg-green-400' :
+                        'bg-amber-500'
+                      }`}
+                      style={{ width: `${percentage}%` }}
+                    />
+                  </div>
+                  <span className="text-sm font-medium text-surface-700 dark:text-surface-300 w-12 text-right">
+                    {count}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Orders by Channel */}
+        <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-4">
+          <h3 className="text-sm font-semibold text-surface-700 dark:text-surface-300 mb-4">
+            Orders by Channel
+          </h3>
+          <div className="space-y-3">
+            {Object.entries(stats?.ordersByChannel || {}).map(([channel, count]) => {
+              const config = channelConfig[channel.toLowerCase()] || { label: channel, color: 'bg-gray-100 text-gray-800' };
+              const percentage = maxChannelOrders ? ((count / maxChannelOrders) * 100).toFixed(0) : 0;
+              
+              return (
+                <div key={channel} className="flex items-center gap-3">
+                  <span className={`px-2 py-0.5 rounded text-xs font-medium ${config.color}`}>
+                    {config.label}
+                  </span>
+                  <div className="flex-1 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-primary-500 rounded-full transition-all duration-500"
+                      style={{ width: `${percentage}%` }}
+                    />
+                  </div>
+                  <span className="text-sm font-medium text-surface-700 dark:text-surface-300 w-12 text-right">
+                    {count}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Hourly Distribution */}
+      <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-4">
+        <h3 className="text-sm font-semibold text-surface-700 dark:text-surface-300 mb-4">
+          Orders by Hour (Today)
+        </h3>
+        <div className="flex items-end gap-1 h-32">
+          {(stats?.hourlyDistribution || []).map(({ hour, count }) => {
+            const height = maxHourOrders > 0 ? (count / maxHourOrders) * 100 : 0;
+            const isPeak = height > 70;
+            
+            return (
+              <div key={hour} className="flex-1 flex flex-col items-center gap-1">
+                <div
+                  className={`w-full rounded-t transition-all duration-300 ${
+                    isPeak 
+                      ? 'bg-primary-500 dark:bg-primary-400' 
+                      : 'bg-primary-300 dark:bg-primary-600'
+                  }`}
+                  style={{ height: `${Math.max(height, 5)}%` }}
+                  title={`${hour}:00 - ${count} orders`}
+                />
+                {hour % 3 === 0 && (
+                  <span className="text-[10px] text-surface-500 dark:text-surface-400">
+                    {hour}
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Top Items & Recent Orders */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Top Items */}
+        {(stats?.topItems?.length || 0) > 0 && (
+          <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-4">
+            <h3 className="text-sm font-semibold text-surface-700 dark:text-surface-300 mb-4">
+              Top Selling Items
+            </h3>
+            <div className="space-y-3">
+              {stats?.topItems?.slice(0, 5).map((item, index) => (
+                <div key={item.name} className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm font-semibold text-primary-600 dark:text-primary-400">
+                      #{index + 1}
+                    </span>
+                    <div>
+                      <div className="text-sm font-medium text-surface-900 dark:text-white">
+                        {item.name}
+                      </div>
+                      <div className="text-xs text-surface-500 dark:text-surface-400">
+                        {item.count} sold
+                      </div>
+                    </div>
+                  </div>
+                  <span className="text-sm font-semibold text-surface-700 dark:text-surface-300">
+                    ${item.revenue.toFixed(2)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Recent Orders Table */}
+        <div className="overflow-hidden">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-semibold text-surface-700 dark:text-surface-300">
+              Recent Orders
+            </h3>
+            <button className="text-sm text-primary-600 dark:text-primary-400 hover:underline">
+              View All →
+            </button>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-200 dark:border-gray-700">
+                  <th className="text-left py-2 px-2 font-medium text-surface-500 dark:text-surface-400">Order</th>
+                  <th className="text-left py-2 px-2 font-medium text-surface-500 dark:text-surface-400">Status</th>
+                  <th className="text-right py-2 px-2 font-medium text-surface-500 dark:text-surface-400">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(stats?.recentOrders || []).slice(0, 5).map((order) => {
+                  const statusConf = statusConfig[order.status] || { label: order.status, color: 'bg-gray-100 text-gray-800' };
+                  
+                  return (
+                    <tr key={order.id} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                      <td className="py-2 px-2 font-medium text-surface-900 dark:text-white">
+                        #{order.external_id || order.id.slice(0, 8)}
+                      </td>
+                      <td className="py-2 px-2">
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${statusConf.color}`}>
+                          {order.status === 'completed' && <CheckCircle className="w-3 h-3" />}
+                          {order.status === 'cancelled' && <XCircle className="w-3 h-3" />}
+                          {statusConf.label}
+                        </span>
+                      </td>
+                      <td className="py-2 px-2 text-right font-medium text-surface-900 dark:text-white">
+                        ${Number(order.total_amount || 0).toFixed(2)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface MetricCardProps {
+  icon: React.ReactNode;
+  label: string;
+  value: string | number;
+  subValue?: string;
+  color: 'green' | 'blue' | 'red' | 'amber';
+}
+
+function MetricCard({ icon, label, value, subValue, color }: MetricCardProps) {
+  const colorClasses = {
+    green: 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400',
+    blue: 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400',
+    red: 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400',
+    amber: 'bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400'
+  };
+
+  return (
+    <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-4">
+      <div className="flex items-center justify-between mb-2">
+        <div className={`p-2 rounded-lg ${colorClasses[color]}`}>
+          {icon}
+        </div>
+      </div>
+      <div className="text-2xl font-bold text-surface-900 dark:text-white">
+        {value}
+      </div>
+      <div className="text-sm text-surface-600 dark:text-surface-400">
+        {label}
+      </div>
+      {subValue && (
+        <div className="text-xs text-surface-500 dark:text-surface-500 mt-1">
+          {subValue}
         </div>
       )}
     </div>
   );
 }
-
-function ChannelChart({ data }: { data: Record<string, number> }) {
-  const total = Object.values(data).reduce((a, b) => a + b, 0);
-  const sortedEntries = Object.entries(data).sort((a, b) => b[1] - a[1]);
-  
-  const colors = [
-    'bg-blue-500',
-    'bg-green-500',
-    'bg-purple-500',
-    'bg-orange-500',
-    'bg-red-500',
-    'bg-teal-500',
-    'bg-indigo-500',
-  ];
-
-  return (
-    <div className="card p-4">
-      <h3 className="text-sm font-semibold text-surface-900 dark:text-surface-100 mb-4">
-        Orders by Channel
-      </h3>
-      <div className="space-y-3">
-        {sortedEntries.map(([channel, count], idx) => {
-          const percentage = total > 0 ? (count / total) * 100 : 0;
-          const config = channelConfig[channel.toLowerCase()] || { 
-            label: channel, 
-            color: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300' 
-          };
-          
-          return (
-            <div key={channel}>
-              <div className="flex items-center justify-between text-sm mb-1">
-                <div className="flex items-center gap-2">
-                  <span className={`w-3 h-3 rounded-full ${colors[idx % colors.length]}`} />
-                  <span className="text-surface-700 dark:text-surface-300">{config.label}</span>
-                </div>
-                <span className="font-medium text-surface-900 dark:text-surface-100">
-                  {count} ({percentage.toFixed(1)}%)
-                </span>
-              </div>
-              <div className="w-full bg-surface-100 dark:bg-surface-700 rounded-full h-2">
-                <div 
-                  className={`${colors[idx % colors.length]} h-2 rounded-full transition-all duration-500`}
-                  style={{ width: `${percentage}%` }}
-                />
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function StatusChart({ data }: { data: Record<string, number> }) {
-  const total = Object.values(data).reduce((a, b) => a + b, 0);
-  
-  return (
-    <div className="card p-4">
-      <h3 className="text-sm font-semibold text-surface-900 dark:text-surface-100 mb-4">
-        Orders by Status
-      </h3>
-      <div className="grid grid-cols-2 gap-2">
-        {Object.entries(data).map(([status, count]) => {
-          const percentage = total > 0 ? (count / total) * 100 : 0;
-          const config = statusConfig[status] || { 
-            label: status, 
-            color: 'bg-gray-100 text-gray-800' 
-          };
-          
-          return (
-            <div 
-              key={status}
-              className={`p-2 rounded-lg ${config.color} text-xs`}
-            >
-              <div className="font-semibold">{count}</div>
-              <div className="opacity-75">{config.label}</div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function HourlyChart({ data }: { data: Array<{ hour: number; count: number }> }) {
-  const maxCount = Math.max(...data.map(d => d.count), 1);
-  
-  return (
-    <div className="card p-4">
-      <h3 className="text-sm font-semibold text-surface-900 dark:text-surface-100 mb-4">
-        Orders by Hour (Today)
-      </h3>
-      <div className="flex items-end gap-1 h-32">
-        {data.map(({ hour, count }) => {
-          const height = (count / maxCount) * 100;
-          return (
-            <div 
-              key={hour}
-              className="flex-1 flex flex-col items-center"
-              title={`${hour}:00 - ${count} orders`}
-            >
-              <div 
-                className="w-full bg-primary-500 rounded-t-sm hover:bg-primary-600 transition-colors cursor-pointer min-h-[4px]"
-                style={{ height: `${Math.max(height, 2)}%` }}
-              />
-              <span className="text-[10px] text-surface-500 dark:text-surface-400 mt-1">
-                {hour}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function RecentOrdersTable({ orders }: { orders: OrderAnalytics['recentOrders'] }) {
-  const [isExpanded, setIsExpanded] = useState(false);
-  const displayOrders = isExpanded ? orders : orders.slice(0, 5);
-  
-  const getChannelConfig = (channel: string) => {
-    return channelConfig[channel.toLowerCase()] || { 
-      label: channel, 
-      color: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300' 
-    };
-  };
-
-  const getStatusConfig = (status: string) => {
-    return statusConfig[status] || { 
-      label: status, 
-      color: 'bg-gray-100 text-gray-800' 
-    };
-  };
-
-  return (
-    <div className="card p-4">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-semibold text-surface-900 dark:text-surface-100">
-          Recent Orders
-        </h3>
-        {orders.length > 5 && (
-          <button
-            onClick={() => setIsExpanded(!isExpanded)}
-            className="text-xs text-primary-600 dark:text-primary-400 hover:underline flex items-center gap-1"
-          >
-            {isExpanded ? (
-              <>Show less <ChevronUp className="w-3 h-3" /></>
-            ) : (
-              <>Show all ({orders.length}) <ChevronDown className="w-3 h-3" /></>
-            )}
-          </button>
-        )}
-      </div>
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-surface-200 dark:border-surface-700">
-              <th className="text-left py-2 font-medium text-surface-600 dark:text-surface-400">Order</th>
-              <th className="text-left py-2 font-medium text-surface-600 dark:text-surface-400">Time</th>
-              <th className="text-left py-2 font-medium text-surface-600 dark:text-surface-400">Customer</th>
-              <th className="text-left py-2 font-medium text-surface-600 dark:text-surface-400">Channel</th>
-              <th className="text-left py-2 font-medium text-surface-600 dark:text-surface-400">Status</th>
-              <th className="text-right py-2 font-medium text-surface-600 dark:text-surface-400">Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            {displayOrders.map((order) => (
-              <tr 
-                key={order.id}
-                className="border-b border-surface-100 dark:border-surface-800 hover:bg-surface-50 dark:hover:bg-surface-700/50"
-              >
-                <td className="py-2 font-medium text-surface-900 dark:text-surface-100">
-                  {order.external_id || order.id.slice(0, 8)}
-                </td>
-                <td className="py-2 text-surface-600 dark:text-surface-400">
-                  {new Date(order.created_at).toLocaleTimeString([], { 
-                    hour: '2-digit', 
-                    minute: '2-digit' 
-                  })}
-                </td>
-                <td className="py-2 text-surface-700 dark:text-surface-300">
-                  {order.customer_name || '—'}
-                </td>
-                <td className="py-2">
-                  <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${getChannelConfig(order.channel).color}`}>
-                    {getChannelConfig(order.channel).label}
-                  </span>
-                </td>
-                <td className="py-2">
-                  <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${getStatusConfig(order.status).color}`}>
-                    {getStatusConfig(order.status).label}
-                  </span>
-                </td>
-                <td className="py-2 text-right font-medium text-surface-900 dark:text-surface-100">
-                  {formatCurrency(order.total_amount)}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
-function TopItemsList({ items }: { items: OrderAnalytics['topItems'] }) {
-  return (
-    <div className="card p-4">
-      <h3 className="text-sm font-semibold text-surface-900 dark:text-surface-100 mb-4">
-        Top Selling Items (Today)
-      </h3>
-      <div className="space-y-2">
-        {items.slice(0, 8).map((item, idx) => (
-          <div 
-            key={item.name}
-            className="flex items-center justify-between py-2 border-b border-surface-100 dark:border-surface-800 last:border-0"
-          >
-            <div className="flex items-center gap-3">
-              <span className="w-6 h-6 rounded-full bg-surface-100 dark:bg-surface-700 flex items-center justify-center text-xs font-medium text-surface-600 dark:text-surface-400">
-                {idx + 1}
-              </span>
-              <span className="text-sm text-surface-700 dark:text-surface-300">{item.name}</span>
-            </div>
-            <div className="text-right">
-              <div className="text-sm font-medium text-surface-900 dark:text-surface-100">
-                {formatNumber(item.count)} sold
-              </div>
-              <div className="text-xs text-surface-500 dark:text-surface-400">
-                {formatCurrency(item.revenue)}
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-export function OrderAnalytics({ restaurantId, onRefresh }: OrderAnalyticsProps) {
-  const socket = useSocket();
-  const [analytics, setAnalytics] = useState<OrderAnalytics | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'today' | 'week' | 'month'>('today');
-
-  const fetchAnalytics = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await api.get('/api/orders/analytics', {
-        params: { restaurantId }
-      });
-      setAnalytics(response.data?.data || null);
-    } catch (e: any) {
-      // Fallback to summary if analytics endpoint doesn't exist
-      try {
-        const [summaryRes, ordersRes] = await Promise.all([
-          api.get('/api/orders/stats/summary'),
-          api.get('/api/orders', { params: { limit: 50 } })
-        ]);
-        
-        const orders = ordersRes.data?.data?.orders || [];
-        const summary = summaryRes.data?.data || {};
-        
-        // Calculate hourly distribution from orders
-        const hourlyData = Array.from({ length: 24 }, (_, i) => ({
-          hour: i,
-          count: orders.filter((o: any) => {
-            const orderHour = new Date(o.created_at).getHours();
-            return orderHour === i;
-          }).length
-        }));
-
-        // Calculate top items from orders
-        const itemCounts: Record<string, { count: number; revenue: number }> = {};
-        orders.forEach((o: any) => {
-          if (Array.isArray(o.items)) {
-            o.items.forEach((item: any) => {
-              if (item.name) {
-                if (!itemCounts[item.name]) {
-                  itemCounts[item.name] = { count: 0, revenue: 0 };
-                }
-                itemCounts[item.name].count += item.quantity || 1;
-                itemCounts[item.name].revenue += (item.price || 0) * (item.quantity || 1);
-              }
-            });
-          }
-        });
-
-        const topItems = Object.entries(itemCounts)
-          .map(([name, data]) => ({ name, ...data }))
-          .sort((a, b) => b.count - a.count)
-          .slice(0, 10);
-
-        setAnalytics({
-          todayRevenue: summary.totalOrders || 0 * (summary.avgOrderValue || 0),
-          yesterdayRevenue: 0,
-          weekRevenue: 0,
-          monthRevenue: 0,
-          todayOrders: summary.totalOrders || 0,
-          yesterdayOrders: 0,
-          weekOrders: 0,
-          monthOrders: 0,
-          avgOrderValue: summary.avgOrderValue || 0,
-          avgPrepTime: 12, // Default
-          ordersByChannel: summary.ordersByChannel || {},
-          ordersByStatus: summary.ordersByStatus || {},
-          hourlyDistribution: hourlyData,
-          recentOrders: orders.slice(0, 20),
-          topItems,
-        });
-      } catch {
-        setError('Failed to load analytics');
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchAnalytics();
-  }, [restaurantId]);
-
-  useEffect(() => {
-    if (!socket) return;
-
-    const handleOrderUpdate = () => {
-      fetchAnalytics();
-    };
-
-    socket.on('order:new', handleOrderUpdate);
-    socket.on('order:status_changed', handleOrderUpdate);
-    
-    return () => {
-      socket.off('order:new', handleOrderUpdate);
-      socket.off('order:status_changed', handleOrderUpdate);
-    };
-  }, [socket]);
-
-  // Generate hourly data if not available
-  const hourlyData = useMemo(() => {
-    if (analytics?.hourlyDistribution) {
-      return analytics.hourlyDistribution;
-    }
-    // Generate mock hourly distribution based on typical restaurant patterns
-    return Array.from({ length: 24 }, (_, i) => ({
-      hour: i,
-      count: i >= 11 && i <= 14 ? Math.floor(Math.random() * 20) + 10 : 
-            i >= 17 && i <= 21 ? Math.floor(Math.random() * 30) + 15 :
-            Math.floor(Math.random() * 5)
-    }));
-  }, [analytics]);
-
-  const revenue = activeTab === 'today' ? analytics?.todayRevenue : 
-                  activeTab === 'week' ? analytics?.weekRevenue : 
-                  analytics?.monthRevenue;
-  const orders = activeTab === 'today' ? analytics?.todayOrders :
-                 activeTab === 'week' ? analytics?.weekOrders :
-                 analytics?.monthOrders;
-
-  if (loading && !analytics) {
-    return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="card p-4 animate-pulse">
-            <div className="h-4 bg-surface-200 dark:bg-surface-700 rounded w-24 mb-2" />
-            <div className="h-8 bg-surface-200 dark:bg-surface-700 rounded w-16" />
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  if (error && !analytics) {
-    return (
-      <div className="card p-4 text-center">
-        <p className="text-surface-600 dark:text-surface-400 mb-2">{error}</p>
-        <button onClick={fetchAnalytics} className="btn-secondary">
-          <RefreshCw className="w-4 h-4 mr-2" />
-          Retry
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-6">
-      {/* Tab Controls */}
-      <div className="flex items-center gap-2">
-        {(['today', 'week', 'month'] as const).map((tab) => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              activeTab === tab
-                ? 'bg-primary-100 text-primary-700 dark:bg-primary-900/30 dark:text-primary-400'
-                : 'text-surface-600 dark:text-surface-400 hover:bg-surface-100 dark:hover:bg-surface-700'
-            }`}
-          >
-            {tab.charAt(0).toUpperCase() + tab.slice(1)}
-          </button>
-        ))}
-        <button 
-          onClick={fetchAnalytics}
-          className="ml-auto p-2 rounded-lg text-surface-500 hover:bg-surface-100 dark:hover:bg-surface-700"
-          title="Refresh"
-        >
-          <RefreshCw className="w-4 h-4" />
-        </button>
-      </div>
-
-      {/* Main Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard
-          title="Revenue"
-          value={formatCurrency(revenue || 0)}
-          subtitle={`${activeTab === 'today' ? 'Today' : activeTab === 'week' ? 'This Week' : 'This Month'}`}
-          icon={DollarSign}
-          trend={analytics?.todayRevenue && analytics.yesterdayRevenue ? 
-            (analytics.todayRevenue >= analytics.yesterdayRevenue ? 'up' : 'down') : undefined}
-          trendValue={analytics?.todayRevenue && analytics.yesterdayRevenue ? 
-            `${((analytics.todayRevenue / analytics.yesterdayRevenue - 1) * 100).toFixed(1)}%` : undefined}
-        />
-        <StatCard
-          title="Orders"
-          value={formatNumber(orders || 0)}
-          subtitle={`${activeTab === 'today' ? 'Today' : activeTab === 'week' ? 'This Week' : 'This Month'}`}
-          icon={ShoppingBag}
-          trend={analytics?.todayOrders && analytics.yesterdayOrders ? 
-            (analytics.todayOrders >= analytics.yesterdayOrders ? 'up' : 'down') : undefined}
-          trendValue={analytics?.todayOrders && analytics.yesterdayOrders ? 
-            `${((analytics.todayOrders / analytics.yesterdayOrders - 1) * 100).toFixed(1)}%` : undefined}
-        />
-        <StatCard
-          title="Avg Order Value"
-          value={formatCurrency(analytics?.avgOrderValue || 0)}
-          subtitle="Per order"
-          icon={TrendingUp}
-        />
-        <StatCard
-          title="Avg Prep Time"
-          value={`${analytics?.avgPrepTime || 12} min`}
-          subtitle="Kitchen time"
-          icon={Clock}
-        />
-      </div>
-
-      {/* Charts Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <ChannelChart data={analytics?.ordersByChannel || {}} />
-        <StatusChart data={analytics?.ordersByStatus || {}} />
-        <HourlyChart data={hourlyData} />
-      </div>
-
-      {/* Bottom Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <TopItemsList items={analytics?.topItems || []} />
-        <RecentOrdersTable orders={analytics?.recentOrders || []} />
-      </div>
-    </div>
-  );
-}
-
-export default OrderAnalytics;
