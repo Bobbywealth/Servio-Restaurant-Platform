@@ -1079,6 +1079,83 @@ router.get('/restaurants', async (req, res) => {
 });
 
 /**
+ * POST /api/admin/restaurants
+ * Create a new restaurant (platform admin only)
+ */
+router.post('/restaurants', async (req, res) => {
+  try {
+    const db = await DatabaseService.getInstance().getDatabase();
+    const { name, slug, email, phone, address, company_id, settings } = req.body;
+
+    // Validate required fields
+    if (!name || !slug) {
+      return res.status(400).json({
+        error: 'Name and slug are required'
+      });
+    }
+
+    // Validate slug format
+    const slugRegex = /^[a-z0-9-]+$/;
+    if (!slugRegex.test(slug)) {
+      return res.status(400).json({
+        error: 'Slug must contain only lowercase letters, numbers, and hyphens'
+      });
+    }
+
+    // Check slug uniqueness
+    const existingSlug = await db.get(
+      'SELECT id FROM restaurants WHERE slug = ?',
+      [slug.toLowerCase()]
+    );
+    if (existingSlug) {
+      return res.status(400).json({
+        error: 'Restaurant slug already exists'
+      });
+    }
+
+    // Create the restaurant
+    const restaurantId = uuidv4();
+    const restaurantSettings = typeof settings === 'object' ? JSON.stringify(settings) : '{}';
+
+    await db.run(
+      `INSERT INTO restaurants (id, name, slug, email, phone, address, company_id, settings, is_active, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+      [restaurantId, name, slug.toLowerCase(), email || null, phone || null, address || null, company_id || null, restaurantSettings]
+    );
+
+    // Log audit
+    await DatabaseService.getInstance().logAudit(
+      restaurantId,
+      req.user?.id || 'system',
+      'create_restaurant',
+      'restaurant',
+      restaurantId,
+      { name, slug, email, company_id }
+    );
+
+    logger.info(`Platform admin ${req.user?.id} created new restaurant "${name}" (${restaurantId})`);
+
+    // Fetch the created restaurant
+    const restaurant = await db.get(
+      'SELECT * FROM restaurants WHERE id = ?',
+      [restaurantId]
+    );
+
+    res.status(201).json({
+      success: true,
+      restaurant
+    });
+
+  } catch (error) {
+    logger.error('Failed to create restaurant:', error);
+    res.status(500).json({
+      error: 'Failed to create restaurant',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
  * GET /api/admin/restaurants/:id
  * Get detailed information about a specific restaurant
  */

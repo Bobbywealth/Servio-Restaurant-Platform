@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
-import { 
-  Building2, 
-  Search, 
+import {
+  Building2,
+  Search,
   Eye,
   Trash2,
   Users,
@@ -12,7 +12,9 @@ import {
   CheckCircle,
   XCircle,
   RefreshCw,
-  AlertCircle
+  AlertCircle,
+  Plus,
+  X
 } from 'lucide-react'
 import AdminLayout from '../../../components/Layout/AdminLayout'
 import { api } from '../../../lib/api'
@@ -44,6 +46,14 @@ interface RestaurantsResponse {
   }
 }
 
+interface NewRestaurantForm {
+  name: string
+  slug: string
+  email: string
+  phone: string
+  address: string
+}
+
 export default function RestaurantsList() {
   const [data, setData] = useState<RestaurantsResponse | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -55,6 +65,17 @@ export default function RestaurantsList() {
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false)
   const [actionSuccess, setActionSuccess] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  
+  // Add Restaurant Modal State
+  const [showAddModal, setShowAddModal] = useState(false)
+  const [isCreating, setIsCreating] = useState(false)
+  const [newRestaurant, setNewRestaurant] = useState<NewRestaurantForm>({
+    name: '',
+    slug: '',
+    email: '',
+    phone: '',
+    address: ''
+  })
 
   const fetchData = React.useCallback(async () => {
     setIsLoading(true)
@@ -131,6 +152,52 @@ export default function RestaurantsList() {
     }
   }
 
+  // Auto-generate slug from name
+  const handleNameChange = (name: string) => {
+    const slug = name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+    setNewRestaurant(prev => ({ ...prev, name, slug }))
+  }
+
+  const handleCreateRestaurant = async () => {
+    if (!newRestaurant.name || !newRestaurant.slug) {
+      setActionError('Name and slug are required')
+      return
+    }
+
+    setIsCreating(true)
+    setActionError(null)
+    setActionSuccess(null)
+
+    try {
+      const response = await api.post('/api/admin/restaurants', newRestaurant)
+      
+      // Add the new restaurant to the list
+      setData(prev => {
+        if (!prev) return prev
+        return {
+          ...prev,
+          restaurants: [response.data.restaurant, ...prev.restaurants],
+          pagination: {
+            ...prev.pagination,
+            total: prev.pagination.total + 1
+          }
+        }
+      })
+      
+      setShowAddModal(false)
+      setNewRestaurant({ name: '', slug: '', email: '', phone: '', address: '' })
+      setActionSuccess(`Restaurant "${newRestaurant.name}" created successfully!`)
+    } catch (err: any) {
+      const message = err.response?.data?.error || getErrorMessage(err, 'Failed to create restaurant')
+      setActionError(message)
+    } finally {
+      setIsCreating(false)
+    }
+  }
+
   return (
     <AdminLayout title="Restaurants" description="Manage all restaurants on the Servio platform">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -143,14 +210,23 @@ export default function RestaurantsList() {
               {data ? `${data.pagination.total} restaurants total` : 'Loading restaurants...'}
             </p>
           </div>
-          <button
-            onClick={fetchData}
-            disabled={isLoading}
-            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-            Refresh
-          </button>
+          <div className="flex gap-3">
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Add Restaurant
+            </button>
+            <button
+              onClick={fetchData}
+              disabled={isLoading}
+              className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+              Refresh
+            </button>
+          </div>
         </div>
 
         {/* Filters */}
@@ -444,6 +520,112 @@ export default function RestaurantsList() {
                   className="px-4 py-2 rounded-md bg-red-600 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
                 >
                   {isUpdatingStatus ? 'Deactivating…' : 'Yes, deactivate'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Add Restaurant Modal */}
+        {showAddModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+            <div className="w-full max-w-lg rounded-lg bg-white dark:bg-gray-800 shadow-xl p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Add New Restaurant</h2>
+                <button
+                  onClick={() => setShowAddModal(false)}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Restaurant Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={newRestaurant.name}
+                    onChange={(e) => handleNameChange(e.target.value)}
+                    placeholder="e.g., Mario's Italian Kitchen"
+                    className="block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 shadow-sm focus:border-red-500 focus:ring-red-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    URL Slug *
+                  </label>
+                  <input
+                    type="text"
+                    value={newRestaurant.slug}
+                    onChange={(e) => setNewRestaurant(prev => ({ ...prev, slug: e.target.value }))}
+                    placeholder="e.g., marios-italian-kitchen"
+                    className="block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 shadow-sm focus:border-red-500 focus:ring-red-500"
+                  />
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    Used in the restaurant URL: /r/{newRestaurant.slug || 'slug'}
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Email
+                  </label>
+                  <input
+                    type="email"
+                    value={newRestaurant.email}
+                    onChange={(e) => setNewRestaurant(prev => ({ ...prev, email: e.target.value }))}
+                    placeholder="contact@restaurant.com"
+                    className="block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 shadow-sm focus:border-red-500 focus:ring-red-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Phone
+                  </label>
+                  <input
+                    type="tel"
+                    value={newRestaurant.phone}
+                    onChange={(e) => setNewRestaurant(prev => ({ ...prev, phone: e.target.value }))}
+                    placeholder="(555) 123-4567"
+                    className="block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 shadow-sm focus:border-red-500 focus:ring-red-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Address
+                  </label>
+                  <textarea
+                    value={newRestaurant.address}
+                    onChange={(e) => setNewRestaurant(prev => ({ ...prev, address: e.target.value }))}
+                    placeholder="123 Main St, City, State 12345"
+                    rows={2}
+                    className="block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 shadow-sm focus:border-red-500 focus:ring-red-500"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-6 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowAddModal(false)}
+                  disabled={isCreating}
+                  className="px-4 py-2 rounded-md border border-gray-300 dark:border-gray-600 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCreateRestaurant}
+                  disabled={isCreating || !newRestaurant.name || !newRestaurant.slug}
+                  className="px-4 py-2 rounded-md bg-green-600 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
+                >
+                  {isCreating ? 'Creating…' : 'Create Restaurant'}
                 </button>
               </div>
             </div>
