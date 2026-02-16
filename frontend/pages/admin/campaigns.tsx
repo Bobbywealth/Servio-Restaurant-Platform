@@ -133,6 +133,23 @@ export default function AdminCampaigns() {
     }
   }, [eventFilter, socket])
 
+  const handleModeration = useCallback(async (campaignId: string, action: 'approve' | 'disapprove') => {
+    setPendingMutationId(campaignId)
+    setError(null)
+    setSuccess(null)
+
+    try {
+      await api.post(`/api/admin/campaigns/${campaignId}/${action}`)
+      setSuccess(action === 'approve' ? 'Campaign approved successfully.' : 'Campaign disapproved successfully.')
+      await Promise.all([fetchCampaigns(), fetchCampaignEvents()])
+    } catch (err: any) {
+      console.error(`Failed to ${action} campaign:`, err)
+      setError(getErrorMessage(err, `Failed to ${action} campaign`))
+    } finally {
+      setPendingMutationId(null)
+    }
+  }, [fetchCampaignEvents, fetchCampaigns])
+
   const filteredCampaigns = useMemo(() => campaigns.filter(c =>
     search === '' ||
     c.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -268,6 +285,18 @@ export default function AdminCampaigns() {
               <div className="ml-3">
                 <h3 className="text-sm font-medium text-red-800 dark:text-red-200">Error</h3>
                 <div className="mt-2 text-sm text-red-700 dark:text-red-300">{error}</div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {success && (
+          <div className="mb-6 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-md p-4">
+            <div className="flex">
+              <CheckCircle2 className="h-5 w-5 text-green-500" />
+              <div className="ml-3">
+                <h3 className="text-sm font-medium text-green-800 dark:text-green-200">Success</h3>
+                <div className="mt-2 text-sm text-green-700 dark:text-green-300">{success}</div>
               </div>
             </div>
           </div>
