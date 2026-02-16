@@ -86,7 +86,7 @@ interface SkipTargetProps {
   /** Tab index for focusability (-1 for programmatic focus only) */
   tabIndex?: number
   /** Element type to render */
-  as?: keyof JSX.IntrinsicElements
+  as?: keyof React.JSX.IntrinsicElements
   /** Additional CSS classes */
   className?: string
   /** ARIA label for the target */
