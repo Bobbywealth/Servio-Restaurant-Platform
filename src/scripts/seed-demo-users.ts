@@ -21,7 +21,7 @@ async function seedDemoUsers() {
       id: 'admin-1',
       email: 'admin@servio.com',
       name: 'System Admin',
-      role: 'admin',
+      role: 'platform-admin',
       restaurant_id: 'platform-admin-org',
       permissions: JSON.stringify(['*']), // All permissions
       password_hash: passwordHash,
@@ -31,7 +31,7 @@ async function seedDemoUsers() {
       id: 'admin-2',
       email: 'superadmin@servio.com',
       name: 'Super Admin',
-      role: 'admin',
+      role: 'platform-admin',
       restaurant_id: 'platform-admin-org',
       permissions: JSON.stringify(['*']),
       password_hash: passwordHash,

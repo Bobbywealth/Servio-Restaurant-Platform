@@ -234,6 +234,49 @@ export class DatabaseService {
       ]
     );
 
+    // Platform admin users (for Servio company management)
+    const platformAdmins = [
+      {
+        id: 'platform-admin-1',
+        restaurant_id: 'platform-admin-org',
+        name: 'System Admin',
+        email: 'admin@servio.com',
+        password: 'password',
+        role: 'platform-admin',
+        permissions: JSON.stringify(['*'])
+      },
+      {
+        id: 'platform-admin-2',
+        restaurant_id: 'platform-admin-org',
+        name: 'Super Admin',
+        email: 'superadmin@servio.com',
+        password: 'password',
+        role: 'platform-admin',
+        permissions: JSON.stringify(['*'])
+      }
+    ];
+
+    // Seed platform admins
+    for (const admin of platformAdmins) {
+      try {
+        const passwordHash = bcrypt.hashSync(admin.password, 10);
+        await db.run(
+          `INSERT INTO users (id, restaurant_id, name, email, password_hash, role, permissions, is_active)
+           VALUES (?, ?, ?, ?, ?, ?, ?, TRUE)
+           ON CONFLICT (email) DO UPDATE SET
+             restaurant_id = excluded.restaurant_id,
+             name = excluded.name,
+             password_hash = excluded.password_hash,
+             role = excluded.role,
+             permissions = excluded.permissions,
+             is_active = TRUE`,
+          [admin.id, admin.restaurant_id, admin.name, admin.email, passwordHash, admin.role, admin.permissions]
+        );
+      } catch (err) {
+        logger.warn('Platform admin seed/update failed:', err);
+      }
+    }
+
     // Sample users
     const users = [
       {
