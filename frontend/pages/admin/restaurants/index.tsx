@@ -4,8 +4,8 @@ import { motion } from 'framer-motion'
 import { 
   Building2, 
   Search, 
-  Filter,
   Eye,
+  Trash2,
   Users,
   ShoppingCart,
   Clock,
@@ -51,6 +51,10 @@ export default function RestaurantsList() {
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [page, setPage] = useState(1)
+  const [pendingRestaurant, setPendingRestaurant] = useState<Restaurant | null>(null)
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false)
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
 
   const fetchData = React.useCallback(async () => {
     setIsLoading(true)
@@ -85,6 +89,46 @@ export default function RestaurantsList() {
   const handleStatusFilter = (status: string) => {
     setStatusFilter(status)
     setPage(1) // Reset to first page when filtering
+  }
+
+  const handleDeactivateRequest = (restaurant: Restaurant) => {
+    setActionError(null)
+    setActionSuccess(null)
+    setPendingRestaurant(restaurant)
+  }
+
+  const handleDeactivateConfirm = async () => {
+    if (!pendingRestaurant) return
+
+    setIsUpdatingStatus(true)
+    setActionError(null)
+    setActionSuccess(null)
+
+    try {
+      await api.patch(`/api/admin/restaurants/${pendingRestaurant.id}/status`, {
+        status: 'inactive'
+      })
+
+      const deactivatedName = pendingRestaurant.name
+      setData((prev) => {
+        if (!prev) return prev
+        return {
+          ...prev,
+          restaurants: prev.restaurants.map((restaurant) =>
+            restaurant.id === pendingRestaurant.id
+              ? { ...restaurant, is_active: false }
+              : restaurant
+          )
+        }
+      })
+      setPendingRestaurant(null)
+      setActionSuccess(`${deactivatedName} was deactivated successfully.`)
+    } catch (err: any) {
+      const failureMessage = getErrorMessage(err, 'Failed to deactivate restaurant')
+      setActionError(`Could not deactivate ${pendingRestaurant.name}. ${failureMessage}`)
+    } finally {
+      setIsUpdatingStatus(false)
+    }
   }
 
   return (
@@ -155,6 +199,24 @@ export default function RestaurantsList() {
                 <h3 className="text-sm font-medium text-red-800 dark:text-red-200">Error loading restaurants</h3>
                 <div className="mt-2 text-sm text-red-700 dark:text-red-300">{error}</div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {actionSuccess && (
+          <div className="mb-6 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-md p-4">
+            <div className="flex">
+              <CheckCircle className="h-5 w-5 text-green-500" />
+              <div className="ml-3 text-sm text-green-800 dark:text-green-200">{actionSuccess}</div>
+            </div>
+          </div>
+        )}
+
+        {actionError && (
+          <div className="mb-6 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md p-4">
+            <div className="flex">
+              <AlertCircle className="h-5 w-5 text-red-400" />
+              <div className="ml-3 text-sm text-red-700 dark:text-red-300">{actionError}</div>
             </div>
           </div>
         )}
@@ -287,13 +349,25 @@ export default function RestaurantsList() {
                       )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <Link
-                        href={`/admin/restaurants/${restaurant.id}`}
-                        className="inline-flex items-center px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-red-500"
-                      >
-                        <Eye className="h-4 w-4 mr-1" />
-                        View
-                      </Link>
+                      <div className="inline-flex items-center gap-2">
+                        <Link
+                          href={`/admin/restaurants/${restaurant.id}`}
+                          className="inline-flex items-center px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-red-500"
+                        >
+                          <Eye className="h-4 w-4 mr-1" />
+                          View
+                        </Link>
+                        {restaurant.is_active && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeactivateRequest(restaurant)}
+                            className="inline-flex items-center px-3 py-1.5 border border-red-300 dark:border-red-700 rounded-md text-sm font-medium text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/40 focus:outline-none focus:ring-2 focus:ring-red-500"
+                          >
+                            <Trash2 className="h-4 w-4 mr-1" />
+                            Deactivate
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </motion.tr>
                 ))}
@@ -343,6 +417,38 @@ export default function RestaurantsList() {
             </div>
           )}
         </div>
+
+        {pendingRestaurant && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+            <div className="w-full max-w-lg rounded-lg bg-white dark:bg-gray-800 shadow-xl p-6">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Deactivate restaurant?</h2>
+              <p className="mt-3 text-sm text-gray-700 dark:text-gray-300">
+                You are about to deactivate <strong>{pendingRestaurant.name}</strong>. This will disable access for users tied to this restaurant and may pause active campaigns.
+              </p>
+              <p className="mt-2 text-sm font-medium text-red-700 dark:text-red-300">
+                Warning: historical orders are retained for reporting, but staff at this restaurant will lose active access immediately.
+              </p>
+              <div className="mt-6 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setPendingRestaurant(null)}
+                  disabled={isUpdatingStatus}
+                  className="px-4 py-2 rounded-md border border-gray-300 dark:border-gray-600 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDeactivateConfirm}
+                  disabled={isUpdatingStatus}
+                  className="px-4 py-2 rounded-md bg-red-600 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+                >
+                  {isUpdatingStatus ? 'Deactivating…' : 'Yes, deactivate'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </AdminLayout>
   )
