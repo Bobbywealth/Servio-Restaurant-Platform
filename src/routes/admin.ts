@@ -1080,23 +1080,41 @@ router.get('/restaurants', async (req, res) => {
 
 /**
  * POST /api/admin/restaurants
- * Create a new restaurant (platform admin only)
+ * Create a new restaurant with owner account (platform admin only)
  */
 router.post('/restaurants', async (req, res) => {
   try {
     const db = await DatabaseService.getInstance().getDatabase();
-    const { name, slug, email, phone, address, company_id, settings } = req.body;
+    const {
+      name,
+      slug,
+      email,
+      phone,
+      address,
+      company_id,
+      settings,
+      // Owner account fields
+      owner_name,
+      owner_email,
+      owner_password
+    } = req.body;
 
     // Validate required fields
-    if (!name || !slug) {
+    if (!name) {
       return res.status(400).json({
-        error: 'Name and slug are required'
+        error: 'Restaurant name is required'
       });
     }
 
+    // Auto-generate slug from name if not provided
+    const generatedSlug = slug || name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+
     // Validate slug format
     const slugRegex = /^[a-z0-9-]+$/;
-    if (!slugRegex.test(slug)) {
+    if (!slugRegex.test(generatedSlug)) {
       return res.status(400).json({
         error: 'Slug must contain only lowercase letters, numbers, and hyphens'
       });
@@ -1105,12 +1123,32 @@ router.post('/restaurants', async (req, res) => {
     // Check slug uniqueness
     const existingSlug = await db.get(
       'SELECT id FROM restaurants WHERE slug = ?',
-      [slug.toLowerCase()]
+      [generatedSlug.toLowerCase()]
     );
     if (existingSlug) {
       return res.status(400).json({
         error: 'Restaurant slug already exists'
       });
+    }
+
+    // Validate owner account fields if provided
+    if (owner_email || owner_password || owner_name) {
+      if (!owner_email || !owner_password || !owner_name) {
+        return res.status(400).json({
+          error: 'Owner name, email, and password are all required to create an owner account'
+        });
+      }
+
+      // Check if owner email already exists
+      const existingOwner = await db.get(
+        'SELECT id FROM users WHERE email = ?',
+        [owner_email.toLowerCase()]
+      );
+      if (existingOwner) {
+        return res.status(400).json({
+          error: 'A user with this email already exists'
+        });
+      }
     }
 
     // Create the restaurant
@@ -1120,8 +1158,31 @@ router.post('/restaurants', async (req, res) => {
     await db.run(
       `INSERT INTO restaurants (id, name, slug, email, phone, address, company_id, settings, is_active, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-      [restaurantId, name, slug.toLowerCase(), email || null, phone || null, address || null, company_id || null, restaurantSettings]
+      [restaurantId, name, generatedSlug.toLowerCase(), email || null, phone || null, address || null, company_id || null, restaurantSettings]
     );
+
+    // Create owner account if credentials provided
+    let ownerUser = null;
+    if (owner_email && owner_password && owner_name) {
+      const bcrypt = require('bcryptjs');
+      const ownerId = uuidv4();
+      const passwordHash = await bcrypt.hash(owner_password, 10);
+
+      await db.run(
+        `INSERT INTO users (id, restaurant_id, name, email, password_hash, role, permissions, is_active, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+        [ownerId, restaurantId, owner_name, owner_email.toLowerCase(), passwordHash, 'owner', JSON.stringify(['*'])]
+      );
+
+      ownerUser = {
+        id: ownerId,
+        name: owner_name,
+        email: owner_email,
+        role: 'owner'
+      };
+
+      logger.info(`Owner account "${owner_email}" created for restaurant "${name}"`);
+    }
 
     // Log audit
     await DatabaseService.getInstance().logAudit(
@@ -1130,7 +1191,7 @@ router.post('/restaurants', async (req, res) => {
       'create_restaurant',
       'restaurant',
       restaurantId,
-      { name, slug, email, company_id }
+      { name, slug: generatedSlug, email, company_id, owner_email }
     );
 
     logger.info(`Platform admin ${req.user?.id} created new restaurant "${name}" (${restaurantId})`);
@@ -1143,7 +1204,8 @@ router.post('/restaurants', async (req, res) => {
 
     res.status(201).json({
       success: true,
-      restaurant
+      restaurant,
+      owner: ownerUser
     });
 
   } catch (error) {

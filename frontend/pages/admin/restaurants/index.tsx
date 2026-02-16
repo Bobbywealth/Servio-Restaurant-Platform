@@ -52,6 +52,10 @@ interface NewRestaurantForm {
   email: string
   phone: string
   address: string
+  // Owner account fields
+  owner_name: string
+  owner_email: string
+  owner_password: string
 }
 
 export default function RestaurantsList() {
@@ -74,7 +78,10 @@ export default function RestaurantsList() {
     slug: '',
     email: '',
     phone: '',
-    address: ''
+    address: '',
+    owner_name: '',
+    owner_email: '',
+    owner_password: ''
   })
 
   const fetchData = React.useCallback(async () => {
@@ -162,9 +169,18 @@ export default function RestaurantsList() {
   }
 
   const handleCreateRestaurant = async () => {
-    if (!newRestaurant.name || !newRestaurant.slug) {
-      setActionError('Name and slug are required')
+    if (!newRestaurant.name) {
+      setActionError('Restaurant name is required')
       return
+    }
+
+    // If any owner field is filled, all are required
+    const hasOwnerFields = newRestaurant.owner_name || newRestaurant.owner_email || newRestaurant.owner_password
+    if (hasOwnerFields) {
+      if (!newRestaurant.owner_name || !newRestaurant.owner_email || !newRestaurant.owner_password) {
+        setActionError('Owner name, email, and password are all required when creating an owner account')
+        return
+      }
     }
 
     setIsCreating(true)
@@ -188,8 +204,21 @@ export default function RestaurantsList() {
       })
       
       setShowAddModal(false)
-      setNewRestaurant({ name: '', slug: '', email: '', phone: '', address: '' })
-      setActionSuccess(`Restaurant "${newRestaurant.name}" created successfully!`)
+      setNewRestaurant({
+        name: '',
+        slug: '',
+        email: '',
+        phone: '',
+        address: '',
+        owner_name: '',
+        owner_email: '',
+        owner_password: ''
+      })
+      
+      const successMessage = response.data.owner
+        ? `Restaurant "${newRestaurant.name}" created with owner account for ${newRestaurant.owner_email}!`
+        : `Restaurant "${newRestaurant.name}" created successfully!`
+      setActionSuccess(successMessage)
     } catch (err: any) {
       const message = err.response?.data?.error || getErrorMessage(err, 'Failed to create restaurant')
       setActionError(message)
@@ -556,23 +585,23 @@ export default function RestaurantsList() {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    URL Slug *
+                    URL Slug
                   </label>
                   <input
                     type="text"
                     value={newRestaurant.slug}
                     onChange={(e) => setNewRestaurant(prev => ({ ...prev, slug: e.target.value }))}
-                    placeholder="e.g., marios-italian-kitchen"
+                    placeholder="Auto-generated from name"
                     className="block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 shadow-sm focus:border-red-500 focus:ring-red-500"
                   />
                   <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                    Used in the restaurant URL: /r/{newRestaurant.slug || 'slug'}
+                    Auto-generated from name. Used in URL: /r/{newRestaurant.slug || 'slug'}
                   </p>
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Email
+                    Restaurant Email
                   </label>
                   <input
                     type="email"
@@ -608,6 +637,57 @@ export default function RestaurantsList() {
                     className="block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 shadow-sm focus:border-red-500 focus:ring-red-500"
                   />
                 </div>
+
+                {/* Owner Account Section */}
+                <div className="border-t border-gray-200 dark:border-gray-700 pt-4 mt-4">
+                  <h3 className="text-sm font-medium text-gray-900 dark:text-white mb-3">
+                    Owner Account (Optional)
+                  </h3>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                    Create an owner account to allow immediate access to the restaurant dashboard.
+                  </p>
+                  
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Owner Name
+                      </label>
+                      <input
+                        type="text"
+                        value={newRestaurant.owner_name}
+                        onChange={(e) => setNewRestaurant(prev => ({ ...prev, owner_name: e.target.value }))}
+                        placeholder="e.g., John Smith"
+                        className="block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 shadow-sm focus:border-red-500 focus:ring-red-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Owner Email
+                      </label>
+                      <input
+                        type="email"
+                        value={newRestaurant.owner_email}
+                        onChange={(e) => setNewRestaurant(prev => ({ ...prev, owner_email: e.target.value }))}
+                        placeholder="owner@restaurant.com"
+                        className="block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 shadow-sm focus:border-red-500 focus:ring-red-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Owner Password
+                      </label>
+                      <input
+                        type="password"
+                        value={newRestaurant.owner_password}
+                        onChange={(e) => setNewRestaurant(prev => ({ ...prev, owner_password: e.target.value }))}
+                        placeholder="Set a secure password"
+                        className="block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-700 shadow-sm focus:border-red-500 focus:ring-red-500"
+                      />
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <div className="mt-6 flex justify-end gap-3">
@@ -622,7 +702,7 @@ export default function RestaurantsList() {
                 <button
                   type="button"
                   onClick={handleCreateRestaurant}
-                  disabled={isCreating || !newRestaurant.name || !newRestaurant.slug}
+                  disabled={isCreating || !newRestaurant.name}
                   className="px-4 py-2 rounded-md bg-green-600 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
                 >
                   {isCreating ? 'Creating…' : 'Create Restaurant'}
