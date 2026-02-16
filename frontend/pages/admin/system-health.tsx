@@ -12,6 +12,15 @@ import { getErrorMessage } from '../../lib/utils'
 interface SystemHealth {
   status: string
   failedJobs: number
+  services: Array<{
+    name: string
+    url: string
+    status: 'operational' | 'degraded' | 'down'
+    latency: number
+    lastChecked: string
+    error: string | null
+    optional: boolean
+  }>
   recentErrors: Array<{
     action: string
     entity_type?: string
@@ -193,6 +202,52 @@ export default function SystemHealth() {
                   Last 24 hours
                 </p>
               </motion.div>
+            </div>
+
+            {/* Service Probes */}
+            <div className="mb-8">
+              <div className="mb-4">
+                <h2 className="text-lg font-medium text-gray-900 dark:text-white">Service Probes</h2>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Live checks for key platform dependencies</p>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                {(health.services || []).map((service, index) => (
+                  <motion.div
+                    key={service.name}
+                    initial={{ opacity: 0, y: 15 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.05 }}
+                    className="bg-white dark:bg-gray-800 rounded-lg shadow p-5 border border-gray-200 dark:border-gray-700"
+                  >
+                    <div className="flex items-start justify-between gap-2 mb-3">
+                      <div>
+                        <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{service.name}</h3>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 break-all">{service.url}</p>
+                      </div>
+                      {getStatusIcon(service.status)}
+                    </div>
+
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(service.status)}`}>
+                        {service.status}
+                      </span>
+                      {service.optional && (
+                        <span className="px-2 py-1 text-xs rounded-full bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200">
+                          Optional
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="text-xs text-gray-600 dark:text-gray-300 space-y-1">
+                      <p>Latency: <span className="font-medium">{service.latency}ms</span></p>
+                      <p>Checked: <span className="font-medium">{new Date(service.lastChecked).toLocaleTimeString()}</span></p>
+                      {service.error && (
+                        <p className="text-red-600 dark:text-red-400">Error: {service.error}</p>
+                      )}
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
             </div>
 
             {/* Failed Jobs */}
