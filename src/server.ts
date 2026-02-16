@@ -130,6 +130,8 @@ async function initializeServer() {
     const { default: staffAnalyticsRoutes } = await import('./routes/staff-analytics');
     const { default: staffBulkRoutes } = await import('./routes/staff-bulk');
     const { default: voiceConversationsRoutes } = await import('./routes/voice-conversations');
+    const { default: companyRoutes } = await import('./routes/company');
+    const { default: adminRoutes } = await import('./routes/admin');
 
     // API Routes
     app.use('/api/auth', authRoutes);
@@ -207,6 +209,10 @@ async function initializeServer() {
     }, pushRoutes);
     app.use('/api/delivery-platforms', requireAuth, deliveryPlatformsRoutes);
     app.use('/api/delivery-platforms-sessions', requireAuth, deliveryPlatformsSessionsRoutes);
+
+    // Company and platform admin routes
+    app.use('/api/company', requireAuth, companyRoutes);
+    app.use('/api/admin', requireAuth, adminRoutes);
 
     // Staff management routes
     app.use('/api/staff/scheduling', requireAuth, staffSchedulingRoutes);

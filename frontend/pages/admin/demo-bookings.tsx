@@ -3,6 +3,10 @@ import AdminLayout from '../../components/Layout/AdminLayout'
 import { api } from '../../lib/api'
 import { CalendarDays, RefreshCw } from 'lucide-react'
 
+/**
+ * API contract: GET /api/admin/demo-bookings?start=YYYY-MM-DD&end=YYYY-MM-DD
+ * Response: { bookings: AdminBooking[] }
+ */
 type AdminBooking = {
   id: string
   name: string

@@ -61,6 +61,50 @@ interface AnalyticsData {
   hourlyDistribution: { hour: number; orders: number }[]
 }
 
+
+/**
+ * API contract: GET /api/company/audit-logs
+ * Response: { success: boolean, data: { logs: CompanyAuditLog[] } }
+ */
+interface CompanyAuditLog {
+  id: string
+  action: string
+  entity_type?: string
+  entity_id?: string
+  created_at: string
+  user?: {
+    name?: string
+    email?: string
+  } | null
+}
+
+const mapAuditLogToActivity = (log: CompanyAuditLog): ActivityItem => {
+  const lowerAction = (log.action || '').toLowerCase()
+  const lowerEntityType = (log.entity_type || '').toLowerCase()
+  const isAlert =
+    lowerAction.includes('error') ||
+    lowerAction.includes('fail') ||
+    lowerAction.includes('alert') ||
+    lowerEntityType.includes('error')
+
+  let type: ActivityItem['type'] = 'order'
+  if (isAlert) {
+    type = 'alert'
+  } else if (lowerEntityType.includes('staff') || lowerAction.includes('clock') || lowerAction.includes('staff')) {
+    type = 'staff'
+  }
+
+  const actor = log.user?.name ? `${log.user.name}: ` : ''
+  const entity = log.entity_type ? ` (${log.entity_type})` : ''
+
+  return {
+    id: log.id,
+    type,
+    message: `${actor}${log.action}${entity}`,
+    timestamp: log.created_at
+  }
+}
+
 interface SummaryStats {
   totalRevenueToday: number
   totalRevenueWeek: number
@@ -513,13 +557,15 @@ const AdminDashboard: React.FC = () => {
         api.get('/api/company'),
         api.get('/api/company/restaurants'),
         api.get('/api/company/analytics'),
-        api.get('/api/company/activities')
+        api.get('/api/company/audit-logs')
       ])
 
       setCompany(companyRes.data?.data || companyRes.data)
       setRestaurants(restaurantsRes.data?.data || restaurantsRes.data || [])
       setAnalytics(analyticsRes.data?.data || analyticsRes.data)
-      setActivities(activitiesRes.data?.data || activitiesRes.data || [])
+      const rawLogs: CompanyAuditLog[] =
+        activitiesRes.data?.data?.logs || activitiesRes.data?.data || activitiesRes.data?.logs || []
+      setActivities(rawLogs.slice(0, 25).map(mapAuditLogToActivity))
     } catch (err: any) {
       console.error('Failed to fetch dashboard data:', err)
       setError(err.response?.data?.message || 'Failed to load dashboard data')

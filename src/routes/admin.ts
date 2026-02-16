@@ -8,6 +8,429 @@ const router = express.Router();
 // Apply platform admin auth to all admin routes
 router.use(requirePlatformAdmin);
 
+type PaginationPayload = {
+  page: number;
+  limit: number;
+  total: number;
+  pages: number;
+};
+
+/**
+ * API contract: GET /api/admin/demo-bookings
+ * Response: { bookings: AdminDemoBooking[] }
+ */
+type AdminDemoBooking = {
+  id: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  restaurant_name: string | null;
+  booking_date: string;
+  booking_time: string;
+  timezone: string;
+  notes: string | null;
+  status: string;
+  created_at: string;
+};
+
+/**
+ * API contract: GET /api/admin/campaigns and GET /api/admin/restaurants/:id/campaigns
+ * Response: { campaigns: AdminCampaign[], pagination: PaginationPayload }
+ */
+type AdminCampaign = {
+  id: string;
+  restaurant_id: string;
+  restaurant_name: string | null;
+  name: string;
+  type: 'sms' | 'email' | string;
+  status: string;
+  message: string;
+  scheduled_at: string | null;
+  sent_at: string | null;
+  total_recipients: number;
+  successful_sends: number;
+  failed_sends: number;
+  created_at: string;
+};
+
+/**
+ * API contract: GET /api/admin/audit-logs
+ * Response: { logs: AdminAuditLog[], pagination: PaginationPayload }
+ */
+type AdminAuditLog = {
+  id: string;
+  restaurant_id: string | null;
+  restaurant_name: string | null;
+  user_id: string | null;
+  user_name: string | null;
+  user_role: string | null;
+  action: string;
+  entity_type: string | null;
+  entity_id: string | null;
+  metadata: string | null;
+  created_at: string;
+};
+
+const resolveLimit = (value: unknown, fallback = 50, max = 200): number => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 1) return fallback;
+  return Math.min(Math.floor(parsed), max);
+};
+
+const resolvePage = (value: unknown, fallback = 1): number => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 1) return fallback;
+  return Math.floor(parsed);
+};
+
+const resolveDays = (value: unknown, fallback = 30, max = 365): number => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 1) return fallback;
+  return Math.min(Math.floor(parsed), max);
+};
+
+const parseTableRows = (rows: any[]): any[] => {
+  return rows.map((row) => {
+    const parsed = { ...row };
+    for (const key of ['metadata', 'details', 'target_criteria']) {
+      if (typeof parsed[key] === 'string') {
+        try {
+          parsed[key] = JSON.parse(parsed[key]);
+        } catch {
+          // Keep raw string as-is for non-JSON payloads
+        }
+      }
+    }
+    return parsed;
+  });
+};
+
+/**
+ * GET /api/admin/demo-bookings
+ * Get all demo bookings for a date range.
+ */
+router.get('/demo-bookings', async (req, res) => {
+  try {
+    const db = await DatabaseService.getInstance().getDatabase();
+    const start = typeof req.query.start === 'string' ? req.query.start : undefined;
+    const end = typeof req.query.end === 'string' ? req.query.end : undefined;
+
+    // Supports either `demo_bookings` or `demo_requests` depending on environment schema.
+    const tableCandidates = ['demo_bookings', 'demo_requests'];
+    const existingTable = await db.get(
+      `SELECT name FROM sqlite_master WHERE type='table' AND name IN (${tableCandidates.map(() => '?').join(',')}) LIMIT 1`,
+      tableCandidates
+    );
+
+    if (!existingTable?.name) {
+      return res.json({ bookings: [] as AdminDemoBooking[] });
+    }
+
+    const whereParts: string[] = [];
+    const params: any[] = [];
+    if (start) {
+      whereParts.push(`date(booking_date) >= date(?)`);
+      params.push(start);
+    }
+    if (end) {
+      whereParts.push(`date(booking_date) <= date(?)`);
+      params.push(end);
+    }
+
+    const whereClause = whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : '';
+    const bookings = await db.all(
+      `
+      SELECT
+        id,
+        name,
+        email,
+        phone,
+        restaurant_name,
+        booking_date,
+        booking_time,
+        COALESCE(timezone, 'UTC') as timezone,
+        notes,
+        COALESCE(status, 'pending') as status,
+        created_at
+      FROM ${existingTable.name}
+      ${whereClause}
+      ORDER BY booking_date ASC, booking_time ASC
+    `,
+      params
+    );
+
+    return res.json({ bookings: bookings as AdminDemoBooking[] });
+  } catch (error) {
+    logger.error('Failed to get demo bookings:', error);
+    return res.status(500).json({
+      error: 'Failed to load demo bookings',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
+ * GET /api/admin/campaigns
+ * Get campaigns across all restaurants with optional status filter.
+ */
+router.get('/campaigns', async (req, res) => {
+  try {
+    const db = await DatabaseService.getInstance().getDatabase();
+    const page = resolvePage(req.query.page, 1);
+    const limit = resolveLimit(req.query.limit, 100, 200);
+    const offset = (page - 1) * limit;
+    const status = typeof req.query.status === 'string' ? req.query.status.trim() : '';
+
+    const whereParts: string[] = [];
+    const params: any[] = [];
+    if (status) {
+      whereParts.push('mc.status = ?');
+      params.push(status);
+    }
+    const whereClause = whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : '';
+
+    const campaigns = await db.all(
+      `
+      SELECT
+        mc.id,
+        mc.restaurant_id,
+        r.name as restaurant_name,
+        mc.name,
+        mc.type,
+        mc.status,
+        mc.message,
+        mc.scheduled_at,
+        mc.sent_at,
+        mc.total_recipients,
+        mc.successful_sends,
+        mc.failed_sends,
+        mc.created_at
+      FROM marketing_campaigns mc
+      LEFT JOIN restaurants r ON r.id = mc.restaurant_id
+      ${whereClause}
+      ORDER BY mc.created_at DESC
+      LIMIT ? OFFSET ?
+    `,
+      [...params, limit, offset]
+    );
+
+    const totalResult = await db.get(
+      `SELECT COUNT(*) as total FROM marketing_campaigns mc ${whereClause}`,
+      params
+    );
+
+    return res.json({
+      campaigns: parseTableRows(campaigns) as AdminCampaign[],
+      pagination: {
+        page,
+        limit,
+        total: totalResult?.total || 0,
+        pages: Math.ceil((totalResult?.total || 0) / limit)
+      } as PaginationPayload
+    });
+  } catch (error) {
+    logger.error('Failed to get admin campaigns:', error);
+    return res.status(500).json({
+      error: 'Failed to load campaigns',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
+ * GET /api/admin/audit-logs
+ * Get platform-wide audit logs for admin surfaces.
+ */
+router.get('/audit-logs', async (req, res) => {
+  try {
+    const db = await DatabaseService.getInstance().getDatabase();
+    const page = resolvePage(req.query.page, 1);
+    const limit = resolveLimit(req.query.limit, 200, 500);
+    const offset = (page - 1) * limit;
+    const restaurantId = typeof req.query.restaurantId === 'string' ? req.query.restaurantId.trim() : '';
+    const action = typeof req.query.action === 'string' ? req.query.action.trim() : '';
+
+    const whereParts: string[] = [];
+    const params: any[] = [];
+
+    if (restaurantId) {
+      whereParts.push('al.restaurant_id = ?');
+      params.push(restaurantId);
+    }
+
+    if (action && action !== 'all') {
+      whereParts.push('LOWER(al.action) LIKE LOWER(?)');
+      params.push(`%${action}%`);
+    }
+
+    const whereClause = whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : '';
+
+    const logs = await db.all(
+      `
+      SELECT
+        al.id,
+        al.restaurant_id,
+        r.name as restaurant_name,
+        al.user_id,
+        u.name as user_name,
+        u.role as user_role,
+        al.action,
+        al.entity_type,
+        al.entity_id,
+        al.details as metadata,
+        al.created_at
+      FROM audit_logs al
+      LEFT JOIN users u ON al.user_id = u.id
+      LEFT JOIN restaurants r ON al.restaurant_id = r.id
+      ${whereClause}
+      ORDER BY al.created_at DESC
+      LIMIT ? OFFSET ?
+    `,
+      [...params, limit, offset]
+    );
+
+    const totalResult = await db.get(
+      `SELECT COUNT(*) as total FROM audit_logs al ${whereClause}`,
+      params
+    );
+
+    return res.json({
+      logs: parseTableRows(logs) as AdminAuditLog[],
+      pagination: {
+        page,
+        limit,
+        total: totalResult?.total || 0,
+        pages: Math.ceil((totalResult?.total || 0) / limit)
+      } as PaginationPayload
+    });
+  } catch (error) {
+    logger.error('Failed to get admin audit logs:', error);
+    return res.status(500).json({
+      error: 'Failed to load audit logs',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
+ * GET /api/admin/system/health
+ * System health payload tailored to frontend/pages/admin/system-health.tsx
+ */
+router.get('/system/health', async (req, res) => {
+  try {
+    const db = await DatabaseService.getInstance().getDatabase();
+
+    const [failedJobsResult, recentErrors, storageErrors] = await Promise.all([
+      db.get(`SELECT COUNT(*) as count FROM sync_jobs WHERE status = 'failed'`),
+      db.all(`
+        SELECT action, entity_type, entity_id, restaurant_id, created_at
+        FROM audit_logs
+        WHERE created_at >= datetime('now', '-24 hours')
+          AND (
+            LOWER(action) LIKE '%error%'
+            OR LOWER(action) LIKE '%fail%'
+            OR LOWER(action) LIKE '%exception%'
+          )
+        ORDER BY created_at DESC
+        LIMIT 50
+      `),
+      db.all(`
+        SELECT action, entity_type, entity_id, restaurant_id, created_at
+        FROM audit_logs
+        WHERE created_at >= datetime('now', '-24 hours')
+          AND (
+            LOWER(entity_type) LIKE '%storage%'
+            OR LOWER(action) LIKE '%storage%'
+            OR LOWER(action) LIKE '%upload%'
+          )
+        ORDER BY created_at DESC
+        LIMIT 20
+      `)
+    ]);
+
+    const failedJobs = Number(failedJobsResult?.count || 0);
+    const status = failedJobs > 0 || recentErrors.length > 0 ? 'degraded' : 'operational';
+
+    return res.json({
+      status,
+      failedJobs,
+      recentErrors,
+      storageErrors,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    logger.error('Failed to get system health:', error);
+    return res.status(500).json({
+      error: 'Failed to load system health',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
+ * GET /api/admin/jobs
+ * Sync job list for admin monitoring surfaces.
+ */
+router.get('/jobs', async (req, res) => {
+  try {
+    const db = await DatabaseService.getInstance().getDatabase();
+    const page = resolvePage(req.query.page, 1);
+    const limit = resolveLimit(req.query.limit, 50, 200);
+    const offset = (page - 1) * limit;
+    const status = typeof req.query.status === 'string' ? req.query.status.trim() : '';
+    const days = resolveDays(req.query.days, 30, 180);
+
+    const whereParts: string[] = [`sj.created_at >= date('now', '-${days} days')`];
+    const params: any[] = [];
+    if (status) {
+      whereParts.push('sj.status = ?');
+      params.push(status);
+    }
+
+    const whereClause = `WHERE ${whereParts.join(' AND ')}`;
+
+    const jobs = await db.all(
+      `
+      SELECT
+        sj.id,
+        sj.restaurant_id,
+        r.name as restaurant_name,
+        sj.job_type,
+        sj.status,
+        sj.error_message,
+        sj.created_at
+      FROM sync_jobs sj
+      LEFT JOIN restaurants r ON r.id = sj.restaurant_id
+      ${whereClause}
+      ORDER BY sj.created_at DESC
+      LIMIT ? OFFSET ?
+    `,
+      [...params, limit, offset]
+    );
+
+    const totalResult = await db.get(
+      `SELECT COUNT(*) as total FROM sync_jobs sj ${whereClause}`,
+      params
+    );
+
+    return res.json({
+      jobs,
+      pagination: {
+        page,
+        limit,
+        total: totalResult?.total || 0,
+        pages: Math.ceil((totalResult?.total || 0) / limit)
+      } as PaginationPayload
+    });
+  } catch (error) {
+    logger.error('Failed to get admin jobs:', error);
+    return res.status(500).json({
+      error: 'Failed to load jobs',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
 /**
  * GET /api/admin/platform-stats
  * Get high-level platform KPIs for admin dashboard
@@ -243,6 +666,77 @@ router.get('/restaurants/:id/orders', async (req, res) => {
     logger.error('Failed to get restaurant orders:', error);
     res.status(500).json({ 
       error: 'Failed to load orders',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
+ * GET /api/admin/restaurants/:id/campaigns
+ * Get marketing campaigns for a specific restaurant.
+ * Response: { campaigns: AdminCampaign[], pagination: PaginationPayload }
+ */
+router.get('/restaurants/:id/campaigns', async (req, res) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const page = resolvePage(req.query.page, 1);
+    const limit = resolveLimit(req.query.limit, 50, 200);
+    const offset = (page - 1) * limit;
+    const status = typeof req.query.status === 'string' ? req.query.status.trim() : '';
+    const db = await DatabaseService.getInstance().getDatabase();
+
+    const whereParts: string[] = ['mc.restaurant_id = ?'];
+    const params: any[] = [id];
+    if (status && status !== 'all') {
+      whereParts.push('mc.status = ?');
+      params.push(status);
+    }
+
+    const whereClause = `WHERE ${whereParts.join(' AND ')}`;
+
+    const campaigns = await db.all(
+      `
+      SELECT
+        mc.id,
+        mc.restaurant_id,
+        r.name as restaurant_name,
+        mc.name,
+        mc.type,
+        mc.status,
+        mc.message,
+        mc.scheduled_at,
+        mc.sent_at,
+        mc.total_recipients,
+        mc.successful_sends,
+        mc.failed_sends,
+        mc.created_at
+      FROM marketing_campaigns mc
+      LEFT JOIN restaurants r ON r.id = mc.restaurant_id
+      ${whereClause}
+      ORDER BY mc.created_at DESC
+      LIMIT ? OFFSET ?
+    `,
+      [...params, limit, offset]
+    );
+
+    const totalResult = await db.get(
+      `SELECT COUNT(*) as total FROM marketing_campaigns mc ${whereClause}`,
+      params
+    );
+
+    return res.json({
+      campaigns: parseTableRows(campaigns) as AdminCampaign[],
+      pagination: {
+        page,
+        limit,
+        total: totalResult?.total || 0,
+        pages: Math.ceil((totalResult?.total || 0) / limit)
+      } as PaginationPayload
+    });
+  } catch (error) {
+    logger.error('Failed to get restaurant campaigns:', error);
+    return res.status(500).json({
+      error: 'Failed to load campaigns',
       details: error instanceof Error ? error.message : 'Unknown error'
     });
   }
