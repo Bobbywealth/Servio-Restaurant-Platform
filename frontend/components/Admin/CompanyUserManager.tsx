@@ -45,7 +45,7 @@ const mockRestaurants: Restaurant[] = [
   { id: '3', name: 'Mall Location' },
 ];
 
-const roleColors: Record<string, { bg: string; text: string; label: string }> = {
+const roleColors: Record<string, { bg: string; label: string }> = {
   super_admin: { bg: 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400', label: 'Super Admin' },
   admin: { bg: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400', label: 'Admin' },
   manager: { bg: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400', label: 'Manager' },
