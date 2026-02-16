@@ -55,6 +55,15 @@ export interface SocketEvents {
   // System events
   'notifications.new': (data: { notification: any }) => void
   'notifications.unread_count.updated': (data: { unreadCount: number }) => void
+  'campaign:event': (data: {
+    eventType: 'created' | 'approved' | 'disapproved' | 'sent'
+    campaignId: string
+    campaignName?: string
+    restaurantId: string
+    restaurantName?: string
+    timestamp: string
+    metadata?: Record<string, unknown>
+  }) => void
   'new-order': (data: any) => void
   'printer.test': () => void
   'system:notification': (data: { type: string; message: string; priority: 'low' | 'medium' | 'high' }) => void

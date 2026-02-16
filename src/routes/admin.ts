@@ -71,6 +71,22 @@ type AdminAuditLog = {
   created_at: string;
 };
 
+type CampaignFeedEventType = 'created' | 'approved' | 'disapproved' | 'sent';
+
+type AdminCampaignEvent = {
+  id: string;
+  event_type: CampaignFeedEventType;
+  action: string;
+  label: string;
+  campaign_id: string;
+  campaign_name: string | null;
+  restaurant_id: string | null;
+  restaurant_name: string | null;
+  timestamp: string;
+  metadata: Record<string, any>;
+  view_url: string;
+};
+
 const resolveLimit = (value: unknown, fallback = 50, max = 200): number => {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed < 1) return fallback;
@@ -103,6 +119,35 @@ const parseTableRows = (rows: any[]): any[] => {
     }
     return parsed;
   });
+};
+
+const normalizeCampaignEventType = (action: string): CampaignFeedEventType | null => {
+  const normalizedAction = action.toLowerCase();
+
+  if (normalizedAction === 'create_campaign' || normalizedAction === 'campaign_created') {
+    return 'created';
+  }
+
+  if (normalizedAction === 'campaign_approved') {
+    return 'approved';
+  }
+
+  if (normalizedAction === 'campaign_disapproved') {
+    return 'disapproved';
+  }
+
+  if (normalizedAction === 'campaign_sent') {
+    return 'sent';
+  }
+
+  return null;
+};
+
+const campaignEventLabel: Record<CampaignFeedEventType, string> = {
+  created: 'Campaign created',
+  approved: 'Campaign approved',
+  disapproved: 'Campaign disapproved',
+  sent: 'Campaign sent'
 };
 
 /**
@@ -307,6 +352,103 @@ router.get('/audit-logs', async (req, res) => {
     logger.error('Failed to get admin audit logs:', error);
     return res.status(500).json({
       error: 'Failed to load audit logs',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
+ * GET /api/admin/campaign-events
+ * Campaign event feed built from audit logs.
+ */
+router.get('/campaign-events', async (req, res) => {
+  try {
+    const db = await DatabaseService.getInstance().getDatabase();
+    const limit = resolveLimit(req.query.limit, 25, 100);
+    const restaurantId = typeof req.query.restaurantId === 'string' ? req.query.restaurantId.trim() : '';
+    const campaignId = typeof req.query.campaignId === 'string' ? req.query.campaignId.trim() : '';
+    const eventType = typeof req.query.eventType === 'string' ? req.query.eventType.trim().toLowerCase() : '';
+
+    const whereParts: string[] = [
+      `(
+        al.action IN ('create_campaign', 'campaign_created', 'campaign_approved', 'campaign_disapproved', 'campaign_sent')
+        OR (
+          al.entity_type = 'marketing_campaign'
+          AND LOWER(al.action) LIKE '%campaign%'
+        )
+      )`
+    ];
+    const params: any[] = [];
+
+    if (restaurantId) {
+      whereParts.push('al.restaurant_id = ?');
+      params.push(restaurantId);
+    }
+
+    if (campaignId) {
+      whereParts.push(`(
+        al.entity_id = ?
+        OR mc.id = ?
+      )`);
+      params.push(campaignId, campaignId);
+    }
+
+    const logs = await db.all(
+      `
+      SELECT
+        al.id,
+        al.action,
+        al.restaurant_id,
+        r.name as restaurant_name,
+        COALESCE(mc.id, al.entity_id) as campaign_id,
+        mc.name as campaign_name,
+        al.details as metadata,
+        al.created_at
+      FROM audit_logs al
+      LEFT JOIN restaurants r ON r.id = al.restaurant_id
+      LEFT JOIN marketing_campaigns mc ON mc.id = al.entity_id
+      WHERE ${whereParts.join(' AND ')}
+      ORDER BY al.created_at DESC
+      LIMIT ?
+    `,
+      [...params, limit]
+    );
+
+    const parsedLogs = parseTableRows(logs);
+    let events = parsedLogs
+      .map((log: any) => {
+        const normalizedType = normalizeCampaignEventType(log.action || '');
+        if (!normalizedType || !log.campaign_id) {
+          return null;
+        }
+
+        return {
+          id: log.id,
+          event_type: normalizedType,
+          action: log.action,
+          label: campaignEventLabel[normalizedType],
+          campaign_id: log.campaign_id,
+          campaign_name: log.campaign_name || log.metadata?.name || null,
+          restaurant_id: log.restaurant_id,
+          restaurant_name: log.restaurant_name || null,
+          timestamp: log.created_at,
+          metadata: log.metadata && typeof log.metadata === 'object' ? log.metadata : {},
+          view_url: log.restaurant_id
+            ? `/admin/restaurants/${log.restaurant_id}?tab=campaigns&campaignId=${log.campaign_id}`
+            : `/admin/campaigns?campaignId=${log.campaign_id}`
+        } as AdminCampaignEvent;
+      })
+      .filter(Boolean) as AdminCampaignEvent[];
+
+    if (eventType && eventType !== 'all') {
+      events = events.filter((event) => event.event_type === eventType);
+    }
+
+    return res.json({ events });
+  } catch (error) {
+    logger.error('Failed to get campaign events feed:', error);
+    return res.status(500).json({
+      error: 'Failed to load campaign events',
       details: error instanceof Error ? error.message : 'Unknown error'
     });
   }

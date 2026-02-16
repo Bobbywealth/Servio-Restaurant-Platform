@@ -5,8 +5,31 @@ import { logger } from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
 import twilio from 'twilio';
 import nodemailer from 'nodemailer';
+import { SocketService } from '../services/SocketService';
 
 const router = Router();
+
+type CampaignEventType = 'created' | 'approved' | 'disapproved' | 'sent';
+
+const emitCampaignEvent = (payload: {
+  eventType: CampaignEventType;
+  campaignId: string;
+  campaignName?: string;
+  restaurantId: string;
+  restaurantName?: string;
+  timestamp?: string;
+  metadata?: Record<string, unknown>;
+}) => {
+  const io = SocketService.getIO();
+  if (!io) {
+    return;
+  }
+
+  io.emit('campaign:event', {
+    ...payload,
+    timestamp: payload.timestamp || new Date().toISOString()
+  });
+};
 
 // Initialize Twilio client (use environment variables in production)
 let twilioClient: any = null;
@@ -360,6 +383,15 @@ router.post('/campaigns', asyncHandler(async (req: Request, res: Response) => {
     campaignId,
     { name, type, scheduled_at: scheduledAt.toISOString() }
   );
+
+  emitCampaignEvent({
+    eventType: 'created',
+    campaignId,
+    campaignName: name,
+    restaurantId: restaurantId!,
+    timestamp: new Date().toISOString(),
+    metadata: { type, scheduled_at: scheduledAt.toISOString() }
+  });
 
   res.status(201).json({
     success: true,
@@ -991,6 +1023,35 @@ async function sendCampaign(campaignId: string) {
       SET status = ?, successful_sends = ?, failed_sends = ?, sent_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `, ['sent', successful, failed, campaignId]);
+
+    await DatabaseService.getInstance().logAudit(
+      campaign.restaurant_id,
+      null,
+      'campaign_sent',
+      'marketing_campaign',
+      campaignId,
+      {
+        name: campaign.name,
+        type: campaign.type,
+        successful_sends: successful,
+        failed_sends: failed,
+        total_recipients: customers.length
+      }
+    );
+
+    emitCampaignEvent({
+      eventType: 'sent',
+      campaignId,
+      campaignName: campaign.name,
+      restaurantId: campaign.restaurant_id,
+      timestamp: new Date().toISOString(),
+      metadata: {
+        type: campaign.type,
+        successful_sends: successful,
+        failed_sends: failed,
+        total_recipients: customers.length
+      }
+    });
 
     logger.info(`Campaign ${campaignId} completed: ${successful} sent, ${failed} failed`);
 
