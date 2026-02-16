@@ -1,4 +1,5 @@
 import express from 'express';
+import { v4 as uuidv4 } from 'uuid';
 import { DatabaseService } from '../services/DatabaseService';
 import { requirePlatformAdmin } from '../middleware/adminAuth';
 import { logger } from '../utils/logger';
@@ -103,6 +104,21 @@ const parseTableRows = (rows: any[]): any[] => {
     }
     return parsed;
   });
+};
+
+const hasColumn = async (db: any, tableName: string, columnName: string): Promise<boolean> => {
+  const existingColumn = await db.get(
+    `
+      SELECT 1
+      FROM information_schema.columns
+      WHERE table_name = ?
+        AND column_name = ?
+      LIMIT 1
+    `,
+    [tableName, columnName]
+  );
+
+  return Boolean(existingColumn);
 };
 
 /**
@@ -725,6 +741,103 @@ router.get('/restaurants/:id', async (req, res) => {
     logger.error('Failed to get restaurant details:', error);
     res.status(500).json({ 
       error: 'Failed to load restaurant details',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
+ * PATCH /api/admin/restaurants/:id/status
+ * Soft-deactivate a restaurant while preserving historical records.
+ */
+router.patch('/restaurants/:id/status', async (req, res) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const db = await DatabaseService.getInstance().getDatabase();
+    const actorId = req.user?.id ?? null;
+    const actorRole = req.user?.role ?? null;
+    const requestedStatus = typeof req.body?.status === 'string' ? req.body.status.trim().toLowerCase() : '';
+    const nextStatus = requestedStatus === 'active' ? 'active' : 'inactive';
+    const nextIsActive = nextStatus === 'active';
+
+    const restaurant = await db.get('SELECT id, name, is_active FROM restaurants WHERE id = ?', [id]);
+    if (!restaurant) {
+      return res.status(404).json({ error: 'Restaurant not found' });
+    }
+
+    if (!nextIsActive && restaurant.is_active) {
+      const activeRestaurantsCount = await db.get(
+        'SELECT COUNT(*) as total FROM restaurants WHERE is_active = true AND id <> ?',
+        [id]
+      );
+      if (Number(activeRestaurantsCount?.total || 0) < 1) {
+        return res.status(409).json({
+          error: 'Cannot deactivate the last active restaurant',
+          details: 'At least one active restaurant must remain on the platform'
+        });
+      }
+    }
+
+    await db.run(
+      'UPDATE restaurants SET is_active = ?, updated_at = NOW() WHERE id = ?',
+      [nextIsActive, id]
+    );
+
+    const userUpdateResult = await db.run(
+      'UPDATE users SET is_active = ?, updated_at = NOW() WHERE restaurant_id = ?',
+      [nextIsActive, id]
+    );
+
+    let campaignUpdateCount = 0;
+    if (await hasColumn(db, 'marketing_campaigns', 'is_active')) {
+      const campaignResult = await db.run(
+        'UPDATE marketing_campaigns SET is_active = ?, updated_at = NOW() WHERE restaurant_id = ?',
+        [nextIsActive, id]
+      );
+      campaignUpdateCount = Number(campaignResult?.changes || 0);
+    }
+
+    const auditId = uuidv4();
+    const timestamp = new Date().toISOString();
+    const action = nextIsActive ? 'restaurant.activated' : 'restaurant.deactivated';
+    await db.run(
+      'INSERT INTO audit_logs (id, restaurant_id, user_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [
+        auditId,
+        id,
+        actorId,
+        action,
+        'restaurant',
+        id,
+        JSON.stringify({
+          actorId,
+          actorRole,
+          restaurantId: id,
+          restaurantName: restaurant.name,
+          timestamp,
+          usersUpdated: Number(userUpdateResult?.changes || 0),
+          campaignsUpdated: campaignUpdateCount,
+          ordersRetained: true
+        })
+      ]
+    );
+
+    return res.json({
+      message: nextIsActive ? 'Restaurant activated successfully' : 'Restaurant deactivated successfully',
+      restaurant: {
+        id,
+        is_active: nextIsActive
+      },
+      relatedUpdates: {
+        usersUpdated: Number(userUpdateResult?.changes || 0),
+        campaignsUpdated: campaignUpdateCount,
+        ordersRetained: true
+      }
+    });
+  } catch (error) {
+    logger.error('Failed to update restaurant status:', error);
+    return res.status(500).json({
+      error: 'Failed to update restaurant status',
       details: error instanceof Error ? error.message : 'Unknown error'
     });
   }
