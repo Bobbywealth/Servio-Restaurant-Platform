@@ -114,6 +114,34 @@ interface SummaryStats {
   staffOnDuty: number
 }
 
+interface DashboardWidgetErrors {
+  platformStats: string | null
+  restaurants: string | null
+  activities: string | null
+  analytics: string | null
+}
+
+const DEFAULT_WIDGET_ERRORS: DashboardWidgetErrors = {
+  platformStats: null,
+  restaurants: null,
+  activities: null,
+  analytics: null
+}
+
+const parseApiError = (error: any, fallbackMessage: string) => {
+  const responseData = error?.response?.data
+  if (typeof responseData?.error === 'string' && responseData.error.trim()) {
+    return responseData.error
+  }
+  if (typeof responseData?.message === 'string' && responseData.message.trim()) {
+    return responseData.message
+  }
+  if (typeof error?.message === 'string' && error.message.trim()) {
+    return error.message
+  }
+  return fallbackMessage
+}
+
 // ============================================================================
 // Loading Skeleton Components
 // ============================================================================
@@ -141,6 +169,15 @@ const RestaurantCardSkeleton: React.FC = () => (
     <div className="grid grid-cols-2 gap-4">
       <Skeleton variant="rounded" height={60} />
       <Skeleton variant="rounded" height={60} />
+    </div>
+  </div>
+)
+
+const WidgetErrorBanner: React.FC<{ message: string }> = ({ message }) => (
+  <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800/50 dark:bg-red-900/20 dark:text-red-300">
+    <div className="flex items-start gap-2">
+      <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+      <span>{message}</span>
     </div>
   </div>
 )
@@ -547,57 +584,95 @@ const AdminDashboard: React.FC = () => {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
+  const [widgetErrors, setWidgetErrors] = useState<DashboardWidgetErrors>(DEFAULT_WIDGET_ERRORS)
 
   const fetchDashboardData = async () => {
     try {
       setLoading(true)
-      setError(null)
 
-      const [platformStatsRes, restaurantsRes, analyticsRes, activitiesRes] = await Promise.all([
+      const [platformStatsResult, restaurantsResult, analyticsResult, activitiesResult] = await Promise.allSettled([
         api.get('/api/admin/platform-stats'),
         api.get('/api/admin/restaurants?limit=12'),
         api.get('/api/admin/analytics?days=30'),
         api.get('/api/admin/recent-activity?limit=20')
       ])
 
-      const stats = platformStatsRes.data?.stats || {}
-      const recentActivity = platformStatsRes.data?.recentActivity || []
-      const restaurantsData = restaurantsRes.data?.restaurants || []
+      const nextWidgetErrors: DashboardWidgetErrors = { ...DEFAULT_WIDGET_ERRORS }
+      let hasSuccessfulSection = false
 
-      setCompany({
-        id: 'platform',
-        name: 'Servio Platform',
-        totalRestaurants: Number(stats.total_restaurants || 0),
-        totalRevenueToday: 0,
-        totalRevenueWeek: 0,
-        totalRevenueMonth: 0
-      })
+      if (platformStatsResult.status === 'fulfilled') {
+        hasSuccessfulSection = true
+        const platformStatsRes = platformStatsResult.value
+        const stats = platformStatsRes.data?.stats || {}
 
-      setRestaurants(restaurantsData.map((restaurant: any) => ({
-        id: restaurant.id,
-        name: restaurant.name,
-        logo_url: restaurant.logo_url,
-        is_active: Boolean(restaurant.is_active),
-        activeOrders: Number(restaurant.orders_today || 0),
-        todayRevenue: 0,
-        staffOnDuty: Number(restaurant.user_count || 0)
-      })))
+        setCompany({
+          id: 'platform',
+          name: 'Servio Platform',
+          totalRestaurants: Number(stats.total_restaurants || 0),
+          totalRevenueToday: 0,
+          totalRevenueWeek: 0,
+          totalRevenueMonth: 0
+        })
+      } else {
+        nextWidgetErrors.platformStats = parseApiError(platformStatsResult.reason, 'Platform stats unavailable')
+      }
 
-      setAnalytics(analyticsRes.data || null)
-      setActivities((activitiesRes.data?.activities || recentActivity || []).map((activity: any) => ({
-        id: activity.id,
-        type: ['order', 'staff', 'alert'].includes(activity.type) ? activity.type : 'alert',
-        message: activity.message,
-        timestamp: activity.timestamp,
-        restaurant: activity.restaurant || activity.restaurant_name
-      })))
+      if (restaurantsResult.status === 'fulfilled') {
+        hasSuccessfulSection = true
+        const restaurantsData = restaurantsResult.value.data?.restaurants || []
+
+        setRestaurants(restaurantsData.map((restaurant: any) => ({
+          id: restaurant.id,
+          name: restaurant.name,
+          logo_url: restaurant.logo_url,
+          is_active: Boolean(restaurant.is_active),
+          activeOrders: Number(restaurant.orders_today || 0),
+          todayRevenue: 0,
+          staffOnDuty: Number(restaurant.user_count || 0)
+        })))
+      } else {
+        nextWidgetErrors.restaurants = parseApiError(restaurantsResult.reason, 'Restaurants unavailable')
+      }
+
+      if (analyticsResult.status === 'fulfilled') {
+        hasSuccessfulSection = true
+        setAnalytics(analyticsResult.value.data || null)
+      } else {
+        nextWidgetErrors.analytics = parseApiError(analyticsResult.reason, 'Analytics unavailable')
+      }
+
+      if (activitiesResult.status === 'fulfilled') {
+        hasSuccessfulSection = true
+        setActivities((activitiesResult.value.data?.activities || []).map((activity: any) => ({
+          id: activity.id,
+          type: ['order', 'staff', 'alert'].includes(activity.type) ? activity.type : 'alert',
+          message: activity.message,
+          timestamp: activity.timestamp,
+          restaurant: activity.restaurant || activity.restaurant_name
+        })))
+      } else if (platformStatsResult.status === 'fulfilled') {
+        const recentActivity = platformStatsResult.value.data?.recentActivity || []
+        setActivities(recentActivity.map((activity: any) => ({
+          id: activity.id,
+          type: ['order', 'staff', 'alert'].includes(activity.type) ? activity.type : 'alert',
+          message: activity.message,
+          timestamp: activity.timestamp,
+          restaurant: activity.restaurant || activity.restaurant_name
+        })))
+      } else {
+        nextWidgetErrors.activities = parseApiError(activitiesResult.reason, 'Recent activity unavailable')
+      }
+
+      setWidgetErrors(nextWidgetErrors)
+
+      if (hasSuccessfulSection) {
+        setError(null)
+      } else {
+        setError('Failed to load dashboard data')
+      }
     } catch (err: any) {
       console.error('Failed to fetch dashboard data:', err)
-      setError(err.response?.data?.message || 'Failed to load dashboard data')
-      setCompany(null)
-      setRestaurants([])
-      setActivities([])
-      setAnalytics(null)
+      setError(parseApiError(err, 'Failed to load dashboard data'))
     } finally {
       setLoading(false)
     }
@@ -651,7 +726,7 @@ const AdminDashboard: React.FC = () => {
     staffOnDuty: restaurants.reduce((sum, r) => sum + r.staffOnDuty, 0)
   }), [company, restaurants])
 
-  if (error && !company) {
+  if (error && !company && restaurants.length === 0 && activities.length === 0 && !analytics) {
     return (
       <AdminLayout title="Admin Dashboard">
         <div className="flex flex-col items-center justify-center min-h-[60vh]">
@@ -724,6 +799,11 @@ const AdminDashboard: React.FC = () => {
             <div className="space-y-8">
               {/* Summary Stats */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                {widgetErrors.platformStats && (
+                  <div className="sm:col-span-2 lg:col-span-4">
+                    <WidgetErrorBanner message={widgetErrors.platformStats} />
+                  </div>
+                )}
                 <StatsCard
                   title="Today's Revenue"
                   value={`$${summaryStats.totalRevenueToday.toLocaleString()}`}
@@ -759,6 +839,7 @@ const AdminDashboard: React.FC = () => {
               <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
                 {/* Restaurant Grid */}
                 <div className="xl:col-span-2 space-y-6">
+                  {widgetErrors.restaurants && <WidgetErrorBanner message={widgetErrors.restaurants} />}
                   <div className="flex items-center justify-between">
                     <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
                       Restaurants
@@ -785,6 +866,7 @@ const AdminDashboard: React.FC = () => {
 
                 {/* Recent Activity Feed */}
                 <div className="space-y-6">
+                  {widgetErrors.activities && <WidgetErrorBanner message={widgetErrors.activities} />}
                   <div className="flex items-center justify-between">
                     <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
                       Recent Activity
@@ -801,6 +883,7 @@ const AdminDashboard: React.FC = () => {
                 <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
                   Cross-Restaurant Analytics
                 </h2>
+                {widgetErrors.analytics && <WidgetErrorBanner message={widgetErrors.analytics} />}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                   {/* Revenue by Restaurant */}
                   <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-200 dark:border-gray-700">
@@ -810,7 +893,9 @@ const AdminDashboard: React.FC = () => {
                         Revenue by Restaurant
                       </h3>
                     </div>
-                    {analytics?.revenueByRestaurant ? (
+                    {widgetErrors.analytics ? (
+                      <p className="text-red-600 dark:text-red-400">Analytics unavailable</p>
+                    ) : analytics?.revenueByRestaurant ? (
                       <RevenueBarChart data={analytics.revenueByRestaurant} />
                     ) : (
                       <p className="text-gray-500 dark:text-gray-400">No data available</p>
@@ -825,7 +910,9 @@ const AdminDashboard: React.FC = () => {
                         Orders by Channel
                       </h3>
                     </div>
-                    {analytics?.ordersByChannel ? (
+                    {widgetErrors.analytics ? (
+                      <p className="text-red-600 dark:text-red-400">Analytics unavailable</p>
+                    ) : analytics?.ordersByChannel ? (
                       <OrdersPieChart data={analytics.ordersByChannel} />
                     ) : (
                       <p className="text-gray-500 dark:text-gray-400">No data available</p>
@@ -840,7 +927,9 @@ const AdminDashboard: React.FC = () => {
                         Hourly Distribution
                       </h3>
                     </div>
-                    {analytics?.hourlyDistribution ? (
+                    {widgetErrors.analytics ? (
+                      <p className="text-red-600 dark:text-red-400">Analytics unavailable</p>
+                    ) : analytics?.hourlyDistribution ? (
                       <HourlyChart data={analytics.hourlyDistribution} />
                     ) : (
                       <p className="text-gray-500 dark:text-gray-400">No data available</p>
