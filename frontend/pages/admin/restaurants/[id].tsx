@@ -550,6 +550,10 @@ const OrdersTab: React.FC<{ orders: Order[]; pagination: any }> = ({ orders, pag
 )
 
 // Campaigns Tab Component
+/**
+ * API contract: GET /api/admin/restaurants/:id/campaigns
+ * Response: { campaigns: Campaign[], pagination: { page, limit, total, pages } }
+ */
 interface Campaign {
   id: string
   name: string

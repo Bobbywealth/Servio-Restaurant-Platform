@@ -6,6 +6,10 @@ import { api } from '../../lib/api'
 import { getErrorMessage } from '../../lib/utils'
 import Link from 'next/link'
 
+/**
+ * API contract: GET /api/admin/audit-logs
+ * Response: { logs: AuditLog[], pagination: { page, limit, total, pages } }
+ */
 interface AuditLog {
   id: string
   restaurant_id?: string
@@ -32,10 +36,8 @@ export default function AdminAudit() {
     setIsLoading(true)
     setError(null)
     try {
-      // For now, we'll fetch all and filter client-side
-      // In production, you'd want server-side filtering
-      const response = await api.get('/api/admin/activity?limit=200')
-      setLogs(response.data || [])
+      const response = await api.get('/api/admin/audit-logs', { params: { limit: 200 } })
+      setLogs(response.data?.logs || [])
     } catch (err: any) {
       console.error('Failed to fetch audit logs:', err)
       setError(getErrorMessage(err, 'Failed to load audit logs'))
