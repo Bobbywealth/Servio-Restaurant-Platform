@@ -894,7 +894,7 @@ const AdminDashboard: React.FC = () => {
                       Recent Activity
                     </h2>
                   </div>
-                  <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
+                  <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 max-h-[36rem] overflow-y-auto">
                     <ActivityFeed activities={activities} />
                   </div>
                 </div>
