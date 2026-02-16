@@ -39,8 +39,8 @@ export default function AdminOrderDetailsPage() {
     if (!id) return
 
     try {
-      const res = await api.get(`/api/orders/${id}`)
-      setOrder(res.data.data)
+      const res = await api.get(`/api/admin/orders/${id}`)
+      setOrder(res.data.order || null)
     } catch (error) {
       console.error('Failed to fetch order:', error)
     } finally {
@@ -79,6 +79,12 @@ export default function AdminOrderDetailsPage() {
             Back to Orders
           </Link>
         </div>
+
+        {order.restaurant_name && (
+          <div className="mb-4 text-sm text-gray-500 dark:text-gray-400">
+            Restaurant: <span className="font-medium text-gray-800 dark:text-gray-200">{order.restaurant_name}</span>
+          </div>
+        )}
 
         {successMessage && (
           <div className="mb-6 p-4 bg-green-100 text-green-800 rounded-lg flex items-center">
@@ -206,6 +212,9 @@ export default function AdminOrderDetailsPage() {
                 <div className="flex items-center text-sm">
                   <MapPin className="w-4 h-4 mr-2 text-gray-400" />
                   {order.order_type} @ {order.pickup_time}
+                </div>
+                <div className="text-xs text-gray-500">
+                  Restaurant: {order.restaurant_name || 'Unknown restaurant'}
                 </div>
               </div>
             </div>

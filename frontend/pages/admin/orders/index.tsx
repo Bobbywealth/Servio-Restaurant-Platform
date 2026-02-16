@@ -13,8 +13,8 @@ export default function AdminOrdersPage() {
 
   const fetchOrders = async () => {
     try {
-      const res = await api.get('/api/orders')
-      setOrders(res.data.data.orders)
+      const res = await api.get('/api/admin/orders')
+      setOrders(res.data.orders || [])
     } catch (error) {
       console.error('Failed to fetch orders:', error)
     } finally {
@@ -72,6 +72,7 @@ export default function AdminOrdersPage() {
                         <div>
                           <p className="text-sm font-medium text-red-600 truncate">{order.customer_name || 'Anonymous'}</p>
                           <p className="text-sm text-gray-500">{order.customer_phone}</p>
+                          <p className="text-xs text-gray-400">{order.restaurant_name || 'Unknown restaurant'}</p>
                         </div>
                         <div className="text-right">
                           <p className="text-sm font-bold text-gray-900 dark:text-white">${(order.total_amount || 0).toFixed(2)}</p>
@@ -97,6 +98,7 @@ export default function AdminOrdersPage() {
               <thead className="bg-gray-50 dark:bg-gray-900/50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Restaurant</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time</th>
@@ -109,6 +111,9 @@ export default function AdminOrdersPage() {
                       <Link href={`/admin/orders/${order.id}`} className="text-sm font-medium text-gray-900 dark:text-white">
                         {order.customer_name || 'Order'}
                       </Link>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                      {order.restaurant_name || 'Unknown'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
