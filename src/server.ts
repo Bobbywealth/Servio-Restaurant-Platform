@@ -130,6 +130,8 @@ async function initializeServer() {
     const { default: staffAnalyticsRoutes } = await import('./routes/staff-analytics');
     const { default: staffBulkRoutes } = await import('./routes/staff-bulk');
     const { default: voiceConversationsRoutes } = await import('./routes/voice-conversations');
+    const { default: companyRoutes } = await import('./routes/company');
+    const { default: adminRoutes } = await import('./routes/admin');
 
     // API Routes
     app.use('/api/auth', authRoutes);
@@ -179,6 +181,8 @@ async function initializeServer() {
 
     app.use('/api/marketing', requireAuth, marketingRoutes);
     app.use('/api/restaurant', requireAuth, restaurantRoutes);
+    app.use('/api/company', requireAuth, companyRoutes);
+    app.use('/api/admin', requireAuth, adminRoutes);
     app.use('/api/restaurants', (req, res, next) => {
       if (req.path.endsWith('/vapi/test')) {
         const vapiApiKey = process.env.VAPI_API_KEY?.trim();

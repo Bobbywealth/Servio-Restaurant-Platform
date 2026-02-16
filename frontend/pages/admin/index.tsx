@@ -509,71 +509,54 @@ const AdminDashboard: React.FC = () => {
       setLoading(true)
       setError(null)
 
-      const [companyRes, restaurantsRes, analyticsRes, activitiesRes] = await Promise.all([
-        api.get('/api/company'),
-        api.get('/api/company/restaurants'),
-        api.get('/api/company/analytics'),
-        api.get('/api/company/activities')
+      const [platformStatsRes, restaurantsRes, analyticsRes, activitiesRes] = await Promise.all([
+        api.get('/api/admin/platform-stats'),
+        api.get('/api/admin/restaurants?limit=12'),
+        api.get('/api/admin/analytics?days=30'),
+        api.get('/api/admin/recent-activity?limit=20')
       ])
 
-      setCompany(companyRes.data?.data || companyRes.data)
-      setRestaurants(restaurantsRes.data?.data || restaurantsRes.data || [])
-      setAnalytics(analyticsRes.data?.data || analyticsRes.data)
-      setActivities(activitiesRes.data?.data || activitiesRes.data || [])
+      const stats = platformStatsRes.data?.stats || {}
+      const recentActivity = platformStatsRes.data?.recentActivity || []
+      const restaurantsData = restaurantsRes.data?.restaurants || []
+
+      setCompany({
+        id: 'platform',
+        name: 'Servio Platform',
+        totalRestaurants: Number(stats.total_restaurants || 0),
+        totalRevenueToday: 0,
+        totalRevenueWeek: 0,
+        totalRevenueMonth: 0
+      })
+
+      setRestaurants(restaurantsData.map((restaurant: any) => ({
+        id: restaurant.id,
+        name: restaurant.name,
+        logo_url: restaurant.logo_url,
+        is_active: Boolean(restaurant.is_active),
+        activeOrders: Number(restaurant.orders_today || 0),
+        todayRevenue: 0,
+        staffOnDuty: Number(restaurant.user_count || 0)
+      })))
+
+      setAnalytics(analyticsRes.data || null)
+      setActivities((activitiesRes.data?.activities || recentActivity || []).map((activity: any) => ({
+        id: activity.id,
+        type: ['order', 'staff', 'alert'].includes(activity.type) ? activity.type : 'alert',
+        message: activity.message,
+        timestamp: activity.timestamp,
+        restaurant: activity.restaurant || activity.restaurant_name
+      })))
     } catch (err: any) {
       console.error('Failed to fetch dashboard data:', err)
       setError(err.response?.data?.message || 'Failed to load dashboard data')
-      
-      // Set mock data for development/demo
-      setMockData()
+      setCompany(null)
+      setRestaurants([])
+      setActivities([])
+      setAnalytics(null)
     } finally {
       setLoading(false)
     }
-  }
-
-  const setMockData = () => {
-    setCompany({
-      id: '1',
-      name: 'Servio Restaurant Group',
-      logo_url: undefined,
-      totalRestaurants: 5,
-      totalRevenueToday: 12500,
-      totalRevenueWeek: 87500,
-      totalRevenueMonth: 350000
-    })
-    setRestaurants([
-      { id: '1', name: 'Downtown Bistro', logo_url: undefined, is_active: true, activeOrders: 12, todayRevenue: 4200, staffOnDuty: 8 },
-      { id: '2', name: 'Harbor View', logo_url: undefined, is_active: true, activeOrders: 8, todayRevenue: 3100, staffOnDuty: 6 },
-      { id: '3', name: 'Garden Terrace', logo_url: undefined, is_active: true, activeOrders: 15, todayRevenue: 3800, staffOnDuty: 10 },
-      { id: '4', name: 'City Center Express', logo_url: undefined, is_active: false, activeOrders: 0, todayRevenue: 1400, staffOnDuty: 4 }
-    ])
-    setActivities([
-      { id: '1', type: 'order', message: 'New order #1234 received', timestamp: new Date().toISOString(), restaurant: 'Downtown Bistro' },
-      { id: '2', type: 'staff', message: 'Sarah J. clocked in', timestamp: new Date(Date.now() - 300000).toISOString(), restaurant: 'Harbor View' },
-      { id: '3', type: 'alert', message: 'Low inventory alert: Chicken breast', timestamp: new Date(Date.now() - 600000).toISOString(), restaurant: 'Garden Terrace' },
-      { id: '4', type: 'order', message: 'Order #1233 completed', timestamp: new Date(Date.now() - 900000).toISOString(), restaurant: 'City Center Express' }
-    ])
-    setAnalytics({
-      revenueByRestaurant: [
-        { name: 'Downtown Bistro', revenue: 15420 },
-        { name: 'Harbor View', revenue: 12350 },
-        { name: 'Garden Terrace', revenue: 11200 },
-        { name: 'City Center Express', revenue: 8500 }
-      ],
-      ordersByChannel: [
-        { channel: 'In-Store', count: 145 },
-        { channel: 'Online', count: 89 },
-        { channel: 'Phone', count: 34 },
-        { channel: 'Third-Party', count: 67 }
-      ],
-      hourlyDistribution: [
-        { hour: 8, orders: 12 }, { hour: 9, orders: 18 }, { hour: 10, orders: 15 },
-        { hour: 11, orders: 28 }, { hour: 12, orders: 45 }, { hour: 13, orders: 38 },
-        { hour: 14, orders: 22 }, { hour: 15, orders: 18 }, { hour: 16, orders: 25 },
-        { hour: 17, orders: 35 }, { hour: 18, orders: 48 }, { hour: 19, orders: 52 },
-        { hour: 20, orders: 42 }, { hour: 21, orders: 28 }, { hour: 22, orders: 15 }
-      ]
-    })
   }
 
   useEffect(() => {
