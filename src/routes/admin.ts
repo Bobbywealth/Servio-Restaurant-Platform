@@ -71,6 +71,33 @@ type AdminAuditLog = {
   created_at: string;
 };
 
+/**
+ * API contract: GET /api/admin/orders
+ * Response: { orders: AdminOrderSummary[], pagination: PaginationPayload }
+ */
+type AdminOrderSummary = {
+  id: string;
+  restaurant_id: string;
+  restaurant_name: string | null;
+  status: string;
+  customer_name: string | null;
+  customer_phone: string | null;
+  total_amount: number | null;
+  source: string | null;
+  created_at: string;
+};
+
+type AdminOrderDetail = AdminOrderSummary & {
+  subtotal: number | null;
+  tax: number | null;
+  fees: number | null;
+  order_type: string | null;
+  pickup_time: string | null;
+  prep_time_minutes: number | null;
+  call_id: string | null;
+  items: any[];
+};
+
 const resolveLimit = (value: unknown, fallback = 50, max = 200): number => {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed < 1) return fallback;
@@ -426,6 +453,159 @@ router.get('/jobs', async (req, res) => {
     logger.error('Failed to get admin jobs:', error);
     return res.status(500).json({
       error: 'Failed to load jobs',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
+ * GET /api/admin/orders
+ * Get orders across all restaurants with pagination and filtering.
+ */
+router.get('/orders', async (req, res) => {
+  try {
+    const db = await DatabaseService.getInstance().getDatabase();
+    const page = resolvePage(req.query.page, 1);
+    const limit = resolveLimit(req.query.limit, 50, 200);
+    const offset = (page - 1) * limit;
+    const status = typeof req.query.status === 'string' ? req.query.status.trim() : '';
+    const restaurantId = typeof req.query.restaurantId === 'string' ? req.query.restaurantId.trim() : '';
+    const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
+
+    const whereParts: string[] = [];
+    const params: any[] = [];
+
+    if (status && status !== 'all') {
+      whereParts.push('o.status = ?');
+      params.push(status);
+    }
+
+    if (restaurantId) {
+      whereParts.push('o.restaurant_id = ?');
+      params.push(restaurantId);
+    }
+
+    if (search) {
+      whereParts.push(`(
+        o.id::text ILIKE ?
+        OR COALESCE(o.customer_name, '') ILIKE ?
+        OR COALESCE(o.customer_phone, '') ILIKE ?
+        OR COALESCE(r.name, '') ILIKE ?
+      )`);
+      const searchTerm = `%${search}%`;
+      params.push(searchTerm, searchTerm, searchTerm, searchTerm);
+    }
+
+    const whereClause = whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : '';
+
+    const orders = await db.all(
+      `
+      SELECT
+        o.id,
+        o.restaurant_id,
+        r.name AS restaurant_name,
+        o.status,
+        o.customer_name,
+        o.customer_phone,
+        o.total_amount,
+        o.source,
+        o.created_at
+      FROM orders o
+      LEFT JOIN restaurants r ON r.id = o.restaurant_id
+      ${whereClause}
+      ORDER BY o.created_at DESC
+      LIMIT ? OFFSET ?
+    `,
+      [...params, limit, offset]
+    );
+
+    const totalResult = await db.get(
+      `
+      SELECT COUNT(*) as total
+      FROM orders o
+      LEFT JOIN restaurants r ON r.id = o.restaurant_id
+      ${whereClause}
+    `,
+      params
+    );
+
+    return res.json({
+      orders: orders as AdminOrderSummary[],
+      pagination: {
+        page,
+        limit,
+        total: totalResult?.total || 0,
+        pages: Math.ceil((totalResult?.total || 0) / limit)
+      } as PaginationPayload
+    });
+  } catch (error) {
+    logger.error('Failed to get admin orders:', error);
+    return res.status(500).json({
+      error: 'Failed to load orders',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
+ * GET /api/admin/orders/:id
+ * Get one order across all restaurants with restaurant metadata.
+ */
+router.get('/orders/:id', async (req, res) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const db = await DatabaseService.getInstance().getDatabase();
+
+    const order = await db.get(
+      `
+      SELECT
+        o.id,
+        o.restaurant_id,
+        r.name AS restaurant_name,
+        o.status,
+        o.customer_name,
+        o.customer_phone,
+        o.total_amount,
+        o.source,
+        o.created_at,
+        o.subtotal,
+        o.tax,
+        o.fees,
+        o.order_type,
+        o.pickup_time,
+        o.prep_time_minutes,
+        o.call_id,
+        o.items
+      FROM orders o
+      LEFT JOIN restaurants r ON r.id = o.restaurant_id
+      WHERE o.id = ?
+      LIMIT 1
+    `,
+      [id]
+    );
+
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+
+    const parsedItems = typeof order.items === 'string' ? (() => {
+      try {
+        return JSON.parse(order.items);
+      } catch {
+        return [];
+      }
+    })() : (Array.isArray(order.items) ? order.items : []);
+
+    return res.json({
+      order: {
+        ...order,
+        items: parsedItems
+      } as AdminOrderDetail
+    });
+  } catch (error) {
+    logger.error('Failed to get admin order detail:', error);
+    return res.status(500).json({
+      error: 'Failed to load order',
       details: error instanceof Error ? error.message : 'Unknown error'
     });
   }

@@ -3,6 +3,7 @@ export type OrderStatus = 'pending' | 'accepted' | 'preparing' | 'ready' | 'comp
 export interface AdminOrderSummary {
   id: string
   status: OrderStatus
+  restaurant_name?: string | null
   customer_name?: string
   customer_phone?: string
   total_amount?: number
