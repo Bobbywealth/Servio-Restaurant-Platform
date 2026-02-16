@@ -5,6 +5,7 @@ import { requirePlatformAdmin } from '../middleware/adminAuth';
 import { logger } from '../utils/logger';
 import { randomUUID } from 'crypto';
 import { CampaignModerationAction, isPlatformAdminOnly, resolveCampaignTransition } from './adminCampaignModeration';
+import { buildSystemHealthPayload } from './systemHealth';
 
 const router = express.Router();
 
@@ -73,6 +74,29 @@ type AdminAuditLog = {
   entity_id: string | null;
   metadata: string | null;
   created_at: string;
+};
+
+type AdminOrderSummary = {
+  id: string;
+  restaurant_id: string;
+  restaurant_name: string | null;
+  status: string;
+  customer_name: string | null;
+  customer_phone: string | null;
+  total_amount: number;
+  source: string | null;
+  created_at: string;
+};
+
+type AdminOrderDetail = AdminOrderSummary & {
+  subtotal: number | null;
+  tax: number | null;
+  fees: number | null;
+  order_type: string | null;
+  pickup_time: string | null;
+  prep_time_minutes: number | null;
+  call_id: string | null;
+  items: any[];
 };
 
 type CampaignFeedEventType = 'created' | 'approved' | 'disapproved' | 'sent';
@@ -152,6 +176,102 @@ const campaignEventLabel: Record<CampaignFeedEventType, string> = {
   approved: 'Campaign approved',
   disapproved: 'Campaign disapproved',
   sent: 'Campaign sent'
+};
+
+const hasColumn = async (db: any, tableName: string, columnName: string): Promise<boolean> => {
+  const result = await db.get(
+    `
+      SELECT 1
+      FROM information_schema.columns
+      WHERE table_name = ?
+        AND column_name = ?
+      LIMIT 1
+    `,
+    [tableName, columnName]
+  );
+
+  return Boolean(result);
+};
+
+const moderateCampaign = async (
+  req: express.Request,
+  res: express.Response,
+  action: CampaignModerationAction
+): Promise<express.Response | void> => {
+  try {
+    if (!isPlatformAdminOnly(req.user)) {
+      return res.status(403).json({ error: 'Platform admin access required' });
+    }
+
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const db = await DatabaseService.getInstance().getDatabase();
+    const campaign = await db.get(
+      `
+      SELECT id, restaurant_id, name, status, scheduled_at
+      FROM marketing_campaigns
+      WHERE id = ?
+      LIMIT 1
+    `,
+      [id]
+    );
+
+    if (!campaign) {
+      return res.status(404).json({ error: 'Campaign not found' });
+    }
+
+    const nextStatus = resolveCampaignTransition({
+      action,
+      currentStatus: campaign.status,
+      scheduledAt: campaign.scheduled_at
+    });
+
+    if (!nextStatus) {
+      return res.status(409).json({
+        error: `Cannot ${action} campaign in status '${campaign.status}'`
+      });
+    }
+
+    await db.run(
+      'UPDATE marketing_campaigns SET status = ?, updated_at = NOW() WHERE id = ?',
+      [nextStatus, id]
+    );
+
+    const auditAction = action === 'approve' ? 'campaign_approved' : 'campaign_disapproved';
+    await db.run(
+      `
+      INSERT INTO audit_logs (id, restaurant_id, user_id, action, entity_type, entity_id, details)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `,
+      [
+        randomUUID(),
+        campaign.restaurant_id,
+        req.user?.id ?? null,
+        auditAction,
+        'marketing_campaign',
+        id,
+        JSON.stringify({
+          action,
+          previousStatus: campaign.status,
+          nextStatus,
+          reason: action === 'disapprove' && typeof req.body?.reason === 'string' ? req.body.reason.trim() : null
+        })
+      ]
+    );
+
+    return res.json({
+      success: true,
+      campaign: {
+        id,
+        status: nextStatus
+      }
+    });
+  } catch (error) {
+    logger.error(`Failed to ${action} campaign:`, error);
+    return res.status(500).json({
+      error: `Failed to ${action} campaign`,
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
 };
 
 /**
