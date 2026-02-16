@@ -21,7 +21,7 @@ interface AuditLogEntry {
   ip_address?: string;
   user_agent?: string;
   details?: Record<string, any>;
-  status: 'success' | 'failed';
+  status: 'success' | 'failed' | 'warning';
 }
 
 interface AuditLogViewerProps {
