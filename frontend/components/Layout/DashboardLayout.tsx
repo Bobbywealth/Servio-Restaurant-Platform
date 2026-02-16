@@ -123,6 +123,15 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     }
   }, [user, isLoading, router, mounted]);
 
+  // Redirect platform-admin users to the platform admin dashboard
+  React.useEffect(() => {
+    if (mounted && user && user.role === 'platform-admin') {
+      // eslint-disable-next-line no-console
+      console.info('[layout-init] platform-admin detected, redirecting to /admin');
+      router.replace('/admin');
+    }
+  }, [user, mounted, router]);
+
   const normalizePath = (p: string) => (p || '/').split('?')[0].replace(/\/+$/, '') || '/';
   const currentPath = normalizePath(router.asPath);
 
