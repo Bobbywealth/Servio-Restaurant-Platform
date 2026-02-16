@@ -19,25 +19,30 @@ interface AccountSwitcherProps {
   className?: string
 }
 
-const roleIcons = {
+type AccountRole = 'staff' | 'manager' | 'owner' | 'admin' | 'platform-admin'
+
+const roleIcons: Record<AccountRole, React.ComponentType<{ className?: string }>> = {
   admin: Shield,
   owner: Crown, 
   manager: Settings,
-  staff: User
+  staff: User,
+  'platform-admin': Shield
 }
 
-const roleColors = {
+const roleColors: Record<AccountRole, string> = {
   admin: 'text-purple-600 bg-purple-100 dark:text-purple-400 dark:bg-purple-900/30',
   owner: 'text-yellow-600 bg-yellow-100 dark:text-yellow-400 dark:bg-yellow-900/30',
   manager: 'text-blue-600 bg-blue-100 dark:text-blue-400 dark:bg-blue-900/30',
-  staff: 'text-green-600 bg-green-100 dark:text-green-400 dark:bg-green-900/30'
+  staff: 'text-green-600 bg-green-100 dark:text-green-400 dark:bg-green-900/30',
+  'platform-admin': 'text-rose-600 bg-rose-100 dark:text-rose-400 dark:bg-rose-900/30'
 }
 
-const roleNames = {
+const roleNames: Record<AccountRole, string> = {
   admin: 'System Admin',
   owner: 'Restaurant Owner',
   manager: 'Restaurant Manager', 
-  staff: 'Restaurant Staff'
+  staff: 'Restaurant Staff',
+  'platform-admin': 'Platform Admin'
 }
 
 export function AccountSwitcher({ className = '' }: AccountSwitcherProps) {
