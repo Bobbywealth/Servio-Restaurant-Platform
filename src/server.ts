@@ -132,7 +132,6 @@ async function initializeServer() {
     const { default: adminRoutes } = await import('./routes/admin');
     const { default: voiceConversationsRoutes } = await import('./routes/voice-conversations');
     const { default: companyRoutes } = await import('./routes/company');
-    const { default: adminRoutes } = await import('./routes/admin');
 
     // API Routes
     app.use('/api/auth', authRoutes);
