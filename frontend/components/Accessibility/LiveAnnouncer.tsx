@@ -228,7 +228,7 @@ export function StatusMessage({
   announce = true,
   children 
 }: StatusMessageProps) {
-  const { announce: doAnnounce } = useAnnounce()
+  const { announce: doAnnounce } = useAnnouncer()
   
   useEffect(() => {
     if (announce) {
