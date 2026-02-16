@@ -7,9 +7,10 @@
  * - Open Graph and Twitter Card support
  */
 
-export { StructuredData, LocalBusinessSchema, RestaurantSchema, FAQPageSchema, ProductSchema, BreadcrumbSchema } from './StructuredData'
+export { StructuredData } from './StructuredData'
 export { EnhancedSEO, HomepageSchemas } from './EnhancedHead'
 
 // Type exports
+export type { LocalBusinessSchema, RestaurantSchema, FAQPageSchema, ProductSchema, BreadcrumbSchema } from './StructuredData'
 export type { StructuredDataProps, BaseSchemaProps } from './StructuredData'
 export type { EnhancedSEOProps } from './EnhancedHead'

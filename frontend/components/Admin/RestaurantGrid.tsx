@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence, type Variants } from 'framer-motion'
 import { 
   Grid3X3, 
   List, 
@@ -139,7 +139,7 @@ const RestaurantCard: React.FC<{
 }> = ({ restaurant, viewMode, onSelect, index }) => {
   const [imageError, setImageError] = useState(false)
 
-  const cardVariants = {
+  const cardVariants: Variants = {
     hidden: { opacity: 0, y: 20 },
     visible: { 
       opacity: 1, 
