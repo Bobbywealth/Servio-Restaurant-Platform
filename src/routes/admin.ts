@@ -3,7 +3,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { DatabaseService } from '../services/DatabaseService';
 import { requirePlatformAdmin } from '../middleware/adminAuth';
 import { logger } from '../utils/logger';
-import { buildSystemHealthPayload } from './systemHealth';
+import { randomUUID } from 'crypto';
+import { CampaignModerationAction, isPlatformAdminOnly, resolveCampaignTransition } from './adminCampaignModeration';
 
 const router = express.Router();
 
@@ -54,6 +55,7 @@ type AdminCampaign = {
   failed_sends: number;
   created_at: string;
 };
+
 
 /**
  * API contract: GET /api/admin/audit-logs
@@ -134,19 +136,115 @@ const parseTableRows = (rows: any[]): any[] => {
   });
 };
 
-const hasColumn = async (db: any, tableName: string, columnName: string): Promise<boolean> => {
-  const existingColumn = await db.get(
-    `
-      SELECT 1
-      FROM information_schema.columns
-      WHERE table_name = ?
-        AND column_name = ?
-      LIMIT 1
-    `,
-    [tableName, columnName]
-  );
+const assertPlatformAdminOnly = (req: express.Request, res: express.Response): boolean => {
+  if (!isPlatformAdminOnly(req.user)) {
+    res.status(403).json({
+      error: 'Platform admin access required',
+      message: 'Only platform-admin users can approve or disapprove campaigns',
+      userRole: req.user?.role || null
+    });
+    return false;
+  }
 
-  return Boolean(existingColumn);
+  return true;
+};
+
+const trimReason = (value: unknown): string | null => {
+  if (typeof value !== 'string') return null;
+  const cleaned = value.trim();
+  if (!cleaned) return null;
+  return cleaned.slice(0, 1000);
+};
+
+const moderateCampaign = async (
+  req: express.Request,
+  res: express.Response,
+  action: CampaignModerationAction
+) => {
+  if (!assertPlatformAdminOnly(req, res)) {
+    return;
+  }
+
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const reason = trimReason(req.body?.reason);
+    const db = await DatabaseService.getInstance().getDatabase();
+
+    const campaign = await db.get(
+      'SELECT id, restaurant_id, status, scheduled_at FROM marketing_campaigns WHERE id = ?',
+      [id]
+    );
+
+    if (!campaign) {
+      return res.status(404).json({ error: 'Campaign not found' });
+    }
+
+    const nextStatus = resolveCampaignTransition({
+      action,
+      currentStatus: campaign.status,
+      scheduledAt: campaign.scheduled_at || null
+    });
+
+    if (!nextStatus) {
+      return res.status(409).json({
+        error: 'Invalid campaign status transition',
+        currentStatus: campaign.status,
+        attemptedAction: action,
+        allowedFrom: action === 'approve' ? ['pending_owner_approval'] : ['pending_owner_approval', 'approved']
+      });
+    }
+
+    if (campaign.status === nextStatus) {
+      return res.json({
+        success: true,
+        message: `Campaign already ${nextStatus}`,
+        campaign: {
+          id: campaign.id,
+          status: campaign.status
+        }
+      });
+    }
+
+    await db.run('UPDATE marketing_campaigns SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [
+      nextStatus,
+      id
+    ]);
+
+    await db.run(
+      'INSERT INTO audit_logs (id, restaurant_id, user_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [
+        randomUUID(),
+        campaign.restaurant_id,
+        req.user?.id || null,
+        action === 'approve' ? 'campaign_approved' : 'campaign_disapproved',
+        'marketing_campaign',
+        campaign.id,
+        JSON.stringify({
+          actorId: req.user?.id,
+          actorName: req.user?.name,
+          actorRole: req.user?.role,
+          reason,
+          previousStatus: campaign.status,
+          nextStatus
+        })
+      ]
+    );
+
+    return res.json({
+      success: true,
+      message: action === 'approve' ? 'Campaign approved successfully' : 'Campaign disapproved successfully',
+      campaign: {
+        id: campaign.id,
+        status: nextStatus
+      }
+    });
+  } catch (error) {
+    logger.error(`Failed to ${action} campaign:`, error);
+    return res.status(500).json({
+      error: `Failed to ${action} campaign`,
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
 };
 
 /**
@@ -279,6 +377,22 @@ router.get('/campaigns', async (req, res) => {
       details: error instanceof Error ? error.message : 'Unknown error'
     });
   }
+});
+
+/**
+ * POST /api/admin/campaigns/:id/approve
+ * Transition pending owner approval campaigns into approved/scheduled.
+ */
+router.post('/campaigns/:id/approve', async (req, res) => {
+  await moderateCampaign(req, res, 'approve');
+});
+
+/**
+ * POST /api/admin/campaigns/:id/disapprove
+ * Transition pending/approved campaigns into rejected with optional reason.
+ */
+router.post('/campaigns/:id/disapprove', async (req, res) => {
+  await moderateCampaign(req, res, 'disapprove');
 });
 
 /**
