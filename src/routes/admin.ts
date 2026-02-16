@@ -480,6 +480,133 @@ router.get('/platform-stats', async (req, res) => {
 });
 
 /**
+ * GET /api/admin/recent-activity
+ * Get recent platform activity across restaurants
+ */
+router.get('/recent-activity', async (req, res) => {
+  try {
+    const db = await DatabaseService.getInstance().getDatabase();
+    const { limit = 20 } = req.query;
+
+    const activities = await db.all(`
+      SELECT *
+      FROM (
+        SELECT
+          o.id,
+          'order' AS type,
+          'Order ' || o.id || ' (' || o.status || ')' AS message,
+          o.created_at AS timestamp,
+          r.name AS restaurant
+        FROM orders o
+        JOIN restaurants r ON r.id = o.restaurant_id
+
+        UNION ALL
+
+        SELECT
+          te.id,
+          'staff' AS type,
+          'Staff clock-in recorded' AS message,
+          te.created_at AS timestamp,
+          r.name AS restaurant
+        FROM time_entries te
+        JOIN restaurants r ON r.id = te.restaurant_id
+
+        UNION ALL
+
+        SELECT
+          it.id,
+          'alert' AS type,
+          'Inventory transaction: ' || COALESCE(it.reason, it.type, 'update') AS message,
+          it.created_at AS timestamp,
+          r.name AS restaurant
+        FROM inventory_transactions it
+        JOIN restaurants r ON r.id = it.restaurant_id
+
+        UNION ALL
+
+        SELECT
+          al.id,
+          'alert' AS type,
+          'Audit event: ' || al.action AS message,
+          al.created_at AS timestamp,
+          r.name AS restaurant
+        FROM audit_logs al
+        JOIN restaurants r ON r.id = al.restaurant_id
+      ) combined
+      ORDER BY timestamp DESC
+      LIMIT ?
+    `, [Number(limit)]);
+
+    res.json({ activities });
+  } catch (error) {
+    logger.error('Failed to get admin recent activity:', error);
+    res.status(500).json({
+      error: 'Failed to load recent activity',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
+ * GET /api/admin/analytics
+ * Get cross-restaurant analytics for admin dashboard
+ */
+router.get('/analytics', async (req, res) => {
+  try {
+    const db = await DatabaseService.getInstance().getDatabase();
+    const { days = 30 } = req.query;
+    const windowDays = Number.isFinite(Number(days)) ? Math.max(1, Number(days)) : 30;
+
+    const revenueByRestaurant = await db.all(`
+      SELECT
+        r.name,
+        COALESCE(SUM(o.total_amount), 0) AS revenue
+      FROM restaurants r
+      LEFT JOIN orders o
+       ON r.id = o.restaurant_id
+       AND o.created_at >= date('now', '-${windowDays} days')
+      WHERE r.is_active = true
+      GROUP BY r.id, r.name
+      ORDER BY revenue DESC
+      LIMIT 10
+    `);
+
+    const ordersByChannel = await db.all(`
+      SELECT
+        channel,
+        COUNT(*) AS count
+      FROM orders
+      WHERE created_at >= date('now', '-${windowDays} days')
+      GROUP BY channel
+      ORDER BY count DESC
+      LIMIT 10
+    `);
+
+    const hourlyDistribution = await db.all(`
+      SELECT
+        CAST(strftime('%H', created_at) AS INTEGER) AS hour,
+        COUNT(*) AS orders
+      FROM orders
+      WHERE created_at >= date('now', '-${windowDays} days')
+      GROUP BY hour
+      ORDER BY hour ASC
+    `);
+
+    res.json({
+      revenueByRestaurant,
+      ordersByChannel,
+      hourlyDistribution
+    });
+  } catch (error) {
+    logger.error('Failed to get admin analytics:', error);
+    res.status(500).json({
+      error: 'Failed to load analytics',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
  * GET /api/admin/restaurants
  * Get list of all restaurants for admin management
  */
