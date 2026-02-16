@@ -199,7 +199,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       icon: Home,
       description: 'Overview & quick actions',
       color: 'text-servio-blue-500',
-      roles: ['staff', 'manager', 'owner', 'admin'],
+      roles: ['staff', 'manager', 'owner'],
       section: 'operations'
     },
     {
@@ -208,7 +208,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       icon: ClipboardList,
       description: 'Manage all orders',
       color: 'text-primary-500',
-      roles: ['staff', 'manager', 'owner', 'admin'],
+      roles: ['staff', 'manager', 'owner'],
       section: 'operations'
     },
     {
@@ -217,7 +217,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       icon: UtensilsCrossed,
       description: 'Menu & categories',
       color: 'text-amber-500',
-      roles: ['manager', 'owner', 'admin'],
+      roles: ['manager', 'owner'],
       section: 'operations'
     },
     {
@@ -226,7 +226,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       icon: Package,
       description: 'Stock management',
       color: 'text-servio-green-500',
-      roles: ['manager', 'owner', 'admin'],
+      roles: ['manager', 'owner'],
       section: 'operations'
     },
     
@@ -237,7 +237,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       icon: Users,
       description: 'Team & schedules',
       color: 'text-purple-500',
-      roles: ['manager', 'owner', 'admin'],
+      roles: ['manager', 'owner'],
       section: 'team'
     },
     {
@@ -246,7 +246,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       icon: CheckCircle,
       description: 'Team task manager',
       color: 'text-servio-green-500',
-      roles: ['manager', 'owner', 'admin'],
+      roles: ['manager', 'owner'],
       section: 'team'
     },
     
@@ -257,7 +257,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       icon: FileText,
       description: 'Call transcripts & insights',
       color: 'text-indigo-500',
-      roles: ['manager', 'owner', 'admin'],
+      roles: ['manager', 'owner'],
       section: 'ai'
     },
     {
@@ -266,18 +266,18 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       icon: Mail,
       description: 'SMS & email campaigns',
       color: 'text-pink-500',
-      roles: ['manager', 'owner', 'admin'],
+      roles: ['manager', 'owner'],
       section: 'ai'
     },
     
-    // ADMIN SECTION
+    // ADMIN SECTION (Owner has full admin access)
     {
       name: 'Integrations',
       href: '/dashboard/integrations',
       icon: Wifi,
       description: 'API connections',
       color: 'text-cyan-500',
-      roles: ['owner', 'admin'],
+      roles: ['owner'],
       section: 'admin'
     },
     {
@@ -286,7 +286,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       icon: FileText,
       description: 'Upload & track invoices',
       color: 'text-blue-500',
-      roles: ['manager', 'owner', 'admin'],
+      roles: ['manager', 'owner'],
       section: 'admin'
     },
     {
@@ -295,7 +295,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       icon: Settings,
       description: 'System settings',
       color: 'text-surface-500',
-      roles: ['staff', 'manager', 'owner', 'admin'],
+      roles: ['manager', 'owner'],
       section: 'admin'
     },
   ];
