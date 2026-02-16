@@ -1,22 +1,13 @@
 import React, { useEffect, useState } from 'react'
 import AdminLayout from '../../../components/Layout/AdminLayout'
 import { api } from '../../../lib/api'
+import { AdminOrderSummary, getOrderStatusBadgeClass } from '../../../lib/adminOrders'
 import { useSocket } from '../../../lib/socket'
 import Link from 'next/link'
-import { ClipboardList, Clock, CheckCircle, XCircle } from 'lucide-react'
-
-interface Order {
-  id: string
-  status: string
-  customer_name?: string
-  customer_phone?: string
-  total_amount?: number
-  created_at: string
-  source?: string
-}
+import { ClipboardList, Clock } from 'lucide-react'
 
 export default function AdminOrdersPage() {
-  const [orders, setOrders] = useState<Order[]>([])
+  const [orders, setOrders] = useState<AdminOrderSummary[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const socket = useSocket()
 
@@ -111,7 +102,7 @@ export default function AdminOrdersPage() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time</th>
                 </tr>
               </thead>
-              <ul className="divide-y divide-gray-200 dark:divide-gray-700">
+              <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                 {otherOrders.map((order) => (
                   <tr key={order.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -121,9 +112,7 @@ export default function AdminOrdersPage() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                        order.status === 'accepted' ? 'bg-green-100 text-green-800' :
-                        order.status === 'cancelled' ? 'bg-red-100 text-red-800' :
-                        'bg-gray-100 text-gray-800'
+                        getOrderStatusBadgeClass(order.status)
                       }`}>
                         {order.status}
                       </span>
@@ -136,7 +125,7 @@ export default function AdminOrdersPage() {
                     </td>
                   </tr>
                 ))}
-              </ul>
+              </tbody>
             </table>
           </div>
         </section>
