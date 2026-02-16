@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react'
 import Head from 'next/head'
+import { useRouter } from 'next/router'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   DollarSign,
@@ -217,6 +218,10 @@ const RestaurantCard: React.FC<RestaurantCardProps> = ({
   onView,
   onManage
 }) => {
+  const handleViewClick = () => {
+    onView(restaurant.id)
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.95 }}
@@ -289,9 +294,10 @@ const RestaurantCard: React.FC<RestaurantCardProps> = ({
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => onView(restaurant.id)}
+            onClick={handleViewClick}
             className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 dark:text-gray-400 transition-colors"
             title="View Details"
+            data-testid={`view-restaurant-${restaurant.id}`}
           >
             <ChevronRight className="w-5 h-5" />
           </button>
@@ -540,12 +546,14 @@ const DashboardHeader: React.FC<DashboardHeaderProps> = ({
 // ============================================================================
 
 const AdminDashboard: React.FC = () => {
+  const router = useRouter()
   const [company, setCompany] = useState<CompanyData | null>(null)
   const [restaurants, setRestaurants] = useState<RestaurantMetrics[]>([])
   const [activities, setActivities] = useState<ActivityItem[]>([])
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [viewRestaurantError, setViewRestaurantError] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
 
   const fetchDashboardData = async () => {
@@ -618,8 +626,16 @@ const AdminDashboard: React.FC = () => {
   }
 
   const handleViewRestaurant = (id: string) => {
-    console.log('View restaurant:', id)
-    // Navigate to restaurant details
+    const normalizedId = typeof id === 'string' ? id.trim() : ''
+    const isValidId = /^[a-zA-Z0-9_-]+$/.test(normalizedId)
+
+    if (!normalizedId || !isValidId) {
+      setViewRestaurantError('Unable to view restaurant details because the restaurant ID is invalid.')
+      return
+    }
+
+    setViewRestaurantError(null)
+    router.push(`/admin/restaurants/${normalizedId}`)
   }
 
   const handleManageRestaurant = (id: string) => {
@@ -770,6 +786,12 @@ const AdminDashboard: React.FC = () => {
                       View All
                     </button>
                   </div>
+                  {viewRestaurantError && (
+                    <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">
+                      <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                      <span>{viewRestaurantError}</span>
+                    </div>
+                  )}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {restaurants.map((restaurant) => (
                       <RestaurantCard
