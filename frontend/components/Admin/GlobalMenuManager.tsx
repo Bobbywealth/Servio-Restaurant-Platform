@@ -4,7 +4,7 @@ import React, { useState, useMemo } from 'react';
 import { 
   Search, Filter, Plus, Edit2, Trash2, Eye, 
   Copy, Check, X, ChevronDown, ChevronRight,
-  Globe, Push, Clock, DollarSign, Package,
+  Globe, Send, Clock, DollarSign, Package,
   AlertTriangle, CheckCircle, Loader2
 } from 'lucide-react';
 import { api } from '@/lib/api';
@@ -34,7 +34,7 @@ interface Restaurant {
   id: string;
   name: string;
   slug: string;
-  logo_url?: string;
+  logo_url?: string | null;
 }
 
 interface GlobalMenuManagerProps {
@@ -270,7 +270,7 @@ export function GlobalMenuManager({ onClose }: GlobalMenuManagerProps) {
 
               {/* Categories & Items */}
               <div className="space-y-4">
-                {filteredCategories.map(category => (
+                {filteredItems.map(category => (
                   <div key={category.id} className="card">
                     {/* Category Header */}
                     <div 
@@ -430,7 +430,7 @@ export function GlobalMenuManager({ onClose }: GlobalMenuManagerProps) {
                   </div>
                 ))}
 
-                {filteredCategories.length === 0 && (
+                {filteredItems.length === 0 && (
                   <div className="text-center py-12">
                     <Package className="w-12 h-12 mx-auto text-gray-300 dark:text-gray-600 mb-3" />
                     <p className="text-gray-500 dark:text-gray-400">
@@ -589,7 +589,7 @@ export function GlobalMenuManager({ onClose }: GlobalMenuManagerProps) {
                   </>
                 ) : (
                   <>
-                    <Push className="w-5 h-5" />
+                    <Send className="w-5 h-5" />
                     Push to {selectedRestaurants.size} Location{selectedRestaurants.size !== 1 ? 's' : ''}
                   </>
                 )}

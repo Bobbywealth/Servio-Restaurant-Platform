@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { 
   CreditCard, DollarSign, Calendar, CheckCircle, AlertTriangle,
-  Download, RefreshCw, TrendingUp, TrendingDown,
+  Clock, Download, RefreshCw, TrendingUp, TrendingDown,
   Building, Package, ChevronRight, Loader2
 } from 'lucide-react';
 
