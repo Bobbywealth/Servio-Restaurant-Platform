@@ -209,8 +209,8 @@ function trackExperimentEvent(
   // Send to analytics
   if ((window as any).dataLayer) {
     (window as any).dataLayer.push({
-      event: 'experiment_event',
-      ...event
+      ...event,
+      event: 'experiment_event'
     })
   }
   

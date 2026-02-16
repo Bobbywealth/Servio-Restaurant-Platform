@@ -24,7 +24,10 @@ export default function Document() {
           rel="preload" 
           href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" 
           as="style"
-          onLoad="this.onload=null;this.rel='stylesheet'"
+          onLoad={(event) => {
+            event.currentTarget.onload = null
+            event.currentTarget.rel = 'stylesheet'
+          }}
         />
         
         {/* Fallback for no-JS */}

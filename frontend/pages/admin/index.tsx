@@ -610,6 +610,7 @@ const AdminDashboard: React.FC = () => {
     return {
       id: company.id,
       name: company.name,
+      slug: company.name.toLowerCase().replace(/\s+/g, '-'),
       logo_url: company.logo_url
     }
   }, [company, restaurants])
