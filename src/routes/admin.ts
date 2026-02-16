@@ -75,31 +75,20 @@ type AdminAuditLog = {
   created_at: string;
 };
 
-/**
- * API contract: GET /api/admin/orders
- * Response: { orders: AdminOrderSummary[], pagination: PaginationPayload }
- */
-type AdminOrderSummary = {
-  id: string;
-  restaurant_id: string;
-  restaurant_name: string | null;
-  status: string;
-  customer_name: string | null;
-  customer_phone: string | null;
-  total_amount: number | null;
-  source: string | null;
-  created_at: string;
-};
+type CampaignFeedEventType = 'created' | 'approved' | 'disapproved' | 'sent';
 
-type AdminOrderDetail = AdminOrderSummary & {
-  subtotal: number | null;
-  tax: number | null;
-  fees: number | null;
-  order_type: string | null;
-  pickup_time: string | null;
-  prep_time_minutes: number | null;
-  call_id: string | null;
-  items: any[];
+type AdminCampaignEvent = {
+  id: string;
+  event_type: CampaignFeedEventType;
+  action: string;
+  label: string;
+  campaign_id: string;
+  campaign_name: string | null;
+  restaurant_id: string | null;
+  restaurant_name: string | null;
+  timestamp: string;
+  metadata: Record<string, any>;
+  view_url: string;
 };
 
 const resolveLimit = (value: unknown, fallback = 50, max = 200): number => {
@@ -136,115 +125,33 @@ const parseTableRows = (rows: any[]): any[] => {
   });
 };
 
-const assertPlatformAdminOnly = (req: express.Request, res: express.Response): boolean => {
-  if (!isPlatformAdminOnly(req.user)) {
-    res.status(403).json({
-      error: 'Platform admin access required',
-      message: 'Only platform-admin users can approve or disapprove campaigns',
-      userRole: req.user?.role || null
-    });
-    return false;
+const normalizeCampaignEventType = (action: string): CampaignFeedEventType | null => {
+  const normalizedAction = action.toLowerCase();
+
+  if (normalizedAction === 'create_campaign' || normalizedAction === 'campaign_created') {
+    return 'created';
   }
 
-  return true;
+  if (normalizedAction === 'campaign_approved') {
+    return 'approved';
+  }
+
+  if (normalizedAction === 'campaign_disapproved') {
+    return 'disapproved';
+  }
+
+  if (normalizedAction === 'campaign_sent') {
+    return 'sent';
+  }
+
+  return null;
 };
 
-const trimReason = (value: unknown): string | null => {
-  if (typeof value !== 'string') return null;
-  const cleaned = value.trim();
-  if (!cleaned) return null;
-  return cleaned.slice(0, 1000);
-};
-
-const moderateCampaign = async (
-  req: express.Request,
-  res: express.Response,
-  action: CampaignModerationAction
-) => {
-  if (!assertPlatformAdminOnly(req, res)) {
-    return;
-  }
-
-  try {
-    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-    const reason = trimReason(req.body?.reason);
-    const db = await DatabaseService.getInstance().getDatabase();
-
-    const campaign = await db.get(
-      'SELECT id, restaurant_id, status, scheduled_at FROM marketing_campaigns WHERE id = ?',
-      [id]
-    );
-
-    if (!campaign) {
-      return res.status(404).json({ error: 'Campaign not found' });
-    }
-
-    const nextStatus = resolveCampaignTransition({
-      action,
-      currentStatus: campaign.status,
-      scheduledAt: campaign.scheduled_at || null
-    });
-
-    if (!nextStatus) {
-      return res.status(409).json({
-        error: 'Invalid campaign status transition',
-        currentStatus: campaign.status,
-        attemptedAction: action,
-        allowedFrom: action === 'approve' ? ['pending_owner_approval'] : ['pending_owner_approval', 'approved']
-      });
-    }
-
-    if (campaign.status === nextStatus) {
-      return res.json({
-        success: true,
-        message: `Campaign already ${nextStatus}`,
-        campaign: {
-          id: campaign.id,
-          status: campaign.status
-        }
-      });
-    }
-
-    await db.run('UPDATE marketing_campaigns SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [
-      nextStatus,
-      id
-    ]);
-
-    await db.run(
-      'INSERT INTO audit_logs (id, restaurant_id, user_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [
-        randomUUID(),
-        campaign.restaurant_id,
-        req.user?.id || null,
-        action === 'approve' ? 'campaign_approved' : 'campaign_disapproved',
-        'marketing_campaign',
-        campaign.id,
-        JSON.stringify({
-          actorId: req.user?.id,
-          actorName: req.user?.name,
-          actorRole: req.user?.role,
-          reason,
-          previousStatus: campaign.status,
-          nextStatus
-        })
-      ]
-    );
-
-    return res.json({
-      success: true,
-      message: action === 'approve' ? 'Campaign approved successfully' : 'Campaign disapproved successfully',
-      campaign: {
-        id: campaign.id,
-        status: nextStatus
-      }
-    });
-  } catch (error) {
-    logger.error(`Failed to ${action} campaign:`, error);
-    return res.status(500).json({
-      error: `Failed to ${action} campaign`,
-      details: error instanceof Error ? error.message : 'Unknown error'
-    });
-  }
+const campaignEventLabel: Record<CampaignFeedEventType, string> = {
+  created: 'Campaign created',
+  approved: 'Campaign approved',
+  disapproved: 'Campaign disapproved',
+  sent: 'Campaign sent'
 };
 
 /**
@@ -465,6 +372,103 @@ router.get('/audit-logs', async (req, res) => {
     logger.error('Failed to get admin audit logs:', error);
     return res.status(500).json({
       error: 'Failed to load audit logs',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
+ * GET /api/admin/campaign-events
+ * Campaign event feed built from audit logs.
+ */
+router.get('/campaign-events', async (req, res) => {
+  try {
+    const db = await DatabaseService.getInstance().getDatabase();
+    const limit = resolveLimit(req.query.limit, 25, 100);
+    const restaurantId = typeof req.query.restaurantId === 'string' ? req.query.restaurantId.trim() : '';
+    const campaignId = typeof req.query.campaignId === 'string' ? req.query.campaignId.trim() : '';
+    const eventType = typeof req.query.eventType === 'string' ? req.query.eventType.trim().toLowerCase() : '';
+
+    const whereParts: string[] = [
+      `(
+        al.action IN ('create_campaign', 'campaign_created', 'campaign_approved', 'campaign_disapproved', 'campaign_sent')
+        OR (
+          al.entity_type = 'marketing_campaign'
+          AND LOWER(al.action) LIKE '%campaign%'
+        )
+      )`
+    ];
+    const params: any[] = [];
+
+    if (restaurantId) {
+      whereParts.push('al.restaurant_id = ?');
+      params.push(restaurantId);
+    }
+
+    if (campaignId) {
+      whereParts.push(`(
+        al.entity_id = ?
+        OR mc.id = ?
+      )`);
+      params.push(campaignId, campaignId);
+    }
+
+    const logs = await db.all(
+      `
+      SELECT
+        al.id,
+        al.action,
+        al.restaurant_id,
+        r.name as restaurant_name,
+        COALESCE(mc.id, al.entity_id) as campaign_id,
+        mc.name as campaign_name,
+        al.details as metadata,
+        al.created_at
+      FROM audit_logs al
+      LEFT JOIN restaurants r ON r.id = al.restaurant_id
+      LEFT JOIN marketing_campaigns mc ON mc.id = al.entity_id
+      WHERE ${whereParts.join(' AND ')}
+      ORDER BY al.created_at DESC
+      LIMIT ?
+    `,
+      [...params, limit]
+    );
+
+    const parsedLogs = parseTableRows(logs);
+    let events = parsedLogs
+      .map((log: any) => {
+        const normalizedType = normalizeCampaignEventType(log.action || '');
+        if (!normalizedType || !log.campaign_id) {
+          return null;
+        }
+
+        return {
+          id: log.id,
+          event_type: normalizedType,
+          action: log.action,
+          label: campaignEventLabel[normalizedType],
+          campaign_id: log.campaign_id,
+          campaign_name: log.campaign_name || log.metadata?.name || null,
+          restaurant_id: log.restaurant_id,
+          restaurant_name: log.restaurant_name || null,
+          timestamp: log.created_at,
+          metadata: log.metadata && typeof log.metadata === 'object' ? log.metadata : {},
+          view_url: log.restaurant_id
+            ? `/admin/restaurants/${log.restaurant_id}?tab=campaigns&campaignId=${log.campaign_id}`
+            : `/admin/campaigns?campaignId=${log.campaign_id}`
+        } as AdminCampaignEvent;
+      })
+      .filter(Boolean) as AdminCampaignEvent[];
+
+    if (eventType && eventType !== 'all') {
+      events = events.filter((event) => event.event_type === eventType);
+    }
+
+    return res.json({ events });
+  } catch (error) {
+    logger.error('Failed to get campaign events feed:', error);
+    return res.status(500).json({
+      error: 'Failed to load campaign events',
       details: error instanceof Error ? error.message : 'Unknown error'
     });
   }
