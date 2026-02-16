@@ -5,6 +5,10 @@ import AdminLayout from '../../components/Layout/AdminLayout'
 import { api } from '../../lib/api'
 import { getErrorMessage } from '../../lib/utils'
 
+/**
+ * API contract: GET /api/admin/system/health
+ * Response shape consumed by this page.
+ */
 interface SystemHealth {
   status: string
   failedJobs: number
@@ -19,6 +23,10 @@ interface SystemHealth {
   timestamp: string
 }
 
+/**
+ * API contract: GET /api/admin/jobs?status=failed&limit=20
+ * Response: { jobs: Job[], pagination: { page, limit, total, pages } }
+ */
 interface Job {
   id: string
   restaurant_id?: string

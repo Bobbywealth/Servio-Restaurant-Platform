@@ -129,6 +129,7 @@ async function initializeServer() {
     const { default: staffSchedulingRoutes } = await import('./routes/staff-scheduling');
     const { default: staffAnalyticsRoutes } = await import('./routes/staff-analytics');
     const { default: staffBulkRoutes } = await import('./routes/staff-bulk');
+    const { default: adminRoutes } = await import('./routes/admin');
     const { default: voiceConversationsRoutes } = await import('./routes/voice-conversations');
     const { default: companyRoutes } = await import('./routes/company');
     const { default: adminRoutes } = await import('./routes/admin');
@@ -212,10 +213,15 @@ async function initializeServer() {
     app.use('/api/delivery-platforms', requireAuth, deliveryPlatformsRoutes);
     app.use('/api/delivery-platforms-sessions', requireAuth, deliveryPlatformsSessionsRoutes);
 
+    // Company and platform admin routes
+    app.use('/api/company', requireAuth, companyRoutes);
+    app.use('/api/admin', requireAuth, adminRoutes);
+
     // Staff management routes
     app.use('/api/staff/scheduling', requireAuth, staffSchedulingRoutes);
     app.use('/api/staff/analytics', requireAuth, staffAnalyticsRoutes);
     app.use('/api/staff/bulk', requireAuth, staffBulkRoutes);
+    app.use('/api/admin', requireAuth, adminRoutes);
 
     // Staff clock-in PWA routes (public - PIN authenticated)
     app.use('/api/staff/clock', staffClockRoutes);

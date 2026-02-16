@@ -6,6 +6,10 @@ import { api } from '../../lib/api'
 import { getErrorMessage } from '../../lib/utils'
 import Link from 'next/link'
 
+/**
+ * API contract: GET /api/admin/campaigns
+ * Response: { campaigns: Campaign[], pagination: { page, limit, total, pages } }
+ */
 interface Campaign {
   id: string
   restaurant_id: string

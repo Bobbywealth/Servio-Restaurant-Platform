@@ -48,11 +48,6 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
     // PLATFORM OVERVIEW
     { name: 'Dashboard', href: '/admin', icon: LayoutDashboard, section: 'overview' },
     
-    // COMPANY MANAGEMENT
-    { name: 'Companies', href: '/admin/companies', icon: Building2, section: 'company' },
-    { name: 'Billing', href: '/admin/billing', icon: CreditCard, section: 'company' },
-    { name: 'All Users', href: '/admin/users', icon: Users, section: 'company' },
-    
     // RESTAURANT MANAGEMENT  
     { name: 'Restaurants', href: '/admin/restaurants', icon: Store, section: 'restaurants' },
     { name: 'All Orders', href: '/admin/orders', icon: ClipboardList, section: 'restaurants' },
@@ -64,12 +59,10 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
     // PLATFORM OPERATIONS
     { name: 'System Health', href: '/admin/system-health', icon: Activity, section: 'system' },
     { name: 'Audit Logs', href: '/admin/audit', icon: Shield, section: 'system' },
-    { name: 'API Keys', href: '/admin/api-keys', icon: Key, section: 'system' },
   ]
 
   const sections = [
     { id: 'overview', label: 'Overview' },
-    { id: 'company', label: 'Company' },
     { id: 'restaurants', label: 'Restaurants' },
     { id: 'marketing', label: 'Marketing' },
     { id: 'system', label: 'System' },
