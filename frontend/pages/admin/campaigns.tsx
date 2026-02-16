@@ -55,6 +55,8 @@ export default function AdminCampaigns() {
   const [isLoading, setIsLoading] = useState(true)
   const [isEventsLoading, setIsEventsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
+  const [pendingMutationId, setPendingMutationId] = useState<string | null>(null)
 
   const fetchCampaigns = useCallback(async () => {
     setIsLoading(true)
@@ -140,10 +142,13 @@ export default function AdminCampaigns() {
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'sent':
+      case 'approved':
         return <CheckCircle2 className="h-4 w-4 text-green-600" />
       case 'sending':
+      case 'pending_owner_approval':
         return <Clock className="h-4 w-4 text-blue-600" />
       case 'failed':
+      case 'rejected':
         return <XCircle className="h-4 w-4 text-red-600" />
       case 'draft':
       case 'scheduled':
@@ -156,10 +161,13 @@ export default function AdminCampaigns() {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'sent':
+      case 'approved':
         return 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300'
       case 'sending':
+      case 'pending_owner_approval':
         return 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-300'
       case 'failed':
+      case 'rejected':
         return 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-300'
       case 'draft':
       case 'scheduled':
@@ -237,7 +245,7 @@ export default function AdminCampaigns() {
             />
           </div>
           <div className="flex gap-2">
-            {['all', 'pending_owner_approval', 'scheduled', 'sent', 'failed'].map((status) => (
+            {['all', 'pending_owner_approval', 'approved', 'scheduled', 'rejected', 'sent', 'failed'].map((status) => (
               <button
                 key={status}
                 onClick={() => setCampaignFilter(status)}
@@ -277,39 +285,65 @@ export default function AdminCampaigns() {
             </div>
           ) : filteredCampaigns.length ? (
             <div className="divide-y divide-gray-200 dark:divide-gray-700">
-              {filteredCampaigns.map((campaign, index) => (
-                <motion.div
-                  key={campaign.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.05 }}
-                  className="p-6 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
-                        {getStatusIcon(campaign.status)}
-                        <h3 className="text-lg font-medium text-gray-900 dark:text-white">{campaign.name}</h3>
-                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(campaign.status)}`}>
-                          {campaign.status}
-                        </span>
+              {filteredCampaigns.map((campaign, index) => {
+                const isPendingApproval = campaign.status === 'pending_owner_approval'
+                const isMutating = pendingMutationId === campaign.id
+
+                return (
+                  <motion.div
+                    key={campaign.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.05 }}
+                    className="p-6 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-2">
+                          {getStatusIcon(campaign.status)}
+                          <h3 className="text-lg font-medium text-gray-900 dark:text-white">{campaign.name}</h3>
+                          <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(campaign.status)}`}>
+                            {campaign.status}
+                          </span>
+                        </div>
+                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                          {campaign.restaurant_name} • {campaign.type.toUpperCase()}
+                        </p>
+                        <p className="text-sm text-gray-700 dark:text-gray-300 line-clamp-2">{campaign.message}</p>
+                        <div className="mt-3 flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
+                          <span>Recipients: {campaign.total_recipients}</span>
+                          <span>Success: {campaign.successful_sends}</span>
+                          {campaign.failed_sends > 0 && (
+                            <span className="text-red-600">Failed: {campaign.failed_sends}</span>
+                          )}
+                          <span>Created: {new Date(campaign.created_at).toLocaleDateString()}</span>
+                        </div>
                       </div>
-                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                        {campaign.restaurant_name} • {campaign.type.toUpperCase()}
-                      </p>
-                      <p className="text-sm text-gray-700 dark:text-gray-300 line-clamp-2">{campaign.message}</p>
-                      <div className="mt-3 flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
-                        <span>Recipients: {campaign.total_recipients}</span>
-                        <span>Success: {campaign.successful_sends}</span>
-                        {campaign.failed_sends > 0 && (
-                          <span className="text-red-600">Failed: {campaign.failed_sends}</span>
-                        )}
-                        <span>Created: {new Date(campaign.created_at).toLocaleDateString()}</span>
-                      </div>
+
+                      {isPendingApproval && (
+                        <div className="flex flex-col sm:flex-row gap-2">
+                          <button
+                            type="button"
+                            disabled={isMutating}
+                            onClick={() => handleModeration(campaign.id, 'approve')}
+                            className="px-3 py-1.5 text-sm rounded-md bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {isMutating ? 'Working...' : 'Approve'}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isMutating}
+                            onClick={() => handleModeration(campaign.id, 'disapprove')}
+                            className="px-3 py-1.5 text-sm rounded-md bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {isMutating ? 'Working...' : 'Disapprove'}
+                          </button>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                </motion.div>
-              ))}
+                  </motion.div>
+                )
+              })}
             </div>
           ) : (
             <div className="p-12 text-center">

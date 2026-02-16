@@ -3,6 +3,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { DatabaseService } from '../services/DatabaseService';
 import { requirePlatformAdmin } from '../middleware/adminAuth';
 import { logger } from '../utils/logger';
+import { randomUUID } from 'crypto';
+import { CampaignModerationAction, isPlatformAdminOnly, resolveCampaignTransition } from './adminCampaignModeration';
 
 const router = express.Router();
 
@@ -53,6 +55,7 @@ type AdminCampaign = {
   failed_sends: number;
   created_at: string;
 };
+
 
 /**
  * API contract: GET /api/admin/audit-logs
@@ -284,6 +287,22 @@ router.get('/campaigns', async (req, res) => {
 });
 
 /**
+ * POST /api/admin/campaigns/:id/approve
+ * Transition pending owner approval campaigns into approved/scheduled.
+ */
+router.post('/campaigns/:id/approve', async (req, res) => {
+  await moderateCampaign(req, res, 'approve');
+});
+
+/**
+ * POST /api/admin/campaigns/:id/disapprove
+ * Transition pending/approved campaigns into rejected with optional reason.
+ */
+router.post('/campaigns/:id/disapprove', async (req, res) => {
+  await moderateCampaign(req, res, 'disapprove');
+});
+
+/**
  * GET /api/admin/audit-logs
  * Get platform-wide audit logs for admin surfaces.
  */
@@ -463,44 +482,13 @@ router.get('/system/health', async (req, res) => {
   try {
     const db = await DatabaseService.getInstance().getDatabase();
 
-    const [failedJobsResult, recentErrors, storageErrors] = await Promise.all([
-      db.get(`SELECT COUNT(*) as count FROM sync_jobs WHERE status = 'failed'`),
-      db.all(`
-        SELECT action, entity_type, entity_id, restaurant_id, created_at
-        FROM audit_logs
-        WHERE created_at >= NOW() - INTERVAL '24 hours'
-          AND (
-            LOWER(action) LIKE '%error%'
-            OR LOWER(action) LIKE '%fail%'
-            OR LOWER(action) LIKE '%exception%'
-          )
-        ORDER BY created_at DESC
-        LIMIT 50
-      `),
-      db.all(`
-        SELECT action, entity_type, entity_id, restaurant_id, created_at
-        FROM audit_logs
-        WHERE created_at >= NOW() - INTERVAL '24 hours'
-          AND (
-            LOWER(entity_type) LIKE '%storage%'
-            OR LOWER(action) LIKE '%storage%'
-            OR LOWER(action) LIKE '%upload%'
-          )
-        ORDER BY created_at DESC
-        LIMIT 20
-      `)
-    ]);
-
-    const failedJobs = Number(failedJobsResult?.count || 0);
-    const status = failedJobs > 0 || recentErrors.length > 0 ? 'degraded' : 'operational';
-
-    return res.json({
-      status,
-      failedJobs,
-      recentErrors,
-      storageErrors,
-      timestamp: new Date().toISOString()
+    const payload = await buildSystemHealthPayload({
+      db,
+      requestProtocol: req.protocol,
+      requestHost: req.get('host')
     });
+
+    return res.json(payload);
   } catch (error) {
     logger.error('Failed to get system health:', error);
     return res.status(500).json({
