@@ -154,7 +154,9 @@ export default function BookDemoPage() {
       setSelectedTime('')
       setNotes('')
     } catch (e: any) {
-      const msg = e?.response?.data?.message || e?.response?.data?.error || e?.message || 'Failed to book demo'
+      const details = e?.response?.data?.details
+      const detailMessage = Array.isArray(details) ? details.join(', ') : details
+      const msg = detailMessage || e?.response?.data?.message || e?.response?.data?.error || e?.message || 'Failed to book demo'
       setError(String(msg))
     } finally {
       setSubmitting(false)
