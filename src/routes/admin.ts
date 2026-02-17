@@ -7,6 +7,7 @@ import { randomUUID } from 'crypto';
 import { CampaignModerationAction, isPlatformAdminOnly, resolveCampaignTransition } from './adminCampaignModeration';
 import { buildSystemHealthPayload } from './systemHealth';
 import { resolveBookingTable } from './bookings';
+import { TASK_SCOPES, TaskScope } from '../types/taskScope';
 
 const router = express.Router();
 
@@ -169,6 +170,9 @@ type AdminTask = {
   created_at: string;
   updated_at: string;
 };
+
+const isTaskScope = (value: unknown): value is TaskScope =>
+  typeof value === 'string' && TASK_SCOPES.includes(value as TaskScope);
 
 type CampaignFeedEventType = 'created' | 'approved' | 'disapproved' | 'sent';
 
@@ -1999,6 +2003,11 @@ router.get('/tasks', async (req, res) => {
       params.push(priority);
     }
 
+    if (scope && scope !== 'all') {
+      whereParts.push('t.scope = ?');
+      params.push(scope);
+    }
+
     if (restaurantId) {
       whereParts.push('t.restaurant_id = ?');
       params.push(restaurantId);
@@ -2074,6 +2083,8 @@ router.get('/tasks', async (req, res) => {
       `
       SELECT
         t.id,
+        t.scope,
+        t.company_id,
         t.restaurant_id,
         t.parent_task_group_id,
         r.name AS restaurant_name,
@@ -2222,14 +2233,43 @@ router.post('/tasks', async (req, res) => {
       return res.status(404).json({ error: 'Restaurant not found' });
     }
 
-    if (assignedTo) {
-      const assignee = await db.get(
-        'SELECT id FROM users WHERE id = ? AND restaurant_id = ? AND is_active = true',
-        [assignedTo, restaurantId]
-      );
-      if (!assignee) {
-        return res.status(400).json({ error: 'Assigned user must be active and belong to the selected restaurant' });
+    if (scope === 'restaurant') {
+      if (!restaurantId) {
+        return res.status(400).json({ error: 'restaurant_id is required for restaurant-scoped tasks' });
       }
+
+      const restaurant = await db.get('SELECT id, company_id FROM restaurants WHERE id = ?', [restaurantId]);
+      if (!restaurant) {
+        return res.status(404).json({ error: 'Restaurant not found' });
+      }
+
+      resolvedRestaurantId = restaurantId;
+      resolvedCompanyId = restaurant.company_id ?? null;
+
+      if (assignedTo) {
+        const assignee = await db.get(
+          'SELECT id FROM users WHERE id = ? AND restaurant_id = ? AND is_active = true',
+          [assignedTo, restaurantId]
+        );
+        if (!assignee) {
+          return res.status(400).json({ error: 'Assigned user must be active and belong to the selected restaurant' });
+        }
+      }
+    } else {
+      if (!companyId) {
+        return res.status(400).json({ error: 'company_id is required for company-scoped tasks' });
+      }
+
+      if (assignedTo) {
+        return res.status(400).json({ error: 'assigned_to is only supported for restaurant-scoped tasks' });
+      }
+
+      const company = await db.get('SELECT id FROM companies WHERE id = ?', [companyId]);
+      if (!company) {
+        return res.status(404).json({ error: 'Company not found' });
+      }
+
+      resolvedCompanyId = companyId;
     }
 
     const taskId = randomUUID();
@@ -2240,13 +2280,15 @@ router.post('/tasks', async (req, res) => {
       INSERT INTO tasks (id, restaurant_id, parent_task_group_id, title, description, status, priority, type, assigned_to, due_date, completed_at, created_at, updated_at)
       VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     `,
-      [taskId, restaurantId, title, description, status, priority, type, assignedTo, dueDate, completedAt]
+      [taskId, scope, resolvedCompanyId, resolvedRestaurantId, title, description, status, priority, type, assignedTo, dueDate, completedAt]
     );
 
     const task = await db.get(
       `
       SELECT
         t.id,
+        t.scope,
+        t.company_id,
         t.restaurant_id,
         t.parent_task_group_id,
         r.name AS restaurant_name,
@@ -2296,12 +2338,68 @@ router.patch('/tasks/:id', async (req, res) => {
 
     const updates: string[] = [];
     const params: any[] = [];
+    const scope = typeof req.body?.scope === 'string' ? req.body.scope.trim() : undefined;
+    const restaurantId = typeof req.body?.restaurant_id === 'string' ? req.body.restaurant_id.trim() : req.body?.restaurant_id === null ? null : undefined;
+    const companyId = typeof req.body?.company_id === 'string' ? req.body.company_id.trim() : req.body?.company_id === null ? null : undefined;
     const status = typeof req.body?.status === 'string' ? req.body.status.trim() : undefined;
     const priority = typeof req.body?.priority === 'string' ? req.body.priority.trim() : undefined;
     const title = typeof req.body?.title === 'string' ? req.body.title.trim() : undefined;
     const description = typeof req.body?.description === 'string' ? req.body.description.trim() : undefined;
     const assignedTo = typeof req.body?.assigned_to === 'string' ? req.body.assigned_to.trim() : req.body?.assigned_to === null ? null : undefined;
     const dueDate = typeof req.body?.due_date === 'string' ? req.body.due_date : req.body?.due_date === null ? null : undefined;
+
+    const nextScope = scope ?? existingTask.scope;
+    const nextRestaurantId = restaurantId === undefined ? existingTask.restaurant_id : restaurantId;
+    const nextCompanyId = companyId === undefined ? existingTask.company_id : companyId;
+    const nextAssignedTo = assignedTo === undefined ? existingTask.assigned_to : assignedTo;
+
+    if (!isTaskScope(nextScope)) {
+      return res.status(400).json({ error: 'Invalid task scope' });
+    }
+
+    if (nextScope === 'restaurant' && !nextRestaurantId) {
+      return res.status(400).json({ error: 'restaurant_id is required for restaurant-scoped tasks' });
+    }
+
+    if (nextScope === 'company' && !nextCompanyId) {
+      return res.status(400).json({ error: 'company_id is required for company-scoped tasks' });
+    }
+
+    if (nextAssignedTo && !nextRestaurantId) {
+      return res.status(400).json({ error: 'assigned_to requires a restaurant_id' });
+    }
+
+    if (scope !== undefined) {
+      if (!isTaskScope(scope)) {
+        return res.status(400).json({ error: 'Invalid task scope' });
+      }
+      updates.push('scope = ?');
+      params.push(scope);
+    }
+
+    if (restaurantId !== undefined) {
+      updates.push('restaurant_id = ?');
+      params.push(restaurantId);
+    }
+
+    if (companyId !== undefined) {
+      updates.push('company_id = ?');
+      params.push(companyId);
+    }
+
+    if (nextRestaurantId) {
+      const restaurant = await db.get('SELECT id FROM restaurants WHERE id = ? LIMIT 1', [nextRestaurantId]);
+      if (!restaurant) {
+        return res.status(404).json({ error: 'Restaurant not found' });
+      }
+    }
+
+    if (nextCompanyId) {
+      const company = await db.get('SELECT id FROM companies WHERE id = ? LIMIT 1', [nextCompanyId]);
+      if (!company) {
+        return res.status(404).json({ error: 'Company not found' });
+      }
+    }
 
     if (title !== undefined) {
       if (!title) return res.status(400).json({ error: 'title cannot be empty' });
@@ -2340,9 +2438,12 @@ router.patch('/tasks/:id', async (req, res) => {
 
     if (assignedTo !== undefined) {
       if (assignedTo) {
+        if (!nextRestaurantId) {
+          return res.status(400).json({ error: 'assigned_to requires a restaurant_id' });
+        }
         const assignee = await db.get(
           'SELECT id FROM users WHERE id = ? AND restaurant_id = ? AND is_active = true',
-          [assignedTo, existingTask.restaurant_id]
+          [assignedTo, nextRestaurantId]
         );
         if (!assignee) {
           return res.status(400).json({ error: 'Assigned user must be active and belong to the same restaurant' });
@@ -2382,6 +2483,8 @@ router.patch('/tasks/:id', async (req, res) => {
       `
       SELECT
         t.id,
+        t.scope,
+        t.company_id,
         t.restaurant_id,
         t.parent_task_group_id,
         r.name AS restaurant_name,

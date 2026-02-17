@@ -3,9 +3,28 @@ import { DatabaseService } from '../services/DatabaseService';
 import { asyncHandler } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
 import { eventBus } from '../events/bus';
+import { TaskScope } from '../types/taskScope';
 
 const router = Router();
 const num = (v: any) => (typeof v === 'number' ? v : Number(v ?? 0));
+
+type RestaurantTaskRecord = {
+  id: string;
+  scope: TaskScope;
+  restaurant_id: string;
+  company_id: string | null;
+  title: string;
+  description: string | null;
+  status: string;
+  priority: string;
+  type: string | null;
+  assigned_to: string | null;
+  assigned_to_name?: string | null;
+  due_date: string | null;
+  created_at: string;
+  updated_at: string;
+  completed_at: string | null;
+};
 
 /**
  * GET /api/tasks/today
@@ -17,7 +36,7 @@ router.get('/today', asyncHandler(async (req: Request, res: Response) => {
   const restaurantId = req.user?.restaurantId;
 
   let query = `
-    SELECT id, title, description, status, priority, type, assigned_to, due_date, created_at, updated_at, completed_at FROM tasks
+    SELECT id, scope, restaurant_id, company_id, title, description, status, priority, type, assigned_to, due_date, created_at, updated_at, completed_at FROM tasks
     WHERE (type = 'daily'
     OR (due_date IS NOT NULL AND due_date::date = CURRENT_DATE)
     OR (type = 'one_time' AND status != 'completed'))
@@ -32,7 +51,7 @@ router.get('/today', asyncHandler(async (req: Request, res: Response) => {
 
     query += ' ORDER BY CASE WHEN status = \'pending\' THEN 1 WHEN status = \'in_progress\' THEN 2 ELSE 3 END, created_at';
 
-  const tasks = await db.all(query, params);
+  const tasks = await db.all<RestaurantTaskRecord>(query, params);
 
   res.json({
     success: true,
@@ -49,7 +68,7 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
   const db = DatabaseService.getInstance().getDatabase();
   const restaurantId = req.user?.restaurantId;
 
-  let query = 'SELECT t.id, t.restaurant_id, t.title, t.description, t.status, t.priority, t.type, t.assigned_to, t.due_date, t.created_at, t.updated_at, t.completed_at, u.name as assigned_to_name FROM tasks t LEFT JOIN users u ON t.assigned_to = u.id';
+  let query = 'SELECT t.id, t.scope, t.restaurant_id, t.company_id, t.title, t.description, t.status, t.priority, t.type, t.assigned_to, t.due_date, t.created_at, t.updated_at, t.completed_at, u.name as assigned_to_name FROM tasks t LEFT JOIN users u ON t.assigned_to = u.id';
   const params: any[] = [restaurantId];
   const conditions: string[] = ['t.restaurant_id = ?'];
 
@@ -79,7 +98,7 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
 
   query += ' ORDER BY t.created_at DESC';
 
-  const tasks = await db.all(query, params);
+  const tasks = await db.all<RestaurantTaskRecord>(query, params);
 
   res.json({
     success: true,

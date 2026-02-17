@@ -5,7 +5,9 @@ import { Plus, Trash2 } from 'lucide-react'
 
 interface AdminTask {
   id: string
-  restaurant_id: string
+  scope: 'company' | 'restaurant'
+  company_id: string | null
+  restaurant_id: string | null
   restaurant_name: string | null
   title: string
   description: string | null
@@ -17,9 +19,13 @@ interface AdminTask {
   created_at: string
 }
 
+type TaskScope = 'company' | 'restaurant'
+type TaskScopeSelection = TaskScope | ''
+
 interface RestaurantOption {
   id: string
   name: string
+  company_id?: string | null
 }
 
 interface PaginationPayload {
@@ -40,10 +46,13 @@ export default function AdminTasksPage() {
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('all')
   const [priority, setPriority] = useState('all')
+  const [scopeFilter, setScopeFilter] = useState<'all' | TaskScope>('all')
   const [restaurantId, setRestaurantId] = useState('')
   const [page, setPage] = useState(1)
   const [pagination, setPagination] = useState<PaginationPayload>({ page: 1, pages: 1, total: 0 })
   const [newTask, setNewTask] = useState({
+    scope: '' as TaskScopeSelection,
+    company_id: '',
     restaurant_id: '',
     title: '',
     description: '',
@@ -55,6 +64,9 @@ export default function AdminTasksPage() {
     try {
       const res = await api.get('/api/admin/restaurants', { params: { limit: 200 } })
       setRestaurants(res.data?.restaurants || [])
+      if (!newTask.company_id && res.data?.restaurants?.[0]?.company_id) {
+        setNewTask((prev) => ({ ...prev, company_id: res.data.restaurants[0].company_id }))
+      }
     } catch (fetchError) {
       console.error('Failed to fetch restaurants', fetchError)
     }
@@ -69,6 +81,7 @@ export default function AdminTasksPage() {
       if (search.trim()) params.search = search.trim()
       if (status !== 'all') params.status = status
       if (priority !== 'all') params.priority = priority
+      if (scopeFilter !== 'all') params.scope = scopeFilter
       if (restaurantId) params.restaurantId = restaurantId
 
       const res = await api.get('/api/admin/tasks', { params })
@@ -79,7 +92,7 @@ export default function AdminTasksPage() {
     } finally {
       setIsLoading(false)
     }
-  }, [page, priority, restaurantId, search, status])
+  }, [page, priority, restaurantId, scopeFilter, search, status])
 
   useEffect(() => {
     fetchRestaurants()
@@ -91,12 +104,17 @@ export default function AdminTasksPage() {
 
   const createTask = async (event: React.FormEvent) => {
     event.preventDefault()
-    if (!newTask.restaurant_id || !newTask.title.trim()) return
+    const isSingleRestaurant = newTask.scope === 'restaurant'
+    if (!newTask.scope || !newTask.title.trim()) return
+    if (isSingleRestaurant && !newTask.restaurant_id) return
+    if (newTask.scope === 'company' && !newTask.company_id) return
 
     setIsSaving(true)
     try {
       await api.post('/api/admin/tasks', {
-        restaurant_id: newTask.restaurant_id,
+        scope: newTask.scope,
+        company_id: newTask.scope === 'company' ? newTask.company_id : undefined,
+        restaurant_id: newTask.scope === 'restaurant' ? newTask.restaurant_id : undefined,
         title: newTask.title.trim(),
         description: newTask.description.trim() || null,
         priority: newTask.priority,
@@ -104,7 +122,9 @@ export default function AdminTasksPage() {
       })
 
       setNewTask({
-        restaurant_id: newTask.restaurant_id,
+        scope: newTask.scope,
+        company_id: newTask.company_id,
+        restaurant_id: newTask.scope === 'restaurant' ? newTask.restaurant_id : '',
         title: '',
         description: '',
         priority: 'medium',
@@ -157,7 +177,20 @@ export default function AdminTasksPage() {
 
         <form onSubmit={createTask} className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 space-y-4">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Create Task</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-3">
+            <label className="text-xs font-medium text-gray-600 dark:text-gray-300 self-center">Task scope *</label>
+            <select
+              aria-label="Task scope"
+              value={newTask.scope}
+              onChange={(event) => setNewTask((prev) => ({ ...prev, scope: event.target.value as TaskScopeSelection, restaurant_id: event.target.value === 'company' ? '' : prev.restaurant_id }))}
+              className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-sm"
+              required
+            >
+              <option value="" disabled>Select task scope</option>
+              <option value="company">Company-wide</option>
+              <option value="restaurant">Single restaurant</option>
+            </select>
+            {newTask.scope === 'restaurant' && (
             <select
               value={newTask.restaurant_id}
               onChange={(event) => setNewTask((prev) => ({ ...prev, restaurant_id: event.target.value }))}
@@ -169,6 +202,7 @@ export default function AdminTasksPage() {
                 <option key={restaurant.id} value={restaurant.id}>{restaurant.name}</option>
               ))}
             </select>
+            )}
             <input
               value={newTask.title}
               onChange={(event) => setNewTask((prev) => ({ ...prev, title: event.target.value }))}
@@ -229,6 +263,11 @@ export default function AdminTasksPage() {
               <option value="">All restaurants</option>
               {restaurants.map((restaurant) => <option key={restaurant.id} value={restaurant.id}>{restaurant.name}</option>)}
             </select>
+            <select value={scopeFilter} onChange={(event) => setScopeFilter(event.target.value as 'all' | TaskScope)} className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-sm">
+              <option value="all">All scopes</option>
+              <option value="company">Company-wide</option>
+              <option value="restaurant">Single restaurant</option>
+            </select>
           </div>
           <div className="flex justify-end">
             <button onClick={() => { setPage(1); fetchTasks() }} className="rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm">Apply filters</button>
@@ -241,6 +280,7 @@ export default function AdminTasksPage() {
               <thead>
                 <tr className="text-left text-xs uppercase text-gray-500">
                   <th className="px-3 py-2">Task</th>
+                  <th className="px-3 py-2">Scope</th>
                   <th className="px-3 py-2">Restaurant</th>
                   <th className="px-3 py-2">Status</th>
                   <th className="px-3 py-2">Priority</th>
@@ -251,16 +291,21 @@ export default function AdminTasksPage() {
               </thead>
               <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                 {isLoading ? (
-                  <tr><td className="px-3 py-4 text-sm text-gray-500" colSpan={7}>Loading tasks...</td></tr>
+                  <tr><td className="px-3 py-4 text-sm text-gray-500" colSpan={8}>Loading tasks...</td></tr>
                 ) : tasks.length === 0 ? (
-                  <tr><td className="px-3 py-4 text-sm text-gray-500" colSpan={7}>No tasks found.</td></tr>
+                  <tr><td className="px-3 py-4 text-sm text-gray-500" colSpan={8}>No tasks found.</td></tr>
                 ) : tasks.map((task) => (
                   <tr key={task.id}>
                     <td className="px-3 py-3">
                       <p className="text-sm font-medium text-gray-900 dark:text-white">{task.title}</p>
                       {task.description && <p className="text-xs text-gray-500 truncate max-w-sm">{task.description}</p>}
                     </td>
-                    <td className="px-3 py-3 text-sm text-gray-600 dark:text-gray-300">{task.restaurant_name || 'Unknown'}</td>
+                    <td className="px-3 py-3 text-sm">
+                      <span className="inline-flex rounded-full bg-gray-100 px-2 py-1 text-xs font-medium text-gray-700 dark:bg-gray-700 dark:text-gray-200">
+                        {task.scope === 'company' ? 'Company-wide' : 'Single restaurant'}
+                      </span>
+                    </td>
+                    <td className="px-3 py-3 text-sm text-gray-600 dark:text-gray-300">{task.scope === 'company' ? 'All restaurants' : (task.restaurant_name || 'Unknown')}</td>
                     <td className="px-3 py-3">
                       <select
                         value={task.status}
