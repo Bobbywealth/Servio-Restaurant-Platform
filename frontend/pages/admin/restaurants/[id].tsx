@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useRouter } from 'next/router'
 import Link from 'next/link'
 import { motion } from 'framer-motion'
@@ -24,7 +24,8 @@ import {
 } from 'lucide-react'
 import AdminLayout from '../../../components/Layout/AdminLayout'
 import { api } from '../../../lib/api'
-import { getErrorMessage } from '../../../lib/utils'
+import { getErrorMessage, safeLocalStorage } from '../../../lib/utils'
+import Modal from '../../../components/ui/Modal'
 
 interface Restaurant {
   id: string
@@ -106,6 +107,23 @@ interface AuditLog {
   created_at: string
 }
 
+
+interface OverrideSummary {
+  action: string
+  actorName: string | null
+  actorRole: string | null
+  reason: string | null
+  createdAt: string
+}
+
+interface OverridesData {
+  lastOverrides: {
+    phone: OverrideSummary | null
+    integrations: OverrideSummary | null
+  }
+  disabledChannels: string[]
+}
+
 type TabName = 'overview' | 'orders' | 'campaigns' | 'inventory' | 'timeclock' | 'audit' | 'integrations' | 'phone'
 
 export default function RestaurantDetail() {
@@ -118,6 +136,7 @@ export default function RestaurantDetail() {
   const [isLoading, setIsLoading] = useState(true)
   const [isTabLoading, setIsTabLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [currentUserRole, setCurrentUserRole] = useState<string>('admin')
 
   const tabs = [
     { id: 'overview', name: 'Overview', icon: Building2 },
@@ -196,6 +215,20 @@ export default function RestaurantDetail() {
     setTabData(null)
     fetchTabData(activeTab)
   }, [activeTab, id, fetchTabData])
+
+  useEffect(() => {
+    const storedUser = safeLocalStorage.getItem('servio_user')
+    if (!storedUser) return
+
+    try {
+      const parsed = JSON.parse(storedUser)
+      if (parsed?.role) {
+        setCurrentUserRole(parsed.role)
+      }
+    } catch (err) {
+      console.warn('Failed to parse current user role', err)
+    }
+  }, [])
 
   if (isLoading) {
     return (
@@ -385,6 +418,7 @@ export default function RestaurantDetail() {
                 restaurant={restaurant} 
                 userBreakdown={restaurantData.userBreakdown}
                 data={tabData} 
+                currentUserRole={currentUserRole}
               />
             )}
           </div>
@@ -400,9 +434,10 @@ interface TabContentProps {
   restaurant: Restaurant
   userBreakdown: UserBreakdown[]
   data: any
+  currentUserRole: string
 }
 
-const TabContent: React.FC<TabContentProps> = ({ tab, restaurant, userBreakdown, data }) => {
+const TabContent: React.FC<TabContentProps> = ({ tab, restaurant, userBreakdown, data, currentUserRole }) => {
   if (data?.error) {
     return (
       <div className="text-center py-8">
@@ -426,9 +461,9 @@ const TabContent: React.FC<TabContentProps> = ({ tab, restaurant, userBreakdown,
     case 'audit':
       return <AuditTab logs={data?.auditLogs || []} pagination={data?.pagination} />
     case 'integrations':
-      return <IntegrationsTab restaurant={restaurant} />
+      return <IntegrationsTab restaurant={restaurant} currentUserRole={currentUserRole} />
     case 'phone':
-      return <PhoneSystemTab restaurant={restaurant} />
+      return <PhoneSystemTab restaurant={restaurant} currentUserRole={currentUserRole} />
     default:
       return <div>Tab not implemented</div>
   }
@@ -622,12 +657,17 @@ const CampaignsTab: React.FC<{ campaigns: Campaign[]; pagination: any }> = ({ ca
 
 // Integrations Tab Component
 // Phone System Tab - Separate from in-app AI Assistant
-const PhoneSystemTab: React.FC<{ restaurant: Restaurant }> = ({ restaurant }) => {
+const PhoneSystemTab: React.FC<{ restaurant: Restaurant; currentUserRole: string }> = ({ restaurant, currentUserRole }) => {
   const [vapiSettings, setVapiSettings] = useState<any>(null)
+  const [overrides, setOverrides] = useState<OverridesData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [isTesting, setIsTesting] = useState(false)
+  const [isOverrideSubmitting, setIsOverrideSubmitting] = useState(false)
   const [testResult, setTestResult] = useState<any>(null)
+  const [overrideAction, setOverrideAction] = useState<'reconnect' | 'rotate-config' | null>(null)
+  const [overrideReason, setOverrideReason] = useState('')
+  const [overrideError, setOverrideError] = useState<string | null>(null)
   const [formData, setFormData] = useState({
     enabled: false,
     apiKey: '',
@@ -637,9 +677,21 @@ const PhoneSystemTab: React.FC<{ restaurant: Restaurant }> = ({ restaurant }) =>
     phoneNumber: ''
   })
 
+  const canRunOverrides = currentUserRole === 'platform-admin'
+
   useEffect(() => {
     loadVapiSettings()
+    loadOverrides()
   }, [restaurant.id])
+
+  const loadOverrides = async () => {
+    try {
+      const response = await api.get(`/api/admin/restaurants/${restaurant.id}/overrides`)
+      setOverrides(response.data)
+    } catch (err) {
+      console.error('Failed to load override metadata', err)
+    }
+  }
 
   const loadVapiSettings = async () => {
     try {
@@ -647,7 +699,7 @@ const PhoneSystemTab: React.FC<{ restaurant: Restaurant }> = ({ restaurant }) =>
       setVapiSettings(response.data)
       setFormData({
         enabled: response.data.enabled || false,
-        apiKey: '',  // Don't pre-fill sensitive data
+        apiKey: '',
         webhookSecret: '',
         assistantId: response.data.assistantId || '',
         phoneNumberId: response.data.phoneNumberId || '',
@@ -686,9 +738,37 @@ const PhoneSystemTab: React.FC<{ restaurant: Restaurant }> = ({ restaurant }) =>
     }
   }
 
+  const runOverride = async () => {
+    if (!overrideAction) return
+    const trimmedReason = overrideReason.trim()
+    if (!trimmedReason) {
+      setOverrideError('Reason is required for admin overrides.')
+      return
+    }
+
+    setIsOverrideSubmitting(true)
+    setOverrideError(null)
+    try {
+      const endpoint = overrideAction === 'reconnect'
+        ? `/api/admin/restaurants/${restaurant.id}/overrides/phone/reconnect`
+        : `/api/admin/restaurants/${restaurant.id}/overrides/phone/rotate-config`
+
+      await api.post(endpoint, { reason: trimmedReason })
+      setOverrideAction(null)
+      setOverrideReason('')
+      await Promise.all([loadOverrides(), loadVapiSettings()])
+    } catch (err: any) {
+      setOverrideError(getErrorMessage(err, 'Failed to run override action'))
+    } finally {
+      setIsOverrideSubmitting(false)
+    }
+  }
+
   if (isLoading) {
     return <div className="text-center py-8">Loading phone system settings...</div>
   }
+
+  const lastPhoneOverride = overrides?.lastOverrides?.phone
 
   return (
     <div className="space-y-6">
@@ -696,182 +776,171 @@ const PhoneSystemTab: React.FC<{ restaurant: Restaurant }> = ({ restaurant }) =>
         <div className="flex items-start">
           <Phone className="w-5 h-5 text-blue-600 dark:text-blue-400 mr-3 mt-0.5" />
           <div>
-            <h3 className="text-sm font-medium text-blue-900 dark:text-blue-300">
-              Phone System (Vapi) - For Incoming Customer Calls
-            </h3>
-            <p className="text-xs text-blue-700 dark:text-blue-400 mt-1">
-              This is separate from the in-app AI Assistant. Vapi handles incoming phone calls from customers who want to place orders by calling your restaurant.
-            </p>
+            <h3 className="text-sm font-medium text-blue-900 dark:text-blue-300">Phone System (Vapi) - For Incoming Customer Calls</h3>
+            <p className="text-xs text-blue-700 dark:text-blue-400 mt-1">This is separate from the in-app AI Assistant. Vapi handles incoming phone calls from customers who want to place orders by calling your restaurant.</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h3 className="text-sm font-semibold text-amber-900 dark:text-amber-300">Admin override controls</h3>
+            <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">Overrides are restricted to platform-admin and require a reason for audit logging.</p>
+            {lastPhoneOverride ? (
+              <p className="text-xs text-amber-700 dark:text-amber-400 mt-2">Last override by <span className="font-medium">{lastPhoneOverride.actorName || 'Unknown user'}</span> on {new Date(lastPhoneOverride.createdAt).toLocaleString()} — “{lastPhoneOverride.reason || 'No reason recorded'}”</p>
+            ) : (
+              <p className="text-xs text-amber-700 dark:text-amber-400 mt-2">No phone override has been recorded yet.</p>
+            )}
+          </div>
+          <div className="flex flex-col gap-2 w-full sm:w-auto">
+            <button onClick={() => setOverrideAction('reconnect')} disabled={!canRunOverrides} className="px-3 py-2 bg-amber-600 text-white rounded-lg text-sm hover:bg-amber-700 disabled:opacity-50">Admin override: reconnect/check</button>
+            <button onClick={() => setOverrideAction('rotate-config')} disabled={!canRunOverrides} className="px-3 py-2 bg-orange-600 text-white rounded-lg text-sm hover:bg-orange-700 disabled:opacity-50">Admin override: rotate service config</button>
+            {!canRunOverrides && <p className="text-xs text-gray-600 dark:text-gray-400">Read-only for admin role.</p>}
           </div>
         </div>
       </div>
 
       <div className="bg-white dark:bg-gray-800 rounded-lg p-6">
         <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Vapi Configuration</h3>
-        
         <div className="space-y-4">
-          <div className="flex items-center">
-            <input
-              type="checkbox"
-              checked={formData.enabled}
-              onChange={(e) => setFormData({ ...formData, enabled: e.target.checked })}
-              className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
-            />
-            <label className="ml-2 text-sm font-medium text-gray-900 dark:text-white">
-              Enable Phone System
-            </label>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Vapi API Key {vapiSettings?.hasApiKey && <span className="text-green-600">(Configured)</span>}
-            </label>
-            <input
-              type="password"
-              value={formData.apiKey}
-              onChange={(e) => setFormData({ ...formData, apiKey: e.target.value })}
-              placeholder={vapiSettings?.hasApiKey ? '••••••••••••' : 'Enter your Vapi API key'}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              Get this from <a href="https://vapi.ai" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">vapi.ai</a> dashboard
-            </p>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Phone Number ID
-            </label>
-            <input
-              type="text"
-              value={formData.phoneNumberId}
-              onChange={(e) => setFormData({ ...formData, phoneNumberId: e.target.value })}
-              placeholder="e.g., 12345678-1234-1234-1234-123456789012"
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              The Vapi phone number ID from your dashboard
-            </p>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Phone Number (Display)
-            </label>
-            <input
-              type="text"
-              value={formData.phoneNumber}
-              onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })}
-              placeholder="e.g., +1 (555) 123-4567"
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Assistant ID
-            </label>
-            <input
-              type="text"
-              value={formData.assistantId}
-              onChange={(e) => setFormData({ ...formData, assistantId: e.target.value })}
-              placeholder="Optional - Vapi assistant ID"
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-            />
-          </div>
-
-          <div className="flex gap-3 pt-4">
-            <button
-              onClick={saveSettings}
-              disabled={isSaving}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-            >
-              {isSaving ? 'Saving...' : 'Save Settings'}
-            </button>
-            
-            <button
-              onClick={testConnection}
-              disabled={isTesting || !formData.enabled || !vapiSettings?.hasApiKey}
-              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
-            >
-              {isTesting ? 'Testing...' : 'Test Connection'}
-            </button>
-          </div>
-
-          {testResult && (
-            <div className={`p-4 rounded-lg ${testResult.success ? 'bg-green-50 dark:bg-green-900/20' : 'bg-red-50 dark:bg-red-900/20'}`}>
-              <div className={`text-sm ${testResult.success ? 'text-green-800 dark:text-green-300' : 'text-red-800 dark:text-red-300'}`}>
-                {testResult.success ? '✓ Connection successful!' : '✗ ' + testResult.error}
-              </div>
-              {testResult.data && (
-                <div className="text-xs text-gray-600 dark:text-gray-400 mt-2">
-                  Phone: {testResult.data.phoneNumber}
-                </div>
-              )}
-            </div>
-          )}
+          <div className="flex items-center"><input type="checkbox" checked={formData.enabled} onChange={(e) => setFormData({ ...formData, enabled: e.target.checked })} className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500" /><label className="ml-2 text-sm font-medium text-gray-900 dark:text-white">Enable Phone System</label></div>
+          <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Vapi API Key {vapiSettings?.hasApiKey && <span className="text-green-600">(Configured)</span>}</label><input type="password" value={formData.apiKey} onChange={(e) => setFormData({ ...formData, apiKey: e.target.value })} placeholder={vapiSettings?.hasApiKey ? '••••••••••••' : 'Enter your Vapi API key'} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white" /></div>
+          <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Phone Number ID</label><input type="text" value={formData.phoneNumberId} onChange={(e) => setFormData({ ...formData, phoneNumberId: e.target.value })} placeholder="e.g., 12345678-1234-1234-1234-123456789012" className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white" /></div>
+          <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Phone Number (Display)</label><input type="text" value={formData.phoneNumber} onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })} placeholder="e.g., +1 (555) 123-4567" className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white" /></div>
+          <div><label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Assistant ID</label><input type="text" value={formData.assistantId} onChange={(e) => setFormData({ ...formData, assistantId: e.target.value })} placeholder="Optional - Vapi assistant ID" className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white" /></div>
+          <div className="flex gap-3 pt-4"><button onClick={saveSettings} disabled={isSaving} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">{isSaving ? 'Saving...' : 'Save Settings'}</button><button onClick={testConnection} disabled={isTesting || !formData.enabled || !vapiSettings?.hasApiKey} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50">{isTesting ? 'Testing...' : 'Test Connection'}</button></div>
+          {testResult && <div className={`p-4 rounded-lg ${testResult.success ? 'bg-green-50 dark:bg-green-900/20' : 'bg-red-50 dark:bg-red-900/20'}`}><div className={`text-sm ${testResult.success ? 'text-green-800 dark:text-green-300' : 'text-red-800 dark:text-red-300'}`}>{testResult.success ? '✓ Connection successful!' : '✗ ' + testResult.error}</div>{testResult.data && <div className="text-xs text-gray-600 dark:text-gray-400 mt-2">Phone: {testResult.data.phoneNumber}</div>}</div>}
         </div>
       </div>
 
-      <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-6">
-        <h3 className="text-sm font-medium text-gray-900 dark:text-white mb-3">Setup Instructions</h3>
-        <ol className="list-decimal list-inside space-y-2 text-sm text-gray-600 dark:text-gray-400">
-          <li>Sign up at <a href="https://vapi.ai" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">vapi.ai</a></li>
-          <li>Purchase a phone number ($2/month)</li>
-          <li>Create an assistant in the Vapi dashboard</li>
-          <li>Copy your API key and phone number ID here</li>
-          <li>Configure webhook URL: <code className="text-xs bg-gray-200 dark:bg-gray-800 px-2 py-1 rounded">{process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/vapi/webhook</code></li>
-          <li>Enable the phone system and test</li>
-        </ol>
-      </div>
+      <Modal isOpen={Boolean(overrideAction)} onClose={() => { if (!isOverrideSubmitting) { setOverrideAction(null); setOverrideReason(''); setOverrideError(null) } }} title="Confirm admin override" description="Override actions are high impact and require a reason." size="md">
+        <div className="space-y-4">
+          <p className="text-sm text-gray-700 dark:text-gray-300">{overrideAction === 'rotate-config' ? 'Rotate/refresh phone service config for this restaurant?' : 'Trigger phone integration reconnection/check for this restaurant?'}</p>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Reason (required)</label>
+            <textarea value={overrideReason} onChange={(e) => setOverrideReason(e.target.value)} rows={3} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white" placeholder="Document why this override is needed..." />
+          </div>
+          {overrideError && <p className="text-sm text-red-600">{overrideError}</p>}
+          <div className="flex justify-end gap-2">
+            <button onClick={() => setOverrideAction(null)} className="px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600" disabled={isOverrideSubmitting}>Cancel</button>
+            <button onClick={runOverride} className="px-3 py-2 rounded-lg bg-red-600 text-white disabled:opacity-50" disabled={isOverrideSubmitting}>{isOverrideSubmitting ? 'Submitting...' : 'Confirm override'}</button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }
 
-const IntegrationsTab: React.FC<{ restaurant: Restaurant }> = ({ restaurant }) => (
-  <div className="space-y-6">
-    <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4 mb-4">
-      <div className="flex items-start">
-        <AlertCircle className="w-5 h-5 text-yellow-600 dark:text-yellow-400 mr-3 mt-0.5" />
-        <div>
-          <h3 className="text-sm font-medium text-yellow-900 dark:text-yellow-300">
-            Looking for Phone System?
-          </h3>
-          <p className="text-xs text-yellow-700 dark:text-yellow-400 mt-1">
-            Vapi phone configuration has been moved to the "Phone System" tab (not shown here to avoid confusion with in-app AI Assistant)
-          </p>
-        </div>
-      </div>
-    </div>
+const IntegrationsTab: React.FC<{ restaurant: Restaurant; currentUserRole: string }> = ({ restaurant, currentUserRole }) => {
+  const [overrides, setOverrides] = useState<OverridesData | null>(null)
+  const [isLoadingOverrides, setIsLoadingOverrides] = useState(true)
+  const [overrideReason, setOverrideReason] = useState('')
+  const [overrideError, setOverrideError] = useState<string | null>(null)
+  const [overrideModal, setOverrideModal] = useState<'recheck' | 'disable-channel' | 'enable-channel' | null>(null)
+  const [channelInput, setChannelInput] = useState('ubereats')
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
-    <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-6">
-      <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Other Integration Status</h3>
-      <div className="space-y-4">
-        <div className="flex items-center justify-between p-4 bg-white dark:bg-gray-800 rounded-lg">
+  const canRunOverrides = currentUserRole === 'platform-admin'
+
+  const loadOverrides = async () => {
+    try {
+      const response = await api.get(`/api/admin/restaurants/${restaurant.id}/overrides`)
+      setOverrides(response.data)
+    } catch (err) {
+      console.error('Failed to load override metadata', err)
+    } finally {
+      setIsLoadingOverrides(false)
+    }
+  }
+
+  useEffect(() => {
+    loadOverrides()
+  }, [restaurant.id])
+
+  const submitOverride = async () => {
+    const reason = overrideReason.trim()
+    const channel = channelInput.trim().toLowerCase()
+    if (!reason) {
+      setOverrideError('Reason is required for admin overrides.')
+      return
+    }
+    if ((overrideModal === 'disable-channel' || overrideModal === 'enable-channel') && !channel) {
+      setOverrideError('Channel is required.')
+      return
+    }
+
+    setIsSubmitting(true)
+    setOverrideError(null)
+    try {
+      if (overrideModal === 'recheck') {
+        await api.post(`/api/admin/restaurants/${restaurant.id}/overrides/integrations/recheck`, { reason })
+      } else if (overrideModal === 'disable-channel') {
+        await api.patch(`/api/admin/restaurants/${restaurant.id}/overrides/channels/${channel}`, { reason, disable: true })
+      } else if (overrideModal === 'enable-channel') {
+        await api.patch(`/api/admin/restaurants/${restaurant.id}/overrides/channels/${channel}`, { reason, disable: false })
+      }
+
+      setOverrideModal(null)
+      setOverrideReason('')
+      await loadOverrides()
+    } catch (err: any) {
+      setOverrideError(getErrorMessage(err, 'Failed to run override action'))
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const lastIntegrationOverride = overrides?.lastOverrides?.integrations
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4 mb-4"><div className="flex items-start"><AlertCircle className="w-5 h-5 text-yellow-600 dark:text-yellow-400 mr-3 mt-0.5" /><div><h3 className="text-sm font-medium text-yellow-900 dark:text-yellow-300">Looking for Phone System?</h3><p className="text-xs text-yellow-700 dark:text-yellow-400 mt-1">Vapi phone configuration has been moved to the "Phone System" tab (not shown here to avoid confusion with in-app AI Assistant)</p></div></div></div>
+
+      <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
+        <div className="flex items-start justify-between gap-4">
           <div>
-            <div className="font-medium text-gray-900 dark:text-white">Twilio</div>
-            <div className="text-sm text-gray-500 dark:text-gray-400">SMS and phone services</div>
+            <h3 className="text-sm font-semibold text-amber-900 dark:text-amber-300">Integration admin overrides</h3>
+            {isLoadingOverrides ? <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">Loading override history...</p> : lastIntegrationOverride ? <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">Last override by <span className="font-medium">{lastIntegrationOverride.actorName || 'Unknown user'}</span> on {new Date(lastIntegrationOverride.createdAt).toLocaleString()} — “{lastIntegrationOverride.reason || 'No reason recorded'}”</p> : <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">No integration override has been recorded yet.</p>}
+            <p className="text-xs text-amber-700 dark:text-amber-400 mt-2">Disabled channels: {overrides?.disabledChannels?.length ? overrides.disabledChannels.join(', ') : 'none'}</p>
           </div>
-          <span className="px-3 py-1 text-sm font-medium rounded-full bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300">
-            Active
-          </span>
-        </div>
-        <div className="flex items-center justify-between p-4 bg-white dark:bg-gray-800 rounded-lg">
-          <div>
-            <div className="font-medium text-gray-900 dark:text-white">Storage</div>
-            <div className="text-sm text-gray-500 dark:text-gray-400">File and image storage</div>
+          <div className="flex flex-col gap-2 w-full sm:w-auto">
+            <button onClick={() => setOverrideModal('recheck')} disabled={!canRunOverrides} className="px-3 py-2 bg-amber-600 text-white rounded-lg text-sm hover:bg-amber-700 disabled:opacity-50">Admin override: reconnect/check integrations</button>
+            <button onClick={() => setOverrideModal('disable-channel')} disabled={!canRunOverrides} className="px-3 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700 disabled:opacity-50">Admin override: disable channel</button>
+            <button onClick={() => setOverrideModal('enable-channel')} disabled={!canRunOverrides} className="px-3 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 disabled:opacity-50">Admin override: enable channel</button>
+            {!canRunOverrides && <p className="text-xs text-gray-600 dark:text-gray-400">Read-only for admin role.</p>}
           </div>
-          <span className="px-3 py-1 text-sm font-medium rounded-full bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300">
-            Active
-          </span>
         </div>
       </div>
-      <p className="text-xs text-gray-500 dark:text-gray-400 mt-4">
-        Note: Integration status is read-only in admin view. Restaurant owners manage integrations from their dashboard.
-      </p>
+
+      <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-6">
+        <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Other Integration Status</h3>
+        <div className="space-y-4">
+          <div className="flex items-center justify-between p-4 bg-white dark:bg-gray-800 rounded-lg"><div><div className="font-medium text-gray-900 dark:text-white">Twilio</div><div className="text-sm text-gray-500 dark:text-gray-400">SMS and phone services</div></div><span className="px-3 py-1 text-sm font-medium rounded-full bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300">Active</span></div>
+          <div className="flex items-center justify-between p-4 bg-white dark:bg-gray-800 rounded-lg"><div><div className="font-medium text-gray-900 dark:text-white">Storage</div><div className="text-sm text-gray-500 dark:text-gray-400">File and image storage</div></div><span className="px-3 py-1 text-sm font-medium rounded-full bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300">Active</span></div>
+        </div>
+      </div>
+
+      <Modal isOpen={Boolean(overrideModal)} onClose={() => { if (!isSubmitting) { setOverrideModal(null); setOverrideReason(''); setOverrideError(null) } }} title="Confirm admin override" description="A reason is mandatory and will be stored in audit logs." size="md">
+        <div className="space-y-4">
+          <p className="text-sm text-gray-700 dark:text-gray-300">{overrideModal === 'recheck' ? 'Trigger integration reconnect/check now?' : overrideModal === 'disable-channel' ? 'Temporarily disable a problematic channel?' : 'Re-enable a previously disabled channel?'}</p>
+          {(overrideModal === 'disable-channel' || overrideModal === 'enable-channel') && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Channel</label>
+              <input type="text" value={channelInput} onChange={(e) => setChannelInput(e.target.value)} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white" placeholder="e.g. doordash" />
+            </div>
+          )}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Reason (required)</label>
+            <textarea value={overrideReason} onChange={(e) => setOverrideReason(e.target.value)} rows={3} className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white" placeholder="Document why this override is needed..." />
+          </div>
+          {overrideError && <p className="text-sm text-red-600">{overrideError}</p>}
+          <div className="flex justify-end gap-2"><button onClick={() => setOverrideModal(null)} className="px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600" disabled={isSubmitting}>Cancel</button><button onClick={submitOverride} className="px-3 py-2 rounded-lg bg-red-600 text-white disabled:opacity-50" disabled={isSubmitting}>{isSubmitting ? 'Submitting...' : 'Confirm override'}</button></div>
+        </div>
+      </Modal>
     </div>
-  </div>
-)
+  )
+}
 
 // Inventory Tab Component  
 const InventoryTab: React.FC<{ transactions: Transaction[]; pagination: any }> = ({ transactions, pagination }) => (

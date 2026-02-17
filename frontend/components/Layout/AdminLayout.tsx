@@ -53,6 +53,8 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
     
     // RESTAURANT MANAGEMENT  
     { name: 'Restaurants', href: '/admin/restaurants', icon: Store, section: 'restaurants' },
+    { name: 'Admin Users', href: '/admin/users', icon: Users, section: 'restaurants' },
+    { name: 'Global Menu', href: '/admin/global-menu', icon: Menu, section: 'restaurants' },
     { name: 'All Orders', href: '/admin/orders', icon: ClipboardList, section: 'restaurants' },
     { name: 'Tasks', href: '/admin/tasks', icon: ListTodo, section: 'restaurants' },
     

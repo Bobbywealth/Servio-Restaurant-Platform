@@ -1,6 +1,10 @@
 import { Router, Request, Response } from 'express';
+import fs from 'fs/promises';
+import path from 'path';
 import multer from 'multer';
 import { AssistantService } from '../services/AssistantService';
+import { VoiceConversationService } from '../services/VoiceConversationService';
+import { DatabaseService } from '../services/DatabaseService';
 import { logger } from '../utils/logger';
 import { asyncHandler, UnauthorizedError } from '../middleware/errorHandler';
 
@@ -23,6 +27,55 @@ const upload = multer({
 });
 
 const assistantService = new AssistantService();
+const voiceConversationService = VoiceConversationService.getInstance();
+
+const parsePositiveNumber = (value: unknown): number => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+};
+
+const parseSafeString = (value: unknown, fallback = 'unknown'): string => {
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : fallback;
+};
+
+const parseRestaurantId = (value: unknown): string => {
+  if (Array.isArray(value)) {
+    return parseSafeString(value[0], '');
+  }
+
+  return parseSafeString(value, '');
+};
+
+const parseRecentErrors = async (limit = 5): Promise<Array<{ message: string; level: string; occurredAt: string; source: string }>> => {
+  const errorLogPath = path.resolve(process.cwd(), 'logs/error.log');
+
+  try {
+    const content = await fs.readFile(errorLogPath, 'utf8');
+    if (!content) {
+      return [];
+    }
+
+    const lines = content
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .filter((line) => /assistant|voice|vapi/i.test(line));
+
+    return lines.slice(-limit).reverse().map((line) => {
+      const timestampMatch = line.match(/^(\d{4}-\d{2}-\d{2}[^[]+)/);
+      const levelMatch = line.match(/\[(error|warn|info|debug)\]/i);
+
+      return {
+        message: line,
+        level: levelMatch?.[1]?.toLowerCase() || 'error',
+        occurredAt: timestampMatch?.[1]?.trim() || new Date(0).toISOString(),
+        source: line.includes('vapi') ? 'vapi' : 'assistant'
+      };
+    });
+  } catch {
+    return [];
+  }
+};
 
 /**
  * POST /api/assistant/process-audio
@@ -157,6 +210,7 @@ router.get('/status', asyncHandler(async (req: Request, res: Response) => {
   // Determine which AI provider is being used
   const usesMiniMax = Boolean(process.env.MINIMAX_API_KEY);
   const usesOpenAI = Boolean(process.env.OPENAI_API_KEY);
+  const restaurantId = parseRestaurantId(req.user?.restaurantId);
 
   let aiProvider = 'unknown';
   if (usesMiniMax) {
@@ -164,6 +218,71 @@ router.get('/status', asyncHandler(async (req: Request, res: Response) => {
   } else if (usesOpenAI) {
     aiProvider = 'openai';
   }
+
+  const defaultConversationStats = {
+    total: 0,
+    active: 0,
+    completed: 0,
+    abandoned: 0,
+    avgMessages: 0
+  };
+
+  let conversationStats = defaultConversationStats;
+  let recentOutcomeRows: any[] = [];
+
+  if (restaurantId) {
+    try {
+      conversationStats = await voiceConversationService.getStatistics(restaurantId);
+      const db = DatabaseService.getInstance().getDatabase();
+      recentOutcomeRows = await db.all(
+        `SELECT id, status, updated_at
+         FROM voice_conversations
+         WHERE restaurant_id = ?
+         ORDER BY updated_at DESC
+         LIMIT 25`,
+        [restaurantId]
+      );
+    } catch (error) {
+      logger.warn('[assistant.status] Failed to load voice conversation stats', {
+        restaurantId,
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+  }
+
+  const normalizedStats = {
+    total: parsePositiveNumber(conversationStats.total),
+    active: parsePositiveNumber(conversationStats.active),
+    completed: parsePositiveNumber(conversationStats.completed),
+    abandoned: parsePositiveNumber(conversationStats.abandoned),
+    avgMessages: parsePositiveNumber(conversationStats.avgMessages)
+  };
+
+  const successCount = parsePositiveNumber(normalizedStats.completed);
+  const failureCount = parsePositiveNumber(normalizedStats.abandoned);
+  const successDenominator = Math.max(successCount + failureCount, 1);
+
+  const recentIncidentsFromConversations = recentOutcomeRows
+    .filter((row) => parseSafeString(row?.status) === 'abandoned')
+    .slice(0, 5)
+    .map((row) => ({
+      id: parseSafeString(row?.id, `incident-${Date.now()}`),
+      type: 'conversation_abandoned',
+      source: 'voice-conversations',
+      message: 'Voice conversation ended as abandoned',
+      severity: 'warning',
+      occurredAt: parseSafeString(row?.updated_at, new Date(0).toISOString())
+    }));
+
+  const recentLogErrors = await parseRecentErrors(5);
+  const recentIncidentsFromLogs = recentLogErrors.map((entry, index) => ({
+    id: `${entry.source}-${index}-${Date.now()}`,
+    type: 'runtime_error',
+    source: entry.source,
+    message: entry.message,
+    severity: entry.level === 'warn' ? 'warning' : 'error',
+    occurredAt: entry.occurredAt
+  }));
 
   const status = {
     service: 'online',
@@ -182,7 +301,40 @@ router.get('/status', asyncHandler(async (req: Request, res: Response) => {
       'Task management',
       'Audit logging'
     ],
-    version: '1.0.0'
+    version: '1.0.0',
+    voiceConversationMetrics: {
+      liveCount: parsePositiveNumber(normalizedStats.active),
+      totalCount: parsePositiveNumber(normalizedStats.total),
+      successCount,
+      failureCount,
+      successRate: Number((successCount / successDenominator).toFixed(4)),
+      failureRate: Number((failureCount / successDenominator).toFixed(4)),
+      averageMessagesPerConversation: parsePositiveNumber(normalizedStats.avgMessages)
+    },
+    incidents: [...recentIncidentsFromConversations, ...recentIncidentsFromLogs].slice(0, 10),
+    probes: [
+      {
+        name: 'assistant-service',
+        status: 'healthy',
+        checkedAt: new Date().toISOString(),
+        details: {
+          aiProvider,
+          configuredProviders: {
+            miniMax: usesMiniMax,
+            openAI: usesOpenAI
+          }
+        }
+      },
+      {
+        name: 'voice-conversations',
+        status: restaurantId ? 'healthy' : 'unknown',
+        checkedAt: new Date().toISOString(),
+        details: {
+          restaurantId: restaurantId || 'unknown',
+          liveCount: parsePositiveNumber(normalizedStats.active)
+        }
+      }
+    ]
   };
 
   res.json({
