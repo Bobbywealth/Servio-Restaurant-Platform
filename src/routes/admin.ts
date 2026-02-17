@@ -50,8 +50,21 @@ type AdminDemoBooking = {
   booking_time: string;
   timezone: string;
   notes: string | null;
+  internal_notes?: string | null;
+  owner_user_id?: string | null;
+  owner_name?: string | null;
+  follow_up_at?: string | null;
+  conversion_stage?: string | null;
+  converted_task_id?: string | null;
   status: string;
   created_at: string;
+};
+
+type BookingOwnerOption = {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
 };
 
 /**
@@ -191,6 +204,14 @@ const parseTableRows = (rows: any[]): any[] => {
     }
     return parsed;
   });
+};
+
+const DEMO_BOOKING_ALLOWED_STATUSES = new Set(['scheduled', 'completed', 'no_show', 'converted', 'lost']);
+const DEMO_BOOKING_ALLOWED_STAGES = new Set(['new', 'contacted', 'qualified', 'proposal', 'negotiation', 'won', 'lost']);
+
+const isValidIsoDateTime = (value: string): boolean => {
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp);
 };
 
 const sanitizePlatformSettings = (input: any): PlatformSettings => {
@@ -429,6 +450,9 @@ router.get('/demo-bookings', async (req, res) => {
     const db = await DatabaseService.getInstance().getDatabase();
     const start = typeof req.query.start === 'string' ? req.query.start : undefined;
     const end = typeof req.query.end === 'string' ? req.query.end : undefined;
+    const ownerId = typeof req.query.ownerId === 'string' ? req.query.ownerId.trim() : '';
+    const status = typeof req.query.status === 'string' ? req.query.status.trim() : '';
+    const conversionStage = typeof req.query.conversionStage === 'string' ? req.query.conversionStage.trim() : '';
 
     const existingTable = await resolveBookingTable();
 
@@ -438,6 +462,16 @@ router.get('/demo-bookings', async (req, res) => {
 
     const whereParts: string[] = [];
     const params: any[] = [];
+    const columnChecks = await Promise.all([
+      hasColumn(db, existingTable, 'owner_user_id'),
+      hasColumn(db, existingTable, 'follow_up_at'),
+      hasColumn(db, existingTable, 'internal_notes'),
+      hasColumn(db, existingTable, 'conversion_stage'),
+      hasColumn(db, existingTable, 'converted_task_id')
+    ]);
+
+    const [hasOwnerColumn, hasFollowUpColumn, hasInternalNotesColumn, hasConversionStageColumn, hasConvertedTaskColumn] = columnChecks;
+
     if (start) {
       whereParts.push(`CAST(booking_date AS DATE) >= CAST(? AS DATE)`);
       params.push(start);
@@ -447,24 +481,50 @@ router.get('/demo-bookings', async (req, res) => {
       params.push(end);
     }
 
+    if (status && status !== 'all') {
+      whereParts.push(`COALESCE(b.status, 'scheduled') = ?`);
+      params.push(status);
+    }
+
+    if (ownerId && ownerId !== 'all') {
+      if (hasOwnerColumn) {
+        whereParts.push('b.owner_user_id = ?');
+        params.push(ownerId);
+      }
+    }
+
+    if (conversionStage && conversionStage !== 'all') {
+      if (hasConversionStageColumn) {
+        whereParts.push(`COALESCE(b.conversion_stage, 'new') = ?`);
+        params.push(conversionStage);
+      }
+    }
+
     const whereClause = whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : '';
     const bookings = await db.all(
       `
       SELECT
-        id,
-        name,
-        email,
-        phone,
-        restaurant_name,
-        booking_date,
-        booking_time,
-        COALESCE(timezone, 'UTC') as timezone,
-        notes,
-        COALESCE(status, 'pending') as status,
-        created_at
-      FROM ${existingTable}
+        b.id,
+        b.name,
+        b.email,
+        b.phone,
+        b.restaurant_name,
+        b.booking_date,
+        b.booking_time,
+        COALESCE(b.timezone, 'UTC') as timezone,
+        b.notes,
+        ${hasInternalNotesColumn ? 'b.internal_notes' : 'NULL AS internal_notes'},
+        ${hasOwnerColumn ? 'b.owner_user_id' : 'NULL AS owner_user_id'},
+        ${hasOwnerColumn ? 'u.name AS owner_name' : 'NULL AS owner_name'},
+        ${hasFollowUpColumn ? 'b.follow_up_at' : 'NULL AS follow_up_at'},
+        ${hasConversionStageColumn ? 'COALESCE(b.conversion_stage, NULL)' : 'NULL AS conversion_stage'},
+        ${hasConvertedTaskColumn ? 'b.converted_task_id' : 'NULL AS converted_task_id'},
+        COALESCE(b.status, 'scheduled') as status,
+        b.created_at
+      FROM ${existingTable} b
+      ${hasOwnerColumn ? 'LEFT JOIN users u ON u.id = b.owner_user_id' : ''}
       ${whereClause}
-      ORDER BY booking_date ASC, booking_time ASC
+      ORDER BY b.booking_date ASC, b.booking_time ASC
     `,
       params
     );
@@ -474,6 +534,278 @@ router.get('/demo-bookings', async (req, res) => {
     logger.error('Failed to get demo bookings:', error);
     return res.status(500).json({
       error: 'Failed to load demo bookings',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+router.get('/demo-bookings/owners', async (_req, res) => {
+  try {
+    const db = await DatabaseService.getInstance().getDatabase();
+    const owners = await db.all(
+      `
+      SELECT id, name, email, role
+      FROM users
+      WHERE is_active = true
+        AND role IN ('platform-admin', 'admin', 'owner', 'manager')
+      ORDER BY
+        CASE role
+          WHEN 'platform-admin' THEN 0
+          WHEN 'admin' THEN 1
+          WHEN 'owner' THEN 2
+          ELSE 3
+        END,
+        name ASC
+    `
+    );
+
+    return res.json({ owners: owners as BookingOwnerOption[] });
+  } catch (error) {
+    logger.error('Failed to get demo booking owners:', error);
+    return res.status(500).json({
+      error: 'Failed to load owner options',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+router.patch('/demo-bookings/:id', async (req, res) => {
+  try {
+    const db = await DatabaseService.getInstance().getDatabase();
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const tableName = await resolveBookingTable();
+
+    if (!tableName) {
+      return res.status(503).json({ error: 'Booking service unavailable' });
+    }
+
+    const existingBooking = await db.get(`SELECT * FROM ${tableName} WHERE id = ? LIMIT 1`, [id]);
+    if (!existingBooking) {
+      return res.status(404).json({ error: 'Booking not found' });
+    }
+
+    const columnChecks = await Promise.all([
+      hasColumn(db, tableName, 'owner_user_id'),
+      hasColumn(db, tableName, 'follow_up_at'),
+      hasColumn(db, tableName, 'internal_notes'),
+      hasColumn(db, tableName, 'conversion_stage')
+    ]);
+    const [hasOwnerColumn, hasFollowUpColumn, hasInternalNotesColumn, hasConversionStageColumn] = columnChecks;
+
+    const ownerUserId = typeof req.body?.owner_user_id === 'string' ? req.body.owner_user_id.trim() : req.body?.owner_user_id === null ? null : undefined;
+    const status = typeof req.body?.status === 'string' ? req.body.status.trim() : undefined;
+    const followUpAt = typeof req.body?.follow_up_at === 'string' ? req.body.follow_up_at.trim() : req.body?.follow_up_at === null ? null : undefined;
+    const internalNotes = typeof req.body?.internal_notes === 'string' ? req.body.internal_notes.trim() : req.body?.internal_notes === null ? null : undefined;
+    const conversionStage = typeof req.body?.conversion_stage === 'string' ? req.body.conversion_stage.trim() : req.body?.conversion_stage === null ? null : undefined;
+
+    const updates: string[] = [];
+    const params: any[] = [];
+    const changedFields: Record<string, { from: any; to: any }> = {};
+
+    if (status !== undefined) {
+      if (!DEMO_BOOKING_ALLOWED_STATUSES.has(status)) {
+        return res.status(400).json({ error: 'Invalid booking status' });
+      }
+      updates.push('status = ?');
+      params.push(status);
+      changedFields.status = { from: existingBooking.status ?? 'scheduled', to: status };
+    }
+
+    if (ownerUserId !== undefined && hasOwnerColumn) {
+      if (ownerUserId) {
+        const owner = await db.get(
+          "SELECT id FROM users WHERE id = ? AND role IN ('platform-admin', 'admin', 'owner', 'manager') AND is_active = true LIMIT 1",
+          [ownerUserId]
+        );
+        if (!owner) {
+          return res.status(400).json({ error: 'Invalid owner_user_id' });
+        }
+      }
+      updates.push('owner_user_id = ?');
+      params.push(ownerUserId || null);
+      changedFields.owner_user_id = { from: existingBooking.owner_user_id ?? null, to: ownerUserId || null };
+    }
+
+    if (followUpAt !== undefined && hasFollowUpColumn) {
+      if (followUpAt && !isValidIsoDateTime(followUpAt)) {
+        return res.status(400).json({ error: 'follow_up_at must be a valid ISO datetime string' });
+      }
+      updates.push('follow_up_at = ?');
+      params.push(followUpAt || null);
+      changedFields.follow_up_at = { from: existingBooking.follow_up_at ?? null, to: followUpAt || null };
+    }
+
+    if (internalNotes !== undefined) {
+      const normalizedNotes = internalNotes ? internalNotes.slice(0, 4000) : null;
+      if (hasInternalNotesColumn) {
+        updates.push('internal_notes = ?');
+      } else {
+        updates.push('notes = ?');
+      }
+      params.push(normalizedNotes);
+      changedFields.internal_notes = {
+        from: hasInternalNotesColumn ? existingBooking.internal_notes ?? null : existingBooking.notes ?? null,
+        to: normalizedNotes
+      };
+    }
+
+    if (conversionStage !== undefined && hasConversionStageColumn) {
+      if (conversionStage && !DEMO_BOOKING_ALLOWED_STAGES.has(conversionStage)) {
+        return res.status(400).json({ error: 'Invalid conversion_stage' });
+      }
+      updates.push('conversion_stage = ?');
+      params.push(conversionStage || null);
+      changedFields.conversion_stage = { from: existingBooking.conversion_stage ?? null, to: conversionStage || null };
+    }
+
+    if (!updates.length) {
+      return res.status(400).json({ error: 'No valid fields provided for update' });
+    }
+
+    if (await hasColumn(db, tableName, 'updated_at')) {
+      updates.push('updated_at = NOW()');
+    }
+    await db.run(`UPDATE ${tableName} SET ${updates.join(', ')} WHERE id = ?`, [...params, id]);
+
+    await db.run(
+      'INSERT INTO audit_logs (id, restaurant_id, user_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [
+        randomUUID(),
+        req.user?.restaurantId ?? existingBooking.restaurant_id ?? null,
+        req.user?.id ?? null,
+        'demo_booking.updated',
+        'demo_booking',
+        id,
+        JSON.stringify({
+          actorId: req.user?.id ?? null,
+          actorName: req.user?.name ?? null,
+          changedAt: new Date().toISOString(),
+          changedFields
+        })
+      ]
+    );
+
+    return res.json({ success: true, changedFields });
+  } catch (error) {
+    logger.error('Failed to update demo booking:', error);
+    return res.status(500).json({
+      error: 'Failed to update demo booking',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+router.post('/demo-bookings/:id/convert', async (req, res) => {
+  try {
+    const db = await DatabaseService.getInstance().getDatabase();
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const tableName = await resolveBookingTable();
+
+    if (!tableName) {
+      return res.status(503).json({ error: 'Booking service unavailable' });
+    }
+
+    const booking = await db.get(`SELECT * FROM ${tableName} WHERE id = ? LIMIT 1`, [id]);
+    if (!booking) {
+      return res.status(404).json({ error: 'Booking not found' });
+    }
+
+    let restaurantId = typeof req.body?.restaurant_id === 'string' ? req.body.restaurant_id.trim() : '';
+    if (!restaurantId && typeof booking.restaurant_name === 'string' && booking.restaurant_name.trim()) {
+      const matchedRestaurant = await db.get('SELECT id FROM restaurants WHERE LOWER(name) = LOWER(?) LIMIT 1', [booking.restaurant_name.trim()]);
+      restaurantId = matchedRestaurant?.id || '';
+    }
+
+    if (!restaurantId) {
+      return res.status(400).json({
+        error: 'restaurant_id is required to create onboarding task',
+        details: 'No matching restaurant was found by booking.restaurant_name.'
+      });
+    }
+
+    const restaurant = await db.get('SELECT id FROM restaurants WHERE id = ? LIMIT 1', [restaurantId]);
+    if (!restaurant) {
+      return res.status(404).json({ error: 'Restaurant not found' });
+    }
+
+    const taskId = randomUUID();
+    const assignedTo = typeof req.body?.assigned_to === 'string' ? req.body.assigned_to.trim() : null;
+    const dueDate = typeof req.body?.due_date === 'string' ? req.body.due_date.trim() : null;
+    if (assignedTo) {
+      const assignee = await db.get('SELECT id FROM users WHERE id = ? AND restaurant_id = ? AND is_active = true LIMIT 1', [assignedTo, restaurantId]);
+      if (!assignee) {
+        return res.status(400).json({ error: 'assigned_to must belong to the selected restaurant and be active' });
+      }
+    }
+
+    const taskTitle =
+      typeof req.body?.title === 'string' && req.body.title.trim()
+        ? req.body.title.trim().slice(0, 180)
+        : `Onboarding follow-up: ${booking.restaurant_name || booking.name}`;
+    const taskDescription =
+      typeof req.body?.description === 'string' && req.body.description.trim()
+        ? req.body.description.trim().slice(0, 2000)
+        : `Converted from demo booking for ${booking.name} (${booking.email}).`;
+
+    await db.run(
+      `
+      INSERT INTO tasks (id, restaurant_id, title, description, status, priority, type, assigned_to, due_date, completed_at, created_at, updated_at)
+      VALUES (?, ?, ?, ?, 'pending', 'high', 'onboarding_conversion', ?, ?, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `,
+      [taskId, restaurantId, taskTitle, taskDescription, assignedTo, dueDate]
+    );
+
+    const hasConversionStage = await hasColumn(db, tableName, 'conversion_stage');
+    const hasConvertedTaskId = await hasColumn(db, tableName, 'converted_task_id');
+    const bookingUpdates: string[] = ['status = ?'];
+    const bookingParams: any[] = ['converted'];
+    if (hasConversionStage) {
+      bookingUpdates.push('conversion_stage = ?');
+      bookingParams.push('won');
+    }
+    if (hasConvertedTaskId) {
+      bookingUpdates.push('converted_task_id = ?');
+      bookingParams.push(taskId);
+    }
+    if (await hasColumn(db, tableName, 'updated_at')) {
+      bookingUpdates.push('updated_at = NOW()');
+    }
+
+    await db.run(`UPDATE ${tableName} SET ${bookingUpdates.join(', ')} WHERE id = ?`, [...bookingParams, id]);
+
+    await db.run(
+      'INSERT INTO audit_logs (id, restaurant_id, user_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [
+        randomUUID(),
+        restaurantId,
+        req.user?.id ?? null,
+        'demo_booking.converted_to_onboarding',
+        'demo_booking',
+        id,
+        JSON.stringify({
+          actorId: req.user?.id ?? null,
+          changedAt: new Date().toISOString(),
+          bookingId: id,
+          restaurantId,
+          onboardingTaskId: taskId
+        })
+      ]
+    );
+
+    return res.status(201).json({
+      success: true,
+      task: {
+        id: taskId,
+        restaurant_id: restaurantId,
+        title: taskTitle,
+        status: 'pending',
+        type: 'onboarding_conversion'
+      }
+    });
+  } catch (error) {
+    logger.error('Failed to convert demo booking:', error);
+    return res.status(500).json({
+      error: 'Failed to convert demo booking',
       details: error instanceof Error ? error.message : 'Unknown error'
     });
   }
@@ -2572,6 +2904,317 @@ router.get('/restaurants/:id/audit-logs', async (req, res) => {
   }
 });
 
+
+router.get('/users', async (_req, res) => {
+  try {
+    const db = await DatabaseService.getInstance().getDatabase();
+    const users = await db.all(
+      `SELECT id, name, email, role, COALESCE(permissions, '[]') as permissions, is_active, created_at as invited_at
+       FROM users
+       ORDER BY created_at DESC
+       LIMIT 500`
+    );
+
+    res.json({
+      users: users.map((user: any) => ({
+        ...user,
+        permissions: typeof user.permissions === 'string' ? JSON.parse(user.permissions) : user.permissions
+      }))
+    });
+  } catch (error) {
+    logger.error('Failed to load admin users:', error);
+    res.status(500).json({ error: 'Failed to load users' });
+  }
+});
+
+router.post('/users/invite', async (req, res) => {
+  try {
+    const { email, role } = req.body || {};
+    if (!email || !role) {
+      return res.status(400).json({ error: 'email and role are required' });
+    }
+
+    const validRoles = ['admin', 'manager', 'viewer', 'super_admin'];
+    if (!validRoles.includes(role)) {
+      return res.status(400).json({ error: 'invalid role' });
+    }
+
+    const db = await DatabaseService.getInstance().getDatabase();
+    const normalizedEmail = String(email).trim().toLowerCase();
+
+    const existing = await db.get('SELECT id FROM users WHERE email = ?', [normalizedEmail]);
+    if (existing) {
+      return res.status(409).json({ error: 'User already exists' });
+    }
+
+    const defaultRestaurant = await db.get('SELECT id FROM restaurants ORDER BY created_at ASC LIMIT 1');
+    if (!defaultRestaurant?.id) {
+      return res.status(400).json({ error: 'No restaurants available to attach invited user' });
+    }
+
+    const userId = uuidv4();
+    const now = new Date().toISOString();
+    await db.run(
+      `INSERT INTO users (id, restaurant_id, name, email, role, permissions, is_active, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, false, ?, ?)` ,
+      [userId, defaultRestaurant.id, normalizedEmail.split('@')[0], normalizedEmail, role, JSON.stringify([]), now, now]
+    );
+
+    await insertAdminAuditLog(db, {
+      restaurantId: defaultRestaurant.id,
+      userId: req.user?.id ?? null,
+      action: 'admin.user.invite',
+      entityType: 'user',
+      entityId: userId,
+      details: { email: normalizedEmail, role }
+    });
+
+    const invitedUser = await db.get('SELECT id, name, email, role, is_active, created_at as invited_at FROM users WHERE id = ?', [userId]);
+    return res.status(201).json({ user: invitedUser });
+  } catch (error) {
+    logger.error('Failed to invite admin user:', error);
+    return res.status(500).json({ error: 'Failed to invite user' });
+  }
+});
+
+router.patch('/users/:id/role', async (req, res) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const { role } = req.body || {};
+    const validRoles = ['admin', 'manager', 'viewer', 'super_admin'];
+    if (!validRoles.includes(role)) {
+      return res.status(400).json({ error: 'invalid role' });
+    }
+
+    const db = await DatabaseService.getInstance().getDatabase();
+    const existing = await db.get('SELECT id, role, restaurant_id FROM users WHERE id = ?', [id]);
+    if (!existing) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    await db.run('UPDATE users SET role = ?, updated_at = NOW() WHERE id = ?', [role, id]);
+
+    await insertAdminAuditLog(db, {
+      restaurantId: existing.restaurant_id,
+      userId: req.user?.id ?? null,
+      action: 'admin.user.role_updated',
+      entityType: 'user',
+      entityId: id,
+      details: { from_role: existing.role, to_role: role }
+    });
+
+    const user = await db.get('SELECT id, name, email, role, is_active, created_at as invited_at FROM users WHERE id = ?', [id]);
+    return res.json({ user });
+  } catch (error) {
+    logger.error('Failed to update user role:', error);
+    return res.status(500).json({ error: 'Failed to update user role' });
+  }
+});
+
+router.patch('/users/:id/deactivate', async (req, res) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const requested = req.body?.is_active;
+    const isActive = requested === undefined ? false : Boolean(requested);
+
+    const db = await DatabaseService.getInstance().getDatabase();
+    const existing = await db.get('SELECT id, is_active, restaurant_id FROM users WHERE id = ?', [id]);
+    if (!existing) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    await db.run('UPDATE users SET is_active = ?, updated_at = NOW() WHERE id = ?', [isActive, id]);
+
+    await insertAdminAuditLog(db, {
+      restaurantId: existing.restaurant_id,
+      userId: req.user?.id ?? null,
+      action: isActive ? 'admin.user.activated' : 'admin.user.deactivated',
+      entityType: 'user',
+      entityId: id,
+      details: { previous_is_active: existing.is_active, next_is_active: isActive }
+    });
+
+    return res.json({ success: true, id, is_active: isActive });
+  } catch (error) {
+    logger.error('Failed to update user active state:', error);
+    return res.status(500).json({ error: 'Failed to update user active state' });
+  }
+});
+
+router.get('/billing/overview', async (_req, res) => {
+  try {
+    const db = await DatabaseService.getInstance().getDatabase();
+    const subscriptions = await db.all(
+      `SELECT abs.*, r.name as restaurant_name
+       FROM admin_billing_subscriptions abs
+       JOIN restaurants r ON r.id = abs.restaurant_id
+       ORDER BY r.name ASC`
+    );
+
+    const history = await db.all(
+      `SELECT cbh.id, cbh.company_id, cbh.amount_cents, cbh.status, cbh.invoice_url, cbh.created_at,
+              r.id as restaurant_id, r.name as restaurant_name
+       FROM company_billing_history cbh
+       LEFT JOIN companies c ON c.id = cbh.company_id
+       LEFT JOIN restaurants r ON r.company_id = c.id
+       ORDER BY cbh.created_at DESC
+       LIMIT 200`
+    );
+
+    return res.json({
+      subscriptions,
+      history: history.map((h: any) => ({
+        id: h.id,
+        restaurant_id: h.restaurant_id,
+        restaurant_name: h.restaurant_name || 'Unassigned',
+        amount: Number(h.amount_cents || 0) / 100,
+        status: h.status,
+        invoice_url: h.invoice_url,
+        created_at: h.created_at
+      }))
+    });
+  } catch (error) {
+    logger.error('Failed to load billing overview:', error);
+    return res.status(500).json({ error: 'Failed to load billing overview' });
+  }
+});
+
+router.post('/billing/invoices/:id/actions', async (req, res) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const action = req.body?.action;
+    if (!['retry', 'void'].includes(action)) {
+      return res.status(400).json({ error: 'action must be retry or void' });
+    }
+
+    const db = await DatabaseService.getInstance().getDatabase();
+    const invoice = await db.get('SELECT id, company_id, status FROM company_billing_history WHERE id = ?', [id]);
+    if (!invoice) {
+      return res.status(404).json({ error: 'Invoice not found' });
+    }
+
+    const nextStatus = action === 'retry' ? 'pending' : 'voided';
+    await db.run('UPDATE company_billing_history SET status = ? WHERE id = ?', [nextStatus, id]);
+
+    const restaurant = await db.get('SELECT id FROM restaurants WHERE company_id = ? ORDER BY created_at ASC LIMIT 1', [invoice.company_id]);
+    if (restaurant?.id) {
+      await insertAdminAuditLog(db, {
+        restaurantId: restaurant.id,
+        userId: req.user?.id ?? null,
+        action: `admin.billing.invoice_${action}`,
+        entityType: 'invoice',
+        entityId: id,
+        details: { previous_status: invoice.status, next_status: nextStatus }
+      });
+    }
+
+    return res.json({ success: true, id, status: nextStatus });
+  } catch (error) {
+    logger.error('Failed invoice action:', error);
+    return res.status(500).json({ error: 'Failed to apply invoice action' });
+  }
+});
+
+router.get('/global-menu', async (_req, res) => {
+  try {
+    const db = await DatabaseService.getInstance().getDatabase();
+    const restaurants = await db.all('SELECT id, name, slug FROM restaurants WHERE is_active = true ORDER BY name ASC LIMIT 100');
+    const templateRestaurant = restaurants[0];
+
+    if (!templateRestaurant) {
+      return res.json({ restaurants: [], categories: [] });
+    }
+
+    const categories = await db.all(
+      `SELECT id, name, sort_order
+       FROM menu_categories
+       WHERE restaurant_id = ?
+       ORDER BY sort_order ASC, created_at ASC`,
+      [templateRestaurant.id]
+    );
+
+    const items = await db.all(
+      `SELECT id, name, price, category_id, is_available
+       FROM menu_items
+       WHERE restaurant_id = ?
+       ORDER BY created_at ASC`,
+      [templateRestaurant.id]
+    );
+
+    const categoriesWithItems = categories.map((category: any) => ({
+      ...category,
+      items: items
+        .filter((item: any) => item.category_id === category.id)
+        .map((item: any) => ({
+          id: item.id,
+          name: item.name,
+          price: Number(item.price || 0),
+          is_available: item.is_available,
+          category: category.name
+        }))
+    }));
+
+    return res.json({ restaurants, categories: categoriesWithItems });
+  } catch (error) {
+    logger.error('Failed to load global menu:', error);
+    return res.status(500).json({ error: 'Failed to load global menu' });
+  }
+});
+
+router.post('/global-menu/push', async (req, res) => {
+  try {
+    const restaurantIds = Array.isArray(req.body?.restaurant_ids) ? req.body.restaurant_ids : [];
+    if (restaurantIds.length === 0) {
+      return res.status(400).json({ error: 'restaurant_ids is required' });
+    }
+
+    const db = await DatabaseService.getInstance().getDatabase();
+    const pushId = uuidv4();
+    for (const restaurantId of restaurantIds) {
+      await insertAdminAuditLog(db, {
+        restaurantId,
+        userId: req.user?.id ?? null,
+        action: 'admin.menu.push',
+        entityType: 'menu',
+        entityId: pushId,
+        details: { push_id: pushId, restaurant_id: restaurantId, triggered_at: new Date().toISOString() }
+      });
+    }
+
+    return res.status(201).json({ success: true, push_id: pushId, restaurant_ids: restaurantIds });
+  } catch (error) {
+    logger.error('Failed to push global menu:', error);
+    return res.status(500).json({ error: 'Failed to push global menu' });
+  }
+});
+
+router.post('/global-menu/rollback', async (req, res) => {
+  try {
+    const pushId = req.body?.push_id;
+    const restaurantIds = Array.isArray(req.body?.restaurant_ids) ? req.body.restaurant_ids : [];
+    if (!pushId || restaurantIds.length === 0) {
+      return res.status(400).json({ error: 'push_id and restaurant_ids are required' });
+    }
+
+    const db = await DatabaseService.getInstance().getDatabase();
+    for (const restaurantId of restaurantIds) {
+      await insertAdminAuditLog(db, {
+        restaurantId,
+        userId: req.user?.id ?? null,
+        action: 'admin.menu.rollback',
+        entityType: 'menu',
+        entityId: String(pushId),
+        details: { push_id: pushId, restaurant_id: restaurantId, rolled_back_at: new Date().toISOString() }
+      });
+    }
+
+    return res.json({ success: true, push_id: pushId, restaurant_ids: restaurantIds });
+  } catch (error) {
+    logger.error('Failed to rollback global menu push:', error);
+    return res.status(500).json({ error: 'Failed to rollback global menu push' });
+  }
+});
+
 router.get('/billing/subscriptions', async (_req, res) => {
   try {
     const db = await DatabaseService.getInstance().getDatabase();
@@ -2594,6 +3237,11 @@ router.patch('/billing/subscriptions/:id', async (req, res) => {
     const { package_name, status, billing_cycle, amount, next_billing_date, contact_email, notes } = req.body || {};
     const db = await DatabaseService.getInstance().getDatabase();
 
+    const existing = await db.get('SELECT * FROM admin_billing_subscriptions WHERE id = ?', [id]);
+    if (!existing) {
+      return res.status(404).json({ error: 'Subscription not found' });
+    }
+
     await db.run(
       `UPDATE admin_billing_subscriptions
        SET package_name = COALESCE(?, package_name),
@@ -2607,6 +3255,28 @@ router.patch('/billing/subscriptions/:id', async (req, res) => {
        WHERE id = ?`,
       [package_name, status, billing_cycle, amount, next_billing_date, contact_email, notes, id]
     );
+
+    await insertAdminAuditLog(db, {
+      restaurantId: existing.restaurant_id,
+      userId: req.user?.id ?? null,
+      action: 'admin.billing.subscription_updated',
+      entityType: 'billing_subscription',
+      entityId: id,
+      details: {
+        previous: {
+          package_name: existing.package_name,
+          status: existing.status,
+          billing_cycle: existing.billing_cycle,
+          amount: existing.amount
+        },
+        next: {
+          package_name: package_name ?? existing.package_name,
+          status: status ?? existing.status,
+          billing_cycle: billing_cycle ?? existing.billing_cycle,
+          amount: amount ?? existing.amount
+        }
+      }
+    });
 
     const subscription = await db.get('SELECT * FROM admin_billing_subscriptions WHERE id = ?', [id]);
     res.json({ subscription });
