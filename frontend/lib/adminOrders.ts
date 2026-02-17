@@ -6,9 +6,18 @@ export interface AdminOrderSummary {
   restaurant_name?: string | null
   customer_name?: string
   customer_phone?: string
-  total_amount?: number
+  total_amount?: number | string | null
   created_at: string
   source?: string
+}
+
+export const coerceMoneyValue = (value: number | string | null | undefined): number => {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string') {
+    const parsed = Number(value)
+    if (Number.isFinite(parsed)) return parsed
+  }
+  return 0
 }
 
 export const getOrderStatusBadgeClass = (status: OrderStatus): string => {

@@ -6,6 +6,7 @@ import { logger } from '../utils/logger';
 import { randomUUID } from 'crypto';
 import { CampaignModerationAction, isPlatformAdminOnly, resolveCampaignTransition } from './adminCampaignModeration';
 import { buildSystemHealthPayload } from './systemHealth';
+import { resolveBookingTable } from './bookings';
 
 const router = express.Router();
 
@@ -113,6 +114,24 @@ type AdminOrderDetail = AdminOrderSummary & {
   prep_time_minutes: number | null;
   call_id: string | null;
   items: any[];
+};
+
+type AdminConversationSummary = {
+  id: string;
+  restaurant_id: string;
+  restaurant_name: string | null;
+  started_at: string;
+  ended_at: string | null;
+  duration_seconds: number | null;
+  direction: 'inbound' | 'outbound' | null;
+  from_number: string | null;
+  to_number: string | null;
+  status: string;
+  intent_primary: string | null;
+  outcome: string | null;
+  sentiment: string | null;
+  quality_score: number | null;
+  reviewed_at: string | null;
 };
 
 type CampaignFeedEventType = 'created' | 'approved' | 'disapproved' | 'sent';
@@ -324,14 +343,9 @@ router.get('/demo-bookings', async (req, res) => {
     const start = typeof req.query.start === 'string' ? req.query.start : undefined;
     const end = typeof req.query.end === 'string' ? req.query.end : undefined;
 
-    // Supports either `demo_bookings` or `demo_requests` depending on environment schema.
-    const tableCandidates = ['demo_bookings', 'demo_requests'];
-    const existingTable = await db.get(
-      `SELECT name FROM sqlite_master WHERE type='table' AND name IN (${tableCandidates.map(() => '?').join(',')}) LIMIT 1`,
-      tableCandidates
-    );
+    const existingTable = await resolveBookingTable();
 
-    if (!existingTable?.name) {
+    if (!existingTable) {
       return res.json({ bookings: [] as AdminDemoBooking[] });
     }
 
@@ -361,7 +375,7 @@ router.get('/demo-bookings', async (req, res) => {
         notes,
         COALESCE(status, 'pending') as status,
         created_at
-      FROM ${existingTable.name}
+      FROM ${existingTable}
       ${whereClause}
       ORDER BY booking_date ASC, booking_time ASC
     `,

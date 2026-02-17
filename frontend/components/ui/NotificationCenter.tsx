@@ -167,16 +167,28 @@ export default function NotificationCenter({ className = '' }: NotificationCente
     audio.preload = 'auto'
     setAlertAudio(audio)
 
+    const normalizeIncomingNotification = (data: any) => {
+      const source = data?.notification || data || {}
+      const rawPriority = source.priority || source.severity || 'medium'
+      const priority: Notification['priority'] =
+        rawPriority === 'critical' ? 'high' : rawPriority
+
+      return {
+        id: source.id || `notif_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
+        type: source.type || 'system',
+        priority,
+        title: source.title || 'New Notification',
+        message: source.message || 'New activity',
+        timestamp: normalizeTimestamp(source.createdAt || source.created_at || new Date()),
+        data: source.metadata || source.data || data
+      }
+    }
+
     const handleNewNotification = (data: any) => {
+      const normalized = normalizeIncomingNotification(data)
       const newNotification: Notification = {
-        id: data.id || `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        type: data.type || 'system',
-        priority: data.priority || 'medium',
-        title: data.title || 'New Notification',
-        message: data.message || 'New activity',
-        timestamp: new Date(),
-        read: false,
-        data
+        ...normalized,
+        read: false
       }
 
       setNotifications(prev => [newNotification, ...prev].slice(0, 100))

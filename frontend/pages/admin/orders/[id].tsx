@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { ArrowLeft, CheckCircle, Clock, MapPin, Phone, User } from 'lucide-react'
 import AdminLayout from '../../../components/Layout/AdminLayout'
 import { api } from '../../../lib/api'
-import { AdminOrderSummary, getOrderStatusBadgeClass } from '../../../lib/adminOrders'
+import { AdminOrderSummary, coerceMoneyValue, getOrderStatusBadgeClass } from '../../../lib/adminOrders'
 
 interface OrderItem {
   item_id: string
@@ -16,9 +16,9 @@ interface OrderItem {
 
 interface Order extends AdminOrderSummary {
   last_initial?: string
-  subtotal?: number
-  tax?: number
-  fees?: number
+  subtotal?: number | string | null
+  tax?: number | string | null
+  fees?: number | string | null
   order_type?: string
   pickup_time?: string
   prep_time_minutes?: number
@@ -123,15 +123,15 @@ export default function AdminOrderDetailsPage() {
               <div className="mt-6 pt-6 border-t dark:border-gray-700 space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-500">Subtotal</span>
-                  <span>${(order.subtotal || 0).toFixed(2)}</span>
+                  <span>${coerceMoneyValue(order.subtotal).toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-500">Tax</span>
-                  <span>${(order.tax || 0).toFixed(2)}</span>
+                  <span>${coerceMoneyValue(order.tax).toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between font-bold text-lg pt-2">
                   <span>Total</span>
-                  <span className="text-red-600">${(order.total_amount || 0).toFixed(2)}</span>
+                  <span className="text-red-600">${coerceMoneyValue(order.total_amount).toFixed(2)}</span>
                 </div>
               </div>
             </div>
