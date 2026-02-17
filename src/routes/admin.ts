@@ -121,11 +121,14 @@ type AdminOrderSummary = {
   restaurant_id: string;
   restaurant_name: string | null;
   status: string;
+  channel: string | null;
   customer_name: string | null;
   customer_phone: string | null;
   total_amount: number;
   source: string | null;
   created_at: string;
+  is_sla_breached?: boolean;
+  sla_minutes_elapsed?: number;
 };
 
 type AdminOrderDetail = AdminOrderSummary & {
@@ -137,6 +140,16 @@ type AdminOrderDetail = AdminOrderSummary & {
   prep_time_minutes: number | null;
   call_id: string | null;
   items: any[];
+  intervention_history?: AdminOrderIntervention[];
+};
+
+type AdminOrderIntervention = {
+  id: string;
+  action: string;
+  user_id: string | null;
+  user_name: string | null;
+  details: Record<string, any> | string | null;
+  created_at: string;
 };
 
 type AdminTask = {
@@ -337,82 +350,79 @@ const hasColumn = async (db: any, tableName: string, columnName: string): Promis
   return Boolean(result);
 };
 
-const parseRestaurantSettings = (raw: any): Record<string, any> => {
-  if (!raw) return {};
-  if (typeof raw === 'object' && !Array.isArray(raw)) return raw;
-  if (typeof raw !== 'string') return {};
+const ORDER_CANCELLABLE_STATUSES = new Set(['pending', 'accepted', 'preparing', 'ready']);
+const ORDER_REOPENABLE_STATUSES = new Set(['cancelled']);
+const ADMIN_INTERVENTION_ACTION_PREFIX = 'admin_order_';
 
-  try {
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
-  } catch {
-    return {};
-  }
+const parseBooleanQuery = (value: unknown): boolean | null => {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'true' || normalized === '1') return true;
+  if (normalized === 'false' || normalized === '0') return false;
+  return null;
 };
 
-const toTrimmedString = (value: unknown): string => (typeof value === 'string' ? value.trim() : '');
-
-const assertPlatformOverrideAccess = (req: express.Request, res: express.Response): boolean => {
-  if (!isPlatformAdminOnly(req.user)) {
-    res.status(403).json({
-      error: 'Platform admin access required',
-      message: 'Only platform-admin users can execute override actions'
-    });
-    return false;
+const resolveIdempotencyKey = (req: express.Request): string | null => {
+  const headerValue = req.headers['x-idempotency-key'];
+  if (Array.isArray(headerValue)) {
+    return typeof headerValue[0] === 'string' ? headerValue[0].trim() : null;
   }
-
-  return true;
+  return typeof headerValue === 'string' ? headerValue.trim() : null;
 };
 
-const requireOverrideReason = (req: express.Request, res: express.Response): string | null => {
-  const reason = toTrimmedString(req.body?.reason);
-  if (!reason) {
-    res.status(400).json({
-      error: 'Override reason required',
-      message: 'A non-empty reason is required for all admin override actions.'
-    });
-    return null;
-  }
-  return reason.slice(0, 500);
-};
+const readOrder = async (db: any, id: string) => db.get(
+  `
+    SELECT id, restaurant_id, status, customer_phone, customer_name
+    FROM orders
+    WHERE id = ?
+    LIMIT 1
+  `,
+  [id]
+);
 
-const writeOverrideAuditLog = async ({
-  db,
-  restaurantId,
-  userId,
-  action,
-  entityType,
-  entityId,
-  reason,
-  before,
-  after,
-  scope,
-  metadata
-}: {
-  db: any;
-  restaurantId: string;
-  userId: string | null;
-  action: string;
-  entityType: string;
-  entityId: string;
-  reason: string;
-  before: Record<string, any>;
-  after: Record<string, any>;
-  scope: RestaurantOverrideScope;
-  metadata?: Record<string, any>;
-}) => {
+const insertOrderAuditLog = async (
+  db: any,
+  params: {
+    restaurantId: string;
+    userId: string | null;
+    orderId: string;
+    action: string;
+    details: Record<string, any>;
+  }
+) => {
   await db.run(
-    'INSERT INTO audit_logs (id, restaurant_id, user_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    `
+      INSERT INTO audit_logs (id, restaurant_id, user_id, action, entity_type, entity_id, details)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `,
     [
       randomUUID(),
-      restaurantId,
-      userId,
-      action,
-      entityType,
-      entityId,
-      JSON.stringify({ reason, before, after, scope, metadata: metadata || {} })
+      params.restaurantId,
+      params.userId,
+      params.action,
+      'order_admin_intervention',
+      params.orderId,
+      JSON.stringify(params.details)
     ]
   );
+};
+
+const findIdempotentIntervention = async (db: any, orderId: string, action: string, idempotencyKey: string) => {
+  const existing = await db.get(
+    `
+      SELECT id, details, created_at
+      FROM audit_logs
+      WHERE entity_type = 'order_admin_intervention'
+        AND entity_id = ?
+        AND action = ?
+        AND details LIKE ?
+      ORDER BY created_at DESC
+      LIMIT 1
+    `,
+    [orderId, action, `%"idempotencyKey":"${idempotencyKey.replace(/"/g, '\\"')}"%`]
+  );
+
+  return existing || null;
 };
 
 const moderateCampaign = async (
@@ -1461,14 +1471,23 @@ router.get('/orders', async (req, res) => {
     const offset = (page - 1) * limit;
     const status = typeof req.query.status === 'string' ? req.query.status.trim() : '';
     const restaurantId = typeof req.query.restaurantId === 'string' ? req.query.restaurantId.trim() : '';
+    const channel = typeof req.query.channel === 'string' ? req.query.channel.trim() : '';
     const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
+    const timeWindowHours = resolveLimit(req.query.timeWindowHours, 24 * 7, 24 * 30);
+    const slaBreach = parseBooleanQuery(req.query.slaBreached);
+    const slaMinutes = resolveLimit(req.query.slaMinutes, 15, 180);
 
-    const whereParts: string[] = [];
+    const whereParts: string[] = [`o.created_at >= NOW() - INTERVAL '${timeWindowHours} hours'`];
     const params: any[] = [];
 
     if (status && status !== 'all') {
       whereParts.push('o.status = ?');
       params.push(status);
+    }
+
+    if (channel && channel !== 'all') {
+      whereParts.push('o.channel = ?');
+      params.push(channel);
     }
 
     if (restaurantId) {
@@ -1487,7 +1506,12 @@ router.get('/orders', async (req, res) => {
       params.push(searchTerm, searchTerm, searchTerm, searchTerm);
     }
 
-    const whereClause = whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : '';
+    if (slaBreach !== null) {
+      whereParts.push(slaBreach ? `(o.status = ? AND o.created_at <= NOW() - INTERVAL '${slaMinutes} minutes')` : `(o.status != ? OR o.created_at > NOW() - INTERVAL '${slaMinutes} minutes')`);
+      params.push('pending');
+    }
+
+    const whereClause = `WHERE ${whereParts.join(' AND ')}`;
 
     const orders = await db.all(
       `
@@ -1496,11 +1520,17 @@ router.get('/orders', async (req, res) => {
         o.restaurant_id,
         r.name AS restaurant_name,
         o.status,
+        o.channel,
         o.customer_name,
         o.customer_phone,
         o.total_amount,
         o.source,
-        o.created_at
+        o.created_at,
+        CASE
+          WHEN o.status = 'pending' AND o.created_at <= NOW() - INTERVAL '${slaMinutes} minutes' THEN true
+          ELSE false
+        END AS is_sla_breached,
+        FLOOR(EXTRACT(EPOCH FROM (NOW() - o.created_at)) / 60)::INTEGER AS sla_minutes_elapsed
       FROM orders o
       LEFT JOIN restaurants r ON r.id = o.restaurant_id
       ${whereClause}
@@ -1554,6 +1584,7 @@ router.get('/orders/:id', async (req, res) => {
         o.restaurant_id,
         r.name AS restaurant_name,
         o.status,
+        o.channel,
         o.customer_name,
         o.customer_phone,
         o.total_amount,
@@ -1587,16 +1618,351 @@ router.get('/orders/:id', async (req, res) => {
       }
     })() : (Array.isArray(order.items) ? order.items : []);
 
+    const interventionLogs = await db.all(
+      `
+      SELECT
+        al.id,
+        al.action,
+        al.user_id,
+        u.name AS user_name,
+        al.details,
+        al.created_at
+      FROM audit_logs al
+      LEFT JOIN users u ON u.id = al.user_id
+      WHERE al.entity_type = 'order_admin_intervention'
+        AND al.entity_id = ?
+      ORDER BY al.created_at DESC
+      LIMIT 200
+      `,
+      [id]
+    );
+
+    const parsedInterventionLogs = interventionLogs.map((entry: any) => {
+      let details: Record<string, any> | string | null = entry.details;
+      if (typeof entry.details === 'string') {
+        try {
+          details = JSON.parse(entry.details);
+        } catch {
+          details = entry.details;
+        }
+      }
+
+      return {
+        ...entry,
+        details
+      } as AdminOrderIntervention;
+    });
+
     return res.json({
       order: {
         ...order,
-        items: parsedItems
+        items: parsedItems,
+        intervention_history: parsedInterventionLogs
       } as AdminOrderDetail
     });
   } catch (error) {
     logger.error('Failed to get admin order detail:', error);
     return res.status(500).json({
       error: 'Failed to load order',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+
+/**
+ * POST /api/admin/orders/:id/cancel
+ * Cancel an order with strict transition checks and idempotency support.
+ */
+router.post('/orders/:id/cancel', async (req, res) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim().slice(0, 500) : '';
+    if (!reason) {
+      return res.status(400).json({ error: 'Cancellation reason is required' });
+    }
+
+    const idempotencyKey = resolveIdempotencyKey(req);
+    if (!idempotencyKey) {
+      return res.status(400).json({ error: 'x-idempotency-key header is required' });
+    }
+
+    const db = await DatabaseService.getInstance().getDatabase();
+    const existing = await findIdempotentIntervention(db, id, `${ADMIN_INTERVENTION_ACTION_PREFIX}cancelled`, idempotencyKey);
+    if (existing) {
+      return res.json({ success: true, idempotentReplay: true, orderId: id, status: 'cancelled' });
+    }
+
+    const order = await readOrder(db, id);
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+    if (!ORDER_CANCELLABLE_STATUSES.has(order.status)) {
+      return res.status(409).json({ error: `Cannot cancel order in status '${order.status}'` });
+    }
+
+    await db.run('UPDATE orders SET status = ?, updated_at = NOW() WHERE id = ?', ['cancelled', id]);
+    await insertOrderAuditLog(db, {
+      restaurantId: order.restaurant_id,
+      userId: req.user?.id ?? null,
+      orderId: id,
+      action: `${ADMIN_INTERVENTION_ACTION_PREFIX}cancelled`,
+      details: {
+        idempotencyKey,
+        reason,
+        previousStatus: order.status,
+        nextStatus: 'cancelled'
+      }
+    });
+
+    return res.json({ success: true, orderId: id, previousStatus: order.status, status: 'cancelled' });
+  } catch (error) {
+    logger.error('Failed to cancel admin order:', error);
+    return res.status(500).json({
+      error: 'Failed to cancel order',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
+ * POST /api/admin/orders/:id/reopen
+ */
+router.post('/orders/:id/reopen', async (req, res) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim().slice(0, 500) : '';
+    if (!reason) {
+      return res.status(400).json({ error: 'Reopen reason is required' });
+    }
+
+    const idempotencyKey = resolveIdempotencyKey(req);
+    if (!idempotencyKey) {
+      return res.status(400).json({ error: 'x-idempotency-key header is required' });
+    }
+
+    const db = await DatabaseService.getInstance().getDatabase();
+    const existing = await findIdempotentIntervention(db, id, `${ADMIN_INTERVENTION_ACTION_PREFIX}reopened`, idempotencyKey);
+    if (existing) {
+      return res.json({ success: true, idempotentReplay: true, orderId: id, status: 'pending' });
+    }
+
+    const order = await readOrder(db, id);
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+    if (!ORDER_REOPENABLE_STATUSES.has(order.status)) {
+      return res.status(409).json({ error: `Cannot reopen order in status '${order.status}'` });
+    }
+
+    await db.run('UPDATE orders SET status = ?, updated_at = NOW() WHERE id = ?', ['pending', id]);
+    await insertOrderAuditLog(db, {
+      restaurantId: order.restaurant_id,
+      userId: req.user?.id ?? null,
+      orderId: id,
+      action: `${ADMIN_INTERVENTION_ACTION_PREFIX}reopened`,
+      details: {
+        idempotencyKey,
+        reason,
+        previousStatus: order.status,
+        nextStatus: 'pending'
+      }
+    });
+
+    return res.json({ success: true, orderId: id, previousStatus: order.status, status: 'pending' });
+  } catch (error) {
+    logger.error('Failed to reopen admin order:', error);
+    return res.status(500).json({
+      error: 'Failed to reopen order',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
+ * POST /api/admin/orders/:id/resend-confirmation
+ */
+router.post('/orders/:id/resend-confirmation', async (req, res) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const channel = typeof req.body?.channel === 'string' ? req.body.channel.trim().toLowerCase() : '';
+    if (!['sms', 'email'].includes(channel)) {
+      return res.status(400).json({ error: "channel must be one of 'sms' or 'email'" });
+    }
+
+    const idempotencyKey = resolveIdempotencyKey(req);
+    if (!idempotencyKey) {
+      return res.status(400).json({ error: 'x-idempotency-key header is required' });
+    }
+
+    const db = await DatabaseService.getInstance().getDatabase();
+    const action = `${ADMIN_INTERVENTION_ACTION_PREFIX}resent_${channel}_confirmation`;
+    const existing = await findIdempotentIntervention(db, id, action, idempotencyKey);
+    if (existing) {
+      return res.json({ success: true, idempotentReplay: true, orderId: id, channel });
+    }
+
+    const order = await readOrder(db, id);
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+    if (order.status === 'cancelled') {
+      return res.status(409).json({ error: 'Cannot resend confirmation for a cancelled order' });
+    }
+
+    await insertOrderAuditLog(db, {
+      restaurantId: order.restaurant_id,
+      userId: req.user?.id ?? null,
+      orderId: id,
+      action,
+      details: {
+        idempotencyKey,
+        channel,
+        providerStatus: 'queued'
+      }
+    });
+
+    return res.json({ success: true, orderId: id, channel, deliveryStatus: 'queued' });
+  } catch (error) {
+    logger.error('Failed to resend order confirmation:', error);
+    return res.status(500).json({
+      error: 'Failed to resend confirmation',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+router.post('/orders/:id/notes', async (req, res) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const note = typeof req.body?.note === 'string' ? req.body.note.trim().slice(0, 2000) : '';
+    if (!note) {
+      return res.status(400).json({ error: 'note is required' });
+    }
+
+    const db = await DatabaseService.getInstance().getDatabase();
+    const order = await readOrder(db, id);
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+
+    await insertOrderAuditLog(db, {
+      restaurantId: order.restaurant_id,
+      userId: req.user?.id ?? null,
+      orderId: id,
+      action: `${ADMIN_INTERVENTION_ACTION_PREFIX}note_added`,
+      details: { note }
+    });
+
+    return res.json({ success: true });
+  } catch (error) {
+    logger.error('Failed to add order intervention note:', error);
+    return res.status(500).json({
+      error: 'Failed to add order note',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+router.post('/orders/:id/escalate', async (req, res) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const target = typeof req.body?.target === 'string' ? req.body.target.trim().toLowerCase() : '';
+    const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim().slice(0, 500) : '';
+    if (!['owner', 'support_queue'].includes(target)) {
+      return res.status(400).json({ error: "target must be 'owner' or 'support_queue'" });
+    }
+    if (!reason) {
+      return res.status(400).json({ error: 'Escalation reason is required' });
+    }
+
+    const db = await DatabaseService.getInstance().getDatabase();
+    const order = await readOrder(db, id);
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+
+    await insertOrderAuditLog(db, {
+      restaurantId: order.restaurant_id,
+      userId: req.user?.id ?? null,
+      orderId: id,
+      action: `${ADMIN_INTERVENTION_ACTION_PREFIX}escalated`,
+      details: { target, reason }
+    });
+
+    return res.json({ success: true, orderId: id, target });
+  } catch (error) {
+    logger.error('Failed to escalate order issue:', error);
+    return res.status(500).json({
+      error: 'Failed to escalate order',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+router.post('/orders/bulk/cancel-stale', async (req, res) => {
+  try {
+    const staleMinutes = resolveLimit(req.body?.staleMinutes, 45, 24 * 60);
+    const idempotencyKey = resolveIdempotencyKey(req);
+    if (!idempotencyKey) {
+      return res.status(400).json({ error: 'x-idempotency-key header is required' });
+    }
+
+    const db = await DatabaseService.getInstance().getDatabase();
+    const existing = await db.get(
+      `
+      SELECT id FROM audit_logs
+      WHERE entity_type = 'order_admin_intervention'
+        AND action = ?
+        AND details LIKE ?
+      ORDER BY created_at DESC
+      LIMIT 1
+      `,
+      [`${ADMIN_INTERVENTION_ACTION_PREFIX}bulk_cancel_stale`, `%"idempotencyKey":"${idempotencyKey.replace(/"/g, '\\\"')}"%`]
+    );
+    if (existing) {
+      return res.json({ success: true, idempotentReplay: true, cancelledOrderIds: [] });
+    }
+
+    const staleOrders = await db.all(
+      `
+      SELECT id, restaurant_id, status
+      FROM orders
+      WHERE status = 'pending'
+        AND created_at <= NOW() - INTERVAL '${staleMinutes} minutes'
+      `
+    );
+
+    const cancellableOrders = staleOrders.filter((order: any) => ORDER_CANCELLABLE_STATUSES.has(order.status));
+    const cancelledOrderIds = cancellableOrders.map((order: any) => order.id);
+
+    if (cancelledOrderIds.length > 0) {
+      await db.run(
+        `
+        UPDATE orders
+        SET status = 'cancelled', updated_at = NOW()
+        WHERE id IN (${cancelledOrderIds.map(() => '?').join(',')})
+        `,
+        cancelledOrderIds
+      );
+    }
+
+    await db.run(
+      `
+      INSERT INTO audit_logs (id, restaurant_id, user_id, action, entity_type, entity_id, details)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+      `,
+      [
+        randomUUID(),
+        null,
+        req.user?.id ?? null,
+        `${ADMIN_INTERVENTION_ACTION_PREFIX}bulk_cancel_stale`,
+        'order_admin_intervention',
+        null,
+        JSON.stringify({
+          idempotencyKey,
+          staleMinutes,
+          cancelledOrderIds,
+          totalCancelled: cancelledOrderIds.length
+        })
+      ]
+    );
+
+    return res.json({ success: true, staleMinutes, cancelledOrderIds, totalCancelled: cancelledOrderIds.length });
+  } catch (error) {
+    logger.error('Failed to run stale pending bulk cancellation:', error);
+    return res.status(500).json({
+      error: 'Failed to run bulk order cleanup',
       details: error instanceof Error ? error.message : 'Unknown error'
     });
   }

@@ -3,12 +3,16 @@ export type OrderStatus = 'pending' | 'accepted' | 'preparing' | 'ready' | 'comp
 export interface AdminOrderSummary {
   id: string
   status: OrderStatus
+  restaurant_id?: string
   restaurant_name?: string | null
+  channel?: string | null
   customer_name?: string
   customer_phone?: string
   total_amount?: number | string | null
   created_at: string
   source?: string
+  is_sla_breached?: boolean
+  sla_minutes_elapsed?: number
 }
 
 export const coerceMoneyValue = (value: number | string | null | undefined): number => {
