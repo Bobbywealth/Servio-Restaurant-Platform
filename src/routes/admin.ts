@@ -2087,6 +2087,7 @@ router.get('/tasks', async (req, res) => {
     const offset = (page - 1) * limit;
     const status = typeof req.query.status === 'string' ? req.query.status.trim() : '';
     const priority = typeof req.query.priority === 'string' ? req.query.priority.trim() : '';
+    const scope = typeof req.query.scope === 'string' ? req.query.scope.trim() : '';
     const restaurantId = typeof req.query.restaurantId === 'string' ? req.query.restaurantId.trim() : '';
     const parentTaskGroupId = typeof req.query.parentTaskGroupId === 'string' ? req.query.parentTaskGroupId.trim() : '';
     const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
@@ -2335,43 +2336,14 @@ router.post('/tasks', async (req, res) => {
       return res.status(404).json({ error: 'Restaurant not found' });
     }
 
-    if (scope === 'restaurant') {
-      if (!restaurantId) {
-        return res.status(400).json({ error: 'restaurant_id is required for restaurant-scoped tasks' });
+    if (assignedTo) {
+      const assignee = await db.get(
+        'SELECT id FROM users WHERE id = ? AND restaurant_id = ? AND is_active = true',
+        [assignedTo, restaurantId]
+      );
+      if (!assignee) {
+        return res.status(400).json({ error: 'Assigned user must be active and belong to the selected restaurant' });
       }
-
-      const restaurant = await db.get('SELECT id, company_id FROM restaurants WHERE id = ?', [restaurantId]);
-      if (!restaurant) {
-        return res.status(404).json({ error: 'Restaurant not found' });
-      }
-
-      resolvedRestaurantId = restaurantId;
-      resolvedCompanyId = restaurant.company_id ?? null;
-
-      if (assignedTo) {
-        const assignee = await db.get(
-          'SELECT id FROM users WHERE id = ? AND restaurant_id = ? AND is_active = true',
-          [assignedTo, restaurantId]
-        );
-        if (!assignee) {
-          return res.status(400).json({ error: 'Assigned user must be active and belong to the selected restaurant' });
-        }
-      }
-    } else {
-      if (!companyId) {
-        return res.status(400).json({ error: 'company_id is required for company-scoped tasks' });
-      }
-
-      if (assignedTo) {
-        return res.status(400).json({ error: 'assigned_to is only supported for restaurant-scoped tasks' });
-      }
-
-      const company = await db.get('SELECT id FROM companies WHERE id = ?', [companyId]);
-      if (!company) {
-        return res.status(404).json({ error: 'Company not found' });
-      }
-
-      resolvedCompanyId = companyId;
     }
 
     const taskId = randomUUID();
@@ -2380,9 +2352,9 @@ router.post('/tasks', async (req, res) => {
     await db.run(
       `
       INSERT INTO tasks (id, restaurant_id, parent_task_group_id, title, description, status, priority, type, assigned_to, due_date, completed_at, created_at, updated_at)
-      VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     `,
-      [taskId, scope, resolvedCompanyId, resolvedRestaurantId, title, description, status, priority, type, assignedTo, dueDate, completedAt]
+      [taskId, restaurantId, null, title, description, status, priority, type, assignedTo, dueDate, completedAt]
     );
 
     const task = await db.get(
