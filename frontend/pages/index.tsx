@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import Head from 'next/head'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -11,8 +11,36 @@ import {
   ArrowRight, PlayCircle, Star, Menu, X, Sparkles
 } from 'lucide-react'
 
+
+interface PublicPricingPlan {
+  id: string
+  name: string
+  slug: string
+  description?: string
+  price_monthly: number
+  is_featured?: boolean
+  features?: string[]
+}
+
 export default function HomePage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [pricingPlans, setPricingPlans] = useState<PublicPricingPlan[]>([])
+
+
+  useEffect(() => {
+    const base = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_BACKEND_URL
+    if (!base) return
+    const normalized = base.startsWith('http') ? base : `https://${base}`
+
+    fetch(`${normalized}/api/public/pricing-structures`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data?.plans) && data.plans.length > 0) {
+          setPricingPlans(data.plans)
+        }
+      })
+      .catch(() => undefined)
+  }, [])
 
   return (
     <>
@@ -863,69 +891,42 @@ export default function HomePage() {
             </motion.div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto">
-              {/* Starter Plan */}
-              <motion.div
-                className="relative bg-gray-800/50 backdrop-blur-sm border border-gray-700/50 rounded-3xl p-8 hover:border-gray-600 transition-all duration-300 hover:shadow-xl hover:-translate-y-1"
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-              >
-                <h3 className="text-2xl font-bold text-white mb-2">Starter</h3>
-                <div className="flex items-baseline mb-6">
-                  <span className="text-5xl font-bold text-white">$49</span>
-                  <span className="text-gray-400 ml-3">/mo</span>
-                </div>
-                <p className="text-gray-400 mb-8">Get control of the basics: orders, visibility, and daily execution.</p>
-                <button className="w-full bg-gray-700 hover:bg-gray-600 text-white py-4 px-6 rounded-2xl font-semibold transition-all duration-200 flex items-center justify-center gap-2">
-                  Select Plan
-                  <ArrowRight className="w-4 h-4" />
-                </button>
-              </motion.div>
-
-              {/* Operations Plan - Most Popular */}
-              <motion.div
-                className="relative bg-gradient-to-b from-gray-800/80 to-gray-800/40 backdrop-blur-xl border-2 border-primary-500/50 rounded-3xl p-8 md:transform md:scale-105 shadow-2xl shadow-primary-500/20"
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: 0.1 }}
-              >
-                <div className="absolute -top-5 left-1/2 transform -translate-x-1/2">
-                  <span className="bg-gradient-to-r from-primary-500 to-primary-600 text-white px-6 py-2 rounded-full text-sm font-semibold shadow-lg">
-                    MOST POPULAR
-                  </span>
-                </div>
-                <h3 className="text-2xl font-bold text-white mb-2">Operations</h3>
-                <div className="flex items-baseline mb-6">
-                  <span className="text-5xl font-bold text-white">$129</span>
-                  <span className="text-gray-400 ml-3">/mo</span>
-                </div>
-                <p className="text-gray-400 mb-8">The full dashboard: orders, menu, marketing, inventory + receipts, staff, and integrations.</p>
-                <button className="w-full bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700 text-white py-4 px-6 rounded-2xl font-semibold transition-all duration-200 flex items-center justify-center gap-2 shadow-lg shadow-primary-500/30">
-                  Select Plan
-                  <ArrowRight className="w-4 h-4" />
-                </button>
-              </motion.div>
-
-              {/* Voice Plan */}
-              <motion.div
-                className="relative bg-gray-800/50 backdrop-blur-sm border border-gray-700/50 rounded-3xl p-8 hover:border-gray-600 transition-all duration-300 hover:shadow-xl hover:-translate-y-1"
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: 0.2 }}
-              >
-                <h3 className="text-2xl font-bold text-white mb-2">Voice</h3>
-                <div className="flex items-baseline mb-6">
-                  <span className="text-5xl font-bold text-white">$179</span>
-                  <span className="text-gray-400 ml-3">/mo</span>
-                </div>
-                <p className="text-gray-400 mb-8">Hands-free workflows and the AI assistant that helps your team execute faster.</p>
-                <button className="w-full bg-gray-700 hover:bg-gray-600 text-white py-4 px-6 rounded-2xl font-semibold transition-all duration-200 flex items-center justify-center gap-2">
-                  Select Plan
-                  <ArrowRight className="w-4 h-4" />
-                </button>
-              </motion.div>
+              {(pricingPlans.length > 0 ? pricingPlans : [
+                { id: 'starter', name: 'Starter', slug: 'starter', description: 'Get control of the basics: orders, visibility, and daily execution.', price_monthly: 49, is_featured: false },
+                { id: 'operations', name: 'Operations', slug: 'operations', description: 'The full dashboard: orders, menu, marketing, inventory + receipts, staff, and integrations.', price_monthly: 129, is_featured: true },
+                { id: 'voice', name: 'Voice', slug: 'voice', description: 'Hands-free workflows and the AI assistant that helps your team execute faster.', price_monthly: 179, is_featured: false }
+              ]).map((plan, idx) => (
+                <motion.div
+                  key={plan.id}
+                  className={`relative rounded-3xl p-8 transition-all duration-300 hover:shadow-xl hover:-translate-y-1 ${plan.is_featured
+                    ? 'bg-gradient-to-b from-gray-800/80 to-gray-800/40 backdrop-blur-xl border-2 border-primary-500/50 md:transform md:scale-105 shadow-2xl shadow-primary-500/20'
+                    : 'bg-gray-800/50 backdrop-blur-sm border border-gray-700/50 hover:border-gray-600'
+                  }`}
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: idx * 0.1 }}
+                >
+                  {plan.is_featured && (
+                    <div className="absolute -top-5 left-1/2 transform -translate-x-1/2">
+                      <span className="bg-gradient-to-r from-primary-500 to-primary-600 text-white px-6 py-2 rounded-full text-sm font-semibold shadow-lg">MOST POPULAR</span>
+                    </div>
+                  )}
+                  <h3 className="text-2xl font-bold text-white mb-2">{plan.name}</h3>
+                  <div className="flex items-baseline mb-6">
+                    <span className="text-5xl font-bold text-white">${Number(plan.price_monthly).toFixed(0)}</span>
+                    <span className="text-gray-400 ml-3">/mo</span>
+                  </div>
+                  <p className="text-gray-400 mb-8">{plan.description}</p>
+                  <button className={`w-full text-white py-4 px-6 rounded-2xl font-semibold transition-all duration-200 flex items-center justify-center gap-2 ${plan.is_featured
+                    ? 'bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700 shadow-lg shadow-primary-500/30'
+                    : 'bg-gray-700 hover:bg-gray-600'
+                  }`}>
+                    Select Plan
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                </motion.div>
+              ))}
             </div>
           </div>
         </section>
