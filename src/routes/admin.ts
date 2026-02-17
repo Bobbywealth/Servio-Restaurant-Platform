@@ -1732,4 +1732,192 @@ router.get('/restaurants/:id/audit-logs', async (req, res) => {
   }
 });
 
+router.get('/billing/subscriptions', async (_req, res) => {
+  try {
+    const db = await DatabaseService.getInstance().getDatabase();
+    const subscriptions = await db.all(`
+      SELECT abs.*, r.name as restaurant_name
+      FROM admin_billing_subscriptions abs
+      JOIN restaurants r ON r.id = abs.restaurant_id
+      ORDER BY r.name ASC
+    `);
+    res.json({ subscriptions });
+  } catch (error) {
+    logger.error('Failed to load billing subscriptions:', error);
+    res.status(500).json({ error: 'Failed to load billing subscriptions' });
+  }
+});
+
+router.patch('/billing/subscriptions/:id', async (req, res) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const { package_name, status, billing_cycle, amount, next_billing_date, contact_email, notes } = req.body || {};
+    const db = await DatabaseService.getInstance().getDatabase();
+
+    await db.run(
+      `UPDATE admin_billing_subscriptions
+       SET package_name = COALESCE(?, package_name),
+           status = COALESCE(?, status),
+           billing_cycle = COALESCE(?, billing_cycle),
+           amount = COALESCE(?, amount),
+           next_billing_date = COALESCE(?, next_billing_date),
+           contact_email = COALESCE(?, contact_email),
+           notes = COALESCE(?, notes),
+           updated_at = NOW()
+       WHERE id = ?`,
+      [package_name, status, billing_cycle, amount, next_billing_date, contact_email, notes, id]
+    );
+
+    const subscription = await db.get('SELECT * FROM admin_billing_subscriptions WHERE id = ?', [id]);
+    res.json({ subscription });
+  } catch (error) {
+    logger.error('Failed to update billing subscription:', error);
+    res.status(500).json({ error: 'Failed to update billing subscription' });
+  }
+});
+
+router.get('/marketing/customers', async (_req, res) => {
+  try {
+    const db = await DatabaseService.getInstance().getDatabase();
+    const customers = await db.all(`
+      SELECT c.id, c.name, c.email, c.phone, c.total_spent, c.total_orders, c.last_order_date, r.name as restaurant_name
+      FROM customers c
+      JOIN restaurants r ON r.id = c.restaurant_id
+      WHERE (c.email IS NOT NULL AND TRIM(c.email) <> '') OR (c.phone IS NOT NULL AND TRIM(c.phone) <> '')
+      ORDER BY COALESCE(c.total_spent, 0) DESC, c.last_order_date DESC
+      LIMIT 500
+    `);
+    res.json({ customers });
+  } catch (error) {
+    logger.error('Failed to load marketing customers:', error);
+    res.status(500).json({ error: 'Failed to load marketing customers' });
+  }
+});
+
+router.get('/marketing/campaigns', async (_req, res) => {
+  try {
+    const db = await DatabaseService.getInstance().getDatabase();
+    const campaigns = await db.all('SELECT * FROM admin_marketing_campaigns ORDER BY created_at DESC LIMIT 100');
+    res.json({ campaigns });
+  } catch (error) {
+    logger.error('Failed to load admin marketing campaigns:', error);
+    res.status(500).json({ error: 'Failed to load admin marketing campaigns' });
+  }
+});
+
+router.post('/marketing/campaigns', async (req, res) => {
+  try {
+    const { name, channel, message, subject, status, scheduled_at, audience_filter, total_customers } = req.body || {};
+    if (!name || !channel || !message) {
+      return res.status(400).json({ error: 'name, channel and message are required' });
+    }
+    const db = await DatabaseService.getInstance().getDatabase();
+    const id = uuidv4();
+    await db.run(
+      `INSERT INTO admin_marketing_campaigns
+      (id, name, channel, status, message, subject, audience_filter, total_customers, scheduled_at, sent_at, created_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id,
+        name,
+        channel,
+        status || 'draft',
+        message,
+        subject || null,
+        audience_filter || 'all_customers',
+        Number(total_customers || 0),
+        scheduled_at || null,
+        status === 'sent' ? new Date().toISOString() : null,
+        req.user?.id || null
+      ]
+    );
+    const campaign = await db.get('SELECT * FROM admin_marketing_campaigns WHERE id = ?', [id]);
+    res.status(201).json({ campaign });
+  } catch (error) {
+    logger.error('Failed to create admin marketing campaign:', error);
+    res.status(500).json({ error: 'Failed to create admin marketing campaign' });
+  }
+});
+
+router.get('/pricing-structures', async (_req, res) => {
+  try {
+    const db = await DatabaseService.getInstance().getDatabase();
+    const plans = await db.all('SELECT * FROM pricing_structures ORDER BY display_order ASC, created_at ASC');
+    res.json({ plans: parseTableRows(plans) });
+  } catch (error) {
+    logger.error('Failed to load pricing structures:', error);
+    res.status(500).json({ error: 'Failed to load pricing structures' });
+  }
+});
+
+router.post('/pricing-structures', async (req, res) => {
+  try {
+    const { name, slug, description, price_monthly, price_yearly, is_featured, is_active, features, display_order } = req.body || {};
+    if (!name || !slug || price_monthly === undefined) {
+      return res.status(400).json({ error: 'name, slug and price_monthly are required' });
+    }
+    const db = await DatabaseService.getInstance().getDatabase();
+    const id = uuidv4();
+    await db.run(
+      `INSERT INTO pricing_structures
+      (id, name, slug, description, price_monthly, price_yearly, is_featured, is_active, features, display_order)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id,
+        name,
+        slug,
+        description || null,
+        Number(price_monthly),
+        price_yearly === undefined ? null : Number(price_yearly),
+        Boolean(is_featured),
+        is_active === undefined ? true : Boolean(is_active),
+        JSON.stringify(Array.isArray(features) ? features : []),
+        Number(display_order || 0)
+      ]
+    );
+    const plan = await db.get('SELECT * FROM pricing_structures WHERE id = ?', [id]);
+    res.status(201).json({ plan: parseTableRows([plan])[0] });
+  } catch (error) {
+    logger.error('Failed to create pricing structure:', error);
+    res.status(500).json({ error: 'Failed to create pricing structure' });
+  }
+});
+
+router.patch('/pricing-structures/:id', async (req, res) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const { name, description, price_monthly, price_yearly, is_featured, is_active, features, display_order } = req.body || {};
+    const db = await DatabaseService.getInstance().getDatabase();
+    await db.run(
+      `UPDATE pricing_structures
+       SET name = COALESCE(?, name),
+           description = COALESCE(?, description),
+           price_monthly = COALESCE(?, price_monthly),
+           price_yearly = COALESCE(?, price_yearly),
+           is_featured = COALESCE(?, is_featured),
+           is_active = COALESCE(?, is_active),
+           features = COALESCE(?, features),
+           display_order = COALESCE(?, display_order),
+           updated_at = NOW()
+       WHERE id = ?`,
+      [
+        name,
+        description,
+        price_monthly === undefined ? null : Number(price_monthly),
+        price_yearly === undefined ? null : Number(price_yearly),
+        is_featured === undefined ? null : Boolean(is_featured),
+        is_active === undefined ? null : Boolean(is_active),
+        features === undefined ? null : JSON.stringify(Array.isArray(features) ? features : []),
+        display_order === undefined ? null : Number(display_order),
+        id
+      ]
+    );
+    const plan = await db.get('SELECT * FROM pricing_structures WHERE id = ?', [id]);
+    res.json({ plan: parseTableRows([plan])[0] });
+  } catch (error) {
+    logger.error('Failed to update pricing structure:', error);
+    res.status(500).json({ error: 'Failed to update pricing structure' });
+  }
+});
+
 export default router;
