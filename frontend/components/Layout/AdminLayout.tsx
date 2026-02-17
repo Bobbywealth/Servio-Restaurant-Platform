@@ -59,6 +59,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
     // PLATFORM OPERATIONS
     { name: 'System Health', href: '/admin/system-health', icon: Activity, section: 'system' },
     { name: 'Audit Logs', href: '/admin/audit', icon: Shield, section: 'system' },
+    { name: 'Settings', href: '/admin/settings', icon: Settings, section: 'system' },
   ]
 
   const sections = [
