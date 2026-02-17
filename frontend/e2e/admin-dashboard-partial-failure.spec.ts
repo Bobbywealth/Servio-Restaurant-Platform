@@ -19,7 +19,7 @@ const mockSuccessfulRestaurants = {
   ]
 }
 
-test('keeps platform stats and restaurants visible when analytics fails', async ({ page }) => {
+test('keeps dashboard core widgets visible when analytics fails', async ({ page }) => {
   await page.route('**/api/admin/platform-stats', async route => {
     await route.fulfill({ status: 200, body: JSON.stringify(mockSuccessfulPlatformStats) })
   })
@@ -42,8 +42,8 @@ test('keeps platform stats and restaurants visible when analytics fails', async 
 
   await page.goto('/admin')
 
-  await expect(page.getByRole('heading', { name: 'Restaurants' })).toBeVisible()
-  await expect(page.getByText('Alpha Kitchen')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Recent Activity' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Operational Snapshot' })).toBeVisible()
   await expect(page.getByText('Analytics service unavailable')).toBeVisible()
   await expect(page.getByText('Analytics unavailable').first()).toBeVisible()
 })
