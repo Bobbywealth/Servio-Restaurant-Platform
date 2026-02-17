@@ -172,6 +172,28 @@ type AdminCampaignEvent = {
   view_url: string;
 };
 
+type ErrorSeverity = 'critical' | 'high' | 'medium' | 'low';
+
+type NormalizedErrorEvent = {
+  id: string;
+  timestamp: string;
+  severity: ErrorSeverity;
+  action: string;
+  message: string;
+  service: string;
+  context: Record<string, any>;
+  restaurantId: string | null;
+  restaurantName: string | null;
+  triage: {
+    acknowledgedAt: string | null;
+    owner: string | null;
+    resolvedAt: string | null;
+    note: string | null;
+    runbookLink: string | null;
+    updatedAt: string | null;
+  };
+};
+
 const resolveLimit = (value: unknown, fallback = 50, max = 200): number => {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed < 1) return fallback;
@@ -206,12 +228,45 @@ const parseTableRows = (rows: any[]): any[] => {
   });
 };
 
-const DEMO_BOOKING_ALLOWED_STATUSES = new Set(['scheduled', 'completed', 'no_show', 'converted', 'lost']);
-const DEMO_BOOKING_ALLOWED_STAGES = new Set(['new', 'contacted', 'qualified', 'proposal', 'negotiation', 'won', 'lost']);
+const parseJsonObject = (value: unknown): Record<string, any> => {
+  if (!value) return {};
+  if (typeof value === 'object') return value as Record<string, any>;
+  if (typeof value !== 'string') return {};
 
-const isValidIsoDateTime = (value: string): boolean => {
-  const timestamp = Date.parse(value);
-  return Number.isFinite(timestamp);
+  try {
+    const parsed = JSON.parse(value);
+    return typeof parsed === 'object' && parsed !== null ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+
+const normalizeServiceName = (source: Record<string, any>, fallbackAction: string): string => {
+  const value = source.service || source.integration || source.module || source.component;
+  if (typeof value === 'string' && value.trim()) return value.trim().toLowerCase();
+
+  const action = fallbackAction.toLowerCase();
+  if (action.includes('voice') || action.includes('vapi')) return 'voice';
+  if (action.includes('sms')) return 'sms';
+  if (action.includes('email')) return 'email';
+  if (action.includes('payment') || action.includes('billing')) return 'payment';
+  if (action.includes('sync') || action.includes('job')) return 'worker';
+
+  return 'platform';
+};
+
+const resolveSeverity = (action: string, details: Record<string, any>, metadata: Record<string, any>): ErrorSeverity => {
+  const declaredSeverity = (details.severity || metadata.severity || '').toString().toLowerCase();
+  if (declaredSeverity === 'critical') return 'critical';
+  if (declaredSeverity === 'high' || declaredSeverity === 'error') return 'high';
+  if (declaredSeverity === 'medium' || declaredSeverity === 'warning' || declaredSeverity === 'warn') return 'medium';
+  if (declaredSeverity === 'low' || declaredSeverity === 'info') return 'low';
+
+  const normalized = `${action} ${details.error || ''} ${details.message || ''}`.toLowerCase();
+  if (normalized.includes('critical') || normalized.includes('outage') || normalized.includes('panic')) return 'critical';
+  if (normalized.includes('failed') || normalized.includes('error') || normalized.includes('exception')) return 'high';
+  if (normalized.includes('warn') || normalized.includes('timeout') || normalized.includes('degraded')) return 'medium';
+  return 'low';
 };
 
 const sanitizePlatformSettings = (input: any): PlatformSettings => {
@@ -1086,6 +1141,207 @@ router.get('/system/health', async (req, res) => {
     logger.error('Failed to get system health:', error);
     return res.status(500).json({
       error: 'Failed to load system health',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
+ * GET /api/admin/errors/recent
+ * Returns normalized recent error-like events and current triage state.
+ */
+router.get('/errors/recent', async (req, res) => {
+  try {
+    const db = await DatabaseService.getInstance().getDatabase();
+    const limit = resolveLimit(req.query.limit, 100, 500);
+    const restaurantId = typeof req.query.restaurantId === 'string' ? req.query.restaurantId.trim() : '';
+    const service = typeof req.query.service === 'string' ? req.query.service.trim().toLowerCase() : '';
+    const severity = typeof req.query.severity === 'string' ? req.query.severity.trim().toLowerCase() : '';
+    const windowHours = resolveLimit(req.query.windowHours, 24, 24 * 30);
+
+    const whereParts: string[] = [
+      `al.created_at >= NOW() - INTERVAL '${windowHours} hours'`,
+      `(
+        LOWER(al.action) LIKE '%error%'
+        OR LOWER(al.action) LIKE '%fail%'
+        OR LOWER(al.action) LIKE '%exception%'
+        OR LOWER(al.action) LIKE '%timeout%'
+        OR LOWER(al.action) LIKE '%warn%'
+      )`
+    ];
+    const params: any[] = [];
+
+    if (restaurantId) {
+      whereParts.push('al.restaurant_id = ?');
+      params.push(restaurantId);
+    }
+
+    const rows = await db.all(
+      `
+      SELECT
+        al.id,
+        al.action,
+        al.entity_type,
+        al.entity_id,
+        al.details,
+        al.metadata,
+        al.restaurant_id,
+        al.created_at,
+        r.name AS restaurant_name,
+        it.acknowledged_at,
+        it.owner,
+        it.resolved_at,
+        it.note,
+        it.runbook_link,
+        it.updated_at AS triage_updated_at
+      FROM audit_logs al
+      LEFT JOIN restaurants r ON r.id = al.restaurant_id
+      LEFT JOIN incident_triage it ON it.error_event_id = al.id
+      WHERE ${whereParts.join(' AND ')}
+      ORDER BY al.created_at DESC
+      LIMIT ?
+    `,
+      [...params, limit]
+    );
+
+    const events: NormalizedErrorEvent[] = rows
+      .map((row: any) => {
+        const details = parseJsonObject(row.details);
+        const metadata = parseJsonObject(row.metadata);
+        const severityValue = resolveSeverity(row.action || '', details, metadata);
+        const serviceValue = normalizeServiceName({ ...metadata, ...details }, row.action || '');
+        const message =
+          (typeof details.message === 'string' && details.message.trim()) ||
+          (typeof details.error === 'string' && details.error.trim()) ||
+          (typeof metadata.message === 'string' && metadata.message.trim()) ||
+          row.action ||
+          'Unknown error event';
+
+        return {
+          id: row.id,
+          timestamp: row.created_at,
+          severity: severityValue,
+          action: row.action,
+          message,
+          service: serviceValue,
+          context: {
+            entityType: row.entity_type || null,
+            entityId: row.entity_id || null,
+            details,
+            metadata
+          },
+          restaurantId: row.restaurant_id || null,
+          restaurantName: row.restaurant_name || null,
+          triage: {
+            acknowledgedAt: row.acknowledged_at || null,
+            owner: row.owner || null,
+            resolvedAt: row.resolved_at || null,
+            note: row.note || null,
+            runbookLink: row.runbook_link || null,
+            updatedAt: row.triage_updated_at || null
+          }
+        };
+      })
+      .filter((event) => (service ? event.service === service : true))
+      .filter((event) => (severity ? event.severity === severity : true));
+
+    const restaurants = Array.from(
+      new Map(
+        events
+          .filter((event) => event.restaurantId)
+          .map((event) => [event.restaurantId, { id: event.restaurantId, name: event.restaurantName || event.restaurantId }])
+      ).values()
+    );
+    const services = Array.from(new Set(events.map((event) => event.service))).sort();
+
+    return res.json({
+      errors: events,
+      filters: {
+        restaurants,
+        services,
+        severities: ['critical', 'high', 'medium', 'low']
+      }
+    });
+  } catch (error) {
+    logger.error('Failed to get recent admin errors:', error);
+    return res.status(500).json({
+      error: 'Failed to load recent errors',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
+ * POST /api/admin/errors/:id/triage
+ * Applies triage mutations and writes immutable audit logs.
+ */
+router.post('/errors/:id/triage', async (req, res) => {
+  try {
+    const errorEventId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const action = typeof req.body?.action === 'string' ? req.body.action.trim() : '';
+    const value = typeof req.body?.value === 'string' ? req.body.value.trim() : '';
+    const runbookLink = typeof req.body?.runbookLink === 'string' ? req.body.runbookLink.trim() : '';
+    const userId = (req.user as any)?.id || null;
+    const db = await DatabaseService.getInstance().getDatabase();
+
+    const errorEvent = await db.get<{ id: string; restaurant_id: string | null }>(
+      'SELECT id, restaurant_id FROM audit_logs WHERE id = ? LIMIT 1',
+      [errorEventId]
+    );
+    if (!errorEvent) {
+      return res.status(404).json({ error: 'Error event not found' });
+    }
+
+    await db.run(
+      `INSERT INTO incident_triage (error_event_id)
+       VALUES (?)
+       ON CONFLICT (error_event_id) DO NOTHING`,
+      [errorEventId]
+    );
+
+    if (action === 'acknowledge') {
+      await db.run('UPDATE incident_triage SET acknowledged_at = NOW(), updated_at = NOW() WHERE error_event_id = ?', [errorEventId]);
+    } else if (action === 'assign_owner') {
+      if (!value) return res.status(400).json({ error: 'Owner is required' });
+      await db.run('UPDATE incident_triage SET owner = ?, updated_at = NOW() WHERE error_event_id = ?', [value.slice(0, 160), errorEventId]);
+    } else if (action === 'resolve') {
+      await db.run('UPDATE incident_triage SET resolved_at = NOW(), updated_at = NOW() WHERE error_event_id = ?', [errorEventId]);
+    } else if (action === 'attach_note') {
+      if (!value && !runbookLink) {
+        return res.status(400).json({ error: 'Note or runbook link is required' });
+      }
+      await db.run(
+        'UPDATE incident_triage SET note = COALESCE(?, note), runbook_link = COALESCE(?, runbook_link), updated_at = NOW() WHERE error_event_id = ?',
+        [value ? value.slice(0, 2000) : null, runbookLink ? runbookLink.slice(0, 300) : null, errorEventId]
+      );
+    } else {
+      return res.status(400).json({ error: 'Unsupported triage action' });
+    }
+
+    await db.run(
+      'INSERT INTO audit_logs (id, restaurant_id, user_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [
+        randomUUID(),
+        errorEvent.restaurant_id || 'platform-admin-org',
+        userId,
+        `incident_${action}`,
+        'error_event',
+        errorEventId,
+        JSON.stringify({ value, runbookLink })
+      ]
+    );
+
+    const triage = await db.get(
+      `SELECT acknowledged_at, owner, resolved_at, note, runbook_link, updated_at
+       FROM incident_triage WHERE error_event_id = ? LIMIT 1`,
+      [errorEventId]
+    );
+
+    return res.json({ triage });
+  } catch (error) {
+    logger.error('Failed to update error triage:', error);
+    return res.status(500).json({
+      error: 'Failed to apply triage action',
       details: error instanceof Error ? error.message : 'Unknown error'
     });
   }

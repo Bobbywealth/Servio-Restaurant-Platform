@@ -15,6 +15,7 @@ import {
   ClipboardList,
   Megaphone,
   Activity,
+  AlertTriangle,
   Shield,
   Search,
   Bell,
@@ -68,6 +69,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
     
     // PLATFORM OPERATIONS
     { name: 'System Health', href: '/admin/system-health', icon: Activity, section: 'system' },
+    { name: 'Diagnostics', href: '/admin/diagnostics', icon: AlertTriangle, section: 'system' },
     { name: 'Audit Logs', href: '/admin/audit', icon: Shield, section: 'system' },
     { name: 'Settings', href: '/admin/settings', icon: Settings, section: 'system' },
   ]
