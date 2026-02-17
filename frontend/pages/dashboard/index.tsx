@@ -100,6 +100,52 @@ const DashboardIndex = memo(() => {
   const [restaurantTimezone, setRestaurantTimezone] = useState('America/New_York')
   const [isOpen, setIsOpen] = useState(true)
   const [restaurantName, setRestaurantName] = useState<string>('')
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null)
+
+  const getCurrentDayKey = (timezone: string) => {
+    const dayName = new Intl.DateTimeFormat('en-US', {
+      weekday: 'long',
+      timeZone: timezone,
+    }).format(new Date())
+    return dayName.toLowerCase()
+  }
+
+  const getMinutesInTimezone = (timezone: string) => {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+      timeZone: timezone,
+    }).formatToParts(new Date())
+
+    const hour = Number(parts.find((part) => part.type === 'hour')?.value || 0)
+    const minute = Number(parts.find((part) => part.type === 'minute')?.value || 0)
+    return hour * 60 + minute
+  }
+
+  const calculateRestaurantOpenState = (
+    timezone: string,
+    hoursMap: Record<string, { open: string; close: string; closed: boolean }>,
+  ) => {
+    const dayKey = getCurrentDayKey(timezone)
+    const todayHours = hoursMap[dayKey]
+
+    if (!todayHours || todayHours.closed) {
+      return false
+    }
+
+    const [openHour = '9', openMinute = '0'] = (todayHours.open || '09:00').split(':')
+    const [closeHour = '22', closeMinute = '0'] = (todayHours.close || '22:00').split(':')
+    const openMinutes = Number(openHour) * 60 + Number(openMinute)
+    const closeMinutes = Number(closeHour) * 60 + Number(closeMinute)
+    const nowMinutes = getMinutesInTimezone(timezone)
+
+    if (closeMinutes <= openMinutes) {
+      return nowMinutes >= openMinutes || nowMinutes < closeMinutes
+    }
+
+    return nowMinutes >= openMinutes && nowMinutes < closeMinutes
+  }
 
   const fetchStats = async () => {
     setIsFetching(true)
@@ -132,12 +178,12 @@ const DashboardIndex = memo(() => {
       const profileData = profileRes.data?.data
       if (profileData) {
         setRestaurantName(profileData.name || '')
-        setRestaurantTimezone(profileData.timezone || 'America/New_York')
+        const timezone = profileData.timezone || 'America/New_York'
+        const normalizedHours = profileData.operating_hours || {}
+        setRestaurantTimezone(timezone)
+        setIsOpen(calculateRestaurantOpenState(timezone, normalizedHours))
       }
-
-      // Determine if restaurant is open (simplified - can be enhanced)
-      const hours = new Date().getHours()
-      setIsOpen(hours >= 9 && hours < 22)
+      setLastUpdatedAt(new Date())
     } catch (err) {
       console.error('Failed to fetch dashboard stats', err)
     } finally {
@@ -172,6 +218,10 @@ const DashboardIndex = memo(() => {
   useEffect(() => {
     fetchStats()
 
+    const interval = setInterval(() => {
+      fetchStats()
+    }, 60000)
+
     if (socket) {
       socket.on('order:new', (order) => {
         toast.success(`New order received! Total: $${order.totalAmount}`)
@@ -180,6 +230,7 @@ const DashboardIndex = memo(() => {
     }
 
     return () => {
+      clearInterval(interval)
       if (socket) socket.off('order:new')
     }
   }, [socket])
@@ -370,6 +421,12 @@ const DashboardIndex = memo(() => {
                     {isOpen ? 'Open' : 'Closed'}
                   </span>
                 </div>
+
+                {lastUpdatedAt && (
+                  <div className="text-xs text-surface-500 dark:text-surface-400">
+                    Updated {lastUpdatedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </div>
+                )}
               </motion.div>
             </div>
           </motion.div>
