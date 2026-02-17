@@ -35,6 +35,7 @@ interface Restaurant {
   address: string
   is_active: boolean
   created_at: string
+  logo_url?: string
   user_count: number
   total_orders: number
   orders_today: number
@@ -267,9 +268,17 @@ export default function RestaurantDetail() {
           <div className="p-6">
             <div className="flex items-start justify-between">
               <div className="flex items-center space-x-4">
-                <div className="h-16 w-16 rounded-full bg-red-100 dark:bg-red-900/20 flex items-center justify-center">
-                  <Building2 className="h-8 w-8 text-red-600" />
-                </div>
+                {restaurant.logo_url ? (
+                  <img
+                    src={restaurant.logo_url}
+                    alt={`${restaurant.name} logo`}
+                    className="h-16 w-16 rounded-full object-cover"
+                  />
+                ) : (
+                  <div className="h-16 w-16 rounded-full bg-red-100 dark:bg-red-900/20 flex items-center justify-center">
+                    <Building2 className="h-8 w-8 text-red-600" />
+                  </div>
+                )}
                 <div>
                   <div className="flex items-center space-x-3">
                     <h1 className="text-2xl font-bold text-gray-900 dark:text-white">

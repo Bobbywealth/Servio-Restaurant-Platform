@@ -29,6 +29,7 @@ interface Restaurant {
   address: string
   is_active: boolean
   created_at: string
+  logo_url?: string
   user_count: number
   total_orders: number
   orders_today: number
@@ -393,9 +394,17 @@ export default function RestaurantsList() {
                   >
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
-                        <div className="h-10 w-10 rounded-full bg-red-100 dark:bg-red-900/20 flex items-center justify-center">
-                          <Building2 className="h-5 w-5 text-red-600" />
-                        </div>
+                        {restaurant.logo_url ? (
+                          <img
+                            src={restaurant.logo_url}
+                            alt={`${restaurant.name} logo`}
+                            className="h-10 w-10 rounded-full object-cover"
+                          />
+                        ) : (
+                          <div className="h-10 w-10 rounded-full bg-red-100 dark:bg-red-900/20 flex items-center justify-center">
+                            <Building2 className="h-5 w-5 text-red-600" />
+                          </div>
+                        )}
                         <div className="ml-4">
                           <div className="text-sm font-medium text-gray-900 dark:text-white">
                             {restaurant.name}
