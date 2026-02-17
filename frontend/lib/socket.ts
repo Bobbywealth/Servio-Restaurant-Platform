@@ -148,10 +148,13 @@ class SocketManager {
       this.reconnectAttempts = 0
       this.notifyConnectionListeners(true)
 
-      // Join user room if authenticated
+      // Join user + restaurant rooms if authenticated
       const user = this.getUserFromStorage()
       if (user) {
         this.socket?.emit('join:user', { userId: user.id, restaurantId: user.restaurantId })
+        if (user.restaurantId) {
+          this.socket?.emit('join:restaurant', { restaurantId: user.restaurantId })
+        }
       }
     })
 

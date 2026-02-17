@@ -133,10 +133,12 @@ async function initializeServer() {
     const { default: voiceConversationsRoutes } = await import('./routes/voice-conversations');
     const { default: companyRoutes } = await import('./routes/company');
     const { default: bookingsRoutes } = await import('./routes/bookings');
+    const { default: publicRoutes } = await import('./routes/public');
 
     // API Routes
     app.use('/api/auth', authRoutes);
     app.use('/api/bookings', bookingsRoutes);
+    app.use('/api/public', publicRoutes);
 
     // Vapi and Voice routes MUST be before the catch-all /api route (no auth)
     app.use('/api/vapi', vapiRoutes);

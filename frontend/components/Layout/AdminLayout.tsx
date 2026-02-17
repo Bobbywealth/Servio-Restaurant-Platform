@@ -19,6 +19,7 @@ import {
   Search,
   Bell,
   CreditCard,
+  DollarSign,
   Users,
   Server,
   Key,
@@ -56,17 +57,24 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
     
     // MARKETING & ENGAGEMENT
     { name: 'Campaigns', href: '/admin/campaigns', icon: Megaphone, section: 'marketing' },
+    { name: 'Marketing Hub', href: '/admin/marketing', icon: Users, section: 'marketing' },
     { name: 'Demo Bookings', href: '/admin/demo-bookings', icon: CalendarDays, section: 'marketing' },
+
+    // BILLING & PRICING
+    { name: 'Billing', href: '/admin/billing', icon: CreditCard, section: 'commercial' },
+    { name: 'Pricing', href: '/admin/pricing', icon: DollarSign, section: 'commercial' },
     
     // PLATFORM OPERATIONS
     { name: 'System Health', href: '/admin/system-health', icon: Activity, section: 'system' },
     { name: 'Audit Logs', href: '/admin/audit', icon: Shield, section: 'system' },
+    { name: 'Settings', href: '/admin/settings', icon: Settings, section: 'system' },
   ]
 
   const sections = [
     { id: 'overview', label: 'Overview' },
     { id: 'restaurants', label: 'Restaurants' },
     { id: 'marketing', label: 'Marketing' },
+    { id: 'commercial', label: 'Commercial' },
     { id: 'system', label: 'System' },
   ]
 

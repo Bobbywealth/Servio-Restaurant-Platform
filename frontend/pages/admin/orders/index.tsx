@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import AdminLayout from '../../../components/Layout/AdminLayout'
 import { api } from '../../../lib/api'
-import { AdminOrderSummary, getOrderStatusBadgeClass } from '../../../lib/adminOrders'
+import { AdminOrderSummary, coerceMoneyValue, getOrderStatusBadgeClass } from '../../../lib/adminOrders'
 import { useSocket } from '../../../lib/socket'
 import Link from 'next/link'
 import { ClipboardList, Clock } from 'lucide-react'
@@ -9,14 +9,17 @@ import { ClipboardList, Clock } from 'lucide-react'
 export default function AdminOrdersPage() {
   const [orders, setOrders] = useState<AdminOrderSummary[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const socket = useSocket()
 
   const fetchOrders = async () => {
     try {
       const res = await api.get('/api/admin/orders')
       setOrders(res.data.orders || [])
+      setErrorMessage(null)
     } catch (error) {
       console.error('Failed to fetch orders:', error)
+      setErrorMessage('Unable to load orders right now. Please refresh and try again.')
     } finally {
       setIsLoading(false)
     }
@@ -48,6 +51,11 @@ export default function AdminOrdersPage() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
         {/* Pending Orders Section */}
         <section>
+          {errorMessage && (
+            <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+              {errorMessage}
+            </div>
+          )}
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center">
               <Clock className="w-5 h-5 mr-2 text-yellow-500" />
@@ -75,7 +83,7 @@ export default function AdminOrdersPage() {
                           <p className="text-xs text-gray-400">{order.restaurant_name || 'Unknown restaurant'}</p>
                         </div>
                         <div className="text-right">
-                          <p className="text-sm font-bold text-gray-900 dark:text-white">${(order.total_amount || 0).toFixed(2)}</p>
+                          <p className="text-sm font-bold text-gray-900 dark:text-white">${coerceMoneyValue(order.total_amount).toFixed(2)}</p>
                           <p className="text-xs text-gray-400">{new Date(order.created_at).toLocaleTimeString()}</p>
                         </div>
                       </div>
@@ -123,7 +131,7 @@ export default function AdminOrdersPage() {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                      ${(order.total_amount || 0).toFixed(2)}
+                      ${coerceMoneyValue(order.total_amount).toFixed(2)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                       {new Date(order.created_at).toLocaleDateString()}
