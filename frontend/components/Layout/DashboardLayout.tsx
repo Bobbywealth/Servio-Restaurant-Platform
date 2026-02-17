@@ -244,9 +244,9 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       name: 'Tasks',
       href: '/dashboard/tasks',
       icon: CheckCircle,
-      description: 'Team task manager',
+      description: 'View assigned tasks',
       color: 'text-servio-green-500',
-      roles: ['manager', 'owner'],
+      roles: ['staff', 'manager', 'owner'],
       section: 'team'
     },
     
@@ -320,6 +320,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const mobileNavItems = [
     { name: 'Home', href: '/dashboard', icon: Home, roles: ['staff', 'manager', 'owner'] },
     { name: 'Orders', href: '/dashboard/orders', icon: ClipboardList, roles: ['manager', 'owner'] },
+    { name: 'Tasks', href: '/dashboard/tasks', icon: CheckCircle, roles: ['staff', 'manager', 'owner'] },
     { name: 'Menu', href: '/dashboard/menu-management', icon: UtensilsCrossed, roles: ['manager', 'owner'] },
     { name: 'Assistant', href: '/dashboard/assistant', icon: Mic, roles: ['staff', 'manager', 'owner'] },
     { name: 'More', href: '#', icon: Menu, isMenuButton: true, roles: ['staff', 'manager', 'owner'] }

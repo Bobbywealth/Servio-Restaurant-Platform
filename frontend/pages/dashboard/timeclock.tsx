@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react'
 import Head from 'next/head'
 import dynamic from 'next/dynamic'
 import DashboardLayout from '../../components/Layout/DashboardLayout'
+import { useUser } from '../../contexts/UserContext'
 import ManagerTimeClockModal from '../../components/timeclock/ManagerTimeClockModal'
-import { Clock, Users, Play, Pause, Coffee, CheckCircle, UserCog } from 'lucide-react'
+import { Clock, Users, Play, Pause, Coffee, CheckCircle, UserCog, Eye } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { api } from '../../lib/api'
 
@@ -39,6 +40,7 @@ interface TimeEntry {
 }
 
 export default function TimeClockPage() {
+  const { user, isManagerOrOwner } = useUser()
   const [currentStaff, setCurrentStaff] = useState<Staff[]>([])
   const [recentEntries, setRecentEntries] = useState<TimeEntry[]>([])
   const [selectedPin, setSelectedPin] = useState('')
@@ -51,20 +53,27 @@ export default function TimeClockPage() {
   })
 
   const [showManagerModal, setShowManagerModal] = useState(false)
+  
+  // Staff can only view their own time for current day
+  const isStaff = user?.role === 'staff'
 
   useEffect(() => {
-    fetchCurrentStaff()
-    fetchRecentEntries()
-    fetchStats()
-
-    // Refresh data every 30 seconds
-    const interval = setInterval(() => {
+    // Only managers/owners can see all staff clock-in status
+    if (!isStaff) {
       fetchCurrentStaff()
-      fetchRecentEntries()
-    }, 30000)
+      fetchStats()
+    }
+    fetchRecentEntries()
 
-    return () => clearInterval(interval)
-  }, [])
+    // Refresh data every 30 seconds (only for managers)
+    if (!isStaff) {
+      const interval = setInterval(() => {
+        fetchCurrentStaff()
+        fetchRecentEntries()
+      }, 30000)
+      return () => clearInterval(interval)
+    }
+  }, [isStaff])
 
   const fetchCurrentStaff = async () => {
     try {
@@ -87,7 +96,12 @@ export default function TimeClockPage() {
   const fetchRecentEntries = async () => {
     try {
       const today = new Date().toISOString().split('T')[0]
-      const response = await api.get('/api/timeclock/entries', { params: { startDate: today, limit: 10 } })
+      // Staff can only see their own entries for today
+      const params: any = { startDate: today, limit: 10 }
+      if (isStaff && user?.id) {
+        params.userId = user.id
+      }
+      const response = await api.get('/api/timeclock/entries', { params })
       const data = response.data
 
       if (data.success) {
@@ -211,18 +225,25 @@ export default function TimeClockPage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Time Clock</h1>
-            <p className="text-gray-600">Staff time tracking and management</p>
+            <h1 className="text-2xl font-bold text-gray-900">
+              {isStaff ? 'My Hours' : 'Time Clock'}
+            </h1>
+            <p className="text-gray-600">
+              {isStaff ? 'View your hours for today' : 'Staff time tracking and management'}
+            </p>
           </div>
 
           <div className="flex items-center gap-4">
-            <button
-              onClick={() => setShowManagerModal(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white font-medium rounded-lg transition-colors"
-            >
-              <UserCog className="w-4 h-4" />
-              Manager Controls
-            </button>
+            {/* Only managers/owners see Manager Controls */}
+            {!isStaff && (
+              <button
+                onClick={() => setShowManagerModal(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white font-medium rounded-lg transition-colors"
+              >
+                <UserCog className="w-4 h-4" />
+                Manager Controls
+              </button>
+            )}
 
             <div className="text-right">
               <div className="text-2xl font-mono font-bold text-gray-900">

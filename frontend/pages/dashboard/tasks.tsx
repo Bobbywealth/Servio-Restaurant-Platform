@@ -44,6 +44,7 @@ export default function TasksPage() {
   const [staff, setStaff] = useState<StaffMember[]>([])
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [priorityFilter, setPriorityFilter] = useState<string>('all')
+  // Staff can only see their own tasks, so filter is hidden for them
   const [assignedToFilter, setAssignedToFilter] = useState<string>('all')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -54,9 +55,12 @@ export default function TasksPage() {
   const [draggedTask, setDraggedTask] = useState<Task | null>(null)
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null)
 
-  const canCreateTasks = isManagerOrOwner || hasPermission('tasks', 'create')
-  const canUpdateTasks = isManagerOrOwner || hasPermission('tasks', 'update')
-  const canDeleteTasks = isManagerOrOwner || hasPermission('tasks', 'delete')
+  // Staff can only see tasks assigned to them and cannot create/edit/delete
+  const isStaff = user?.role === 'staff'
+  const canCreateTasks = !isStaff && (isManagerOrOwner || hasPermission('tasks', 'create'))
+  const canUpdateTasks = !isStaff && (isManagerOrOwner || hasPermission('tasks', 'update'))
+  const canDeleteTasks = !isStaff && (isManagerOrOwner || hasPermission('tasks', 'delete'))
+  const canAssignTasks = !isStaff && (isManagerOrOwner || hasPermission('tasks', 'assign'))
 
   const fetchTasks = async () => {
     setIsLoading(true)
@@ -65,7 +69,13 @@ export default function TasksPage() {
       const params: any = {}
       if (statusFilter !== 'all') params.status = statusFilter
       if (priorityFilter !== 'all') params.priority = priorityFilter
-      if (assignedToFilter !== 'all') params.assignedTo = assignedToFilter
+      
+      // Staff can only see tasks assigned to them
+      if (isStaff) {
+        params.assignedTo = user?.id
+      } else if (assignedToFilter !== 'all') {
+        params.assignedTo = assignedToFilter
+      }
 
       const res = await api.get('/api/tasks', { params })
       setTasks(res.data?.data?.tasks || [])
@@ -90,7 +100,10 @@ export default function TasksPage() {
   useEffect(() => {
     if (!hasPermission('tasks', 'read')) return
     fetchTasks()
-    fetchStaff()
+    // Only managers/owners need to see staff list for assigning tasks
+    if (!isStaff) {
+      fetchStaff()
+    }
   }, [statusFilter, priorityFilter, assignedToFilter])
 
   // Socket listeners for real-time updates
