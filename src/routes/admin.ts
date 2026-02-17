@@ -74,6 +74,16 @@ type AdminCampaign = {
   created_at: string;
 };
 
+type RestaurantOverrideScope = 'phone' | 'integrations';
+
+type AdminOverrideSummary = {
+  actorName: string | null;
+  actorRole: string | null;
+  reason: string | null;
+  action: string;
+  createdAt: string;
+};
+
 
 /**
  * API contract: GET /api/admin/audit-logs
@@ -249,6 +259,84 @@ const hasColumn = async (db: any, tableName: string, columnName: string): Promis
   );
 
   return Boolean(result);
+};
+
+const parseRestaurantSettings = (raw: any): Record<string, any> => {
+  if (!raw) return {};
+  if (typeof raw === 'object' && !Array.isArray(raw)) return raw;
+  if (typeof raw !== 'string') return {};
+
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+
+const toTrimmedString = (value: unknown): string => (typeof value === 'string' ? value.trim() : '');
+
+const assertPlatformOverrideAccess = (req: express.Request, res: express.Response): boolean => {
+  if (!isPlatformAdminOnly(req.user)) {
+    res.status(403).json({
+      error: 'Platform admin access required',
+      message: 'Only platform-admin users can execute override actions'
+    });
+    return false;
+  }
+
+  return true;
+};
+
+const requireOverrideReason = (req: express.Request, res: express.Response): string | null => {
+  const reason = toTrimmedString(req.body?.reason);
+  if (!reason) {
+    res.status(400).json({
+      error: 'Override reason required',
+      message: 'A non-empty reason is required for all admin override actions.'
+    });
+    return null;
+  }
+  return reason.slice(0, 500);
+};
+
+const writeOverrideAuditLog = async ({
+  db,
+  restaurantId,
+  userId,
+  action,
+  entityType,
+  entityId,
+  reason,
+  before,
+  after,
+  scope,
+  metadata
+}: {
+  db: any;
+  restaurantId: string;
+  userId: string | null;
+  action: string;
+  entityType: string;
+  entityId: string;
+  reason: string;
+  before: Record<string, any>;
+  after: Record<string, any>;
+  scope: RestaurantOverrideScope;
+  metadata?: Record<string, any>;
+}) => {
+  await db.run(
+    'INSERT INTO audit_logs (id, restaurant_id, user_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    [
+      randomUUID(),
+      restaurantId,
+      userId,
+      action,
+      entityType,
+      entityId,
+      JSON.stringify({ reason, before, after, scope, metadata: metadata || {} })
+    ]
+  );
 };
 
 const moderateCampaign = async (
@@ -1711,6 +1799,317 @@ router.get('/restaurants/:id', async (req, res) => {
       error: 'Failed to load restaurant details',
       details: error instanceof Error ? error.message : 'Unknown error'
     });
+  }
+});
+
+/**
+ * GET /api/admin/restaurants/:id/overrides
+ * Read-only snapshot of override metadata for troubleshooting.
+ */
+router.get('/restaurants/:id/overrides', async (req, res) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const db = await DatabaseService.getInstance().getDatabase();
+
+    const restaurant = await db.get('SELECT id, settings FROM restaurants WHERE id = ?', [id]);
+    if (!restaurant) {
+      return res.status(404).json({ error: 'Restaurant not found' });
+    }
+
+    const settings = parseRestaurantSettings(restaurant.settings);
+    const disabledChannels = Array.isArray(settings?.integrationOverrides?.disabledChannels)
+      ? settings.integrationOverrides.disabledChannels.filter((item: unknown) => typeof item === 'string')
+      : [];
+
+    const lastRows = await db.all(
+      `
+      SELECT
+        al.action,
+        al.created_at,
+        al.details,
+        u.name as actor_name,
+        u.role as actor_role
+      FROM audit_logs al
+      LEFT JOIN users u ON u.id = al.user_id
+      WHERE al.restaurant_id = ?
+        AND al.action IN (
+          'admin_override_phone_reconnect',
+          'admin_override_phone_rotate_config',
+          'admin_override_integration_recheck',
+          'admin_override_channel_status'
+        )
+      ORDER BY al.created_at DESC
+    `,
+      [id]
+    );
+
+    const summary: Record<RestaurantOverrideScope, AdminOverrideSummary | null> = {
+      phone: null,
+      integrations: null
+    };
+
+    for (const row of lastRows) {
+      let details: Record<string, any> = {};
+      if (typeof row.details === 'string') {
+        try {
+          details = JSON.parse(row.details);
+        } catch {
+          details = {};
+        }
+      }
+
+      const scope = details?.scope === 'phone' ? 'phone' : 'integrations';
+      if (!summary[scope]) {
+        summary[scope] = {
+          action: row.action,
+          actorName: row.actor_name ?? null,
+          actorRole: row.actor_role ?? null,
+          reason: typeof details?.reason === 'string' ? details.reason : null,
+          createdAt: row.created_at
+        };
+      }
+
+      if (summary.phone && summary.integrations) break;
+    }
+
+    return res.json({
+      lastOverrides: summary,
+      disabledChannels
+    });
+  } catch (error) {
+    logger.error('Failed to load override metadata:', error);
+    return res.status(500).json({
+      error: 'Failed to load override metadata',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
+ * POST /api/admin/restaurants/:id/overrides/phone/reconnect
+ * Force a phone/integration reconnection check.
+ */
+router.post('/restaurants/:id/overrides/phone/reconnect', async (req, res) => {
+  if (!assertPlatformOverrideAccess(req, res)) return;
+  const reason = requireOverrideReason(req, res);
+  if (!reason) return;
+
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const db = await DatabaseService.getInstance().getDatabase();
+    const restaurant = await db.get('SELECT id, settings FROM restaurants WHERE id = ?', [id]);
+    if (!restaurant) {
+      return res.status(404).json({ error: 'Restaurant not found' });
+    }
+
+    const settings = parseRestaurantSettings(restaurant.settings);
+    const previous = settings.integrationOverrides?.phoneHealth || null;
+    settings.integrationOverrides = settings.integrationOverrides || {};
+    settings.integrationOverrides.phoneHealth = {
+      status: 'recheck-requested',
+      requestedAt: new Date().toISOString(),
+      requestedBy: req.user?.id ?? null
+    };
+
+    await db.run('UPDATE restaurants SET settings = ?, updated_at = NOW() WHERE id = ?', [JSON.stringify(settings), id]);
+
+    await writeOverrideAuditLog({
+      db,
+      restaurantId: id,
+      userId: req.user?.id ?? null,
+      action: 'admin_override_phone_reconnect',
+      entityType: 'restaurant_integration',
+      entityId: id,
+      reason,
+      scope: 'phone',
+      before: { phoneHealth: previous },
+      after: { phoneHealth: settings.integrationOverrides.phoneHealth }
+    });
+
+    return res.json({ success: true, phoneHealth: settings.integrationOverrides.phoneHealth });
+  } catch (error) {
+    logger.error('Failed to request phone reconnect:', error);
+    return res.status(500).json({ error: 'Failed to request phone reconnect' });
+  }
+});
+
+/**
+ * POST /api/admin/restaurants/:id/overrides/phone/rotate-config
+ * Rotate service config token safely without exposing secrets in payloads.
+ */
+router.post('/restaurants/:id/overrides/phone/rotate-config', async (req, res) => {
+  if (!assertPlatformOverrideAccess(req, res)) return;
+  const reason = requireOverrideReason(req, res);
+  if (!reason) return;
+
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const db = await DatabaseService.getInstance().getDatabase();
+    const restaurant = await db.get('SELECT id, settings FROM restaurants WHERE id = ?', [id]);
+    if (!restaurant) {
+      return res.status(404).json({ error: 'Restaurant not found' });
+    }
+
+    const settings = parseRestaurantSettings(restaurant.settings);
+    const vapiConfig = settings?.vapi || {};
+    const before = {
+      hasWebhookSecret: Boolean(vapiConfig.webhookSecret),
+      configVersion: Number(vapiConfig.configVersion || 1)
+    };
+
+    const nextVersion = before.configVersion + 1;
+    const refreshed = {
+      ...vapiConfig,
+      configVersion: nextVersion,
+      lastRotatedAt: new Date().toISOString(),
+      rotatedBy: req.user?.id ?? null,
+      webhookSecret: randomUUID().replace(/-/g, '')
+    };
+
+    settings.vapi = refreshed;
+    await db.run('UPDATE restaurants SET settings = ?, updated_at = NOW() WHERE id = ?', [JSON.stringify(settings), id]);
+
+    await writeOverrideAuditLog({
+      db,
+      restaurantId: id,
+      userId: req.user?.id ?? null,
+      action: 'admin_override_phone_rotate_config',
+      entityType: 'restaurant_phone_config',
+      entityId: id,
+      reason,
+      scope: 'phone',
+      before,
+      after: {
+        hasWebhookSecret: Boolean(refreshed.webhookSecret),
+        configVersion: refreshed.configVersion,
+        lastRotatedAt: refreshed.lastRotatedAt
+      }
+    });
+
+    return res.json({
+      success: true,
+      configVersion: refreshed.configVersion,
+      lastRotatedAt: refreshed.lastRotatedAt
+    });
+  } catch (error) {
+    logger.error('Failed to rotate phone config:', error);
+    return res.status(500).json({ error: 'Failed to rotate phone config' });
+  }
+});
+
+/**
+ * POST /api/admin/restaurants/:id/overrides/integrations/recheck
+ * Trigger an integration health check marker.
+ */
+router.post('/restaurants/:id/overrides/integrations/recheck', async (req, res) => {
+  if (!assertPlatformOverrideAccess(req, res)) return;
+  const reason = requireOverrideReason(req, res);
+  if (!reason) return;
+
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const db = await DatabaseService.getInstance().getDatabase();
+    const restaurant = await db.get('SELECT id, settings FROM restaurants WHERE id = ?', [id]);
+    if (!restaurant) {
+      return res.status(404).json({ error: 'Restaurant not found' });
+    }
+
+    const settings = parseRestaurantSettings(restaurant.settings);
+    const previous = settings.integrationOverrides?.lastRecheck || null;
+    settings.integrationOverrides = settings.integrationOverrides || {};
+    settings.integrationOverrides.lastRecheck = {
+      requestedAt: new Date().toISOString(),
+      requestedBy: req.user?.id ?? null,
+      status: 'queued'
+    };
+
+    await db.run('UPDATE restaurants SET settings = ?, updated_at = NOW() WHERE id = ?', [JSON.stringify(settings), id]);
+
+    await writeOverrideAuditLog({
+      db,
+      restaurantId: id,
+      userId: req.user?.id ?? null,
+      action: 'admin_override_integration_recheck',
+      entityType: 'restaurant_integration',
+      entityId: id,
+      reason,
+      scope: 'integrations',
+      before: { lastRecheck: previous },
+      after: { lastRecheck: settings.integrationOverrides.lastRecheck }
+    });
+
+    return res.json({ success: true, lastRecheck: settings.integrationOverrides.lastRecheck });
+  } catch (error) {
+    logger.error('Failed to trigger integration recheck:', error);
+    return res.status(500).json({ error: 'Failed to trigger integration recheck' });
+  }
+});
+
+/**
+ * PATCH /api/admin/restaurants/:id/overrides/channels/:channel
+ * Enable or disable problematic channels.
+ */
+router.patch('/restaurants/:id/overrides/channels/:channel', async (req, res) => {
+  if (!assertPlatformOverrideAccess(req, res)) return;
+  const reason = requireOverrideReason(req, res);
+  if (!reason) return;
+
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const channelInput = Array.isArray(req.params.channel) ? req.params.channel[0] : req.params.channel;
+    const channel = channelInput.trim().toLowerCase();
+    if (!channel || !/^[a-z0-9_-]{2,40}$/.test(channel)) {
+      return res.status(400).json({ error: 'Invalid channel identifier' });
+    }
+
+    const disable = Boolean(req.body?.disable);
+    const db = await DatabaseService.getInstance().getDatabase();
+    const restaurant = await db.get('SELECT id, settings FROM restaurants WHERE id = ?', [id]);
+    if (!restaurant) {
+      return res.status(404).json({ error: 'Restaurant not found' });
+    }
+
+    const settings = parseRestaurantSettings(restaurant.settings);
+    const integrationOverrides = settings.integrationOverrides || {};
+    const previousChannels = Array.isArray(integrationOverrides.disabledChannels)
+      ? integrationOverrides.disabledChannels.filter((item: unknown) => typeof item === 'string')
+      : [];
+
+    const set = new Set(previousChannels.map((item: string) => item.toLowerCase()));
+    if (disable) {
+      set.add(channel);
+    } else {
+      set.delete(channel);
+    }
+
+    const nextChannels = Array.from(set).sort();
+    settings.integrationOverrides = {
+      ...integrationOverrides,
+      disabledChannels: nextChannels,
+      updatedAt: new Date().toISOString(),
+      updatedBy: req.user?.id ?? null
+    };
+
+    await db.run('UPDATE restaurants SET settings = ?, updated_at = NOW() WHERE id = ?', [JSON.stringify(settings), id]);
+
+    await writeOverrideAuditLog({
+      db,
+      restaurantId: id,
+      userId: req.user?.id ?? null,
+      action: 'admin_override_channel_status',
+      entityType: 'restaurant_channel',
+      entityId: `${id}:${channel}`,
+      reason,
+      scope: 'integrations',
+      before: { disabledChannels: previousChannels },
+      after: { disabledChannels: nextChannels },
+      metadata: { channel, disable }
+    });
+
+    return res.json({ success: true, channel, disable, disabledChannels: nextChannels });
+  } catch (error) {
+    logger.error('Failed to update channel override:', error);
+    return res.status(500).json({ error: 'Failed to update channel override' });
   }
 });
 
