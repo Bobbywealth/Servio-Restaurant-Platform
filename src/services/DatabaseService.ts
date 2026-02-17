@@ -287,7 +287,7 @@ export class DatabaseService {
         password: 'password',
         pin: '1111',
         role: 'staff',
-        permissions: JSON.stringify(['orders.read', 'orders.update', 'inventory.read', 'inventory.adjust'])
+        permissions: JSON.stringify(['inventory.read', 'inventory.adjust'])
       },
       {
         id: 'user-2',

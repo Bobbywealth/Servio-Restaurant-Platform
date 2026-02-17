@@ -208,7 +208,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       icon: ClipboardList,
       description: 'Manage all orders',
       color: 'text-primary-500',
-      roles: ['staff', 'manager', 'owner'],
+      roles: ['manager', 'owner'],
       section: 'operations'
     },
     {
@@ -316,14 +316,19 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const currentItem = navigation.find((item) => currentPath === normalizePath(item.href));
   const pageTitle = currentItem?.name || 'Dashboard';
 
-  // Mobile navigation - always show these 5 items at bottom
-  const mobileNav = [
-    { name: 'Home', href: '/dashboard', icon: Home },
-    { name: 'Orders', href: '/dashboard/orders', icon: ClipboardList },
-    { name: 'Menu', href: '/dashboard/menu-management', icon: UtensilsCrossed },
-    { name: 'Assistant', href: '/dashboard/assistant', icon: Mic },
-    { name: 'More', href: '#', icon: Menu, isMenuButton: true }
+  // Mobile navigation items with role-based access
+  const mobileNavItems = [
+    { name: 'Home', href: '/dashboard', icon: Home, roles: ['staff', 'manager', 'owner'] },
+    { name: 'Orders', href: '/dashboard/orders', icon: ClipboardList, roles: ['manager', 'owner'] },
+    { name: 'Menu', href: '/dashboard/menu-management', icon: UtensilsCrossed, roles: ['manager', 'owner'] },
+    { name: 'Assistant', href: '/dashboard/assistant', icon: Mic, roles: ['staff', 'manager', 'owner'] },
+    { name: 'More', href: '#', icon: Menu, isMenuButton: true, roles: ['staff', 'manager', 'owner'] }
   ];
+
+  // Filter mobile nav based on user role
+  const mobileNav = mobileNavItems.filter(item =>
+    item.roles.includes(user.role)
+  );
 
   const closeSidebar = () => setSidebarOpen(false);
 

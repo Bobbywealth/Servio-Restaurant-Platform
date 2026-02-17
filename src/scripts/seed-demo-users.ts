@@ -63,7 +63,7 @@ async function seedDemoUsers() {
       name: 'Restaurant Staff',
       role: 'staff',
       restaurant_id: 'demo-restaurant-1',
-      permissions: JSON.stringify(['orders.read', 'orders.update', 'inventory.read']),
+      permissions: JSON.stringify(['inventory.read']),
       password_hash: passwordHash,
       is_active: true
     }
