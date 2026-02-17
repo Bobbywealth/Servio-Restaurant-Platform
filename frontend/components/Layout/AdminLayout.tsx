@@ -18,7 +18,6 @@ import {
   AlertTriangle,
   Shield,
   Search,
-  Bell,
   CreditCard,
   DollarSign,
   Users,
@@ -30,6 +29,7 @@ import {
   ListTodo
 } from 'lucide-react'
 import { useUser } from '../../contexts/UserContext'
+import NotificationCenter from '../ui/NotificationCenter'
 
 interface AdminLayoutProps {
   children: React.ReactNode
@@ -256,10 +256,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
                 </button>
                 
                 {/* Notifications */}
-                <button className="relative p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300">
-                  <Bell className="h-5 w-5" />
-                  <span className="absolute top-1 right-1 h-2 w-2 bg-red-500 rounded-full"></span>
-                </button>
+                <NotificationCenter />
                 
                 {/* Profile */}
                 <div className="flex items-center gap-2">
