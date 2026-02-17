@@ -269,6 +269,15 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       roles: ['manager', 'owner'],
       section: 'ai'
     },
+    {
+      name: 'Assistant Status',
+      href: '/dashboard/assistant-status',
+      icon: Bot,
+      description: 'Monitor assistant health & activity',
+      color: 'text-servio-blue-500',
+      roles: ['manager', 'owner'],
+      section: 'ai'
+    },
     
     // ADMIN SECTION (Owner has full admin access)
     {

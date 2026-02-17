@@ -15,6 +15,7 @@ import {
   ClipboardList,
   Megaphone,
   Activity,
+  AlertTriangle,
   Shield,
   Search,
   Bell,
@@ -52,6 +53,8 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
     
     // RESTAURANT MANAGEMENT  
     { name: 'Restaurants', href: '/admin/restaurants', icon: Store, section: 'restaurants' },
+    { name: 'Admin Users', href: '/admin/users', icon: Users, section: 'restaurants' },
+    { name: 'Global Menu', href: '/admin/global-menu', icon: Menu, section: 'restaurants' },
     { name: 'All Orders', href: '/admin/orders', icon: ClipboardList, section: 'restaurants' },
     { name: 'Tasks', href: '/admin/tasks', icon: ListTodo, section: 'restaurants' },
     
@@ -66,6 +69,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
     
     // PLATFORM OPERATIONS
     { name: 'System Health', href: '/admin/system-health', icon: Activity, section: 'system' },
+    { name: 'Diagnostics', href: '/admin/diagnostics', icon: AlertTriangle, section: 'system' },
     { name: 'Audit Logs', href: '/admin/audit', icon: Shield, section: 'system' },
     { name: 'Settings', href: '/admin/settings', icon: Settings, section: 'system' },
   ]
