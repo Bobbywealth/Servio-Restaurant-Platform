@@ -116,22 +116,21 @@ type AdminOrderDetail = AdminOrderSummary & {
   items: any[];
 };
 
-type AdminConversationSummary = {
+type AdminTask = {
   id: string;
   restaurant_id: string;
   restaurant_name: string | null;
-  started_at: string;
-  ended_at: string | null;
-  duration_seconds: number | null;
-  direction: 'inbound' | 'outbound' | null;
-  from_number: string | null;
-  to_number: string | null;
-  status: string;
-  intent_primary: string | null;
-  outcome: string | null;
-  sentiment: string | null;
-  quality_score: number | null;
-  reviewed_at: string | null;
+  title: string;
+  description: string | null;
+  status: 'pending' | 'in_progress' | 'completed' | string;
+  priority: 'low' | 'medium' | 'high' | string;
+  type: string | null;
+  assigned_to: string | null;
+  assigned_to_name: string | null;
+  due_date: string | null;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 type CampaignFeedEventType = 'created' | 'approved' | 'disapproved' | 'sent';
@@ -928,68 +927,350 @@ router.get('/orders/:id', async (req, res) => {
 });
 
 /**
- * GET /api/admin/settings
- * Load persisted platform admin settings.
+ * GET /api/admin/tasks
+ * Get tasks across all restaurants with filtering and pagination.
  */
-router.get('/settings', async (req, res) => {
+router.get('/tasks', async (req, res) => {
   try {
     const db = await DatabaseService.getInstance().getDatabase();
-    const row = await db.get<{ settings?: any }>(
-      'SELECT settings FROM platform_settings WHERE id = ? LIMIT 1',
-      ['default']
+    const page = resolvePage(req.query.page, 1);
+    const limit = resolveLimit(req.query.limit, 50, 200);
+    const offset = (page - 1) * limit;
+    const status = typeof req.query.status === 'string' ? req.query.status.trim() : '';
+    const priority = typeof req.query.priority === 'string' ? req.query.priority.trim() : '';
+    const restaurantId = typeof req.query.restaurantId === 'string' ? req.query.restaurantId.trim() : '';
+    const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
+
+    const whereParts: string[] = [];
+    const params: any[] = [];
+
+    if (status && status !== 'all') {
+      whereParts.push('t.status = ?');
+      params.push(status);
+    }
+
+    if (priority && priority !== 'all') {
+      whereParts.push('t.priority = ?');
+      params.push(priority);
+    }
+
+    if (restaurantId) {
+      whereParts.push('t.restaurant_id = ?');
+      params.push(restaurantId);
+    }
+
+    if (search) {
+      whereParts.push(`(
+        COALESCE(t.title, '') ILIKE ?
+        OR COALESCE(t.description, '') ILIKE ?
+        OR COALESCE(r.name, '') ILIKE ?
+        OR COALESCE(u.name, '') ILIKE ?
+      )`);
+      const searchTerm = `%${search}%`;
+      params.push(searchTerm, searchTerm, searchTerm, searchTerm);
+    }
+
+    const whereClause = whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : '';
+
+    const tasks = await db.all(
+      `
+      SELECT
+        t.id,
+        t.restaurant_id,
+        r.name AS restaurant_name,
+        t.title,
+        t.description,
+        t.status,
+        COALESCE(t.priority, 'medium') AS priority,
+        t.type,
+        t.assigned_to,
+        u.name AS assigned_to_name,
+        t.due_date,
+        t.completed_at,
+        t.created_at,
+        t.updated_at
+      FROM tasks t
+      LEFT JOIN restaurants r ON r.id = t.restaurant_id
+      LEFT JOIN users u ON u.id = t.assigned_to
+      ${whereClause}
+      ORDER BY
+        CASE
+          WHEN t.status = 'pending' THEN 0
+          WHEN t.status = 'in_progress' THEN 1
+          WHEN t.status = 'completed' THEN 2
+          ELSE 3
+        END,
+        t.created_at DESC
+      LIMIT ? OFFSET ?
+    `,
+      [...params, limit, offset]
     );
 
-    const rawSettings = typeof row?.settings === 'string'
-      ? (() => {
-        try {
-          return JSON.parse(row.settings);
-        } catch {
-          return {};
-        }
-      })()
-      : (row?.settings || {});
+    const totalResult = await db.get(
+      `
+      SELECT COUNT(*) as total
+      FROM tasks t
+      LEFT JOIN restaurants r ON r.id = t.restaurant_id
+      LEFT JOIN users u ON u.id = t.assigned_to
+      ${whereClause}
+    `,
+      params
+    );
 
     return res.json({
-      success: true,
-      settings: {
-        ...DEFAULT_PLATFORM_SETTINGS,
-        ...sanitizePlatformSettings(rawSettings)
-      }
+      tasks: tasks as AdminTask[],
+      pagination: {
+        page,
+        limit,
+        total: totalResult?.total || 0,
+        pages: Math.ceil((totalResult?.total || 0) / limit)
+      } as PaginationPayload
     });
   } catch (error) {
-    logger.error('Failed to load admin platform settings:', error);
+    logger.error('Failed to get admin tasks:', error);
     return res.status(500).json({
-      error: 'Failed to load settings',
+      error: 'Failed to load tasks',
       details: error instanceof Error ? error.message : 'Unknown error'
     });
   }
 });
 
 /**
- * PUT /api/admin/settings
- * Persist platform admin settings.
+ * POST /api/admin/tasks
+ * Create a task for any restaurant.
  */
-router.put('/settings', async (req, res) => {
+router.post('/tasks', async (req, res) => {
   try {
     const db = await DatabaseService.getInstance().getDatabase();
-    const nextSettings = sanitizePlatformSettings(req.body || {});
+    const restaurantId = typeof req.body?.restaurant_id === 'string' ? req.body.restaurant_id.trim() : '';
+    const title = typeof req.body?.title === 'string' ? req.body.title.trim() : '';
+    const description = typeof req.body?.description === 'string' ? req.body.description.trim() : null;
+    const status = typeof req.body?.status === 'string' ? req.body.status.trim() : 'pending';
+    const priority = typeof req.body?.priority === 'string' ? req.body.priority.trim() : 'medium';
+    const type = typeof req.body?.type === 'string' ? req.body.type.trim() : 'one_time';
+    const assignedTo = typeof req.body?.assigned_to === 'string' ? req.body.assigned_to.trim() : null;
+    const dueDate = typeof req.body?.due_date === 'string' ? req.body.due_date : null;
+
+    if (!restaurantId) {
+      return res.status(400).json({ error: 'restaurant_id is required' });
+    }
+
+    if (!title) {
+      return res.status(400).json({ error: 'title is required' });
+    }
+
+    const allowedStatuses = new Set(['pending', 'in_progress', 'completed']);
+    if (!allowedStatuses.has(status)) {
+      return res.status(400).json({ error: 'Invalid task status' });
+    }
+
+    const allowedPriorities = new Set(['low', 'medium', 'high']);
+    if (!allowedPriorities.has(priority)) {
+      return res.status(400).json({ error: 'Invalid task priority' });
+    }
+
+    const restaurant = await db.get('SELECT id FROM restaurants WHERE id = ?', [restaurantId]);
+    if (!restaurant) {
+      return res.status(404).json({ error: 'Restaurant not found' });
+    }
+
+    if (assignedTo) {
+      const assignee = await db.get(
+        'SELECT id FROM users WHERE id = ? AND restaurant_id = ? AND is_active = true',
+        [assignedTo, restaurantId]
+      );
+      if (!assignee) {
+        return res.status(400).json({ error: 'Assigned user must be active and belong to the selected restaurant' });
+      }
+    }
+
+    const taskId = randomUUID();
+    const completedAt = status === 'completed' ? new Date().toISOString() : null;
 
     await db.run(
-      `INSERT INTO platform_settings (id, settings, updated_by)
-       VALUES (?, ?::jsonb, ?)
-       ON CONFLICT (id)
-       DO UPDATE SET settings = EXCLUDED.settings, updated_by = EXCLUDED.updated_by, updated_at = NOW()`,
-      ['default', JSON.stringify(nextSettings), req.user?.id ?? null]
+      `
+      INSERT INTO tasks (id, restaurant_id, title, description, status, priority, type, assigned_to, due_date, completed_at, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `,
+      [taskId, restaurantId, title, description, status, priority, type, assignedTo, dueDate, completedAt]
     );
 
-    return res.json({
-      success: true,
-      settings: nextSettings
-    });
+    const task = await db.get(
+      `
+      SELECT
+        t.id,
+        t.restaurant_id,
+        r.name AS restaurant_name,
+        t.title,
+        t.description,
+        t.status,
+        COALESCE(t.priority, 'medium') AS priority,
+        t.type,
+        t.assigned_to,
+        u.name AS assigned_to_name,
+        t.due_date,
+        t.completed_at,
+        t.created_at,
+        t.updated_at
+      FROM tasks t
+      LEFT JOIN restaurants r ON r.id = t.restaurant_id
+      LEFT JOIN users u ON u.id = t.assigned_to
+      WHERE t.id = ?
+      LIMIT 1
+    `,
+      [taskId]
+    );
+
+    return res.status(201).json({ task: task as AdminTask });
   } catch (error) {
-    logger.error('Failed to update admin platform settings:', error);
+    logger.error('Failed to create admin task:', error);
     return res.status(500).json({
-      error: 'Failed to save settings',
+      error: 'Failed to create task',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
+ * PATCH /api/admin/tasks/:id
+ * Update an existing task.
+ */
+router.patch('/tasks/:id', async (req, res) => {
+  try {
+    const db = await DatabaseService.getInstance().getDatabase();
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const existingTask = await db.get('SELECT id, restaurant_id, status FROM tasks WHERE id = ? LIMIT 1', [id]);
+
+    if (!existingTask) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+
+    const updates: string[] = [];
+    const params: any[] = [];
+    const status = typeof req.body?.status === 'string' ? req.body.status.trim() : undefined;
+    const priority = typeof req.body?.priority === 'string' ? req.body.priority.trim() : undefined;
+    const title = typeof req.body?.title === 'string' ? req.body.title.trim() : undefined;
+    const description = typeof req.body?.description === 'string' ? req.body.description.trim() : undefined;
+    const assignedTo = typeof req.body?.assigned_to === 'string' ? req.body.assigned_to.trim() : req.body?.assigned_to === null ? null : undefined;
+    const dueDate = typeof req.body?.due_date === 'string' ? req.body.due_date : req.body?.due_date === null ? null : undefined;
+
+    if (title !== undefined) {
+      if (!title) return res.status(400).json({ error: 'title cannot be empty' });
+      updates.push('title = ?');
+      params.push(title);
+    }
+
+    if (description !== undefined) {
+      updates.push('description = ?');
+      params.push(description || null);
+    }
+
+    if (status !== undefined) {
+      const allowedStatuses = new Set(['pending', 'in_progress', 'completed']);
+      if (!allowedStatuses.has(status)) {
+        return res.status(400).json({ error: 'Invalid task status' });
+      }
+      updates.push('status = ?');
+      params.push(status);
+      if (status === 'completed') {
+        updates.push('completed_at = ?');
+        params.push(new Date().toISOString());
+      } else if (existingTask.status === 'completed') {
+        updates.push('completed_at = NULL');
+      }
+    }
+
+    if (priority !== undefined) {
+      const allowedPriorities = new Set(['low', 'medium', 'high']);
+      if (!allowedPriorities.has(priority)) {
+        return res.status(400).json({ error: 'Invalid task priority' });
+      }
+      updates.push('priority = ?');
+      params.push(priority);
+    }
+
+    if (assignedTo !== undefined) {
+      if (assignedTo) {
+        const assignee = await db.get(
+          'SELECT id FROM users WHERE id = ? AND restaurant_id = ? AND is_active = true',
+          [assignedTo, existingTask.restaurant_id]
+        );
+        if (!assignee) {
+          return res.status(400).json({ error: 'Assigned user must be active and belong to the same restaurant' });
+        }
+      }
+      updates.push('assigned_to = ?');
+      params.push(assignedTo || null);
+    }
+
+    if (dueDate !== undefined) {
+      updates.push('due_date = ?');
+      params.push(dueDate);
+    }
+
+    if (!updates.length) {
+      return res.status(400).json({ error: 'No valid fields to update' });
+    }
+
+    updates.push('updated_at = CURRENT_TIMESTAMP');
+    await db.run(`UPDATE tasks SET ${updates.join(', ')} WHERE id = ?`, [...params, id]);
+
+    const task = await db.get(
+      `
+      SELECT
+        t.id,
+        t.restaurant_id,
+        r.name AS restaurant_name,
+        t.title,
+        t.description,
+        t.status,
+        COALESCE(t.priority, 'medium') AS priority,
+        t.type,
+        t.assigned_to,
+        u.name AS assigned_to_name,
+        t.due_date,
+        t.completed_at,
+        t.created_at,
+        t.updated_at
+      FROM tasks t
+      LEFT JOIN restaurants r ON r.id = t.restaurant_id
+      LEFT JOIN users u ON u.id = t.assigned_to
+      WHERE t.id = ?
+      LIMIT 1
+    `,
+      [id]
+    );
+
+    return res.json({ task: task as AdminTask });
+  } catch (error) {
+    logger.error('Failed to update admin task:', error);
+    return res.status(500).json({
+      error: 'Failed to update task',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
+ * DELETE /api/admin/tasks/:id
+ * Delete a task across any restaurant.
+ */
+router.delete('/tasks/:id', async (req, res) => {
+  try {
+    const db = await DatabaseService.getInstance().getDatabase();
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const existingTask = await db.get('SELECT id FROM tasks WHERE id = ? LIMIT 1', [id]);
+
+    if (!existingTask) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+
+    await db.run('DELETE FROM tasks WHERE id = ?', [id]);
+    return res.json({ success: true });
+  } catch (error) {
+    logger.error('Failed to delete admin task:', error);
+    return res.status(500).json({
+      error: 'Failed to delete task',
       details: error instanceof Error ? error.message : 'Unknown error'
     });
   }
