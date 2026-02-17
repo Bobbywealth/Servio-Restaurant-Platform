@@ -355,6 +355,108 @@ const hasColumn = async (db: any, tableName: string, columnName: string): Promis
   return Boolean(result);
 };
 
+const DEMO_BOOKING_ALLOWED_STATUSES = new Set(['scheduled', 'completed', 'no_show', 'converted', 'lost']);
+const DEMO_BOOKING_ALLOWED_STAGES = new Set(['new', 'contacted', 'qualified', 'proposal', 'negotiation', 'won', 'lost']);
+
+const isValidIsoDateTime = (value: string): boolean => {
+  const parsed = new Date(value);
+  return !Number.isNaN(parsed.getTime());
+};
+
+const parseRestaurantSettings = (value: unknown): Record<string, any> => {
+  if (!value) return {};
+  if (typeof value === 'object') return { ...(value as Record<string, any>) };
+  if (typeof value !== 'string') return {};
+
+  try {
+    const parsed = JSON.parse(value);
+    return typeof parsed === 'object' && parsed !== null ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+
+const assertPlatformOverrideAccess = (req: express.Request, res: express.Response): boolean => {
+  if (!req.user) {
+    res.status(401).json({ error: 'Authentication required' });
+    return false;
+  }
+
+  if (req.user.role !== 'platform-admin' && req.user.role !== 'admin') {
+    res.status(403).json({ error: 'Platform admin access required' });
+    return false;
+  }
+
+  return true;
+};
+
+const requireOverrideReason = (req: express.Request, res: express.Response): string | null => {
+  const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
+  if (!reason) {
+    res.status(400).json({ error: 'reason is required' });
+    return null;
+  }
+
+  return reason.slice(0, 500);
+};
+
+const insertAdminAuditLog = async (
+  db: any,
+  params: {
+    restaurantId: string | null;
+    userId: string | null;
+    action: string;
+    entityType?: string | null;
+    entityId?: string | null;
+    details?: Record<string, any> | null;
+  }
+): Promise<void> => {
+  await db.run(
+    `INSERT INTO audit_logs (id, restaurant_id, user_id, action, entity_type, entity_id, details, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
+    [
+      randomUUID(),
+      params.restaurantId,
+      params.userId,
+      params.action,
+      params.entityType ?? null,
+      params.entityId ?? null,
+      params.details ? JSON.stringify(params.details) : null
+    ]
+  );
+};
+
+const writeOverrideAuditLog = async (
+  params: {
+    db: any;
+    restaurantId: string;
+    userId: string | null;
+    action: string;
+    entityType: string;
+    entityId: string;
+    reason: string;
+    scope: RestaurantOverrideScope;
+    before?: Record<string, any>;
+    after?: Record<string, any>;
+    metadata?: Record<string, any>;
+  }
+): Promise<void> => {
+  await insertAdminAuditLog(params.db, {
+    restaurantId: params.restaurantId,
+    userId: params.userId,
+    action: params.action,
+    entityType: params.entityType,
+    entityId: params.entityId,
+    details: {
+      reason: params.reason,
+      scope: params.scope,
+      before: params.before ?? null,
+      after: params.after ?? null,
+      ...(params.metadata ? { metadata: params.metadata } : {})
+    }
+  });
+};
+
 const ORDER_CANCELLABLE_STATUSES = new Set(['pending', 'accepted', 'preparing', 'ready']);
 const ORDER_REOPENABLE_STATUSES = new Set(['cancelled']);
 const ADMIN_INTERVENTION_ACTION_PREFIX = 'admin_order_';
