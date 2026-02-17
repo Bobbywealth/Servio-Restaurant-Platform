@@ -135,16 +135,12 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
           <div className="flex h-full flex-col">
             {/* Logo */}
             <div className="flex h-16 items-center justify-between px-6 border-b border-gray-200 dark:border-gray-700">
-              <div className="flex items-center space-x-3">
+              <div className="flex items-center">
                 <img
                   src="/images/servio_logo_transparent_tight.png"
                   alt="Servio Logo"
                   className="h-8 w-auto"
                 />
-                <div>
-                  <h1 className="text-lg font-bold text-gray-900 dark:text-white">Servio</h1>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Platform Admin</p>
-                </div>
               </div>
               <button
                 onClick={() => setSidebarOpen(false)}
