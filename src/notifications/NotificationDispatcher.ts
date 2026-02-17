@@ -11,6 +11,11 @@ export class NotificationDispatcher {
     // Lazy initialization of PushService to avoid issues with database not being ready
   }
 
+  private shouldSendPush(payload: any): boolean {
+    const severity = payload?.severity ?? payload?.notification?.severity;
+    return severity === 'high' || severity === 'critical';
+  }
+
   private getPushService(): PushService | null {
     if (!this.pushService) {
       try {
@@ -29,7 +34,7 @@ export class NotificationDispatcher {
 
     // Also send push notification for high/critical severity
     const pushService = this.getPushService();
-    if (pushService && (payload.severity === 'high' || payload.severity === 'critical')) {
+    if (pushService && this.shouldSendPush(payload)) {
       // Fire and forget - don't await
       pushService.sendNotification(
         null, // broadcast to restaurant
@@ -46,7 +51,7 @@ export class NotificationDispatcher {
 
     // Also send push notification for high/critical severity
     const pushService = this.getPushService();
-    if (pushService && (payload.severity === 'high' || payload.severity === 'critical')) {
+    if (pushService && this.shouldSendPush(payload)) {
       // Fire and forget - don't await
       pushService.sendNotification(
         userId,

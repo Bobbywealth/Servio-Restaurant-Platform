@@ -146,35 +146,6 @@ router.post('/read-all', asyncHandler(async (req: Request, res: Response) => {
 }));
 
 /**
- * DELETE /api/notifications/:id
- */
-router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
-  const user = req.user!;
-  const id = req.params.id;
-
-  const db = DatabaseService.getInstance().getDatabase();
-  
-  // Check if notification belongs to user's restaurant
-  const notification = await db.get(
-    'SELECT id FROM notifications WHERE id = ? AND restaurant_id = ?',
-    [id, user.restaurantId]
-  );
-
-  if (!notification) {
-    return res.status(404).json({ success: false, error: 'Notification not found' });
-  }
-
-  // Delete read status
-  await db.run('DELETE FROM notification_reads WHERE notification_id = ?', [id]);
-  // Delete recipients
-  await db.run('DELETE FROM notification_recipients WHERE notification_id = ?', [id]);
-  // Delete notification
-  await db.run('DELETE FROM notifications WHERE id = ?', [id]);
-
-  res.json({ success: true, data: { ok: true } });
-}));
-
-/**
  * DELETE /api/notifications/clear-all
  */
 router.delete('/clear-all', asyncHandler(async (req: Request, res: Response) => {
@@ -202,6 +173,35 @@ router.delete('/clear-all', asyncHandler(async (req: Request, res: Response) => 
     `,
     [restaurantId, restaurantId, user.role, userId]
   );
+
+  res.json({ success: true, data: { ok: true } });
+}));
+
+/**
+ * DELETE /api/notifications/:id
+ */
+router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
+  const user = req.user!;
+  const id = req.params.id;
+
+  const db = DatabaseService.getInstance().getDatabase();
+
+  // Check if notification belongs to user's restaurant
+  const notification = await db.get(
+    'SELECT id FROM notifications WHERE id = ? AND restaurant_id = ?',
+    [id, user.restaurantId]
+  );
+
+  if (!notification) {
+    return res.status(404).json({ success: false, error: 'Notification not found' });
+  }
+
+  // Delete read status
+  await db.run('DELETE FROM notification_reads WHERE notification_id = ?', [id]);
+  // Delete recipients
+  await db.run('DELETE FROM notification_recipients WHERE notification_id = ?', [id]);
+  // Delete notification
+  await db.run('DELETE FROM notifications WHERE id = ?', [id]);
 
   res.json({ success: true, data: { ok: true } });
 }));
