@@ -49,14 +49,16 @@ interface AssistantStatusPayload {
     avgResponseLatencyMs: number | null
     transcriptionBacklog: number
   }
-  incidents: Array<{
-    id: string
-    source: string
-    message: string
-    severity: 'warning' | 'critical'
-    timestamp: string
-  }>
+  incidents: AssistantIncident[]
   totalCalls: number
+}
+
+interface AssistantIncident {
+  id: string
+  source: string
+  message: string
+  severity: 'warning' | 'critical'
+  timestamp: string
 }
 
 const getStatusMeta = (status: AssistantStatus) => {
@@ -144,7 +146,7 @@ export default function AssistantStatusPage() {
 
       const status = computeTopLevelStatus(stats, healthData)
 
-      const incidents = conversations
+      const incidents: AssistantIncident[] = conversations
         .filter((conversation) => conversation.status === 'abandoned')
         .slice(0, 5)
         .map((conversation) => ({
