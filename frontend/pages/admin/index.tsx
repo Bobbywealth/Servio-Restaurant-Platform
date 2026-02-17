@@ -1,22 +1,18 @@
 import React, { useEffect, useState, useMemo } from 'react'
 import Head from 'next/head'
-import { useRouter } from 'next/router'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   DollarSign,
   ShoppingBag,
   Building2,
   Users,
-  Plus,
   TrendingUp,
   Clock,
   AlertCircle,
-  ChevronRight,
   RefreshCw,
   BarChart3,
   Phone,
-  Globe,
-  Utensils
+  Globe
 } from 'lucide-react'
 import AdminLayout from '../../components/Layout/AdminLayout'
 import { LiveClock } from '../../components/ui/LiveClock'
@@ -158,18 +154,16 @@ const StatsSkeleton: React.FC = () => (
   </div>
 )
 
-const RestaurantCardSkeleton: React.FC = () => (
+const PanelSkeleton: React.FC = () => (
   <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-200 dark:border-gray-700">
-    <div className="flex items-center gap-4 mb-4">
-      <Skeleton variant="circular" width={56} height={56} />
-      <div className="flex-1">
-        <Skeleton variant="text" width={120} height={20} className="mb-2" />
-        <Skeleton variant="text" width={80} height={14} />
-      </div>
+    <div className="flex items-center justify-between mb-4">
+      <Skeleton variant="text" width={180} height={24} />
+      <Skeleton variant="text" width={70} height={20} />
     </div>
-    <div className="grid grid-cols-2 gap-4">
-      <Skeleton variant="rounded" height={60} />
-      <Skeleton variant="rounded" height={60} />
+    <div className="space-y-3">
+      {[...Array(5)].map((_, index) => (
+        <Skeleton key={index} variant="rounded" height={48} />
+      ))}
     </div>
   </div>
 )
@@ -239,134 +233,6 @@ const StatsCard: React.FC<StatsCardProps> = ({
     </motion.div>
   )
 }
-
-// ============================================================================
-// Restaurant Card Component
-// ============================================================================
-
-interface RestaurantCardProps {
-  restaurant: RestaurantMetrics
-  onView: (id: string) => void
-  onManage: (id: string) => void
-}
-
-const RestaurantCard: React.FC<RestaurantCardProps> = ({
-  restaurant,
-  onView,
-  onManage
-}) => {
-  const handleViewClick = () => {
-    onView(restaurant.id)
-  }
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      whileHover={{ y: -4 }}
-      className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-200 dark:border-gray-700 hover:shadow-xl transition-all duration-300"
-    >
-      <div className="flex items-center gap-4 mb-4">
-        <div className="relative">
-          {restaurant.logo_url ? (
-            <img
-              src={restaurant.logo_url}
-              alt={restaurant.name}
-              className="w-14 h-14 rounded-xl object-cover"
-            />
-          ) : (
-            <div className="w-14 h-14 rounded-xl bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center">
-              <Utensils className="w-7 h-7 text-primary-600 dark:text-primary-400" />
-            </div>
-          )}
-          <span
-            className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-white dark:border-gray-800 ${
-              restaurant.is_active ? 'bg-green-500' : 'bg-gray-400'
-            }`}
-          />
-        </div>
-        <div className="flex-1 min-w-0">
-          <h3 className="font-semibold text-gray-900 dark:text-white truncate">
-            {restaurant.name}
-          </h3>
-          <div className="flex items-center gap-2 mt-1">
-            <span
-              className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                restaurant.is_active
-                  ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
-                  : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
-              }`}
-            >
-              {restaurant.is_active ? 'Active' : 'Inactive'}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3 mb-4">
-        <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3">
-          <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 mb-1">
-            <ShoppingBag className="w-4 h-4" />
-            <span className="text-xs">Active Orders</span>
-          </div>
-          <div className="text-xl font-bold text-gray-900 dark:text-white">
-            {restaurant.activeOrders}
-          </div>
-        </div>
-        <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3">
-          <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 mb-1">
-            <DollarSign className="w-4 h-4" />
-            <span className="text-xs">Today's Revenue</span>
-          </div>
-          <div className="text-xl font-bold text-gray-900 dark:text-white">
-            ${restaurant.todayRevenue.toLocaleString()}
-          </div>
-        </div>
-      </div>
-
-      <div className="flex items-center justify-between pt-4 border-t border-gray-100 dark:border-gray-700">
-        <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
-          <Users className="w-4 h-4" />
-          <span>{restaurant.staffOnDuty} staff on duty</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleViewClick}
-            className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 dark:text-gray-400 transition-colors"
-            title="View Details"
-            data-testid={`view-restaurant-${restaurant.id}`}
-          >
-            <ChevronRight className="w-5 h-5" />
-          </button>
-        </div>
-      </div>
-    </motion.div>
-  )
-}
-
-// ============================================================================
-// Add Restaurant Card Component
-// ============================================================================
-
-const AddRestaurantCard: React.FC<{ onClick: () => void }> = ({ onClick }) => (
-  <motion.button
-    initial={{ opacity: 0, scale: 0.95 }}
-    animate={{ opacity: 1, scale: 1 }}
-    whileHover={{ y: -4 }}
-    onClick={onClick}
-    className="bg-white dark:bg-gray-800 rounded-xl p-6 border-2 border-dashed border-gray-300 dark:border-gray-600 hover:border-primary-500 dark:hover:border-primary-400 hover:shadow-xl transition-all duration-300 group text-center"
-  >
-    <div className="w-14 h-14 mx-auto mb-4 rounded-xl bg-gray-100 dark:bg-gray-700 group-hover:bg-primary-100 dark:group-hover:bg-primary-900/30 flex items-center justify-center transition-colors">
-      <Plus className="w-7 h-7 text-gray-400 group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors" />
-    </div>
-    <h3 className="font-semibold text-gray-900 dark:text-white mb-1">
-      Add New Restaurant
-    </h3>
-    <p className="text-sm text-gray-500 dark:text-gray-400">
-      Expand your restaurant network
-    </p>
-  </motion.button>
-)
 
 // ============================================================================
 // Simple Chart Components (Inline)
@@ -583,14 +449,12 @@ const DashboardHeader: React.FC<DashboardHeaderProps> = ({
 // ============================================================================
 
 const AdminDashboard: React.FC = () => {
-  const router = useRouter()
   const [company, setCompany] = useState<CompanyData | null>(null)
   const [restaurants, setRestaurants] = useState<RestaurantMetrics[]>([])
   const [activities, setActivities] = useState<ActivityItem[]>([])
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [viewRestaurantError, setViewRestaurantError] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [widgetErrors, setWidgetErrors] = useState<DashboardWidgetErrors>(DEFAULT_WIDGET_ERRORS)
 
@@ -700,29 +564,6 @@ const AdminDashboard: React.FC = () => {
     setRefreshing(false)
   }
 
-  const handleViewRestaurant = (id: string) => {
-    const normalizedId = typeof id === 'string' ? id.trim() : ''
-    const isValidId = /^[a-zA-Z0-9_-]+$/.test(normalizedId)
-
-    if (!normalizedId || !isValidId) {
-      setViewRestaurantError('Unable to view restaurant details because the restaurant ID is invalid.')
-      return
-    }
-
-    setViewRestaurantError(null)
-    router.push(`/admin/restaurants/${normalizedId}`)
-  }
-
-  const handleManageRestaurant = (id: string) => {
-    console.log('Manage restaurant:', id)
-    // Navigate to restaurant management
-  }
-
-  const handleAddRestaurant = () => {
-    console.log('Add new restaurant')
-    // Open add restaurant modal or navigate
-  }
-
   const currentRestaurant = useMemo(() => {
     if (!company || restaurants.length === 0) return null
     return {
@@ -741,6 +582,22 @@ const AdminDashboard: React.FC = () => {
     totalRestaurants: restaurants.length,
     staffOnDuty: restaurants.reduce((sum, r) => sum + r.staffOnDuty, 0)
   }), [company, restaurants])
+
+  const peakHour = useMemo(() => {
+    const hourlyDistribution = analytics?.hourlyDistribution || []
+    if (hourlyDistribution.length === 0) return null
+    return hourlyDistribution.reduce((highest, current) => (
+      current.orders > highest.orders ? current : highest
+    ), hourlyDistribution[0])
+  }, [analytics])
+
+  const topChannel = useMemo(() => {
+    const ordersByChannel = analytics?.ordersByChannel || []
+    if (ordersByChannel.length === 0) return null
+    return ordersByChannel.reduce((highest, current) => (
+      current.count > highest.count ? current : highest
+    ), ordersByChannel[0])
+  }, [analytics])
 
   if (error && !company && restaurants.length === 0 && activities.length === 0 && !analytics) {
     return (
@@ -807,14 +664,19 @@ const AdminDashboard: React.FC = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                 {[...Array(4)].map((_, i) => <StatsSkeleton key={i} />)}
               </div>
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {[...Array(6)].map((_, i) => <RestaurantCardSkeleton key={i} />)}
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                {[...Array(2)].map((_, i) => <PanelSkeleton key={i} />)}
               </div>
             </div>
           ) : (
             <div className="space-y-8">
               {/* Summary Stats */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                {widgetErrors.restaurants && (
+                  <div className="sm:col-span-2 lg:col-span-4">
+                    <WidgetErrorBanner message={widgetErrors.restaurants} />
+                  </div>
+                )}
                 {widgetErrors.platformStats && (
                   <div className="sm:col-span-2 lg:col-span-4">
                     <WidgetErrorBanner message={widgetErrors.platformStats} />
@@ -852,41 +714,7 @@ const AdminDashboard: React.FC = () => {
               </div>
 
               {/* Main Content Grid */}
-              <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-                {/* Restaurant Grid */}
-                <div className="xl:col-span-2 space-y-6">
-                  {widgetErrors.restaurants && <WidgetErrorBanner message={widgetErrors.restaurants} />}
-                  <div className="flex items-center justify-between">
-                    <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-                      Restaurants
-                    </h2>
-                    <button
-                      onClick={handleAddRestaurant}
-                      className="text-sm text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 font-medium"
-                    >
-                      View All
-                    </button>
-                  </div>
-                  {viewRestaurantError && (
-                    <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">
-                      <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
-                      <span>{viewRestaurantError}</span>
-                    </div>
-                  )}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {restaurants.map((restaurant) => (
-                      <RestaurantCard
-                        key={restaurant.id}
-                        restaurant={restaurant}
-                        onView={handleViewRestaurant}
-                        onManage={handleManageRestaurant}
-                      />
-                    ))}
-                    <AddRestaurantCard onClick={handleAddRestaurant} />
-                  </div>
-                </div>
-
-                {/* Recent Activity Feed */}
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
                 <div className="space-y-6">
                   {widgetErrors.activities && <WidgetErrorBanner message={widgetErrors.activities} />}
                   <div className="flex items-center justify-between">
@@ -896,6 +724,42 @@ const AdminDashboard: React.FC = () => {
                   </div>
                   <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 max-h-[36rem] overflow-y-auto">
                     <ActivityFeed activities={activities} />
+                  </div>
+                </div>
+
+                <div className="space-y-6">
+                  <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+                    Operational Snapshot
+                  </h2>
+                  <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 space-y-6">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="rounded-lg bg-gray-50 dark:bg-gray-700/50 p-4">
+                        <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Active Restaurants</p>
+                        <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-white">
+                          {restaurants.filter(r => r.is_active).length}
+                        </p>
+                      </div>
+                      <div className="rounded-lg bg-gray-50 dark:bg-gray-700/50 p-4">
+                        <p className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">Top Channel</p>
+                        <p className="mt-2 text-xl font-semibold text-gray-900 dark:text-white">
+                          {topChannel ? `${topChannel.channel} (${topChannel.count})` : 'No channel data'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="mb-3 flex items-center justify-between">
+                        <h3 className="font-semibold text-gray-900 dark:text-white">Hourly Order Trend</h3>
+                        <span className="text-sm text-gray-500 dark:text-gray-400">
+                          {peakHour ? `Peak: ${peakHour.hour}:00 (${peakHour.orders} orders)` : 'No hourly data'}
+                        </span>
+                      </div>
+                      {analytics?.hourlyDistribution?.length ? (
+                        <HourlyChart data={analytics.hourlyDistribution} />
+                      ) : (
+                        <p className="text-sm text-gray-500 dark:text-gray-400">No hourly activity available.</p>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
