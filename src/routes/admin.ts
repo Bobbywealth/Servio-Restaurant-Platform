@@ -155,6 +155,7 @@ type AdminOrderIntervention = {
 type AdminTask = {
   id: string;
   restaurant_id: string;
+  parent_task_group_id: string | null;
   restaurant_name: string | null;
   title: string;
   description: string | null;
@@ -1981,7 +1982,9 @@ router.get('/tasks', async (req, res) => {
     const status = typeof req.query.status === 'string' ? req.query.status.trim() : '';
     const priority = typeof req.query.priority === 'string' ? req.query.priority.trim() : '';
     const restaurantId = typeof req.query.restaurantId === 'string' ? req.query.restaurantId.trim() : '';
+    const parentTaskGroupId = typeof req.query.parentTaskGroupId === 'string' ? req.query.parentTaskGroupId.trim() : '';
     const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
+    const groupBy = typeof req.query.groupBy === 'string' ? req.query.groupBy.trim() : '';
 
     const whereParts: string[] = [];
     const params: any[] = [];
@@ -2001,6 +2004,11 @@ router.get('/tasks', async (req, res) => {
       params.push(restaurantId);
     }
 
+    if (parentTaskGroupId) {
+      whereParts.push('t.parent_task_group_id = ?');
+      params.push(parentTaskGroupId);
+    }
+
     if (search) {
       whereParts.push(`(
         COALESCE(t.title, '') ILIKE ?
@@ -2014,11 +2022,60 @@ router.get('/tasks', async (req, res) => {
 
     const whereClause = whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : '';
 
+    if (groupBy === 'parent_task_group_id') {
+      const groupedRows = await db.all(
+        `
+        SELECT
+          t.parent_task_group_id,
+          COUNT(*)::int AS total_tasks,
+          SUM(CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END)::int AS completed_tasks,
+          SUM(CASE WHEN t.status = 'in_progress' THEN 1 ELSE 0 END)::int AS in_progress_tasks,
+          SUM(CASE WHEN t.status = 'pending' THEN 1 ELSE 0 END)::int AS pending_tasks,
+          MAX(t.created_at) AS latest_created_at
+        FROM tasks t
+        LEFT JOIN restaurants r ON r.id = t.restaurant_id
+        LEFT JOIN users u ON u.id = t.assigned_to
+        ${whereClause}
+        GROUP BY t.parent_task_group_id
+        ORDER BY latest_created_at DESC
+        LIMIT ? OFFSET ?
+      `,
+        [...params, limit, offset]
+      );
+
+      const groupedTotalResult = await db.get(
+        `
+        SELECT COUNT(*) AS total
+        FROM (
+          SELECT t.parent_task_group_id
+          FROM tasks t
+          LEFT JOIN restaurants r ON r.id = t.restaurant_id
+          LEFT JOIN users u ON u.id = t.assigned_to
+          ${whereClause}
+          GROUP BY t.parent_task_group_id
+        ) grouped
+      `,
+        params
+      );
+
+      return res.json({
+        grouped_by: 'parent_task_group_id',
+        groups: groupedRows,
+        pagination: {
+          page,
+          limit,
+          total: groupedTotalResult?.total || 0,
+          pages: Math.ceil((groupedTotalResult?.total || 0) / limit)
+        } as PaginationPayload
+      });
+    }
+
     const tasks = await db.all(
       `
       SELECT
         t.id,
         t.restaurant_id,
+        t.parent_task_group_id,
         r.name AS restaurant_name,
         t.title,
         t.description,
@@ -2084,7 +2141,9 @@ router.get('/tasks', async (req, res) => {
 router.post('/tasks', async (req, res) => {
   try {
     const db = await DatabaseService.getInstance().getDatabase();
+    const scope = typeof req.body?.scope === 'string' ? req.body.scope.trim() : 'restaurant';
     const restaurantId = typeof req.body?.restaurant_id === 'string' ? req.body.restaurant_id.trim() : '';
+    const companyId = typeof req.body?.company_id === 'string' ? req.body.company_id.trim() : '';
     const title = typeof req.body?.title === 'string' ? req.body.title.trim() : '';
     const description = typeof req.body?.description === 'string' ? req.body.description.trim() : null;
     const status = typeof req.body?.status === 'string' ? req.body.status.trim() : 'pending';
@@ -2093,12 +2152,13 @@ router.post('/tasks', async (req, res) => {
     const assignedTo = typeof req.body?.assigned_to === 'string' ? req.body.assigned_to.trim() : null;
     const dueDate = typeof req.body?.due_date === 'string' ? req.body.due_date : null;
 
-    if (!restaurantId) {
-      return res.status(400).json({ error: 'restaurant_id is required' });
-    }
-
     if (!title) {
       return res.status(400).json({ error: 'title is required' });
+    }
+
+    const allowedScopes = new Set(['restaurant', 'company']);
+    if (!allowedScopes.has(scope)) {
+      return res.status(400).json({ error: 'Invalid task scope' });
     }
 
     const allowedStatuses = new Set(['pending', 'in_progress', 'completed']);
@@ -2109,6 +2169,52 @@ router.post('/tasks', async (req, res) => {
     const allowedPriorities = new Set(['low', 'medium', 'high']);
     if (!allowedPriorities.has(priority)) {
       return res.status(400).json({ error: 'Invalid task priority' });
+    }
+
+    if (scope === 'company') {
+      if (!companyId) {
+        return res.status(400).json({ error: 'company_id is required when scope=company' });
+      }
+
+      if (assignedTo) {
+        return res.status(400).json({ error: 'assigned_to is not supported for scope=company tasks' });
+      }
+
+      const restaurants = await db.all(
+        'SELECT id FROM restaurants WHERE company_id = ? AND is_active = true ORDER BY created_at ASC',
+        [companyId]
+      );
+
+      if (!restaurants.length) {
+        return res.status(404).json({ error: 'No active restaurants found for company' });
+      }
+
+      const parentTaskGroupId = randomUUID();
+      const completedAt = status === 'completed' ? new Date().toISOString() : null;
+      const createdTaskIds: string[] = [];
+
+      for (const restaurant of restaurants) {
+        const taskId = randomUUID();
+        createdTaskIds.push(taskId);
+        await db.run(
+          `
+          INSERT INTO tasks (id, restaurant_id, parent_task_group_id, title, description, status, priority, type, assigned_to, due_date, completed_at, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        `,
+          [taskId, restaurant.id, parentTaskGroupId, title, description, status, priority, type, null, dueDate, completedAt]
+        );
+      }
+
+      return res.status(201).json({
+        scope,
+        parent_task_group_id: parentTaskGroupId,
+        created_count: createdTaskIds.length,
+        task_ids: createdTaskIds
+      });
+    }
+
+    if (!restaurantId) {
+      return res.status(400).json({ error: 'restaurant_id is required' });
     }
 
     const restaurant = await db.get('SELECT id FROM restaurants WHERE id = ?', [restaurantId]);
@@ -2131,8 +2237,8 @@ router.post('/tasks', async (req, res) => {
 
     await db.run(
       `
-      INSERT INTO tasks (id, restaurant_id, title, description, status, priority, type, assigned_to, due_date, completed_at, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      INSERT INTO tasks (id, restaurant_id, parent_task_group_id, title, description, status, priority, type, assigned_to, due_date, completed_at, created_at, updated_at)
+      VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     `,
       [taskId, restaurantId, title, description, status, priority, type, assignedTo, dueDate, completedAt]
     );
@@ -2142,6 +2248,7 @@ router.post('/tasks', async (req, res) => {
       SELECT
         t.id,
         t.restaurant_id,
+        t.parent_task_group_id,
         r.name AS restaurant_name,
         t.title,
         t.description,
@@ -2181,7 +2288,7 @@ router.patch('/tasks/:id', async (req, res) => {
   try {
     const db = await DatabaseService.getInstance().getDatabase();
     const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-    const existingTask = await db.get('SELECT id, restaurant_id, status FROM tasks WHERE id = ? LIMIT 1', [id]);
+    const existingTask = await db.get('SELECT id, restaurant_id, status, parent_task_group_id FROM tasks WHERE id = ? LIMIT 1', [id]);
 
     if (!existingTask) {
       return res.status(404).json({ error: 'Task not found' });
@@ -2255,13 +2362,28 @@ router.patch('/tasks/:id', async (req, res) => {
     }
 
     updates.push('updated_at = CURRENT_TIMESTAMP');
-    await db.run(`UPDATE tasks SET ${updates.join(', ')} WHERE id = ?`, [...params, id]);
+    const applyToGroup = req.body?.apply_to_group === true;
+    const shouldApplyToGroup = applyToGroup && !!existingTask.parent_task_group_id;
+
+    if (applyToGroup && !existingTask.parent_task_group_id) {
+      return res.status(400).json({ error: 'apply_to_group can only be used on grouped tasks' });
+    }
+
+    if (shouldApplyToGroup) {
+      await db.run(
+        `UPDATE tasks SET ${updates.join(', ')} WHERE parent_task_group_id = ?`,
+        [...params, existingTask.parent_task_group_id]
+      );
+    } else {
+      await db.run(`UPDATE tasks SET ${updates.join(', ')} WHERE id = ?`, [...params, id]);
+    }
 
     const task = await db.get(
       `
       SELECT
         t.id,
         t.restaurant_id,
+        t.parent_task_group_id,
         r.name AS restaurant_name,
         t.title,
         t.description,
@@ -2283,7 +2405,7 @@ router.patch('/tasks/:id', async (req, res) => {
       [id]
     );
 
-    return res.json({ task: task as AdminTask });
+    return res.json({ task: task as AdminTask, applied_to_group: shouldApplyToGroup });
   } catch (error) {
     logger.error('Failed to update admin task:', error);
     return res.status(500).json({
@@ -2301,14 +2423,25 @@ router.delete('/tasks/:id', async (req, res) => {
   try {
     const db = await DatabaseService.getInstance().getDatabase();
     const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-    const existingTask = await db.get('SELECT id FROM tasks WHERE id = ? LIMIT 1', [id]);
+    const existingTask = await db.get('SELECT id, parent_task_group_id FROM tasks WHERE id = ? LIMIT 1', [id]);
 
     if (!existingTask) {
       return res.status(404).json({ error: 'Task not found' });
     }
 
+    const applyToGroup = req.query.applyToGroup === 'true';
+
+    if (applyToGroup && !existingTask.parent_task_group_id) {
+      return res.status(400).json({ error: 'applyToGroup can only be used on grouped tasks' });
+    }
+
+    if (applyToGroup && existingTask.parent_task_group_id) {
+      const result = await db.run('DELETE FROM tasks WHERE parent_task_group_id = ?', [existingTask.parent_task_group_id]);
+      return res.json({ success: true, deleted_count: result?.changes ?? 0, applied_to_group: true });
+    }
+
     await db.run('DELETE FROM tasks WHERE id = ?', [id]);
-    return res.json({ success: true });
+    return res.json({ success: true, applied_to_group: false });
   } catch (error) {
     logger.error('Failed to delete admin task:', error);
     return res.status(500).json({
