@@ -20,6 +20,22 @@ type PaginationPayload = {
   pages: number;
 };
 
+type PlatformSettings = {
+  maintenanceMode: boolean;
+  maintenanceMessage: string;
+  allowNewDemoBookings: boolean;
+  defaultOrderPageSize: number;
+  alertEmail: string;
+};
+
+const DEFAULT_PLATFORM_SETTINGS: PlatformSettings = {
+  maintenanceMode: false,
+  maintenanceMessage: 'Servio platform maintenance is in progress. Please check back shortly.',
+  allowNewDemoBookings: true,
+  defaultOrderPageSize: 50,
+  alertEmail: 'ops@servio.solutions'
+};
+
 /**
  * API contract: GET /api/admin/demo-bookings
  * Response: { bookings: AdminDemoBooking[] }
@@ -166,6 +182,30 @@ const parseTableRows = (rows: any[]): any[] => {
     }
     return parsed;
   });
+};
+
+const sanitizePlatformSettings = (input: any): PlatformSettings => {
+  const parsedPageSize = Number(input?.defaultOrderPageSize);
+
+  return {
+    maintenanceMode: Boolean(input?.maintenanceMode),
+    maintenanceMessage:
+      typeof input?.maintenanceMessage === 'string' && input.maintenanceMessage.trim()
+        ? input.maintenanceMessage.trim().slice(0, 300)
+        : DEFAULT_PLATFORM_SETTINGS.maintenanceMessage,
+    allowNewDemoBookings:
+      input?.allowNewDemoBookings === undefined
+        ? DEFAULT_PLATFORM_SETTINGS.allowNewDemoBookings
+        : Boolean(input.allowNewDemoBookings),
+    defaultOrderPageSize:
+      Number.isFinite(parsedPageSize) && parsedPageSize >= 10 && parsedPageSize <= 200
+        ? Math.floor(parsedPageSize)
+        : DEFAULT_PLATFORM_SETTINGS.defaultOrderPageSize,
+    alertEmail:
+      typeof input?.alertEmail === 'string' && input.alertEmail.trim()
+        ? input.alertEmail.trim().slice(0, 160)
+        : DEFAULT_PLATFORM_SETTINGS.alertEmail
+  };
 };
 
 const normalizeCampaignEventType = (action: string): CampaignFeedEventType | null => {
@@ -640,7 +680,26 @@ router.get('/jobs', async (req, res) => {
   try {
     const db = await DatabaseService.getInstance().getDatabase();
     const page = resolvePage(req.query.page, 1);
-    const limit = resolveLimit(req.query.limit, 50, 200);
+
+    const platformSettingsRow = await db.get<{ settings?: any }>(
+      'SELECT settings FROM platform_settings WHERE id = ? LIMIT 1',
+      ['default']
+    );
+    const platformRawSettings = typeof platformSettingsRow?.settings === 'string'
+      ? (() => {
+        try {
+          return JSON.parse(platformSettingsRow.settings);
+        } catch {
+          return {};
+        }
+      })()
+      : (platformSettingsRow?.settings || {});
+
+    const platformSettings = sanitizePlatformSettings(platformRawSettings);
+    const requestedLimit = req.query.limit === undefined
+      ? platformSettings.defaultOrderPageSize
+      : req.query.limit;
+    const limit = resolveLimit(requestedLimit, platformSettings.defaultOrderPageSize, 200);
     const offset = (page - 1) * limit;
     const status = typeof req.query.status === 'string' ? req.query.status.trim() : '';
     const days = resolveDays(req.query.days, 30, 180);
@@ -704,7 +763,26 @@ router.get('/orders', async (req, res) => {
   try {
     const db = await DatabaseService.getInstance().getDatabase();
     const page = resolvePage(req.query.page, 1);
-    const limit = resolveLimit(req.query.limit, 50, 200);
+
+    const platformSettingsRow = await db.get<{ settings?: any }>(
+      'SELECT settings FROM platform_settings WHERE id = ? LIMIT 1',
+      ['default']
+    );
+    const platformRawSettings = typeof platformSettingsRow?.settings === 'string'
+      ? (() => {
+        try {
+          return JSON.parse(platformSettingsRow.settings);
+        } catch {
+          return {};
+        }
+      })()
+      : (platformSettingsRow?.settings || {});
+
+    const platformSettings = sanitizePlatformSettings(platformRawSettings);
+    const requestedLimit = req.query.limit === undefined
+      ? platformSettings.defaultOrderPageSize
+      : req.query.limit;
+    const limit = resolveLimit(requestedLimit, platformSettings.defaultOrderPageSize, 200);
     const offset = (page - 1) * limit;
     const status = typeof req.query.status === 'string' ? req.query.status.trim() : '';
     const restaurantId = typeof req.query.restaurantId === 'string' ? req.query.restaurantId.trim() : '';
@@ -850,124 +928,68 @@ router.get('/orders/:id', async (req, res) => {
 });
 
 /**
- * GET /api/admin/conversations
- * List conversation sessions across all restaurants, with optional restaurant filter.
+ * GET /api/admin/settings
+ * Load persisted platform admin settings.
  */
-router.get('/conversations', async (req, res) => {
+router.get('/settings', async (req, res) => {
   try {
-    const page = resolvePage(req.query.page, 1);
-    const limit = resolveLimit(req.query.limit, 50, 200);
-    const offset = (page - 1) * limit;
-    const restaurantId = typeof req.query.restaurantId === 'string' ? req.query.restaurantId.trim() : '';
-    const status = typeof req.query.status === 'string' ? req.query.status.trim() : '';
-    const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
-    const days = resolveDays(req.query.days, 30, 365);
     const db = await DatabaseService.getInstance().getDatabase();
-
-    const whereParts: string[] = [`cs.started_at >= NOW() - INTERVAL '${days} days'`];
-    const params: any[] = [];
-
-    if (restaurantId) {
-      whereParts.push('cs.restaurant_id = ?');
-      params.push(restaurantId);
-    }
-
-    if (status && status !== 'all') {
-      whereParts.push('cs.status = ?');
-      params.push(status);
-    }
-
-    if (search) {
-      whereParts.push(`(
-        r.name ILIKE ?
-        OR cs.from_number ILIKE ?
-        OR cs.to_number ILIKE ?
-        OR ci.intent_primary ILIKE ?
-        OR ci.summary ILIKE ?
-      )`);
-      const searchTerm = `%${search}%`;
-      params.push(searchTerm, searchTerm, searchTerm, searchTerm, searchTerm);
-    }
-
-    const whereClause = whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : '';
-
-    const conversations = await db.all(
-      `
-      SELECT
-        cs.id,
-        cs.restaurant_id,
-        r.name as restaurant_name,
-        cs.started_at,
-        cs.ended_at,
-        cs.duration_seconds,
-        cs.direction,
-        cs.from_number,
-        cs.to_number,
-        cs.status,
-        ci.intent_primary,
-        ci.outcome,
-        ci.sentiment,
-        ci.quality_score,
-        cr.reviewed_at
-      FROM call_sessions cs
-      LEFT JOIN restaurants r ON r.id = cs.restaurant_id
-      LEFT JOIN call_insights ci ON ci.call_session_id = cs.id
-      LEFT JOIN call_reviews cr ON cr.call_session_id = cs.id
-      ${whereClause}
-      ORDER BY cs.started_at DESC
-      LIMIT ? OFFSET ?
-    `,
-      [...params, limit, offset]
+    const row = await db.get<{ settings?: any }>(
+      'SELECT settings FROM platform_settings WHERE id = ? LIMIT 1',
+      ['default']
     );
 
-    const totalResult = await db.get(
-      `
-      SELECT COUNT(*) as total
-      FROM call_sessions cs
-      LEFT JOIN restaurants r ON r.id = cs.restaurant_id
-      LEFT JOIN call_insights ci ON ci.call_session_id = cs.id
-      ${whereClause}
-    `,
-      params
-    );
-
-    const aggregateStats = await db.get(
-      `
-      SELECT
-        COUNT(*) as total_calls,
-        COUNT(*) FILTER (WHERE cs.status = 'completed') as completed_calls,
-        COUNT(*) FILTER (WHERE cs.status != 'completed') as non_completed_calls,
-        AVG(cs.duration_seconds) as average_duration_seconds,
-        COUNT(*) FILTER (WHERE ci.sentiment = 'positive') as positive_calls,
-        COUNT(*) FILTER (WHERE ci.sentiment = 'negative') as negative_calls
-      FROM call_sessions cs
-      LEFT JOIN call_insights ci ON ci.call_session_id = cs.id
-      ${whereClause}
-    `,
-      params
-    );
+    const rawSettings = typeof row?.settings === 'string'
+      ? (() => {
+        try {
+          return JSON.parse(row.settings);
+        } catch {
+          return {};
+        }
+      })()
+      : (row?.settings || {});
 
     return res.json({
-      conversations: parseTableRows(conversations) as AdminConversationSummary[],
-      stats: {
-        total_calls: Number(aggregateStats?.total_calls || 0),
-        completed_calls: Number(aggregateStats?.completed_calls || 0),
-        non_completed_calls: Number(aggregateStats?.non_completed_calls || 0),
-        average_duration_seconds: Math.round(Number(aggregateStats?.average_duration_seconds || 0)),
-        positive_calls: Number(aggregateStats?.positive_calls || 0),
-        negative_calls: Number(aggregateStats?.negative_calls || 0)
-      },
-      pagination: {
-        page,
-        limit,
-        total: totalResult?.total || 0,
-        pages: Math.ceil((totalResult?.total || 0) / limit)
+      success: true,
+      settings: {
+        ...DEFAULT_PLATFORM_SETTINGS,
+        ...sanitizePlatformSettings(rawSettings)
       }
     });
   } catch (error) {
-    logger.error('Failed to get admin conversations:', error);
+    logger.error('Failed to load admin platform settings:', error);
     return res.status(500).json({
-      error: 'Failed to load conversations',
+      error: 'Failed to load settings',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
+ * PUT /api/admin/settings
+ * Persist platform admin settings.
+ */
+router.put('/settings', async (req, res) => {
+  try {
+    const db = await DatabaseService.getInstance().getDatabase();
+    const nextSettings = sanitizePlatformSettings(req.body || {});
+
+    await db.run(
+      `INSERT INTO platform_settings (id, settings, updated_by)
+       VALUES (?, ?::jsonb, ?)
+       ON CONFLICT (id)
+       DO UPDATE SET settings = EXCLUDED.settings, updated_by = EXCLUDED.updated_by, updated_at = NOW()`,
+      ['default', JSON.stringify(nextSettings), req.user?.id ?? null]
+    );
+
+    return res.json({
+      success: true,
+      settings: nextSettings
+    });
+  } catch (error) {
+    logger.error('Failed to update admin platform settings:', error);
+    return res.status(500).json({
+      error: 'Failed to save settings',
       details: error instanceof Error ? error.message : 'Unknown error'
     });
   }
