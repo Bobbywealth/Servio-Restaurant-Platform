@@ -1,0 +1,308 @@
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import AdminLayout from '../../components/Layout/AdminLayout'
+import { api } from '../../lib/api'
+import { Plus, Trash2 } from 'lucide-react'
+
+interface AdminTask {
+  id: string
+  restaurant_id: string
+  restaurant_name: string | null
+  title: string
+  description: string | null
+  status: 'pending' | 'in_progress' | 'completed'
+  priority: 'low' | 'medium' | 'high'
+  assigned_to: string | null
+  assigned_to_name: string | null
+  due_date: string | null
+  created_at: string
+}
+
+interface RestaurantOption {
+  id: string
+  name: string
+}
+
+interface PaginationPayload {
+  page: number
+  pages: number
+  total: number
+}
+
+const statusOptions: Array<AdminTask['status']> = ['pending', 'in_progress', 'completed']
+const priorityOptions: Array<AdminTask['priority']> = ['low', 'medium', 'high']
+
+export default function AdminTasksPage() {
+  const [tasks, setTasks] = useState<AdminTask[]>([])
+  const [restaurants, setRestaurants] = useState<RestaurantOption[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [isSaving, setIsSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
+  const [status, setStatus] = useState('all')
+  const [priority, setPriority] = useState('all')
+  const [restaurantId, setRestaurantId] = useState('')
+  const [page, setPage] = useState(1)
+  const [pagination, setPagination] = useState<PaginationPayload>({ page: 1, pages: 1, total: 0 })
+  const [newTask, setNewTask] = useState({
+    restaurant_id: '',
+    title: '',
+    description: '',
+    priority: 'medium' as AdminTask['priority'],
+    due_date: ''
+  })
+
+  const fetchRestaurants = async () => {
+    try {
+      const res = await api.get('/api/admin/restaurants', { params: { limit: 200 } })
+      setRestaurants(res.data?.restaurants || [])
+    } catch (fetchError) {
+      console.error('Failed to fetch restaurants', fetchError)
+    }
+  }
+
+  const fetchTasks = useCallback(async () => {
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      const params: Record<string, string | number> = { page, limit: 20 }
+      if (search.trim()) params.search = search.trim()
+      if (status !== 'all') params.status = status
+      if (priority !== 'all') params.priority = priority
+      if (restaurantId) params.restaurantId = restaurantId
+
+      const res = await api.get('/api/admin/tasks', { params })
+      setTasks(res.data?.tasks || [])
+      setPagination(res.data?.pagination || { page: 1, pages: 1, total: 0 })
+    } catch (fetchError: any) {
+      setError(fetchError?.response?.data?.error || 'Failed to load tasks')
+    } finally {
+      setIsLoading(false)
+    }
+  }, [page, priority, restaurantId, search, status])
+
+  useEffect(() => {
+    fetchRestaurants()
+  }, [])
+
+  useEffect(() => {
+    fetchTasks()
+  }, [fetchTasks])
+
+  const createTask = async (event: React.FormEvent) => {
+    event.preventDefault()
+    if (!newTask.restaurant_id || !newTask.title.trim()) return
+
+    setIsSaving(true)
+    try {
+      await api.post('/api/admin/tasks', {
+        restaurant_id: newTask.restaurant_id,
+        title: newTask.title.trim(),
+        description: newTask.description.trim() || null,
+        priority: newTask.priority,
+        due_date: newTask.due_date || null
+      })
+
+      setNewTask({
+        restaurant_id: newTask.restaurant_id,
+        title: '',
+        description: '',
+        priority: 'medium',
+        due_date: ''
+      })
+      await fetchTasks()
+    } catch (saveError: any) {
+      setError(saveError?.response?.data?.error || 'Failed to create task')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const updateTaskStatus = async (taskId: string, nextStatus: AdminTask['status']) => {
+    try {
+      await api.patch(`/api/admin/tasks/${taskId}`, { status: nextStatus })
+      await fetchTasks()
+    } catch (updateError: any) {
+      setError(updateError?.response?.data?.error || 'Failed to update task')
+    }
+  }
+
+  const deleteTask = async (taskId: string) => {
+    if (!window.confirm('Delete this task?')) return
+
+    try {
+      await api.delete(`/api/admin/tasks/${taskId}`)
+      await fetchTasks()
+    } catch (deleteError: any) {
+      setError(deleteError?.response?.data?.error || 'Failed to delete task')
+    }
+  }
+
+  const totalByStatus = useMemo(() => {
+    return {
+      pending: tasks.filter((task) => task.status === 'pending').length,
+      in_progress: tasks.filter((task) => task.status === 'in_progress').length,
+      completed: tasks.filter((task) => task.status === 'completed').length
+    }
+  }, [tasks])
+
+  return (
+    <AdminLayout title="Task Management" description="Manage company tasks across all restaurants">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <StatCard label="Pending" value={totalByStatus.pending} />
+          <StatCard label="In Progress" value={totalByStatus.in_progress} />
+          <StatCard label="Completed" value={totalByStatus.completed} />
+        </div>
+
+        <form onSubmit={createTask} className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 space-y-4">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Create Task</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
+            <select
+              value={newTask.restaurant_id}
+              onChange={(event) => setNewTask((prev) => ({ ...prev, restaurant_id: event.target.value }))}
+              className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-sm"
+              required
+            >
+              <option value="">Select restaurant</option>
+              {restaurants.map((restaurant) => (
+                <option key={restaurant.id} value={restaurant.id}>{restaurant.name}</option>
+              ))}
+            </select>
+            <input
+              value={newTask.title}
+              onChange={(event) => setNewTask((prev) => ({ ...prev, title: event.target.value }))}
+              placeholder="Task title"
+              className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-sm"
+              required
+            />
+            <select
+              value={newTask.priority}
+              onChange={(event) => setNewTask((prev) => ({ ...prev, priority: event.target.value as AdminTask['priority'] }))}
+              className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-sm"
+            >
+              {priorityOptions.map((option) => (
+                <option key={option} value={option}>{option}</option>
+              ))}
+            </select>
+            <input
+              type="date"
+              value={newTask.due_date}
+              onChange={(event) => setNewTask((prev) => ({ ...prev, due_date: event.target.value }))}
+              className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-sm"
+            />
+            <button
+              type="submit"
+              disabled={isSaving}
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-60"
+            >
+              <Plus className="w-4 h-4" />
+              {isSaving ? 'Creating...' : 'Create'}
+            </button>
+          </div>
+          <textarea
+            value={newTask.description}
+            onChange={(event) => setNewTask((prev) => ({ ...prev, description: event.target.value }))}
+            placeholder="Description (optional)"
+            className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-sm"
+            rows={2}
+          />
+        </form>
+
+        <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search tasks"
+              className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-sm"
+            />
+            <select value={status} onChange={(event) => setStatus(event.target.value)} className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-sm">
+              <option value="all">All statuses</option>
+              {statusOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+            </select>
+            <select value={priority} onChange={(event) => setPriority(event.target.value)} className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-sm">
+              <option value="all">All priorities</option>
+              {priorityOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+            </select>
+            <select value={restaurantId} onChange={(event) => setRestaurantId(event.target.value)} className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-sm">
+              <option value="">All restaurants</option>
+              {restaurants.map((restaurant) => <option key={restaurant.id} value={restaurant.id}>{restaurant.name}</option>)}
+            </select>
+          </div>
+          <div className="flex justify-end">
+            <button onClick={() => { setPage(1); fetchTasks() }} className="rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm">Apply filters</button>
+          </div>
+
+          {error && <p className="text-sm text-red-600">{error}</p>}
+
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+              <thead>
+                <tr className="text-left text-xs uppercase text-gray-500">
+                  <th className="px-3 py-2">Task</th>
+                  <th className="px-3 py-2">Restaurant</th>
+                  <th className="px-3 py-2">Status</th>
+                  <th className="px-3 py-2">Priority</th>
+                  <th className="px-3 py-2">Assigned</th>
+                  <th className="px-3 py-2">Due</th>
+                  <th className="px-3 py-2">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                {isLoading ? (
+                  <tr><td className="px-3 py-4 text-sm text-gray-500" colSpan={7}>Loading tasks...</td></tr>
+                ) : tasks.length === 0 ? (
+                  <tr><td className="px-3 py-4 text-sm text-gray-500" colSpan={7}>No tasks found.</td></tr>
+                ) : tasks.map((task) => (
+                  <tr key={task.id}>
+                    <td className="px-3 py-3">
+                      <p className="text-sm font-medium text-gray-900 dark:text-white">{task.title}</p>
+                      {task.description && <p className="text-xs text-gray-500 truncate max-w-sm">{task.description}</p>}
+                    </td>
+                    <td className="px-3 py-3 text-sm text-gray-600 dark:text-gray-300">{task.restaurant_name || 'Unknown'}</td>
+                    <td className="px-3 py-3">
+                      <select
+                        value={task.status}
+                        onChange={(event) => updateTaskStatus(task.id, event.target.value as AdminTask['status'])}
+                        className="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-2 py-1 text-xs"
+                      >
+                        {statusOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+                      </select>
+                    </td>
+                    <td className="px-3 py-3 text-sm capitalize">{task.priority}</td>
+                    <td className="px-3 py-3 text-sm">{task.assigned_to_name || 'Unassigned'}</td>
+                    <td className="px-3 py-3 text-sm">{task.due_date ? new Date(task.due_date).toLocaleDateString() : '-'}</td>
+                    <td className="px-3 py-3">
+                      <button onClick={() => deleteTask(task.id)} className="text-red-600 hover:text-red-700" title="Delete task">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="flex items-center justify-between text-sm text-gray-600 dark:text-gray-300">
+            <p>Total tasks: {pagination.total}</p>
+            <div className="flex items-center gap-2">
+              <button disabled={page <= 1} onClick={() => setPage((prev) => prev - 1)} className="rounded border border-gray-300 px-3 py-1 disabled:opacity-50">Previous</button>
+              <span>Page {pagination.page} / {Math.max(pagination.pages, 1)}</span>
+              <button disabled={pagination.page >= pagination.pages} onClick={() => setPage((prev) => prev + 1)} className="rounded border border-gray-300 px-3 py-1 disabled:opacity-50">Next</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </AdminLayout>
+  )
+}
+
+function StatCard({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+      <p className="text-sm text-gray-500 dark:text-gray-400">{label}</p>
+      <p className="text-2xl font-semibold text-gray-900 dark:text-white">{value}</p>
+    </div>
+  )
+}
