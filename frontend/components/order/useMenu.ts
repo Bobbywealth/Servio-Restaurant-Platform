@@ -1,13 +1,62 @@
+import axios from 'axios';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { api } from '../../lib/api';
 import type { MenuItem, RestaurantInfo } from './types';
+
+export type MenuErrorCode =
+  | 'restaurant_not_found'
+  | 'restaurant_unavailable'
+  | 'connection_issue'
+  | 'unknown';
+
+type MenuErrorState = {
+  code: MenuErrorCode;
+  message: string;
+  statusCode: number | null;
+  requestId: string | null;
+};
+
+const getRequestId = (headers: Record<string, unknown> | undefined): string | null => {
+  if (!headers) return null;
+  const requestId = headers['x-request-id'] || headers['x-correlation-id'];
+  if (typeof requestId === 'string') return requestId;
+  if (Array.isArray(requestId) && typeof requestId[0] === 'string') return requestId[0];
+  return null;
+};
+
+const getMenuErrorState = (error: unknown): MenuErrorState => {
+  if (axios.isAxiosError(error)) {
+    const statusCode = error.response?.status ?? null;
+    const requestId = getRequestId(error.response?.headers as Record<string, unknown> | undefined);
+
+    if (statusCode === 404) {
+      return { code: 'restaurant_not_found', message: 'Restaurant not found', statusCode, requestId };
+    }
+
+    if (statusCode && statusCode >= 500) {
+      return { code: 'restaurant_unavailable', message: 'Restaurant unavailable, try again', statusCode, requestId };
+    }
+
+    if (error.code === 'ECONNABORTED' || !error.response) {
+      return { code: 'connection_issue', message: 'Connection issue', statusCode, requestId };
+    }
+  }
+
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    return { code: 'connection_issue', message: 'Connection issue', statusCode: null, requestId: null };
+  }
+
+  return { code: 'unknown', message: 'Unable to load restaurant menu', statusCode: null, requestId: null };
+};
 
 export function useMenu(restaurantSlug: string | undefined) {
   const [restaurant, setRestaurant] = useState<RestaurantInfo | null>(null);
   const [items, setItems] = useState<MenuItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [errorState, setErrorState] = useState<MenuErrorState | null>(null);
   const [onlinePaymentsEnabled, setOnlinePaymentsEnabled] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
 
   // Search and filter state
   const [searchQuery, setSearchQuery] = useState('');
@@ -19,10 +68,17 @@ export function useMenu(restaurantSlug: string | undefined) {
 
   useEffect(() => {
     if (!restaurantSlug) return;
+    let isMounted = true;
 
     const fetchData = async () => {
+      setIsLoading(true);
+      setError(null);
+      setErrorState(null);
+
       try {
         const resp = await api.get(`/api/menu/public/${restaurantSlug}`);
+        if (!isMounted) return;
+
         setRestaurant(resp.data.data.restaurant);
         const rawItems = resp.data.data.items || [];
         const normalized = rawItems.map((item: any) => {
@@ -48,15 +104,37 @@ export function useMenu(restaurantSlug: string | undefined) {
         if (settings?.online_payments_enabled) {
           setOnlinePaymentsEnabled(true);
         }
-      } catch {
-        setError('Restaurant not found');
+      } catch (fetchError) {
+        if (!isMounted) return;
+
+        const nextErrorState = getMenuErrorState(fetchError);
+        setRestaurant(null);
+        setItems([]);
+        setError(nextErrorState.message);
+        setErrorState(nextErrorState);
+        console.error('[menu.fetch.failed]', {
+          slug: restaurantSlug,
+          errorCode: nextErrorState.code,
+          statusCode: nextErrorState.statusCode,
+          requestId: nextErrorState.requestId,
+        });
       } finally {
-        setIsLoading(false);
+        if (isMounted) {
+          setIsLoading(false);
+        }
       }
     };
 
     fetchData();
-  }, [restaurantSlug]);
+
+    return () => {
+      isMounted = false;
+    };
+  }, [restaurantSlug, retryCount]);
+
+  const retryFetch = useCallback(() => {
+    setRetryCount(count => count + 1);
+  }, []);
 
   const categories = useMemo(() => {
     const seen = new Map<string, number>();
@@ -150,6 +228,7 @@ export function useMenu(restaurantSlug: string | undefined) {
     items,
     isLoading,
     error,
+    errorState,
     onlinePaymentsEnabled,
     searchQuery,
     setSearchQuery,
@@ -170,5 +249,6 @@ export function useMenu(restaurantSlug: string | undefined) {
     handleShowAllCategories,
     handleShowLessCategories,
     setShowAllCategories,
+    retryFetch,
   };
 }

@@ -73,8 +73,20 @@ export default function PublicProfile() {
 
   if (menu.error || !menu.restaurant) {
     return (
-      <div className="min-h-screen flex items-center justify-center font-bold text-red-600">
-        {menu.error || 'Restaurant not found'}
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4 px-4 text-center">
+        <p className="font-bold text-red-600">{menu.error || 'Restaurant not found'}</p>
+        {menu.errorState?.code && (
+          <p className="text-sm text-slate-500">
+            Error code: <span className="font-mono">{menu.errorState.code}</span>
+          </p>
+        )}
+        <button
+          type="button"
+          onClick={menu.retryFetch}
+          className="inline-flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700"
+        >
+          Retry
+        </button>
       </div>
     );
   }
