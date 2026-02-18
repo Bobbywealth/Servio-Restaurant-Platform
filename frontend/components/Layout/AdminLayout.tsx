@@ -26,7 +26,8 @@ import {
   CalendarDays,
   BarChart3,
   Store,
-  ListTodo
+  ListTodo,
+  Bot
 } from 'lucide-react'
 import { useUser } from '../../contexts/UserContext'
 import NotificationCenter from '../ui/NotificationCenter'
@@ -69,6 +70,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
     
     // PLATFORM OPERATIONS
     { name: 'System Health', href: '/admin/system-health', icon: Activity, section: 'system' },
+    { name: 'Assistant Status', href: '/admin/assistant-status', icon: Bot, section: 'system' },
     { name: 'Diagnostics', href: '/admin/diagnostics', icon: AlertTriangle, section: 'system' },
     { name: 'Audit Logs', href: '/admin/audit', icon: Shield, section: 'system' },
     { name: 'Settings', href: '/admin/settings', icon: Settings, section: 'system' },
