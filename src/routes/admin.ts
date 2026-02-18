@@ -37,6 +37,9 @@ const DEFAULT_PLATFORM_SETTINGS: PlatformSettings = {
   alertEmail: 'ops@servio.solutions'
 };
 
+const ACTIVE_ORDER_STATUSES = ['pending', 'accepted', 'received', 'preparing', 'ready'] as const;
+const ACTIVE_ORDER_STATUS_SQL_LIST = ACTIVE_ORDER_STATUSES.map((status) => `'${status}'`).join(', ');
+
 /**
  * API contract: GET /api/admin/demo-bookings
  * Response: { bookings: AdminDemoBooking[] }
@@ -2646,6 +2649,11 @@ router.get('/platform-stats', async (req, res) => {
         (SELECT COALESCE(SUM(total_amount), 0) FROM orders WHERE created_at >= CURRENT_DATE) as revenue_today,
         (SELECT COALESCE(SUM(total_amount), 0) FROM orders WHERE created_at >= NOW() - INTERVAL '7 days') as revenue_week,
         (SELECT COALESCE(SUM(total_amount), 0) FROM orders WHERE created_at >= NOW() - INTERVAL '30 days') as revenue_month,
+        (SELECT COUNT(*) FROM orders WHERE status IN (${ACTIVE_ORDER_STATUS_SQL_LIST})) as active_orders_now,
+        (SELECT COUNT(DISTINCT te.user_id)
+          FROM time_entries te
+          JOIN users u ON u.id = te.user_id AND u.is_active = true
+          WHERE te.clock_out_time IS NULL) as staff_on_duty,
         (SELECT COUNT(*) FROM time_entries WHERE created_at > NOW() - INTERVAL '30 days') as timeclock_entries_30d,
         (SELECT COUNT(*) FROM inventory_transactions WHERE created_at > NOW() - INTERVAL '30 days') as inventory_transactions_30d,
         (SELECT COUNT(*) FROM audit_logs WHERE created_at > NOW() - INTERVAL '24 hours') as audit_events_24h
@@ -2834,14 +2842,18 @@ router.get('/restaurants', async (req, res) => {
     const restaurants = await db.all(`
       SELECT 
         r.*,
-        COUNT(DISTINCT u.id) as user_count,
+        COUNT(DISTINCT u.id) as staff_total,
         COUNT(DISTINCT o.id) as total_orders,
         COUNT(DISTINCT CASE WHEN o.created_at::date = CURRENT_DATE THEN o.id END) as orders_today,
+        COUNT(DISTINCT CASE WHEN o.status IN (${ACTIVE_ORDER_STATUS_SQL_LIST}) THEN o.id END) as active_orders_now,
+        COUNT(DISTINCT CASE WHEN te.clock_out_time IS NULL AND tu.is_active = true THEN te.user_id END) as staff_on_duty,
         MAX(o.created_at) as last_order_at,
         COUNT(DISTINCT CASE WHEN u.role = 'owner' THEN u.id END) as owner_count
       FROM restaurants r
       LEFT JOIN users u ON r.id = u.restaurant_id AND u.is_active = true
       LEFT JOIN orders o ON r.id = o.restaurant_id
+      LEFT JOIN time_entries te ON r.id = te.restaurant_id AND te.clock_out_time IS NULL
+      LEFT JOIN users tu ON te.user_id = tu.id
       WHERE ${whereClause}
       GROUP BY r.id
       ORDER BY r.created_at DESC
@@ -3026,9 +3038,11 @@ router.get('/restaurants/:id', async (req, res) => {
     const restaurant = await db.get(`
       SELECT 
         r.*,
-        COUNT(DISTINCT u.id) as user_count,
+        COUNT(DISTINCT u.id) as staff_total,
         COUNT(DISTINCT o.id) as total_orders,
         COUNT(DISTINCT CASE WHEN o.created_at::date = CURRENT_DATE THEN o.id END) as orders_today,
+        COUNT(DISTINCT CASE WHEN o.status IN (${ACTIVE_ORDER_STATUS_SQL_LIST}) THEN o.id END) as active_orders_now,
+        COUNT(DISTINCT CASE WHEN te.clock_out_time IS NULL AND tu.is_active = true THEN te.user_id END) as staff_on_duty,
         COUNT(DISTINCT CASE WHEN o.created_at >= NOW() - INTERVAL '7 days' THEN o.id END) as orders_7d,
         COUNT(DISTINCT CASE WHEN o.created_at >= NOW() - INTERVAL '30 days' THEN o.id END) as orders_30d,
         SUM(CASE WHEN o.created_at >= NOW() - INTERVAL '30 days' THEN o.total_amount END) as revenue_30d,
@@ -3036,6 +3050,8 @@ router.get('/restaurants/:id', async (req, res) => {
       FROM restaurants r
       LEFT JOIN users u ON r.id = u.restaurant_id AND u.is_active = true
       LEFT JOIN orders o ON r.id = o.restaurant_id
+      LEFT JOIN time_entries te ON r.id = te.restaurant_id AND te.clock_out_time IS NULL
+      LEFT JOIN users tu ON te.user_id = tu.id
       WHERE r.id = ?
       GROUP BY r.id
     `, [id]);
