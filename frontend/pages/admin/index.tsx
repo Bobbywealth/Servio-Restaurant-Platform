@@ -472,6 +472,9 @@ const AdminDashboard: React.FC = () => {
       const nextWidgetErrors: DashboardWidgetErrors = { ...DEFAULT_WIDGET_ERRORS }
       let hasSuccessfulSection = false
 
+      const analyticsPayload = analyticsResult.status === 'fulfilled' ? analyticsResult.value.data : null
+      const revenueByRestaurant = analyticsPayload?.revenueByRestaurant || []
+
       if (platformStatsResult.status === 'fulfilled') {
         hasSuccessfulSection = true
         const platformStatsRes = platformStatsResult.value
@@ -481,9 +484,9 @@ const AdminDashboard: React.FC = () => {
           id: 'platform',
           name: 'Servio Platform',
           totalRestaurants: Number(stats.total_restaurants || 0),
-          totalRevenueToday: 0,
-          totalRevenueWeek: 0,
-          totalRevenueMonth: 0
+          totalRevenueToday: Number(stats.revenue_today || 0),
+          totalRevenueWeek: Number(stats.revenue_week || 0),
+          totalRevenueMonth: Number(stats.revenue_month || 0)
         })
       } else {
         nextWidgetErrors.platformStats = parseApiError(platformStatsResult.reason, 'Platform stats unavailable')
@@ -493,13 +496,17 @@ const AdminDashboard: React.FC = () => {
         hasSuccessfulSection = true
         const restaurantsData = restaurantsResult.value.data?.restaurants || []
 
+        const revenueByName = new Map(
+          (revenueByRestaurant || []).map((entry: any) => [String(entry?.name || ''), Number(entry?.revenue || 0)])
+        )
+
         setRestaurants(restaurantsData.map((restaurant: any) => ({
           id: restaurant.id,
           name: restaurant.name,
           logo_url: restaurant.logo_url,
           is_active: Boolean(restaurant.is_active),
           activeOrders: Number(restaurant.orders_today || 0),
-          todayRevenue: 0,
+          todayRevenue: revenueByName.get(String(restaurant.name || '')) || 0,
           staffOnDuty: Number(restaurant.user_count || 0)
         })))
       } else {

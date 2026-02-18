@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { CreditCard, Download, Loader2 } from 'lucide-react';
+import { AlertTriangle, Download, Loader2, ShieldCheck } from 'lucide-react';
 import { api } from '@/lib/api';
 
 interface Subscription {
@@ -34,13 +34,18 @@ export function CompanyBilling({ onClose }: CompanyBillingProps) {
   const [history, setHistory] = useState<BillingHistory[]>([]);
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const loadBilling = async () => {
     setLoading(true);
     try {
+      setError(null);
       const response = await api.get('/api/admin/billing/overview');
       setSubscriptions(response.data.subscriptions || []);
       setHistory(response.data.history || []);
+    } catch (loadError) {
+      console.error('Failed to load billing overview', loadError);
+      setError('Unable to load billing data right now.');
     } finally {
       setLoading(false);
     }
@@ -53,17 +58,34 @@ export function CompanyBilling({ onClose }: CompanyBillingProps) {
   const updateSubscription = async (id: string, patch: Partial<Subscription>) => {
     setUpdatingId(id);
     try {
+      setError(null);
       await api.patch(`/api/admin/billing/subscriptions/${id}`, patch);
       await loadBilling();
+    } catch (updateError) {
+      console.error('Failed to update subscription', updateError);
+      setError('Subscription update failed.');
     } finally {
       setUpdatingId(null);
     }
   };
 
   const markInvoiceAction = async (id: string, action: 'retry' | 'void') => {
-    await api.post(`/api/admin/billing/invoices/${id}/actions`, { action });
-    await loadBilling();
+    try {
+      setError(null);
+      await api.post(`/api/admin/billing/invoices/${id}/actions`, { action });
+      await loadBilling();
+    } catch (invoiceError) {
+      console.error('Invoice action failed', invoiceError);
+      setError('Invoice action failed. Please retry.');
+    }
   };
+
+
+  const activeSubscriptions = subscriptions.filter((sub) => sub.status === 'active').length;
+  const pastDueSubscriptions = subscriptions.filter((sub) => sub.status === 'past_due').length;
+  const monthlyRecurringRevenue = subscriptions
+    .filter((sub) => sub.status === 'active')
+    .reduce((sum, sub) => sum + Number(sub.amount || 0), 0);
 
   return (
     <div className="space-y-6">
@@ -73,6 +95,38 @@ export function CompanyBilling({ onClose }: CompanyBillingProps) {
           <p className="text-sm text-gray-500 dark:text-gray-400">Manage billing package, cycle, and invoice lifecycle.</p>
         </div>
         {onClose && <button className="btn-secondary" onClick={onClose}>Close</button>}
+      </div>
+
+      {error && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800/60 dark:bg-red-900/20 dark:text-red-300">
+          <div className="inline-flex items-center gap-2"><AlertTriangle className="h-4 w-4" />{error}</div>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
+          <p className="text-xs text-gray-500">Active subscriptions</p>
+          <p className="text-2xl font-semibold text-gray-900 dark:text-white">{activeSubscriptions}</p>
+        </div>
+        <div className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
+          <p className="text-xs text-gray-500">Past due subscriptions</p>
+          <p className="text-2xl font-semibold text-gray-900 dark:text-white">{pastDueSubscriptions}</p>
+        </div>
+        <div className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
+          <p className="text-xs text-gray-500">MRR (active)</p>
+          <p className="text-2xl font-semibold text-gray-900 dark:text-white">${monthlyRecurringRevenue.toFixed(2)}</p>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
+        <div className="flex items-center gap-2 text-sm font-medium text-gray-900 dark:text-white">
+          <ShieldCheck className="h-4 w-4 text-green-600" /> Payment operations readiness
+        </div>
+        <ul className="mt-2 list-disc pl-5 text-xs text-gray-600 dark:text-gray-300 space-y-1">
+          <li>Invoice retry and void actions are available per line item.</li>
+          <li>Subscription plan, status, and cycle updates are editable in-line.</li>
+          <li>Use external invoice links to complete customer payment collection.</li>
+        </ul>
       </div>
 
       {loading ? (
