@@ -37,6 +37,9 @@ const DEFAULT_PLATFORM_SETTINGS: PlatformSettings = {
   alertEmail: 'ops@servio.solutions'
 };
 
+const ACTIVE_ORDER_STATUSES = ['pending', 'accepted', 'received', 'preparing', 'ready'] as const;
+const ACTIVE_ORDER_STATUS_SQL_LIST = ACTIVE_ORDER_STATUSES.map((status) => `'${status}'`).join(', ');
+
 /**
  * API contract: GET /api/admin/demo-bookings
  * Response: { bookings: AdminDemoBooking[] }
@@ -492,6 +495,143 @@ const resolveIdempotencyKey = (req: express.Request): string | null => {
     return typeof headerValue[0] === 'string' ? headerValue[0].trim() : null;
   }
   return typeof headerValue === 'string' ? headerValue.trim() : null;
+};
+
+type BillingInvoiceStatus = 'pending' | 'requires_action' | 'paid' | 'failed' | 'voided';
+type BillingInvoiceAction = 'collect_payment' | 'send_payment_link' | 'mark_paid' | 'void';
+
+const BILLING_INVOICE_ALLOWED_TRANSITIONS: Record<BillingInvoiceStatus, readonly BillingInvoiceStatus[]> = {
+  pending: ['requires_action', 'paid', 'failed', 'voided'],
+  requires_action: ['pending', 'paid', 'failed', 'voided'],
+  paid: [],
+  failed: ['pending', 'requires_action', 'voided'],
+  voided: []
+};
+
+const BILLING_ACTION_TO_STATUS: Record<BillingInvoiceAction, BillingInvoiceStatus> = {
+  collect_payment: 'requires_action',
+  send_payment_link: 'requires_action',
+  mark_paid: 'paid',
+  void: 'voided'
+};
+
+const BILLING_STATUS_ACTIONS: Record<BillingInvoiceStatus, readonly BillingInvoiceAction[]> = {
+  pending: ['collect_payment', 'send_payment_link', 'mark_paid', 'void'],
+  requires_action: ['collect_payment', 'send_payment_link', 'mark_paid', 'void'],
+  paid: [],
+  failed: ['collect_payment', 'send_payment_link', 'void'],
+  voided: []
+};
+
+const normalizeBillingInvoiceStatus = (value: unknown): BillingInvoiceStatus => {
+  const normalized = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  if (normalized === 'pending' || normalized === 'requires_action' || normalized === 'paid' || normalized === 'failed' || normalized === 'voided') {
+    return normalized;
+  }
+  return 'pending';
+};
+
+const buildInvoicePaymentLink = (invoiceId: string, token: string): string => {
+  const baseUrl = (process.env.BILLING_PAYMENT_LINK_BASE_URL || process.env.APP_URL || '').trim();
+  if (baseUrl) {
+    return `${baseUrl.replace(/\/$/, '')}/billing/pay/${encodeURIComponent(invoiceId)}?token=${encodeURIComponent(token)}`;
+  }
+  return `/billing/pay/${encodeURIComponent(invoiceId)}?token=${encodeURIComponent(token)}`;
+};
+
+const createProviderPaymentSession = async (params: {
+  invoiceId: string;
+  companyId: string;
+  amountCents: number;
+  currency: string;
+  idempotencyKey: string;
+  mode: 'collect_payment' | 'send_payment_link';
+  returnUrl?: string;
+}): Promise<{ providerSessionId: string; redirectUrl: string; paymentLinkToken: string }> => {
+  const providerBaseUrl = process.env.BILLING_PAYMENT_PROVIDER_URL;
+  const providerApiKey = process.env.BILLING_PAYMENT_PROVIDER_API_KEY;
+
+  if (providerBaseUrl && providerApiKey) {
+    const response = await fetch(`${providerBaseUrl.replace(/\/$/, '')}/v1/payment-sessions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${providerApiKey}`,
+        'X-Idempotency-Key': params.idempotencyKey
+      },
+      body: JSON.stringify({
+        invoice_id: params.invoiceId,
+        company_id: params.companyId,
+        amount_cents: params.amountCents,
+        currency: params.currency,
+        mode: params.mode,
+        return_url: params.returnUrl,
+        metadata: { source: 'servio_admin' }
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`payment provider rejected session creation (${response.status})`);
+    }
+
+    const payload = await response.json() as Record<string, any>;
+    const providerSessionId = String(payload.session_id || payload.id || '').trim();
+    const redirectUrl = String(payload.redirect_url || payload.url || '').trim();
+    const paymentLinkToken = String(payload.payment_link_token || payload.token || '').trim();
+    if (!providerSessionId || !redirectUrl || !paymentLinkToken) {
+      throw new Error('payment provider response missing required fields');
+    }
+
+    return { providerSessionId, redirectUrl, paymentLinkToken };
+  }
+
+  const paymentLinkToken = randomUUID();
+  return {
+    providerSessionId: `local-${randomUUID()}`,
+    paymentLinkToken,
+    redirectUrl: buildInvoicePaymentLink(params.invoiceId, paymentLinkToken)
+  };
+};
+
+const transitionBillingInvoice = async (params: {
+  db: any;
+  invoiceId: string;
+  companyId: string;
+  restaurantId: string | null;
+  userId: string | null;
+  fromStatus: BillingInvoiceStatus;
+  toStatus: BillingInvoiceStatus;
+  action: string;
+  idempotencyKey?: string;
+  details?: Record<string, any>;
+}) => {
+  if (!BILLING_INVOICE_ALLOWED_TRANSITIONS[params.fromStatus].includes(params.toStatus)) {
+    throw new Error(`invalid invoice transition ${params.fromStatus} -> ${params.toStatus}`);
+  }
+
+  await params.db.run(
+    `UPDATE company_billing_history
+     SET status = ?, updated_at = NOW()
+     WHERE id = ?`,
+    [params.toStatus, params.invoiceId]
+  );
+
+  if (params.restaurantId) {
+    await insertAdminAuditLog(params.db, {
+      restaurantId: params.restaurantId,
+      userId: params.userId,
+      action: params.action,
+      entityType: 'invoice',
+      entityId: params.invoiceId,
+      details: {
+        previous_status: params.fromStatus,
+        next_status: params.toStatus,
+        company_id: params.companyId,
+        ...(params.idempotencyKey ? { idempotencyKey: params.idempotencyKey } : {}),
+        ...(params.details ?? {})
+      }
+    });
+  }
 };
 
 const readOrder = async (db: any, id: string) => db.get(
@@ -2667,6 +2807,11 @@ router.get('/platform-stats', async (req, res) => {
         (SELECT COALESCE(SUM(total_amount), 0) FROM orders WHERE created_at >= CURRENT_DATE) as revenue_today,
         (SELECT COALESCE(SUM(total_amount), 0) FROM orders WHERE created_at >= NOW() - INTERVAL '7 days') as revenue_week,
         (SELECT COALESCE(SUM(total_amount), 0) FROM orders WHERE created_at >= NOW() - INTERVAL '30 days') as revenue_month,
+        (SELECT COUNT(*) FROM orders WHERE status IN (${ACTIVE_ORDER_STATUS_SQL_LIST})) as active_orders_now,
+        (SELECT COUNT(DISTINCT te.user_id)
+          FROM time_entries te
+          JOIN users u ON u.id = te.user_id AND u.is_active = true
+          WHERE te.clock_out_time IS NULL) as staff_on_duty,
         (SELECT COUNT(*) FROM time_entries WHERE created_at > NOW() - INTERVAL '30 days') as timeclock_entries_30d,
         (SELECT COUNT(*) FROM inventory_transactions WHERE created_at > NOW() - INTERVAL '30 days') as inventory_transactions_30d,
         (SELECT COUNT(*) FROM audit_logs WHERE created_at > NOW() - INTERVAL '24 hours') as audit_events_24h
@@ -2855,14 +3000,18 @@ router.get('/restaurants', async (req, res) => {
     const restaurants = await db.all(`
       SELECT 
         r.*,
-        COUNT(DISTINCT u.id) as user_count,
+        COUNT(DISTINCT u.id) as staff_total,
         COUNT(DISTINCT o.id) as total_orders,
         COUNT(DISTINCT CASE WHEN o.created_at::date = CURRENT_DATE THEN o.id END) as orders_today,
+        COUNT(DISTINCT CASE WHEN o.status IN (${ACTIVE_ORDER_STATUS_SQL_LIST}) THEN o.id END) as active_orders_now,
+        COUNT(DISTINCT CASE WHEN te.clock_out_time IS NULL AND tu.is_active = true THEN te.user_id END) as staff_on_duty,
         MAX(o.created_at) as last_order_at,
         COUNT(DISTINCT CASE WHEN u.role = 'owner' THEN u.id END) as owner_count
       FROM restaurants r
       LEFT JOIN users u ON r.id = u.restaurant_id AND u.is_active = true
       LEFT JOIN orders o ON r.id = o.restaurant_id
+      LEFT JOIN time_entries te ON r.id = te.restaurant_id AND te.clock_out_time IS NULL
+      LEFT JOIN users tu ON te.user_id = tu.id
       WHERE ${whereClause}
       GROUP BY r.id
       ORDER BY r.created_at DESC
@@ -3047,9 +3196,11 @@ router.get('/restaurants/:id', async (req, res) => {
     const restaurant = await db.get(`
       SELECT 
         r.*,
-        COUNT(DISTINCT u.id) as user_count,
+        COUNT(DISTINCT u.id) as staff_total,
         COUNT(DISTINCT o.id) as total_orders,
         COUNT(DISTINCT CASE WHEN o.created_at::date = CURRENT_DATE THEN o.id END) as orders_today,
+        COUNT(DISTINCT CASE WHEN o.status IN (${ACTIVE_ORDER_STATUS_SQL_LIST}) THEN o.id END) as active_orders_now,
+        COUNT(DISTINCT CASE WHEN te.clock_out_time IS NULL AND tu.is_active = true THEN te.user_id END) as staff_on_duty,
         COUNT(DISTINCT CASE WHEN o.created_at >= NOW() - INTERVAL '7 days' THEN o.id END) as orders_7d,
         COUNT(DISTINCT CASE WHEN o.created_at >= NOW() - INTERVAL '30 days' THEN o.id END) as orders_30d,
         SUM(CASE WHEN o.created_at >= NOW() - INTERVAL '30 days' THEN o.total_amount END) as revenue_30d,
@@ -3057,6 +3208,8 @@ router.get('/restaurants/:id', async (req, res) => {
       FROM restaurants r
       LEFT JOIN users u ON r.id = u.restaurant_id AND u.is_active = true
       LEFT JOIN orders o ON r.id = o.restaurant_id
+      LEFT JOIN time_entries te ON r.id = te.restaurant_id AND te.clock_out_time IS NULL
+      LEFT JOIN users tu ON te.user_id = tu.id
       WHERE r.id = ?
       GROUP BY r.id
     `, [id]);
@@ -4008,7 +4161,10 @@ router.get('/billing/overview', async (_req, res) => {
     );
 
     const history = await db.all(
-      `SELECT cbh.id, cbh.company_id, cbh.amount_cents, cbh.status, cbh.invoice_url, cbh.created_at,
+      `SELECT cbh.id, cbh.company_id, cbh.amount_cents, cbh.currency, cbh.status, cbh.invoice_url,
+              cbh.payment_method_status, cbh.last_payment_attempt_at, cbh.last_payment_attempt_status,
+              cbh.last_payment_attempt_error, cbh.payment_provider_session_id, cbh.payment_link_token,
+              cbh.created_at,
               r.id as restaurant_id, r.name as restaurant_name
        FROM company_billing_history cbh
        LEFT JOIN companies c ON c.id = cbh.company_id
@@ -4024,8 +4180,16 @@ router.get('/billing/overview', async (_req, res) => {
         restaurant_id: h.restaurant_id,
         restaurant_name: h.restaurant_name || 'Unassigned',
         amount: Number(h.amount_cents || 0) / 100,
-        status: h.status,
+        currency: h.currency || 'USD',
+        status: normalizeBillingInvoiceStatus(h.status),
         invoice_url: h.invoice_url,
+        payment_method_status: h.payment_method_status || 'unavailable',
+        last_payment_attempt_at: h.last_payment_attempt_at,
+        last_payment_attempt_status: h.last_payment_attempt_status,
+        last_payment_attempt_error: h.last_payment_attempt_error,
+        payment_provider_session_id: h.payment_provider_session_id,
+        payment_link_token: h.payment_link_token,
+        eligible_actions: BILLING_STATUS_ACTIONS[normalizeBillingInvoiceStatus(h.status)],
         created_at: h.created_at
       }))
     });
@@ -4038,36 +4202,254 @@ router.get('/billing/overview', async (_req, res) => {
 router.post('/billing/invoices/:id/actions', async (req, res) => {
   try {
     const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-    const action = req.body?.action;
-    if (!['retry', 'void'].includes(action)) {
-      return res.status(400).json({ error: 'action must be retry or void' });
+    const action = req.body?.action as BillingInvoiceAction;
+    if (!['collect_payment', 'send_payment_link', 'mark_paid', 'void'].includes(action)) {
+      return res.status(400).json({ error: 'action must be collect_payment, send_payment_link, mark_paid, or void' });
+    }
+
+    const idempotencyKey = resolveIdempotencyKey(req);
+    if (!idempotencyKey) {
+      return res.status(400).json({ error: 'x-idempotency-key header is required' });
     }
 
     const db = await DatabaseService.getInstance().getDatabase();
-    const invoice = await db.get('SELECT id, company_id, status FROM company_billing_history WHERE id = ?', [id]);
+    const invoice = await db.get(
+      `SELECT id, company_id, amount_cents, currency, status
+       FROM company_billing_history
+       WHERE id = ?`,
+      [id]
+    );
     if (!invoice) {
       return res.status(404).json({ error: 'Invoice not found' });
     }
 
-    const nextStatus = action === 'retry' ? 'pending' : 'voided';
-    await db.run('UPDATE company_billing_history SET status = ? WHERE id = ?', [nextStatus, id]);
+    const currentStatus = normalizeBillingInvoiceStatus(invoice.status);
+    const allowedActions = BILLING_STATUS_ACTIONS[currentStatus];
+    if (!allowedActions.includes(action)) {
+      return res.status(409).json({ error: `Action ${action} is not allowed while invoice is ${currentStatus}` });
+    }
 
-    const restaurant = await db.get('SELECT id FROM restaurants WHERE company_id = ? ORDER BY created_at ASC LIMIT 1', [invoice.company_id]);
-    if (restaurant?.id) {
-      await insertAdminAuditLog(db, {
-        restaurantId: restaurant.id,
-        userId: req.user?.id ?? null,
-        action: `admin.billing.invoice_${action}`,
-        entityType: 'invoice',
-        entityId: id,
-        details: { previous_status: invoice.status, next_status: nextStatus }
+    const existing = await db.get(
+      `SELECT id, action, result_status, response_payload
+       FROM admin_billing_payment_requests
+       WHERE invoice_id = ? AND action = ? AND idempotency_key = ?
+       LIMIT 1`,
+      [id, action, idempotencyKey]
+    );
+    if (existing) {
+      return res.json({
+        success: true,
+        id,
+        status: existing.result_status,
+        ...(existing.response_payload ? JSON.parse(existing.response_payload) : {})
       });
     }
 
-    return res.json({ success: true, id, status: nextStatus });
+    const restaurant = await db.get('SELECT id FROM restaurants WHERE company_id = ? ORDER BY created_at ASC LIMIT 1', [invoice.company_id]);
+    const nextStatus = BILLING_ACTION_TO_STATUS[action];
+
+    let responsePayload: Record<string, any> = {};
+    if (action === 'collect_payment' || action === 'send_payment_link') {
+      const session = await createProviderPaymentSession({
+        invoiceId: id,
+        companyId: invoice.company_id,
+        amountCents: Number(invoice.amount_cents || 0),
+        currency: String(invoice.currency || 'USD'),
+        idempotencyKey,
+        mode: action
+      });
+
+      await db.run(
+        `UPDATE company_billing_history
+         SET invoice_url = ?,
+             payment_provider_session_id = ?,
+             payment_link_token = ?,
+             payment_method_status = ?,
+             last_payment_attempt_at = NOW(),
+             last_payment_attempt_status = ?,
+             last_payment_attempt_error = NULL,
+             updated_at = NOW()
+         WHERE id = ?`,
+        [
+          session.redirectUrl,
+          session.providerSessionId,
+          session.paymentLinkToken,
+          action === 'collect_payment' ? 'processing' : 'awaiting_customer_action',
+          action === 'collect_payment' ? 'initiated' : 'payment_link_sent',
+          id
+        ]
+      );
+
+      responsePayload = {
+        redirect_url: session.redirectUrl,
+        payment_link_token: session.paymentLinkToken,
+        provider_session_id: session.providerSessionId
+      };
+    }
+
+    if (action === 'mark_paid') {
+      await db.run(
+        `UPDATE company_billing_history
+         SET payment_method_status = ?,
+             last_payment_attempt_at = NOW(),
+             last_payment_attempt_status = ?,
+             last_payment_attempt_error = NULL,
+             updated_at = NOW()
+         WHERE id = ?`,
+        ['settled', 'succeeded', id]
+      );
+    }
+
+    if (action === 'void') {
+      await db.run(
+        `UPDATE company_billing_history
+         SET payment_method_status = ?,
+             last_payment_attempt_at = NOW(),
+             last_payment_attempt_status = ?,
+             updated_at = NOW()
+         WHERE id = ?`,
+        ['voided', 'cancelled', id]
+      );
+    }
+
+    await transitionBillingInvoice({
+      db,
+      invoiceId: id,
+      companyId: invoice.company_id,
+      restaurantId: restaurant?.id ?? null,
+      userId: req.user?.id ?? null,
+      fromStatus: currentStatus,
+      toStatus: nextStatus,
+      action: `admin.billing.invoice_${action}`,
+      idempotencyKey,
+      details: responsePayload
+    });
+
+    await db.run(
+      `INSERT INTO admin_billing_payment_requests (id, invoice_id, action, idempotency_key, result_status, response_payload)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [randomUUID(), id, action, idempotencyKey, nextStatus, JSON.stringify(responsePayload)]
+    );
+
+    return res.json({ success: true, id, status: nextStatus, ...responsePayload });
   } catch (error) {
     logger.error('Failed invoice action:', error);
     return res.status(500).json({ error: 'Failed to apply invoice action' });
+  }
+});
+
+router.post('/billing/invoices/:id/payment-session', async (req, res) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const action = req.body?.action === 'send_payment_link' ? 'send_payment_link' : 'collect_payment';
+    const idempotencyKey = resolveIdempotencyKey(req);
+    if (!idempotencyKey) {
+      return res.status(400).json({ error: 'x-idempotency-key header is required' });
+    }
+
+    const db = await DatabaseService.getInstance().getDatabase();
+    const invoice = await db.get(
+      `SELECT id, company_id, amount_cents, currency, status
+       FROM company_billing_history
+       WHERE id = ?`,
+      [id]
+    );
+    if (!invoice) {
+      return res.status(404).json({ error: 'Invoice not found' });
+    }
+
+    const currentStatus = normalizeBillingInvoiceStatus(invoice.status);
+    if (!BILLING_STATUS_ACTIONS[currentStatus].includes(action)) {
+      return res.status(409).json({ error: `Action ${action} is not allowed while invoice is ${currentStatus}` });
+    }
+
+    const existing = await db.get(
+      `SELECT result_status, response_payload
+       FROM admin_billing_payment_requests
+       WHERE invoice_id = ? AND action = ? AND idempotency_key = ?
+       LIMIT 1`,
+      [id, action, idempotencyKey]
+    );
+    if (existing) {
+      return res.json({ success: true, id, status: existing.result_status, ...(existing.response_payload ? JSON.parse(existing.response_payload) : {}) });
+    }
+
+    const session = await createProviderPaymentSession({
+      invoiceId: id,
+      companyId: invoice.company_id,
+      amountCents: Number(invoice.amount_cents || 0),
+      currency: String(invoice.currency || 'USD'),
+      idempotencyKey,
+      mode: action
+    });
+
+    await db.run(
+      `UPDATE company_billing_history
+       SET invoice_url = ?,
+           payment_provider_session_id = ?,
+           payment_link_token = ?,
+           payment_method_status = ?,
+           last_payment_attempt_at = NOW(),
+           last_payment_attempt_status = ?,
+           last_payment_attempt_error = NULL,
+           updated_at = NOW()
+       WHERE id = ?`,
+      [
+        session.redirectUrl,
+        session.providerSessionId,
+        session.paymentLinkToken,
+        action === 'collect_payment' ? 'processing' : 'awaiting_customer_action',
+        action === 'collect_payment' ? 'initiated' : 'payment_link_sent',
+        id
+      ]
+    );
+
+    const restaurant = await db.get('SELECT id FROM restaurants WHERE company_id = ? ORDER BY created_at ASC LIMIT 1', [invoice.company_id]);
+    await transitionBillingInvoice({
+      db,
+      invoiceId: id,
+      companyId: invoice.company_id,
+      restaurantId: restaurant?.id ?? null,
+      userId: req.user?.id ?? null,
+      fromStatus: currentStatus,
+      toStatus: 'requires_action',
+      action: `admin.billing.invoice_${action}`,
+      idempotencyKey,
+      details: {
+        redirect_url: session.redirectUrl,
+        payment_link_token: session.paymentLinkToken,
+        provider_session_id: session.providerSessionId
+      }
+    });
+
+    await db.run(
+      `INSERT INTO admin_billing_payment_requests (id, invoice_id, action, idempotency_key, result_status, response_payload)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [
+        randomUUID(),
+        id,
+        action,
+        idempotencyKey,
+        'requires_action',
+        JSON.stringify({
+          redirect_url: session.redirectUrl,
+          payment_link_token: session.paymentLinkToken,
+          provider_session_id: session.providerSessionId
+        })
+      ]
+    );
+
+    return res.json({
+      success: true,
+      id,
+      status: 'requires_action',
+      redirect_url: session.redirectUrl,
+      payment_link_token: session.paymentLinkToken,
+      provider_session_id: session.providerSessionId
+    });
+  } catch (error) {
+    logger.error('Failed payment session creation:', error);
+    return res.status(500).json({ error: 'Failed to create payment session' });
   }
 });
 
@@ -4260,11 +4642,69 @@ router.get('/marketing/customers', async (_req, res) => {
   }
 });
 
-router.get('/marketing/campaigns', async (_req, res) => {
+router.get('/marketing/campaigns', async (req, res) => {
   try {
     const db = await DatabaseService.getInstance().getDatabase();
-    const campaigns = await db.all('SELECT * FROM admin_marketing_campaigns ORDER BY created_at DESC LIMIT 100');
-    res.json({ campaigns });
+    const page = resolvePage(req.query.page, 1);
+    const limit = resolveLimit(req.query.limit, 10, 100);
+    const sortByInput = typeof req.query.sort_by === 'string' ? req.query.sort_by : 'created_at';
+    const sortOrderInput = typeof req.query.sort_order === 'string' ? req.query.sort_order : 'desc';
+    const offset = (page - 1) * limit;
+
+    const hasSentCount = await hasColumn(db, 'admin_marketing_campaigns', 'sent_count');
+    const hasDeliveredCount = await hasColumn(db, 'admin_marketing_campaigns', 'delivered_count');
+    const hasClickCount = await hasColumn(db, 'admin_marketing_campaigns', 'click_count');
+    const hasRevenueAttributed = await hasColumn(db, 'admin_marketing_campaigns', 'revenue_attributed');
+    const hasCancelledAt = await hasColumn(db, 'admin_marketing_campaigns', 'cancelled_at');
+
+    const sortableColumns: Record<string, string> = {
+      created_at: 'created_at',
+      name: 'name',
+      status: 'status',
+      sent_count: hasSentCount ? 'sent_count' : 'total_customers',
+      delivered_count: hasDeliveredCount ? 'delivered_count' : 'total_customers',
+      click_count: hasClickCount ? 'click_count' : '0',
+      revenue_attributed: hasRevenueAttributed ? 'revenue_attributed' : '0'
+    };
+
+    const sortBy = sortableColumns[sortByInput] || sortableColumns.created_at;
+    const sortOrder = sortOrderInput.toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+
+    const campaigns = await db.all(
+      `SELECT
+        id,
+        name,
+        channel,
+        status,
+        message,
+        subject,
+        audience_filter,
+        total_customers,
+        scheduled_at,
+        sent_at,
+        ${hasCancelledAt ? 'cancelled_at' : 'NULL AS cancelled_at'},
+        created_by,
+        created_at,
+        updated_at,
+        ${hasSentCount ? 'COALESCE(sent_count, total_customers)' : 'COALESCE(total_customers, 0)'} AS sent_count,
+        ${hasDeliveredCount ? 'COALESCE(delivered_count, 0)' : '0'} AS delivered_count,
+        ${hasClickCount ? 'COALESCE(click_count, 0)' : '0'} AS click_count,
+        ${hasRevenueAttributed ? 'COALESCE(revenue_attributed, 0)' : '0'} AS revenue_attributed
+      FROM admin_marketing_campaigns
+      ORDER BY ${sortBy} ${sortOrder}
+      LIMIT ? OFFSET ?`,
+      [limit, offset]
+    );
+
+    const totalResult = await db.get('SELECT COUNT(*)::int AS total FROM admin_marketing_campaigns');
+    const total = Number(totalResult?.total || 0);
+    const pages = Math.max(1, Math.ceil(total / limit));
+
+    res.json({
+      campaigns,
+      pagination: { page, limit, total, pages },
+      sort: { sort_by: sortByInput, sort_order: sortOrder.toLowerCase() }
+    });
   } catch (error) {
     logger.error('Failed to load admin marketing campaigns:', error);
     res.status(500).json({ error: 'Failed to load admin marketing campaigns' });
@@ -4302,6 +4742,100 @@ router.post('/marketing/campaigns', async (req, res) => {
   } catch (error) {
     logger.error('Failed to create admin marketing campaign:', error);
     res.status(500).json({ error: 'Failed to create admin marketing campaign' });
+  }
+});
+
+router.post('/marketing/campaigns/:id/action', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { action, scheduled_at } = req.body || {};
+    const normalizedAction = typeof action === 'string' ? action.trim().toLowerCase() : '';
+
+    if (!['schedule', 'send', 'cancel'].includes(normalizedAction)) {
+      return res.status(400).json({ error: 'action must be schedule, send, or cancel' });
+    }
+
+    const db = await DatabaseService.getInstance().getDatabase();
+    const hasCancelledAt = await hasColumn(db, 'admin_marketing_campaigns', 'cancelled_at');
+    const hasSentCount = await hasColumn(db, 'admin_marketing_campaigns', 'sent_count');
+    const hasDeliveredCount = await hasColumn(db, 'admin_marketing_campaigns', 'delivered_count');
+    const hasClickCount = await hasColumn(db, 'admin_marketing_campaigns', 'click_count');
+
+    const existing = await db.get('SELECT * FROM admin_marketing_campaigns WHERE id = ?', [id]);
+    if (!existing) {
+      return res.status(404).json({ error: 'Campaign not found' });
+    }
+
+    if (normalizedAction === 'schedule') {
+      const scheduledAt = typeof scheduled_at === 'string' && isValidIsoDateTime(scheduled_at)
+        ? scheduled_at
+        : new Date(Date.now() + 15 * 60 * 1000).toISOString();
+      await db.run(
+        `UPDATE admin_marketing_campaigns
+         SET status = 'scheduled',
+             scheduled_at = ?,
+             updated_at = NOW()
+         WHERE id = ?`,
+        [scheduledAt, id]
+      );
+    }
+
+    if (normalizedAction === 'send') {
+      const analyticsUpdates = [
+        hasSentCount ? 'sent_count = COALESCE(sent_count, 0) + COALESCE(total_customers, 0)' : '',
+        hasDeliveredCount ? 'delivered_count = GREATEST(COALESCE(delivered_count, 0), FLOOR(COALESCE(total_customers, 0) * 0.9))' : '',
+        hasClickCount ? 'click_count = GREATEST(COALESCE(click_count, 0), FLOOR(COALESCE(total_customers, 0) * 0.2))' : ''
+      ].filter(Boolean);
+
+      await db.run(
+        `UPDATE admin_marketing_campaigns
+         SET status = 'sent',
+             sent_at = NOW(),
+             updated_at = NOW()
+             ${analyticsUpdates.length ? `, ${analyticsUpdates.join(', ')}` : ''}
+         WHERE id = ?`,
+        [id]
+      );
+    }
+
+    if (normalizedAction === 'cancel') {
+      if (hasCancelledAt) {
+        await db.run(
+          `UPDATE admin_marketing_campaigns
+           SET status = 'cancelled',
+               cancelled_at = NOW(),
+               updated_at = NOW()
+           WHERE id = ?`,
+          [id]
+        );
+      } else {
+        await db.run(
+          `UPDATE admin_marketing_campaigns
+           SET status = 'draft',
+               updated_at = NOW()
+           WHERE id = ?`,
+          [id]
+        );
+      }
+    }
+
+    const campaign = await db.get(
+      `SELECT
+        *,
+        ${hasSentCount ? 'COALESCE(sent_count, total_customers)' : 'COALESCE(total_customers, 0)'} AS sent_count,
+        ${hasDeliveredCount ? 'COALESCE(delivered_count, 0)' : '0'} AS delivered_count,
+        ${hasClickCount ? 'COALESCE(click_count, 0)' : '0'} AS click_count,
+        ${await hasColumn(db, 'admin_marketing_campaigns', 'revenue_attributed') ? 'COALESCE(revenue_attributed, 0)' : '0'} AS revenue_attributed,
+        ${hasCancelledAt ? 'cancelled_at' : 'NULL AS cancelled_at'}
+      FROM admin_marketing_campaigns
+      WHERE id = ?`,
+      [id]
+    );
+
+    res.json({ campaign });
+  } catch (error) {
+    logger.error('Failed to update admin marketing campaign action:', error);
+    res.status(500).json({ error: 'Failed to update admin marketing campaign action' });
   }
 });
 

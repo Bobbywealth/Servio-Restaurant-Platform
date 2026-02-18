@@ -39,8 +39,10 @@ interface RestaurantMetrics {
   name: string
   logo_url?: string
   is_active: boolean
-  activeOrders: number
+  ordersToday: number
+  activeOrdersNow: number
   todayRevenue: number
+  staffTotal: number
   staffOnDuty: number
 }
 
@@ -106,8 +108,10 @@ interface SummaryStats {
   totalRevenueToday: number
   totalRevenueWeek: number
   totalRevenueMonth: number
-  activeOrders: number
+  ordersToday: number
+  activeOrdersNow: number
   totalRestaurants: number
+  staffTotal: number
   staffOnDuty: number
 }
 
@@ -505,9 +509,11 @@ const AdminDashboard: React.FC = () => {
           name: restaurant.name,
           logo_url: restaurant.logo_url,
           is_active: Boolean(restaurant.is_active),
-          activeOrders: Number(restaurant.orders_today || 0),
+          ordersToday: Number(restaurant.orders_today || 0),
+          activeOrdersNow: Number(restaurant.active_orders_now || 0),
           todayRevenue: revenueByName.get(String(restaurant.name || '')) || 0,
-          staffOnDuty: Number(restaurant.user_count || 0)
+          staffTotal: Number(restaurant.staff_total || 0),
+          staffOnDuty: Number(restaurant.staff_on_duty || 0)
         })))
       } else {
         nextWidgetErrors.restaurants = parseApiError(restaurantsResult.reason, 'Restaurants unavailable')
@@ -585,8 +591,10 @@ const AdminDashboard: React.FC = () => {
     totalRevenueToday: company?.totalRevenueToday || restaurants.reduce((sum, r) => sum + r.todayRevenue, 0),
     totalRevenueWeek: company?.totalRevenueWeek || 0,
     totalRevenueMonth: company?.totalRevenueMonth || 0,
-    activeOrders: restaurants.reduce((sum, r) => sum + r.activeOrders, 0),
+    ordersToday: restaurants.reduce((sum, r) => sum + r.ordersToday, 0),
+    activeOrdersNow: restaurants.reduce((sum, r) => sum + r.activeOrdersNow, 0),
     totalRestaurants: restaurants.length,
+    staffTotal: restaurants.reduce((sum, r) => sum + r.staffTotal, 0),
     staffOnDuty: restaurants.reduce((sum, r) => sum + r.staffOnDuty, 0)
   }), [company, restaurants])
 
@@ -646,7 +654,7 @@ const AdminDashboard: React.FC = () => {
               slug: r.name.toLowerCase().replace(/\s+/g, '-'),
               is_active: r.is_active,
               metrics: {
-                activeOrders: r.activeOrders,
+                activeOrders: r.activeOrdersNow,
                 todayRevenue: r.todayRevenue,
                 staffOnDuty: r.staffOnDuty
               }
@@ -698,9 +706,9 @@ const AdminDashboard: React.FC = () => {
                   color="green"
                 />
                 <StatsCard
-                  title="Active Orders"
-                  value={summaryStats.activeOrders}
-                  subtitle="Across all locations"
+                  title="Active Orders Now"
+                  value={summaryStats.activeOrdersNow}
+                  subtitle={`${summaryStats.ordersToday} placed today`}
                   icon={ShoppingBag}
                   color="blue"
                 />
@@ -714,7 +722,7 @@ const AdminDashboard: React.FC = () => {
                 <StatsCard
                   title="Staff On Duty"
                   value={summaryStats.staffOnDuty}
-                  subtitle="Across all locations"
+                  subtitle={`${summaryStats.staffTotal} total active staff`}
                   icon={Users}
                   color="purple"
                 />

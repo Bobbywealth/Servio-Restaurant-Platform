@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { AlertTriangle, Download, Loader2, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, Download, Loader2, Link2, ShieldCheck } from 'lucide-react';
 import { api } from '@/lib/api';
 
 interface Subscription {
@@ -15,13 +15,22 @@ interface Subscription {
   next_billing_date?: string | null;
 }
 
+type InvoiceStatus = 'pending' | 'requires_action' | 'paid' | 'failed' | 'voided';
+type InvoiceAction = 'collect_payment' | 'send_payment_link' | 'mark_paid' | 'void';
+
 interface BillingHistory {
   id: string;
   restaurant_id: string;
   restaurant_name: string;
   amount: number;
-  status: string;
+  status: InvoiceStatus;
+  currency?: string;
   invoice_url?: string | null;
+  payment_method_status?: string | null;
+  last_payment_attempt_at?: string | null;
+  last_payment_attempt_status?: string | null;
+  last_payment_attempt_error?: string | null;
+  eligible_actions?: InvoiceAction[];
   created_at: string;
 }
 
@@ -29,11 +38,17 @@ interface CompanyBillingProps {
   onClose?: () => void;
 }
 
+const idempotencyKey = () =>
+  typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
 export function CompanyBilling({ onClose }: CompanyBillingProps) {
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [history, setHistory] = useState<BillingHistory[]>([]);
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [invoiceActionInFlight, setInvoiceActionInFlight] = useState<Record<string, InvoiceAction | null>>({});
   const [error, setError] = useState<string | null>(null);
 
   const loadBilling = async () => {
@@ -69,17 +84,29 @@ export function CompanyBilling({ onClose }: CompanyBillingProps) {
     }
   };
 
-  const markInvoiceAction = async (id: string, action: 'retry' | 'void') => {
+  const runInvoiceAction = async (id: string, action: InvoiceAction) => {
+    setInvoiceActionInFlight((prev) => ({ ...prev, [id]: action }));
     try {
       setError(null);
-      await api.post(`/api/admin/billing/invoices/${id}/actions`, { action });
+      const response = await api.post(
+        `/api/admin/billing/invoices/${id}/actions`,
+        { action },
+        { headers: { 'x-idempotency-key': idempotencyKey() } }
+      );
+
+      const redirectUrl = response.data?.redirect_url as string | undefined;
+      if (redirectUrl && (action === 'collect_payment' || action === 'send_payment_link')) {
+        window.open(redirectUrl, '_blank', 'noopener,noreferrer');
+      }
+
       await loadBilling();
     } catch (invoiceError) {
       console.error('Invoice action failed', invoiceError);
       setError('Invoice action failed. Please retry.');
+    } finally {
+      setInvoiceActionInFlight((prev) => ({ ...prev, [id]: null }));
     }
   };
-
 
   const activeSubscriptions = subscriptions.filter((sub) => sub.status === 'active').length;
   const pastDueSubscriptions = subscriptions.filter((sub) => sub.status === 'past_due').length;
@@ -123,9 +150,9 @@ export function CompanyBilling({ onClose }: CompanyBillingProps) {
           <ShieldCheck className="h-4 w-4 text-green-600" /> Payment operations readiness
         </div>
         <ul className="mt-2 list-disc pl-5 text-xs text-gray-600 dark:text-gray-300 space-y-1">
-          <li>Invoice retry and void actions are available per line item.</li>
-          <li>Subscription plan, status, and cycle updates are editable in-line.</li>
-          <li>Use external invoice links to complete customer payment collection.</li>
+          <li>Per-invoice actions now support collect payment, send payment link, mark paid, and void.</li>
+          <li>Invoice status transitions are enforced and audited in backend state machine rules.</li>
+          <li>Payment method status and latest payment attempt are visible for each invoice.</li>
         </ul>
       </div>
 
@@ -176,19 +203,38 @@ export function CompanyBilling({ onClose }: CompanyBillingProps) {
           <div className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
             <h3 className="font-semibold text-gray-900 dark:text-white mb-4">Invoice History</h3>
             <div className="space-y-2">
-              {history.map((row) => (
-                <div key={row.id} className="border border-gray-100 dark:border-gray-700 rounded-lg p-3 flex items-center justify-between">
-                  <div>
-                    <p className="font-medium text-gray-900 dark:text-white">{row.restaurant_name}</p>
-                    <p className="text-xs text-gray-500">{new Date(row.created_at).toLocaleDateString()} • ${Number(row.amount).toFixed(2)} • {row.status}</p>
+              {history.map((row) => {
+                const inFlightAction = invoiceActionInFlight[row.id];
+                const allowed = new Set(row.eligible_actions || []);
+                return (
+                  <div key={row.id} className="border border-gray-100 dark:border-gray-700 rounded-lg p-3 flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-medium text-gray-900 dark:text-white">{row.restaurant_name}</p>
+                      <p className="text-xs text-gray-500">
+                        {new Date(row.created_at).toLocaleDateString()} • {row.currency || 'USD'} ${Number(row.amount).toFixed(2)} • {row.status}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">Payment method: <span className="font-medium">{row.payment_method_status || 'unavailable'}</span></p>
+                      <p className="text-xs text-gray-500">Last attempt: {row.last_payment_attempt_at ? `${new Date(row.last_payment_attempt_at).toLocaleString()} (${row.last_payment_attempt_status || 'unknown'})` : 'No attempts yet'}</p>
+                      {row.last_payment_attempt_error && <p className="text-xs text-red-500">Error: {row.last_payment_attempt_error}</p>}
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap justify-end">
+                      {row.invoice_url && <a href={row.invoice_url} target="_blank" rel="noreferrer" className="btn-secondary"><Download className="w-4 h-4" /></a>}
+                      <button disabled={!allowed.has('collect_payment') || Boolean(inFlightAction)} className="btn-secondary" onClick={() => runInvoiceAction(row.id, 'collect_payment')}>
+                        {inFlightAction === 'collect_payment' ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Collect payment'}
+                      </button>
+                      <button disabled={!allowed.has('send_payment_link') || Boolean(inFlightAction)} className="btn-secondary inline-flex items-center gap-1" onClick={() => runInvoiceAction(row.id, 'send_payment_link')}>
+                        {inFlightAction === 'send_payment_link' ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Link2 className="w-4 h-4" />Send link</>}
+                      </button>
+                      <button disabled={!allowed.has('mark_paid') || Boolean(inFlightAction)} className="btn-secondary" onClick={() => runInvoiceAction(row.id, 'mark_paid')}>
+                        Mark paid
+                      </button>
+                      <button disabled={!allowed.has('void') || Boolean(inFlightAction)} className="btn-secondary" onClick={() => runInvoiceAction(row.id, 'void')}>
+                        Void
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {row.invoice_url && <a href={row.invoice_url} target="_blank" rel="noreferrer" className="btn-secondary"><Download className="w-4 h-4" /></a>}
-                    <button className="btn-secondary" onClick={() => markInvoiceAction(row.id, 'retry')}>Retry</button>
-                    <button className="btn-secondary" onClick={() => markInvoiceAction(row.id, 'void')}>Void</button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
               {history.length === 0 && <p className="text-sm text-gray-500">No invoice history found.</p>}
             </div>
           </div>
