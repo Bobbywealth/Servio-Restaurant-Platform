@@ -21,9 +21,18 @@ ALTER TABLE company_billing_history
 ALTER TABLE company_billing_history
   ADD COLUMN IF NOT EXISTS payment_link_token TEXT;
 
-ALTER TABLE company_billing_history
-  ADD CONSTRAINT IF NOT EXISTS chk_company_billing_history_status
-  CHECK (status IN ('pending', 'requires_action', 'paid', 'failed', 'voided'));
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'chk_company_billing_history_status'
+  ) THEN
+    ALTER TABLE company_billing_history
+      ADD CONSTRAINT chk_company_billing_history_status
+      CHECK (status IN ('pending', 'requires_action', 'paid', 'failed', 'voided'));
+  END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS idx_company_billing_history_status ON company_billing_history(status);
 CREATE INDEX IF NOT EXISTS idx_company_billing_history_last_attempt ON company_billing_history(last_payment_attempt_at DESC);
