@@ -32,6 +32,7 @@ import {
 } from 'lucide-react'
 import { api } from '../../lib/api'
 import { socketManager } from '../../lib/socket'
+import { getStaffRefreshActionsFromNotification } from '../../lib/staffSocketNotifications'
 import { useUser } from '../../contexts/UserContext'
 import EditStaffHoursModal from '../../components/staff/EditStaffHoursModal'
 import { showToast } from '../../components/ui/Toast'
@@ -740,39 +741,26 @@ export default function StaffPage() {
   useEffect(() => {
     console.log('[DEBUG] Setting up socket listeners...')
     
-    const handleTimeEntryCreated = (data: { userId: string; entry?: any }) => {
-      console.log('[DEBUG-SOCKET] Time entry created received:', data)
-      console.log('[DEBUG-SOCKET] Validating data before processing:', {
-        hasUserId: !!data?.userId,
-        hasEntry: !!data?.entry,
-        userId: data?.userId
-      })
-      showToast.success('Staff clock in recorded')
-      // Refresh current staff and hours
-      refreshStaffData()
-    }
+    const handleNotificationEvent = (data: { notification?: { type?: string } }) => {
+      console.log('[DEBUG-SOCKET] Notification received:', data)
+      const actions = getStaffRefreshActionsFromNotification(data)
 
-    const handleTimeEntryUpdated = (data: { userId: string; entry?: any }) => {
-      console.log('[DEBUG-SOCKET] Time entry updated received:', data)
-      // Refresh hours data
-      refreshHoursData()
+      if (!actions) {
+        return
+      }
+
+      if (actions.refreshStaffData) {
+        refreshStaffData()
+      }
+
+      if (actions.refreshHoursData) {
+        refreshHoursData()
+      }
     }
 
     const handleScheduleUpdated = () => {
       console.log('[DEBUG-SOCKET] Schedule updated event received')
       showToast.info('Schedule has been updated')
-      refreshStaffData()
-    }
-
-    const handleBreakStarted = (data: { userId: string }) => {
-      console.log('[DEBUG-SOCKET] Break started event received:', data)
-      showToast.success('Break started')
-      refreshStaffData()
-    }
-
-    const handleBreakEnded = (data: { userId: string }) => {
-      console.log('[DEBUG-SOCKET] Break ended event received:', data)
-      showToast.success('Break ended')
       refreshStaffData()
     }
 
@@ -784,21 +772,15 @@ export default function StaffPage() {
       console.log('[DEBUG] Socket already connected')
     }
 
-    socketManager.on('staff:clock_in', handleTimeEntryCreated)
-    socketManager.on('staff:clock_out', handleTimeEntryUpdated)
+    socketManager.on('notifications.new', handleNotificationEvent)
     socketManager.on('staff.schedule_updated', handleScheduleUpdated)
-    socketManager.on('staff:break_start', handleBreakStarted)
-    socketManager.on('staff:break_end', handleBreakEnded)
 
     console.log('[DEBUG] Socket listeners registered')
 
     return () => {
       console.log('[DEBUG] Cleaning up socket listeners...')
-      socketManager.off('staff:clock_in', handleTimeEntryCreated)
-      socketManager.off('staff:clock_out', handleTimeEntryUpdated)
+      socketManager.off('notifications.new', handleNotificationEvent)
       socketManager.off('staff.schedule_updated', handleScheduleUpdated)
-      socketManager.off('staff:break_start', handleBreakStarted)
-      socketManager.off('staff:break_end', handleBreakEnded)
     }
   }, [])
 
