@@ -131,6 +131,7 @@ async function initializeServer() {
     const { default: staffBulkRoutes } = await import('./routes/staff-bulk');
     const { default: adminRoutes } = await import('./routes/admin');
     const { default: voiceConversationsRoutes } = await import('./routes/voice-conversations');
+    const { default: conversationsRoutes } = await import('./routes/conversations');
     const { default: companyRoutes } = await import('./routes/company');
     const { default: bookingsRoutes } = await import('./routes/bookings');
     const { default: publicRoutes } = await import('./routes/public');
@@ -145,6 +146,7 @@ async function initializeServer() {
     app.use('/api/voice', voiceRoutes);
     app.use('/api/voice-hub', voiceHubRoutes);
     app.use('/api/voice-conversations', requireAuth, voiceConversationsRoutes);
+    app.use('/api/conversations', requireAuth, conversationsRoutes);
     
     // Protected routes
     app.use('/api/assistant', requireAuth, assistantRoutes);
