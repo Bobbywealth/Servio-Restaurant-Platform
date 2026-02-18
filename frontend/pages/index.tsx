@@ -776,33 +776,14 @@ export default function HomePage() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
             >
-              <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4">Works with your tools</h2>
-              <p className="text-gray-400">Seamlessly integrates with the platforms you already use</p>
+              <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4">Integrations coming soon</h2>
+              <p className="text-gray-400">We&apos;re actively building platform integrations and will announce each one as it goes live.</p>
             </motion.div>
 
-            <div className="flex flex-wrap justify-center items-center gap-8 md:gap-16">
-              {[
-                { name: 'Toast', color: 'bg-red-500' },
-                { name: 'Square', color: 'bg-black' },
-                { name: 'DoorDash', color: 'bg-red-600' },
-                { name: 'Uber Eats', color: 'bg-green-500' },
-                { name: 'Grubhub', color: 'bg-orange-500' },
-                { name: ' Clover', color: 'bg-gray-700' }
-              ].map((partner, idx) => (
-                <motion.div
-                  key={idx}
-                  className="flex items-center gap-2 px-4 py-2 bg-gray-800/50 rounded-lg border border-gray-700/50"
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  whileInView={{ opacity: 1, scale: 1 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: idx * 0.1 }}
-                >
-                  <div className={`w-6 h-6 ${partner.color} rounded-md flex items-center justify-center`}>
-                    <span className="text-white text-xs font-bold">{partner.name.charAt(0)}</span>
-                  </div>
-                  <span className="text-gray-400 font-medium">{partner.name}</span>
-                </motion.div>
-              ))}
+            <div className="max-w-3xl mx-auto text-center">
+              <p className="text-gray-300">
+                Want a specific integration prioritized? Reach out and we&apos;ll add your preferred platform to the roadmap.
+              </p>
             </div>
 
             <motion.div
