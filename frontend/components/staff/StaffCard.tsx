@@ -99,7 +99,7 @@ export function StaffCard({
   const [openMenu, setOpenMenu] = useState<string | null | boolean>(null)
   const [loading, setLoading] = useState<string | null>(null)
   const [shiftDuration, setShiftDuration] = useState<string>('')
-  const [breakMinutesTotal, setBreakMinutesTotal] = useState<number>(0)
+  const [breakDurationLabel, setBreakDurationLabel] = useState<string>('0m')
   const [isHovering, setIsHovering] = useState(false)
 
   // Staff members cannot edit hours - only managers/owners/admins can
@@ -109,7 +109,7 @@ export function StaffCard({
   useEffect(() => {
     if (!activeShift || status === 'off-shift') {
       setShiftDuration('')
-      setBreakMinutesTotal(0)
+      setBreakDurationLabel('0m')
       return
     }
 
@@ -127,22 +127,32 @@ export function StaffCard({
         setShiftDuration(`${mins}m`)
       }
 
-      let totalBreakMinutes = Number(activeShift.break_minutes || 0)
+      const persistedBreakSeconds = Math.max(0, Math.floor(Number(activeShift.break_minutes || 0) * 60))
+      let liveBreakSeconds = 0
       if (status === 'on-break' && activeShift.current_break_start) {
         const breakStart = new Date(activeShift.current_break_start)
         if (!Number.isNaN(breakStart.getTime())) {
           const breakDiffMs = now.getTime() - breakStart.getTime()
-          const breakDiffMins = Math.floor(breakDiffMs / 60000)
-          if (breakDiffMins > 0) {
-            totalBreakMinutes += breakDiffMins
-          }
+          liveBreakSeconds = Math.max(0, Math.floor(breakDiffMs / 1000))
         }
       }
-      setBreakMinutesTotal(Math.max(0, Math.round(totalBreakMinutes)))
+
+      const totalBreakSeconds = persistedBreakSeconds + liveBreakSeconds
+      const breakHours = Math.floor(totalBreakSeconds / 3600)
+      const breakMinutes = Math.floor((totalBreakSeconds % 3600) / 60)
+      const breakSeconds = totalBreakSeconds % 60
+
+      if (breakHours > 0) {
+        setBreakDurationLabel(`${breakHours}h ${breakMinutes}m`)
+      } else if (totalBreakSeconds >= 60) {
+        setBreakDurationLabel(`${breakMinutes}m ${breakSeconds}s`)
+      } else {
+        setBreakDurationLabel(`${breakSeconds}s`)
+      }
     }
 
     updateDuration()
-    const interval = setInterval(updateDuration, 60000)
+    const interval = setInterval(updateDuration, 1000)
 
     return () => clearInterval(interval)
   }, [activeShift, status])
@@ -497,7 +507,7 @@ export function StaffCard({
                 <span>Breaks</span>
               </div>
               <span className="font-medium text-surface-700 dark:text-surface-200">
-                {breakMinutesTotal}m
+                {breakDurationLabel}
               </span>
             </div>
           </div>

@@ -80,9 +80,8 @@ function OrderTimer({ createdAt, status }: { createdAt: string; status?: string 
       const now = Date.now()
       const diff = Math.floor((now - created) / 1000)
       const mins = Math.floor(diff / 60)
-      const secs = diff % 60
       setMinutes(mins)
-      setElapsed(mins > 0 ? `${mins}m ${secs}s` : `${secs}s`)
+      setElapsed(mins > 0 ? `${mins}m` : '<1m')
       return
     }
 
@@ -92,9 +91,8 @@ function OrderTimer({ createdAt, status }: { createdAt: string; status?: string 
       const diff = Math.floor((now - created) / 1000)
 
       const mins = Math.floor(diff / 60)
-      const secs = diff % 60
       setMinutes(mins)
-      setElapsed(mins > 0 ? `${mins}m ${secs}s` : `${secs}s`)
+      setElapsed(mins > 0 ? `${mins}m` : '<1m')
     }
 
     updateElapsed()
