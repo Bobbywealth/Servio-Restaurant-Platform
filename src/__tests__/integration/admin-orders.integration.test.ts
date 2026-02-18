@@ -95,6 +95,55 @@ describe('Admin orders integration', () => {
     expect(query).toContain('LEFT JOIN restaurants r ON r.id = o.restaurant_id');
   });
 
+  it('uses bounded time window predicates for finite windows', async () => {
+    mockDb.all.mockResolvedValue([]);
+    mockDb.get
+      .mockResolvedValueOnce({ settings: '{}' })
+      .mockResolvedValueOnce({ total: 0 });
+
+    const app = await createApp();
+    const response = await httpRequest(app, '/api/admin/orders?timeWindow=30d', {
+      headers: { 'x-test-role': 'platform-admin' }
+    });
+
+    expect(response.status).toBe(200);
+
+    const [query] = mockDb.all.mock.calls[0];
+    expect(query).toContain("o.created_at >= NOW() - INTERVAL '30 days'");
+  });
+
+  it('omits created_at predicate in all-history mode so older records can be returned', async () => {
+    mockDb.all.mockResolvedValue([
+      {
+        id: 'order-legacy',
+        restaurant_id: 'rest-a',
+        restaurant_name: 'North Side Diner',
+        status: 'completed',
+        customer_name: 'Pat',
+        customer_phone: '555-3000',
+        total_amount: 14.25,
+        source: 'web',
+        created_at: '2024-01-01T10:00:00.000Z'
+      }
+    ]);
+    mockDb.get
+      .mockResolvedValueOnce({ settings: '{}' })
+      .mockResolvedValueOnce({ total: 1 });
+
+    const app = await createApp();
+    const response = await httpRequest(app, '/api/admin/orders?timeWindow=all', {
+      headers: { 'x-test-role': 'platform-admin' }
+    });
+
+    expect(response.status).toBe(200);
+    const payload = await response.json();
+    expect(payload.orders).toHaveLength(1);
+    expect(payload.orders[0].id).toBe('order-legacy');
+
+    const [query] = mockDb.all.mock.calls[0];
+    expect(query).not.toContain('o.created_at >= NOW() - INTERVAL');
+  });
+
   it('rejects non-admin users from admin orders endpoints', async () => {
     const app = await createApp();
 
