@@ -98,6 +98,33 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
 }));
 
 /**
+ * GET /api/conversations/analytics/summary
+ * Get analytics summary for conversations
+ */
+router.get('/analytics/summary', asyncHandler(async (req: Request, res: Response) => {
+  const requestId = getRequestId(req);
+  const restaurantId = asRestaurantId(req.user?.restaurantId);
+
+  logger.info(`[conversations.analytics] entry ${JSON.stringify({ requestId, restaurantId, query: req.query })}`);
+
+  if (!restaurantId) {
+    throw new BadRequestError('Missing restaurantId');
+  }
+
+  const { from, to } = req.query;
+
+  const fromDate = from ? new Date(from as string) : undefined;
+  const toDate = to ? new Date(to as string) : undefined;
+
+  const summary = await conversationService.getAnalyticsSummary(restaurantId, fromDate, toDate);
+
+  res.json({
+    success: true,
+    data: summary
+  });
+}));
+
+/**
  * GET /api/conversations/:id
  * Get conversation details with transcript, insights, and review
  */
@@ -231,33 +258,6 @@ router.post('/:id/review', asyncHandler(async (req: Request, res: Response) => {
       tags: review.tags,
       followUpAction: review.follow_up_action
     }
-  });
-}));
-
-/**
- * GET /api/conversations/analytics/summary
- * Get analytics summary for conversations
- */
-router.get('/analytics/summary', asyncHandler(async (req: Request, res: Response) => {
-  const requestId = getRequestId(req);
-  const restaurantId = asRestaurantId(req.user?.restaurantId);
-
-  logger.info(`[conversations.analytics] entry ${JSON.stringify({ requestId, restaurantId, query: req.query })}`);
-
-  if (!restaurantId) {
-    throw new BadRequestError('Missing restaurantId');
-  }
-
-  const { from, to } = req.query;
-
-  const fromDate = from ? new Date(from as string) : undefined;
-  const toDate = to ? new Date(to as string) : undefined;
-
-  const summary = await conversationService.getAnalyticsSummary(restaurantId, fromDate, toDate);
-
-  res.json({
-    success: true,
-    data: summary
   });
 }));
 

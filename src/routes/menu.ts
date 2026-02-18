@@ -616,22 +616,23 @@ router.put('/categories/reorder', asyncHandler(async (req: Request, res: Respons
 
   let updatedCount = 0;
   if (updates.length > 0) {
-    const valuesClauses = updates.map(() => '(?::TEXT, ?::INTEGER)').join(', ');
-    const params: any[] = [];
-    for (const [id, order] of updates) {
-      params.push(id, order);
+    await db.run('BEGIN TRANSACTION');
+    try {
+      for (const [id, order] of updates) {
+        const result = await db.run(
+          `UPDATE menu_categories
+           SET sort_order = ?,
+               updated_at = CURRENT_TIMESTAMP
+           WHERE id = ? AND restaurant_id = ?`,
+          [order, id, restaurantId]
+        );
+        updatedCount += result.changes || 0;
+      }
+      await db.run('COMMIT');
+    } catch (error) {
+      await db.run('ROLLBACK');
+      throw error;
     }
-    params.push(restaurantId);
-
-    const result = await db.run(
-      `UPDATE menu_categories AS mc
-       SET sort_order = v.new_order,
-           updated_at = CURRENT_TIMESTAMP
-       FROM (VALUES ${valuesClauses}) AS v(cat_id, new_order)
-       WHERE mc.id = v.cat_id AND mc.restaurant_id = ?`,
-      params
-    );
-    updatedCount = result.changes;
   }
 
   logger.info(`Category reorder: updated ${updatedCount}/${orderedIds.length} categories for restaurant ${restaurantId}`);
