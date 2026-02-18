@@ -153,7 +153,10 @@ export default function ConversationsPage() {
     offset: 0
   })
 
-  const loadConversations = async (isRefresh = false) => {
+  const refreshTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const refreshDedupRef = useRef<Map<string, number>>(new Map())
+
+  const loadConversations = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true)
     try {
       const result = await conversationsApi.list({
@@ -169,16 +172,45 @@ export default function ConversationsPage() {
       setLoading(false)
       setRefreshing(false)
     }
-  }
+  }, [filters, pagination.limit, pagination.offset])
+
+  const queueConversationsRefresh = useCallback((reason: string) => {
+    const now = Date.now()
+    const dedupeWindowMs = 2000
+    const debounceMs = 600
+
+    for (const [key, timestamp] of refreshDedupRef.current.entries()) {
+      if (now - timestamp > dedupeWindowMs) {
+        refreshDedupRef.current.delete(key)
+      }
+    }
+
+    const previousRefreshAt = refreshDedupRef.current.get(reason)
+    if (previousRefreshAt && now - previousRefreshAt < dedupeWindowMs) {
+      return
+    }
+    refreshDedupRef.current.set(reason, now)
+
+    if (refreshTimerRef.current) {
+      return
+    }
+
+    refreshTimerRef.current = setTimeout(() => {
+      refreshTimerRef.current = null
+      loadConversations()
+    }, debounceMs)
+  }, [loadConversations])
 
   useEffect(() => {
     if (user) {
       loadConversations()
     }
-  }, [user, pagination])
+  }, [loadConversations, user])
 
   // Socket listeners for real-time updates
   useEffect(() => {
+    const conversationNotificationTypes = new Set(['order.created_vapi'])
+
     const handleNewConversation = (data: { sessionId?: string; session?: ConversationSession; transcript?: string; confidence?: number }) => {
       console.log('New conversation received:', data)
 
@@ -187,18 +219,44 @@ export default function ConversationsPage() {
       setTimeout(() => setNewConversationAlert(false), 5000)
 
       // Refresh the conversations list
-      loadConversations()
+      queueConversationsRefresh(`voice:command_received:${data.sessionId ?? 'unknown'}`)
 
       // If it's an active call, add it to active calls
       if (data.session) {
-        setActiveCalls(prev => [...prev, data.session!])
+        setActiveCalls(prev => {
+          if (prev.some(call => call.id === data.session!.id)) {
+            return prev
+          }
+          return [...prev, data.session!]
+        })
       }
     }
 
     const handleCallEnded = (data: { sessionId: string }) => {
       console.log('Call ended:', data)
       setActiveCalls(prev => prev.filter(call => call.id !== data.sessionId))
-      loadConversations()
+      queueConversationsRefresh(`call:ended:${data.sessionId}`)
+    }
+
+    const handleNotificationEvent = (data: { notification?: { id?: string; type?: string; metadata?: { source?: string; sessionId?: string } } }) => {
+      const notificationType = data.notification?.type
+      if (!notificationType) return
+
+      const isConversationRelevant =
+        conversationNotificationTypes.has(notificationType) ||
+        (notificationType === 'system.warning' && data.notification?.metadata?.source === 'vapi')
+
+      if (!isConversationRelevant) {
+        return
+      }
+
+      setNewConversationAlert(true)
+      setTimeout(() => setNewConversationAlert(false), 5000)
+
+      const dedupeKey = data.notification?.id
+        ? `notifications.new:${data.notification.id}`
+        : `notifications.new:${notificationType}:${data.notification?.metadata?.sessionId ?? 'unknown'}`
+      queueConversationsRefresh(dedupeKey)
     }
 
     // Connect and listen
@@ -208,12 +266,18 @@ export default function ConversationsPage() {
 
     socketManager.on('voice:command_received', handleNewConversation)
     socketManager.on('call:ended', handleCallEnded)
+    socketManager.on('notifications.new', handleNotificationEvent)
 
     return () => {
       socketManager.off('voice:command_received', handleNewConversation)
       socketManager.off('call:ended', handleCallEnded)
+      socketManager.off('notifications.new', handleNotificationEvent)
+      if (refreshTimerRef.current) {
+        clearTimeout(refreshTimerRef.current)
+        refreshTimerRef.current = null
+      }
     }
-  }, [user])
+  }, [queueConversationsRefresh, user])
 
   const handleRefresh = () => {
     loadConversations(true)
