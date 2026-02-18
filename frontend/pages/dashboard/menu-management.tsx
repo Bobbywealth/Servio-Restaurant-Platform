@@ -311,9 +311,11 @@ const MenuManagement: React.FC = () => {
       setCategories(mergedCategories);
       setExpandedCategories(new Set(mergedCategories.map((cat) => cat.id)));
       setSelectedCategory((prev) => (prev === 'all' && mergedCategories[0]?.id ? mergedCategories[0].id : prev));
+      return mergedCategories;
     } catch (error) {
       console.error('Error loading menu data:', error);
       toast.error('Failed to load menu data');
+      return null;
     } finally {
       setLoading(false);
     }
@@ -677,11 +679,35 @@ const MenuManagement: React.FC = () => {
       const { updated } = response.data || {};
       console.log('[handleReorderCategories] Category order saved:', { requested: orderedIds.length, updated });
       toast.success('Category order saved');
-      // Refresh data in background — don't revert if this fails since the
-      // PUT already persisted the new order to the database.
-      loadMenuData().catch((err) => {
-        console.warn('[handleReorderCategories] Background refresh failed (order was saved):', err);
-      });
+
+      // Refresh data in background and verify persisted ordering.
+      loadMenuData()
+        .then((reloadedCategories) => {
+          if (!Array.isArray(reloadedCategories)) return;
+
+          const requestedOrder = orderedIds.map((id, index) => ({ id, sortOrder: index }));
+          const returnedOrder = reloadedCategories
+            .map((category) => ({ id: category.id, sortOrder: Number(category.sort_order ?? 0) }))
+            .sort((a, b) => a.sortOrder - b.sortOrder || a.id.localeCompare(b.id));
+
+          const persistedIds = returnedOrder.map((entry) => entry.id);
+          const expectedIds = requestedOrder.map((entry) => entry.id);
+          const mismatch =
+            persistedIds.length !== expectedIds.length ||
+            expectedIds.some((id, index) => id !== persistedIds[index]);
+
+          if (mismatch) {
+            console.error('[handleReorderCategories] Category reorder persistence mismatch', {
+              restaurantId: user?.restaurantId,
+              requestedOrder,
+              returnedOrder
+            });
+            toast.error('Category order could not be verified after save. Please refresh and try again.');
+          }
+        })
+        .catch((err) => {
+          console.warn('[handleReorderCategories] Background refresh failed (order was saved):', err);
+        });
     } catch (error) {
       console.error('Failed to persist category order', error);
       setCategories(previousCategories);
@@ -739,6 +765,9 @@ const MenuManagement: React.FC = () => {
   };
 
   const handleReorderItems = async (categoryId: string, orderedItemIds: string[]) => {
+    const previousCategoryItems =
+      categories.find((cat) => cat.id === categoryId)?.items?.map((item) => ({ ...item })) || [];
+
     // Optimistic reorder in UI
     setCategories((prev) =>
       prev.map((cat) => {
@@ -759,6 +788,9 @@ const MenuManagement: React.FC = () => {
       await api.put(`/api/menu/categories/${encodeURIComponent(categoryId)}/items/reorder`, { itemIds: orderedItemIds });
     } catch (error) {
       console.error('Failed to save item order', error);
+      setCategories((prev) =>
+        prev.map((cat) => (cat.id === categoryId ? { ...cat, items: previousCategoryItems } : cat))
+      );
       toast.error('Failed to save item order');
     }
   };
