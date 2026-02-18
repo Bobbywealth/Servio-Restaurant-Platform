@@ -1,10 +1,12 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import { useRouter } from 'next/router'
 import AdminLayout from '../../../components/Layout/AdminLayout'
 import { api } from '../../../lib/api'
-import { AdminOrderSummary, coerceMoneyValue, getOrderStatusBadgeClass } from '../../../lib/adminOrders'
+import { AdminOrderSummary, coerceMoneyValue } from '../../../lib/adminOrders'
 import { useSocket } from '../../../lib/socket'
-import Link from 'next/link'
-import { ClipboardList, Clock } from 'lucide-react'
+import OrderQueueView from '../../../components/Admin/orders/OrderQueueView'
+import OrderTableView from '../../../components/Admin/orders/OrderTableView'
+import OrderKanbanView from '../../../components/Admin/orders/OrderKanbanView'
 
 type Filters = {
   restaurantId: string
@@ -15,6 +17,8 @@ type Filters = {
   search: string
 }
 
+type OrdersView = 'queue' | 'table' | 'kanban'
+
 const DEFAULT_FILTERS: Filters = {
   restaurantId: '',
   channel: 'all',
@@ -24,7 +28,16 @@ const DEFAULT_FILTERS: Filters = {
   search: ''
 }
 
+const VIEW_OPTIONS: OrdersView[] = ['queue', 'table', 'kanban']
+const DEFAULT_VIEW: OrdersView = 'queue'
+
+const coerceView = (value: string | string[] | undefined): OrdersView => {
+  if (typeof value !== 'string') return DEFAULT_VIEW
+  return VIEW_OPTIONS.includes(value as OrdersView) ? (value as OrdersView) : DEFAULT_VIEW
+}
+
 export default function AdminOrdersPage() {
+  const router = useRouter()
   const [orders, setOrders] = useState<AdminOrderSummary[]>([])
   const [restaurants, setRestaurants] = useState<{ id: string; name: string }[]>([])
   const [selectedIds, setSelectedIds] = useState<string[]>([])
@@ -33,18 +46,19 @@ export default function AdminOrdersPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [isBulkRunning, setIsBulkRunning] = useState(false)
   const [pagination, setPagination] = useState({ page: 1, pages: 1, total: 0, limit: 100 })
+  const [view, setView] = useState<OrdersView>(DEFAULT_VIEW)
   const socket = useSocket()
 
-  const fetchRestaurants = async () => {
+  const fetchRestaurants = useCallback(async () => {
     try {
       const res = await api.get('/api/admin/restaurants', { params: { limit: 200, page: 1 } })
       setRestaurants((res.data.restaurants || []).map((restaurant: any) => ({ id: restaurant.id, name: restaurant.name })))
     } catch (error) {
       console.error('Failed to fetch restaurants:', error)
     }
-  }
+  }, [])
 
-  const fetchOrders = async () => {
+  const fetchOrders = useCallback(async () => {
     setIsLoading(true)
     try {
       const params: Record<string, string> = {
@@ -68,15 +82,36 @@ export default function AdminOrdersPage() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [filters, pagination.limit, pagination.page])
+
+  useEffect(() => {
+    if (!router.isReady) return
+    setView(coerceView(router.query.view))
+  }, [router.isReady, router.query.view])
+
+  useEffect(() => {
+    if (!router.isReady) return
+
+    const queryView = coerceView(router.query.view)
+    if (queryView === view) return
+
+    router.replace(
+      {
+        pathname: router.pathname,
+        query: { ...router.query, view }
+      },
+      undefined,
+      { shallow: true }
+    )
+  }, [router, router.isReady, router.pathname, router.query, view])
 
   useEffect(() => {
     fetchRestaurants()
-  }, [])
+  }, [fetchRestaurants])
 
   useEffect(() => {
     fetchOrders()
-  }, [filters, pagination.page, pagination.limit])
+  }, [fetchOrders])
 
   useEffect(() => {
     if (!socket) return
@@ -90,19 +125,27 @@ export default function AdminOrdersPage() {
     return () => {
       socket.off('notifications.new')
     }
-  }, [socket, filters])
+  }, [socket, fetchOrders])
 
   const pendingOrders = useMemo(() => orders.filter(o => o.status === 'pending'), [orders])
-  const otherOrders = useMemo(() => orders.filter(o => o.status !== 'pending'), [orders])
   const allVisibleOrderIds = useMemo(() => orders.map(o => o.id), [orders])
   const totalRevenueVisible = useMemo(() => orders.reduce((sum, order) => sum + coerceMoneyValue(order.total_amount), 0), [orders])
+  const hasSelectedAllVisible = useMemo(
+    () => allVisibleOrderIds.length > 0 && allVisibleOrderIds.every((orderId) => selectedIds.includes(orderId)),
+    [allVisibleOrderIds, selectedIds]
+  )
 
   const toggleSelectOrder = (orderId: string) => {
     setSelectedIds(prev => (prev.includes(orderId) ? prev.filter(id => id !== orderId) : [...prev, orderId]))
   }
 
   const toggleSelectAllVisible = () => {
-    setSelectedIds(prev => (prev.length === allVisibleOrderIds.length ? [] : allVisibleOrderIds))
+    setSelectedIds((prev) => {
+      if (hasSelectedAllVisible) {
+        return prev.filter((orderId) => !allVisibleOrderIds.includes(orderId))
+      }
+      return Array.from(new Set([...prev, ...allVisibleOrderIds]))
+    })
   }
 
   const runBulkCancelStale = async () => {
@@ -123,15 +166,45 @@ export default function AdminOrdersPage() {
     }
   }
 
+  const renderActiveView = () => {
+    if (view === 'table') {
+      return (
+        <OrderTableView
+          orders={orders}
+          selectedIds={selectedIds}
+          isLoading={isLoading}
+          errorMessage={errorMessage}
+          onToggleSelectOrder={toggleSelectOrder}
+        />
+      )
+    }
+
+    if (view === 'kanban') {
+      return (
+        <OrderKanbanView
+          orders={orders}
+          selectedIds={selectedIds}
+          isLoading={isLoading}
+          errorMessage={errorMessage}
+          onToggleSelectOrder={toggleSelectOrder}
+        />
+      )
+    }
+
+    return (
+      <OrderQueueView
+        orders={pendingOrders}
+        selectedIds={selectedIds}
+        isLoading={isLoading}
+        errorMessage={errorMessage}
+        onToggleSelectOrder={toggleSelectOrder}
+      />
+    )
+  }
+
   return (
     <AdminLayout title="Order Management">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
-        {errorMessage && (
-          <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-            {errorMessage}
-          </div>
-        )}
-
         <section className="bg-white dark:bg-gray-800 shadow rounded-lg p-4 space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
             <input value={filters.search} onChange={(e) => { setPagination((prev) => ({ ...prev, page: 1 })); setFilters(prev => ({ ...prev, search: e.target.value })) }} placeholder="Search order ID, customer, phone, restaurant" className="input-field" />
@@ -143,10 +216,9 @@ export default function AdminOrdersPage() {
 
             <select value={filters.channel} onChange={(e) => { setPagination((prev) => ({ ...prev, page: 1 })); setFilters(prev => ({ ...prev, channel: e.target.value })) }} className="input-field">
               <option value="all">All channels</option>
-              <option value="voice">Voice</option>
+              <option value="vapi_voice">Voice AI</option>
               <option value="web">Web</option>
-              <option value="sms">SMS</option>
-              <option value="email">Email</option>
+              <option value="phone">Phone</option>
             </select>
 
             <select value={filters.status} onChange={(e) => { setPagination((prev) => ({ ...prev, page: 1 })); setFilters(prev => ({ ...prev, status: e.target.value })) }} className="input-field">
@@ -161,7 +233,7 @@ export default function AdminOrdersPage() {
 
             <select value={filters.timeWindowHours} onChange={(e) => { setPagination((prev) => ({ ...prev, page: 1 })); setFilters(prev => ({ ...prev, timeWindowHours: e.target.value })) }} className="input-field">
               <option value="24">Last 24 hours</option>
-              <option value="72">Last 72 hours</option>
+              <option value="72">Last 3 days</option>
               <option value="168">Last 7 days</option>
               <option value="720">Last 30 days</option>
               <option value="8760">All orders (last 12 months)</option>
@@ -174,11 +246,24 @@ export default function AdminOrdersPage() {
             </select>
           </div>
 
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="inline-flex rounded-md border border-gray-300 dark:border-gray-600 overflow-hidden">
+              {VIEW_OPTIONS.map((option) => (
+                <button
+                  key={option}
+                  onClick={() => setView(option)}
+                  className={`px-3 py-1.5 text-sm capitalize ${view === option ? 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900' : 'bg-white text-gray-700 dark:bg-gray-800 dark:text-gray-200'}`}
+                >
+                  {option}
+                </button>
+              ))}
+            </div>
+
             <label className="inline-flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={selectedIds.length > 0 && selectedIds.length === allVisibleOrderIds.length} onChange={toggleSelectAllVisible} />
+              <input type="checkbox" checked={hasSelectedAllVisible} onChange={toggleSelectAllVisible} />
               Select all visible ({selectedIds.length} selected)
             </label>
+
             <button onClick={runBulkCancelStale} disabled={isBulkRunning} className="btn-secondary text-sm">
               {isBulkRunning ? 'Running...' : 'Bulk cancel stale pending'}
             </button>
@@ -200,89 +285,7 @@ export default function AdminOrdersPage() {
           </div>
         </section>
 
-        {/* Pending Orders Section */}
-        <section>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center">
-              <Clock className="w-5 h-5 mr-2 text-yellow-500" />
-              Pending Orders
-              {pendingOrders.length > 0 && (
-                <span className="ml-3 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                  {pendingOrders.length}
-                </span>
-              )}
-            </h2>
-          </div>
-
-          <div className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden">
-            {isLoading ? <div className="p-8 text-center text-gray-500">Loading orders...</div> : pendingOrders.length === 0 ? (
-              <div className="p-8 text-center text-gray-500">No pending orders</div>
-            ) : (
-              <ul className="divide-y divide-gray-200 dark:divide-gray-700">
-                {pendingOrders.map((order) => (
-                  <li key={order.id} className="p-4 hover:bg-gray-50 dark:hover:bg-gray-700">
-                    <div className="flex items-center justify-between gap-4">
-                      <label className="inline-flex items-center gap-2">
-                        <input type="checkbox" checked={selectedIds.includes(order.id)} onChange={() => toggleSelectOrder(order.id)} />
-                        <Link href={`/admin/orders/${order.id}`} className="block">
-                          <p className="text-sm font-medium text-red-600 truncate">{order.customer_name || 'Anonymous'}</p>
-                          <p className="text-sm text-gray-500">{order.customer_phone}</p>
-                          <p className="text-xs text-gray-400">{order.restaurant_name || 'Unknown restaurant'}</p>
-                        </Link>
-                      </label>
-                      <div className="text-right">
-                        <p className="text-sm font-bold text-gray-900 dark:text-white">${coerceMoneyValue(order.total_amount).toFixed(2)}</p>
-                        <p className="text-xs text-gray-400">{new Date(order.created_at).toLocaleTimeString()}</p>
-                        {order.is_sla_breached ? <p className="text-xs font-semibold text-red-600">SLA breached</p> : <p className="text-xs text-green-600">SLA OK</p>}
-                      </div>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </section>
-
-        <section>
-          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4 flex items-center">
-            <ClipboardList className="w-5 h-5 mr-2 text-gray-400" />
-            Recent Activity
-          </h2>
-          <div className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden">
-            <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-              <thead className="bg-gray-50 dark:bg-gray-900/50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Restaurant</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Channel</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">SLA</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                {otherOrders.map((order) => (
-                  <tr key={order.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <Link href={`/admin/orders/${order.id}`} className="text-sm font-medium text-gray-900 dark:text-white">
-                        {order.customer_name || 'Order'}
-                      </Link>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{order.restaurant_name || 'Unknown'}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{order.channel || 'unknown'}</td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getOrderStatusBadgeClass(order.status)}`}>{order.status}</span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">${coerceMoneyValue(order.total_amount).toFixed(2)}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      {order.is_sla_breached ? <span className="text-red-600 font-medium">Breached</span> : <span className="text-green-600">On time</span>}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
+        {renderActiveView()}
 
         <div className="flex items-center justify-between text-sm text-gray-600 dark:text-gray-300">
           <p>Page {pagination.page} of {Math.max(1, pagination.pages)}</p>
