@@ -2643,6 +2643,9 @@ router.get('/platform-stats', async (req, res) => {
         (SELECT COUNT(*) FROM restaurants WHERE is_active = true AND updated_at > NOW() - INTERVAL '7 days') as active_restaurants_7d,
         (SELECT COUNT(*) FROM orders) as total_orders,
         (SELECT COUNT(*) FROM orders WHERE created_at > NOW() - INTERVAL '30 days') as orders_30d,
+        (SELECT COALESCE(SUM(total_amount), 0) FROM orders WHERE created_at >= CURRENT_DATE) as revenue_today,
+        (SELECT COALESCE(SUM(total_amount), 0) FROM orders WHERE created_at >= NOW() - INTERVAL '7 days') as revenue_week,
+        (SELECT COALESCE(SUM(total_amount), 0) FROM orders WHERE created_at >= NOW() - INTERVAL '30 days') as revenue_month,
         (SELECT COUNT(*) FROM time_entries WHERE created_at > NOW() - INTERVAL '30 days') as timeclock_entries_30d,
         (SELECT COUNT(*) FROM inventory_transactions WHERE created_at > NOW() - INTERVAL '30 days') as inventory_transactions_30d,
         (SELECT COUNT(*) FROM audit_logs WHERE created_at > NOW() - INTERVAL '24 hours') as audit_events_24h

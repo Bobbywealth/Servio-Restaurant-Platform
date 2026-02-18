@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import AdminLayout from '../../components/Layout/AdminLayout'
 import { api } from '../../lib/api'
-import { Plus, Trash2 } from 'lucide-react'
+import { LayoutGrid, List, Plus, Trash2 } from 'lucide-react'
 
 interface AdminTask {
   id: string
@@ -49,6 +49,7 @@ export default function AdminTasksPage() {
   const [scopeFilter, setScopeFilter] = useState<'all' | TaskScope>('all')
   const [restaurantId, setRestaurantId] = useState('')
   const [page, setPage] = useState(1)
+  const [viewMode, setViewMode] = useState<'table' | 'board'>('table')
   const [pagination, setPagination] = useState<PaginationPayload>({ page: 1, pages: 1, total: 0 })
   const [newTask, setNewTask] = useState({
     scope: '' as TaskScopeSelection,
@@ -166,6 +167,14 @@ export default function AdminTasksPage() {
     }
   }, [tasks])
 
+  const tasksByStatus = useMemo(() => {
+    return {
+      pending: tasks.filter((task) => task.status === 'pending'),
+      in_progress: tasks.filter((task) => task.status === 'in_progress'),
+      completed: tasks.filter((task) => task.status === 'completed')
+    }
+  }, [tasks])
+
   return (
     <AdminLayout title="Task Management" description="Manage company tasks across all restaurants">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
@@ -269,12 +278,31 @@ export default function AdminTasksPage() {
               <option value="restaurant">Single restaurant</option>
             </select>
           </div>
-          <div className="flex justify-end">
+          <div className="flex flex-wrap justify-between gap-3">
+            <div className="inline-flex rounded-lg border border-gray-300 dark:border-gray-600 p-1">
+              <button
+                onClick={() => setViewMode('table')}
+                className={`inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium ${viewMode === 'table' ? 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900' : 'text-gray-600 dark:text-gray-300'}`}
+                type="button"
+              >
+                <List className="w-3.5 h-3.5" />
+                Table
+              </button>
+              <button
+                onClick={() => setViewMode('board')}
+                className={`inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium ${viewMode === 'board' ? 'bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900' : 'text-gray-600 dark:text-gray-300'}`}
+                type="button"
+              >
+                <LayoutGrid className="w-3.5 h-3.5" />
+                Board
+              </button>
+            </div>
             <button onClick={() => { setPage(1); fetchTasks() }} className="rounded-lg border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm">Apply filters</button>
           </div>
 
           {error && <p className="text-sm text-red-600">{error}</p>}
 
+          {viewMode === 'table' ? (
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
               <thead>
@@ -328,6 +356,44 @@ export default function AdminTasksPage() {
               </tbody>
             </table>
           </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              {statusOptions.map((option) => (
+                <div key={option} className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50/80 dark:bg-gray-900/30 p-3">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-sm font-semibold text-gray-900 dark:text-white capitalize">{option.replace('_', ' ')}</h4>
+                    <span className="text-xs text-gray-500">{tasksByStatus[option].length}</span>
+                  </div>
+                  <div className="space-y-2">
+                    {tasksByStatus[option].length === 0 ? (
+                      <p className="text-xs text-gray-500">No tasks</p>
+                    ) : tasksByStatus[option].map((task) => (
+                      <div key={task.id} className="rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3 space-y-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{task.title}</p>
+                          <button onClick={() => deleteTask(task.id)} className="text-red-600 hover:text-red-700" title="Delete task">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                        {task.description && <p className="text-xs text-gray-500 line-clamp-2">{task.description}</p>}
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="capitalize text-gray-600 dark:text-gray-300">{task.priority}</span>
+                          <select
+                            value={task.status}
+                            onChange={(event) => updateTaskStatus(task.id, event.target.value as AdminTask['status'])}
+                            className="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-2 py-1 text-xs"
+                          >
+                            {statusOptions.map((statusOption) => <option key={statusOption} value={statusOption}>{statusOption}</option>)}
+                          </select>
+                        </div>
+                        <p className="text-xs text-gray-500">{task.scope === 'company' ? 'Company-wide' : (task.restaurant_name || 'Single restaurant')}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
 
           <div className="flex items-center justify-between text-sm text-gray-600 dark:text-gray-300">
             <p>Total tasks: {pagination.total}</p>
