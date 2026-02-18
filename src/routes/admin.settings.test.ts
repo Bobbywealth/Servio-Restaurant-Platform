@@ -80,6 +80,28 @@ describe('admin settings routes', () => {
     expect(result.data.settings.defaultOrderPageSize).toBe(50);
   });
 
+  it('GET /api/admin/settings falls back to defaults when stored JSON is malformed', async () => {
+    const db: MockDb = {
+      get: jest.fn().mockResolvedValue({ settings: '{not-valid-json' }),
+      run: jest.fn()
+    };
+
+    mockedGetInstance.mockReturnValue({ getDatabase: jest.fn().mockResolvedValue(db) });
+
+    const app = createApp(true);
+    const result = await requestJson(app, '/api/admin/settings');
+
+    expect(result.status).toBe(200);
+    expect(result.data.success).toBe(true);
+    expect(result.data.settings).toEqual({
+      maintenanceMode: false,
+      maintenanceMessage: 'Servio platform maintenance is in progress. Please check back shortly.',
+      allowNewDemoBookings: true,
+      defaultOrderPageSize: 50,
+      alertEmail: 'ops@servio.solutions'
+    });
+  });
+
   it('PUT /api/admin/settings sanitizes and persists payload', async () => {
     const db: MockDb = {
       get: jest.fn(),

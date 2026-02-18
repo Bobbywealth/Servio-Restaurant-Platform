@@ -331,6 +331,23 @@ const sanitizePlatformSettings = (input: any): PlatformSettings => {
   };
 };
 
+const parseStoredPlatformSettings = (settings: unknown): Record<string, any> => {
+  if (typeof settings === 'string') {
+    try {
+      const parsed = JSON.parse(settings);
+      return typeof parsed === 'object' && parsed !== null ? parsed as Record<string, any> : {};
+    } catch {
+      return {};
+    }
+  }
+
+  if (typeof settings === 'object' && settings !== null) {
+    return settings as Record<string, any>;
+  }
+
+  return {};
+};
+
 const normalizeCampaignEventType = (action: string): CampaignFeedEventType | null => {
   const normalizedAction = action.toLowerCase();
 
@@ -377,6 +394,53 @@ const hasColumn = async (db: any, tableName: string, columnName: string): Promis
 
 const DEMO_BOOKING_ALLOWED_STATUSES = new Set(['scheduled', 'completed', 'no_show', 'converted', 'lost']);
 const DEMO_BOOKING_ALLOWED_STAGES = new Set(['new', 'contacted', 'qualified', 'proposal', 'negotiation', 'won', 'lost']);
+
+router.get('/settings', async (_req, res) => {
+  try {
+    const db = await DatabaseService.getInstance().getDatabase();
+    const settingsRow = await db.get<{ settings?: unknown }>(
+      'SELECT settings FROM platform_settings WHERE id = ? LIMIT 1',
+      ['default']
+    );
+
+    const settings = sanitizePlatformSettings(parseStoredPlatformSettings(settingsRow?.settings));
+    return res.json({ success: true, settings });
+  } catch (error) {
+    logger.error('Failed to get platform settings:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to load platform settings',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+router.put('/settings', async (req, res) => {
+  try {
+    const db = await DatabaseService.getInstance().getDatabase();
+    const settings = sanitizePlatformSettings(req.body || {});
+    const actorId = (req as any).user?.id || null;
+
+    await db.run(
+      `
+        INSERT INTO platform_settings (id, settings, updated_by)
+        VALUES (?, ?::jsonb, ?)
+        ON CONFLICT (id)
+        DO UPDATE SET settings = EXCLUDED.settings, updated_by = EXCLUDED.updated_by
+      `,
+      ['default', JSON.stringify(settings), actorId]
+    );
+
+    return res.json({ success: true, settings });
+  } catch (error) {
+    logger.error('Failed to update platform settings:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to save platform settings',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
 
 const isValidIsoDateTime = (value: string): boolean => {
   const parsed = new Date(value);
