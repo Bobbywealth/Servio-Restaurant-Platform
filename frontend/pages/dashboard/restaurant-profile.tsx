@@ -31,6 +31,7 @@ import { useUser } from '../../contexts/UserContext';
 import toast from 'react-hot-toast';
 import { api } from '../../lib/api';
 import { resolveMediaUrl } from '../../lib/utils';
+import { RestaurantIntegration } from '../../components/RestaurantIntegration';
 
 interface RestaurantProfile {
   id: string;
@@ -651,6 +652,7 @@ export default function RestaurantProfile() {
   const tabs = [
     { id: 'profile', name: 'Profile', icon: Settings },
     { id: 'branding', name: 'Branding', icon: Palette },
+    { id: 'integration', name: 'Integration', icon: Share2 },
     { id: 'links', name: 'Links & QR', icon: LinkIcon },
   ];
 
@@ -1064,6 +1066,11 @@ export default function RestaurantProfile() {
                 </div>
               </div>
             </div>
+          )}
+
+          {/* Integration Tab */}
+          {activeTab === 'integration' && (
+            <RestaurantIntegration slug={profileData.slug} themeColors={{ primaryColor: themeData.primaryColor }} />
           )}
 
           {/* Links Tab */}
