@@ -477,6 +477,143 @@ const resolveIdempotencyKey = (req: express.Request): string | null => {
   return typeof headerValue === 'string' ? headerValue.trim() : null;
 };
 
+type BillingInvoiceStatus = 'pending' | 'requires_action' | 'paid' | 'failed' | 'voided';
+type BillingInvoiceAction = 'collect_payment' | 'send_payment_link' | 'mark_paid' | 'void';
+
+const BILLING_INVOICE_ALLOWED_TRANSITIONS: Record<BillingInvoiceStatus, readonly BillingInvoiceStatus[]> = {
+  pending: ['requires_action', 'paid', 'failed', 'voided'],
+  requires_action: ['pending', 'paid', 'failed', 'voided'],
+  paid: [],
+  failed: ['pending', 'requires_action', 'voided'],
+  voided: []
+};
+
+const BILLING_ACTION_TO_STATUS: Record<BillingInvoiceAction, BillingInvoiceStatus> = {
+  collect_payment: 'requires_action',
+  send_payment_link: 'requires_action',
+  mark_paid: 'paid',
+  void: 'voided'
+};
+
+const BILLING_STATUS_ACTIONS: Record<BillingInvoiceStatus, readonly BillingInvoiceAction[]> = {
+  pending: ['collect_payment', 'send_payment_link', 'mark_paid', 'void'],
+  requires_action: ['collect_payment', 'send_payment_link', 'mark_paid', 'void'],
+  paid: [],
+  failed: ['collect_payment', 'send_payment_link', 'void'],
+  voided: []
+};
+
+const normalizeBillingInvoiceStatus = (value: unknown): BillingInvoiceStatus => {
+  const normalized = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  if (normalized === 'pending' || normalized === 'requires_action' || normalized === 'paid' || normalized === 'failed' || normalized === 'voided') {
+    return normalized;
+  }
+  return 'pending';
+};
+
+const buildInvoicePaymentLink = (invoiceId: string, token: string): string => {
+  const baseUrl = (process.env.BILLING_PAYMENT_LINK_BASE_URL || process.env.APP_URL || '').trim();
+  if (baseUrl) {
+    return `${baseUrl.replace(/\/$/, '')}/billing/pay/${encodeURIComponent(invoiceId)}?token=${encodeURIComponent(token)}`;
+  }
+  return `/billing/pay/${encodeURIComponent(invoiceId)}?token=${encodeURIComponent(token)}`;
+};
+
+const createProviderPaymentSession = async (params: {
+  invoiceId: string;
+  companyId: string;
+  amountCents: number;
+  currency: string;
+  idempotencyKey: string;
+  mode: 'collect_payment' | 'send_payment_link';
+  returnUrl?: string;
+}): Promise<{ providerSessionId: string; redirectUrl: string; paymentLinkToken: string }> => {
+  const providerBaseUrl = process.env.BILLING_PAYMENT_PROVIDER_URL;
+  const providerApiKey = process.env.BILLING_PAYMENT_PROVIDER_API_KEY;
+
+  if (providerBaseUrl && providerApiKey) {
+    const response = await fetch(`${providerBaseUrl.replace(/\/$/, '')}/v1/payment-sessions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${providerApiKey}`,
+        'X-Idempotency-Key': params.idempotencyKey
+      },
+      body: JSON.stringify({
+        invoice_id: params.invoiceId,
+        company_id: params.companyId,
+        amount_cents: params.amountCents,
+        currency: params.currency,
+        mode: params.mode,
+        return_url: params.returnUrl,
+        metadata: { source: 'servio_admin' }
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`payment provider rejected session creation (${response.status})`);
+    }
+
+    const payload = await response.json() as Record<string, any>;
+    const providerSessionId = String(payload.session_id || payload.id || '').trim();
+    const redirectUrl = String(payload.redirect_url || payload.url || '').trim();
+    const paymentLinkToken = String(payload.payment_link_token || payload.token || '').trim();
+    if (!providerSessionId || !redirectUrl || !paymentLinkToken) {
+      throw new Error('payment provider response missing required fields');
+    }
+
+    return { providerSessionId, redirectUrl, paymentLinkToken };
+  }
+
+  const paymentLinkToken = randomUUID();
+  return {
+    providerSessionId: `local-${randomUUID()}`,
+    paymentLinkToken,
+    redirectUrl: buildInvoicePaymentLink(params.invoiceId, paymentLinkToken)
+  };
+};
+
+const transitionBillingInvoice = async (params: {
+  db: any;
+  invoiceId: string;
+  companyId: string;
+  restaurantId: string | null;
+  userId: string | null;
+  fromStatus: BillingInvoiceStatus;
+  toStatus: BillingInvoiceStatus;
+  action: string;
+  idempotencyKey?: string;
+  details?: Record<string, any>;
+}) => {
+  if (!BILLING_INVOICE_ALLOWED_TRANSITIONS[params.fromStatus].includes(params.toStatus)) {
+    throw new Error(`invalid invoice transition ${params.fromStatus} -> ${params.toStatus}`);
+  }
+
+  await params.db.run(
+    `UPDATE company_billing_history
+     SET status = ?, updated_at = NOW()
+     WHERE id = ?`,
+    [params.toStatus, params.invoiceId]
+  );
+
+  if (params.restaurantId) {
+    await insertAdminAuditLog(params.db, {
+      restaurantId: params.restaurantId,
+      userId: params.userId,
+      action: params.action,
+      entityType: 'invoice',
+      entityId: params.invoiceId,
+      details: {
+        previous_status: params.fromStatus,
+        next_status: params.toStatus,
+        company_id: params.companyId,
+        ...(params.idempotencyKey ? { idempotencyKey: params.idempotencyKey } : {}),
+        ...(params.details ?? {})
+      }
+    });
+  }
+};
+
 const readOrder = async (db: any, id: string) => db.get(
   `
     SELECT id, restaurant_id, status, customer_phone, customer_name
@@ -3987,7 +4124,10 @@ router.get('/billing/overview', async (_req, res) => {
     );
 
     const history = await db.all(
-      `SELECT cbh.id, cbh.company_id, cbh.amount_cents, cbh.status, cbh.invoice_url, cbh.created_at,
+      `SELECT cbh.id, cbh.company_id, cbh.amount_cents, cbh.currency, cbh.status, cbh.invoice_url,
+              cbh.payment_method_status, cbh.last_payment_attempt_at, cbh.last_payment_attempt_status,
+              cbh.last_payment_attempt_error, cbh.payment_provider_session_id, cbh.payment_link_token,
+              cbh.created_at,
               r.id as restaurant_id, r.name as restaurant_name
        FROM company_billing_history cbh
        LEFT JOIN companies c ON c.id = cbh.company_id
@@ -4003,8 +4143,16 @@ router.get('/billing/overview', async (_req, res) => {
         restaurant_id: h.restaurant_id,
         restaurant_name: h.restaurant_name || 'Unassigned',
         amount: Number(h.amount_cents || 0) / 100,
-        status: h.status,
+        currency: h.currency || 'USD',
+        status: normalizeBillingInvoiceStatus(h.status),
         invoice_url: h.invoice_url,
+        payment_method_status: h.payment_method_status || 'unavailable',
+        last_payment_attempt_at: h.last_payment_attempt_at,
+        last_payment_attempt_status: h.last_payment_attempt_status,
+        last_payment_attempt_error: h.last_payment_attempt_error,
+        payment_provider_session_id: h.payment_provider_session_id,
+        payment_link_token: h.payment_link_token,
+        eligible_actions: BILLING_STATUS_ACTIONS[normalizeBillingInvoiceStatus(h.status)],
         created_at: h.created_at
       }))
     });
@@ -4017,36 +4165,254 @@ router.get('/billing/overview', async (_req, res) => {
 router.post('/billing/invoices/:id/actions', async (req, res) => {
   try {
     const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-    const action = req.body?.action;
-    if (!['retry', 'void'].includes(action)) {
-      return res.status(400).json({ error: 'action must be retry or void' });
+    const action = req.body?.action as BillingInvoiceAction;
+    if (!['collect_payment', 'send_payment_link', 'mark_paid', 'void'].includes(action)) {
+      return res.status(400).json({ error: 'action must be collect_payment, send_payment_link, mark_paid, or void' });
+    }
+
+    const idempotencyKey = resolveIdempotencyKey(req);
+    if (!idempotencyKey) {
+      return res.status(400).json({ error: 'x-idempotency-key header is required' });
     }
 
     const db = await DatabaseService.getInstance().getDatabase();
-    const invoice = await db.get('SELECT id, company_id, status FROM company_billing_history WHERE id = ?', [id]);
+    const invoice = await db.get(
+      `SELECT id, company_id, amount_cents, currency, status
+       FROM company_billing_history
+       WHERE id = ?`,
+      [id]
+    );
     if (!invoice) {
       return res.status(404).json({ error: 'Invoice not found' });
     }
 
-    const nextStatus = action === 'retry' ? 'pending' : 'voided';
-    await db.run('UPDATE company_billing_history SET status = ? WHERE id = ?', [nextStatus, id]);
+    const currentStatus = normalizeBillingInvoiceStatus(invoice.status);
+    const allowedActions = BILLING_STATUS_ACTIONS[currentStatus];
+    if (!allowedActions.includes(action)) {
+      return res.status(409).json({ error: `Action ${action} is not allowed while invoice is ${currentStatus}` });
+    }
 
-    const restaurant = await db.get('SELECT id FROM restaurants WHERE company_id = ? ORDER BY created_at ASC LIMIT 1', [invoice.company_id]);
-    if (restaurant?.id) {
-      await insertAdminAuditLog(db, {
-        restaurantId: restaurant.id,
-        userId: req.user?.id ?? null,
-        action: `admin.billing.invoice_${action}`,
-        entityType: 'invoice',
-        entityId: id,
-        details: { previous_status: invoice.status, next_status: nextStatus }
+    const existing = await db.get(
+      `SELECT id, action, result_status, response_payload
+       FROM admin_billing_payment_requests
+       WHERE invoice_id = ? AND action = ? AND idempotency_key = ?
+       LIMIT 1`,
+      [id, action, idempotencyKey]
+    );
+    if (existing) {
+      return res.json({
+        success: true,
+        id,
+        status: existing.result_status,
+        ...(existing.response_payload ? JSON.parse(existing.response_payload) : {})
       });
     }
 
-    return res.json({ success: true, id, status: nextStatus });
+    const restaurant = await db.get('SELECT id FROM restaurants WHERE company_id = ? ORDER BY created_at ASC LIMIT 1', [invoice.company_id]);
+    const nextStatus = BILLING_ACTION_TO_STATUS[action];
+
+    let responsePayload: Record<string, any> = {};
+    if (action === 'collect_payment' || action === 'send_payment_link') {
+      const session = await createProviderPaymentSession({
+        invoiceId: id,
+        companyId: invoice.company_id,
+        amountCents: Number(invoice.amount_cents || 0),
+        currency: String(invoice.currency || 'USD'),
+        idempotencyKey,
+        mode: action
+      });
+
+      await db.run(
+        `UPDATE company_billing_history
+         SET invoice_url = ?,
+             payment_provider_session_id = ?,
+             payment_link_token = ?,
+             payment_method_status = ?,
+             last_payment_attempt_at = NOW(),
+             last_payment_attempt_status = ?,
+             last_payment_attempt_error = NULL,
+             updated_at = NOW()
+         WHERE id = ?`,
+        [
+          session.redirectUrl,
+          session.providerSessionId,
+          session.paymentLinkToken,
+          action === 'collect_payment' ? 'processing' : 'awaiting_customer_action',
+          action === 'collect_payment' ? 'initiated' : 'payment_link_sent',
+          id
+        ]
+      );
+
+      responsePayload = {
+        redirect_url: session.redirectUrl,
+        payment_link_token: session.paymentLinkToken,
+        provider_session_id: session.providerSessionId
+      };
+    }
+
+    if (action === 'mark_paid') {
+      await db.run(
+        `UPDATE company_billing_history
+         SET payment_method_status = ?,
+             last_payment_attempt_at = NOW(),
+             last_payment_attempt_status = ?,
+             last_payment_attempt_error = NULL,
+             updated_at = NOW()
+         WHERE id = ?`,
+        ['settled', 'succeeded', id]
+      );
+    }
+
+    if (action === 'void') {
+      await db.run(
+        `UPDATE company_billing_history
+         SET payment_method_status = ?,
+             last_payment_attempt_at = NOW(),
+             last_payment_attempt_status = ?,
+             updated_at = NOW()
+         WHERE id = ?`,
+        ['voided', 'cancelled', id]
+      );
+    }
+
+    await transitionBillingInvoice({
+      db,
+      invoiceId: id,
+      companyId: invoice.company_id,
+      restaurantId: restaurant?.id ?? null,
+      userId: req.user?.id ?? null,
+      fromStatus: currentStatus,
+      toStatus: nextStatus,
+      action: `admin.billing.invoice_${action}`,
+      idempotencyKey,
+      details: responsePayload
+    });
+
+    await db.run(
+      `INSERT INTO admin_billing_payment_requests (id, invoice_id, action, idempotency_key, result_status, response_payload)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [randomUUID(), id, action, idempotencyKey, nextStatus, JSON.stringify(responsePayload)]
+    );
+
+    return res.json({ success: true, id, status: nextStatus, ...responsePayload });
   } catch (error) {
     logger.error('Failed invoice action:', error);
     return res.status(500).json({ error: 'Failed to apply invoice action' });
+  }
+});
+
+router.post('/billing/invoices/:id/payment-session', async (req, res) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const action = req.body?.action === 'send_payment_link' ? 'send_payment_link' : 'collect_payment';
+    const idempotencyKey = resolveIdempotencyKey(req);
+    if (!idempotencyKey) {
+      return res.status(400).json({ error: 'x-idempotency-key header is required' });
+    }
+
+    const db = await DatabaseService.getInstance().getDatabase();
+    const invoice = await db.get(
+      `SELECT id, company_id, amount_cents, currency, status
+       FROM company_billing_history
+       WHERE id = ?`,
+      [id]
+    );
+    if (!invoice) {
+      return res.status(404).json({ error: 'Invoice not found' });
+    }
+
+    const currentStatus = normalizeBillingInvoiceStatus(invoice.status);
+    if (!BILLING_STATUS_ACTIONS[currentStatus].includes(action)) {
+      return res.status(409).json({ error: `Action ${action} is not allowed while invoice is ${currentStatus}` });
+    }
+
+    const existing = await db.get(
+      `SELECT result_status, response_payload
+       FROM admin_billing_payment_requests
+       WHERE invoice_id = ? AND action = ? AND idempotency_key = ?
+       LIMIT 1`,
+      [id, action, idempotencyKey]
+    );
+    if (existing) {
+      return res.json({ success: true, id, status: existing.result_status, ...(existing.response_payload ? JSON.parse(existing.response_payload) : {}) });
+    }
+
+    const session = await createProviderPaymentSession({
+      invoiceId: id,
+      companyId: invoice.company_id,
+      amountCents: Number(invoice.amount_cents || 0),
+      currency: String(invoice.currency || 'USD'),
+      idempotencyKey,
+      mode: action
+    });
+
+    await db.run(
+      `UPDATE company_billing_history
+       SET invoice_url = ?,
+           payment_provider_session_id = ?,
+           payment_link_token = ?,
+           payment_method_status = ?,
+           last_payment_attempt_at = NOW(),
+           last_payment_attempt_status = ?,
+           last_payment_attempt_error = NULL,
+           updated_at = NOW()
+       WHERE id = ?`,
+      [
+        session.redirectUrl,
+        session.providerSessionId,
+        session.paymentLinkToken,
+        action === 'collect_payment' ? 'processing' : 'awaiting_customer_action',
+        action === 'collect_payment' ? 'initiated' : 'payment_link_sent',
+        id
+      ]
+    );
+
+    const restaurant = await db.get('SELECT id FROM restaurants WHERE company_id = ? ORDER BY created_at ASC LIMIT 1', [invoice.company_id]);
+    await transitionBillingInvoice({
+      db,
+      invoiceId: id,
+      companyId: invoice.company_id,
+      restaurantId: restaurant?.id ?? null,
+      userId: req.user?.id ?? null,
+      fromStatus: currentStatus,
+      toStatus: 'requires_action',
+      action: `admin.billing.invoice_${action}`,
+      idempotencyKey,
+      details: {
+        redirect_url: session.redirectUrl,
+        payment_link_token: session.paymentLinkToken,
+        provider_session_id: session.providerSessionId
+      }
+    });
+
+    await db.run(
+      `INSERT INTO admin_billing_payment_requests (id, invoice_id, action, idempotency_key, result_status, response_payload)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [
+        randomUUID(),
+        id,
+        action,
+        idempotencyKey,
+        'requires_action',
+        JSON.stringify({
+          redirect_url: session.redirectUrl,
+          payment_link_token: session.paymentLinkToken,
+          provider_session_id: session.providerSessionId
+        })
+      ]
+    );
+
+    return res.json({
+      success: true,
+      id,
+      status: 'requires_action',
+      redirect_url: session.redirectUrl,
+      payment_link_token: session.paymentLinkToken,
+      provider_session_id: session.providerSessionId
+    });
+  } catch (error) {
+    logger.error('Failed payment session creation:', error);
+    return res.status(500).json({ error: 'Failed to create payment session' });
   }
 });
 
