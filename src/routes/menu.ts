@@ -903,15 +903,46 @@ router.put('/categories/:id/items/reorder', asyncHandler(async (req: Request, re
     return res.status(400).json({ success: false, error: { message: 'itemIds is required' } });
   }
 
-  for (let i = 0; i < itemIds.length; i++) {
-    await db.run(
+  const placeholders = itemIds.map(() => '?').join(', ');
+  const existingItems = await db.all(
+    `SELECT id FROM menu_items WHERE id IN (${placeholders}) AND restaurant_id = ? AND category_id = ?`,
+    [...itemIds, restaurantId, categoryId]
+  );
+  const existingIds = new Set(existingItems.map((item: { id: string }) => String(item.id)));
+  const invalidItemIds = itemIds.filter((id) => !existingIds.has(id));
+  if (invalidItemIds.length > 0) {
+    logger.warn(`Item reorder: ${invalidItemIds.length} items not found in category ${categoryId} for restaurant ${restaurantId}:`, invalidItemIds);
+  }
+
+  const existingItemsOrdered = await db.all(
+    `
+      SELECT id
+      FROM menu_items
+      WHERE restaurant_id = ? AND category_id = ?
+      ORDER BY sort_order ASC, name ASC
+    `,
+    [restaurantId, categoryId]
+  );
+
+  const existingOrderedIds = existingItemsOrdered.map((row: { id: string }) => String(row.id));
+  const allExistingIds = new Set(existingOrderedIds);
+  const missingOrderedIds = existingOrderedIds.filter((id) => !itemIds.includes(id));
+  const orderedIds = [
+    ...itemIds.filter((id) => allExistingIds.has(id)),
+    ...missingOrderedIds
+  ];
+
+  let updatedCount = 0;
+  for (let i = 0; i < orderedIds.length; i++) {
+    const result = await db.run(
       `
         UPDATE menu_items
         SET sort_order = ?, updated_at = CURRENT_TIMESTAMP
         WHERE id = ? AND restaurant_id = ? AND category_id = ?
       `,
-      [i, itemIds[i], restaurantId, categoryId]
+      [i, orderedIds[i], restaurantId, categoryId]
     );
+    updatedCount += result.changes || 0;
   }
 
   await DatabaseService.getInstance().logAudit(
@@ -920,10 +951,10 @@ router.put('/categories/:id/items/reorder', asyncHandler(async (req: Request, re
     'reorder_menu_items',
     'menu_item',
     'multiple',
-    { categoryId, itemIds }
+    { categoryId, itemIds: orderedIds, updatedCount, invalidItemIds }
   );
 
-  res.json({ success: true });
+  res.json({ success: true, updated: updatedCount, total: orderedIds.length, invalidItemIds });
 }));
 
 // ============================================================================
