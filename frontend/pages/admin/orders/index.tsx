@@ -10,7 +10,7 @@ type Filters = {
   restaurantId: string
   channel: string
   status: string
-  timeWindowHours: string
+  timeWindow: string
   slaBreached: string
   search: string
 }
@@ -19,7 +19,7 @@ const DEFAULT_FILTERS: Filters = {
   restaurantId: '',
   channel: 'all',
   status: 'all',
-  timeWindowHours: '168',
+  timeWindow: '7d',
   slaBreached: 'all',
   search: ''
 }
@@ -48,7 +48,7 @@ export default function AdminOrdersPage() {
     setIsLoading(true)
     try {
       const params: Record<string, string> = {
-        timeWindowHours: filters.timeWindowHours,
+        timeWindow: filters.timeWindow,
         page: String(pagination.page),
         limit: String(pagination.limit)
       }
@@ -159,12 +159,12 @@ export default function AdminOrdersPage() {
               <option value="cancelled">Cancelled</option>
             </select>
 
-            <select value={filters.timeWindowHours} onChange={(e) => { setPagination((prev) => ({ ...prev, page: 1 })); setFilters(prev => ({ ...prev, timeWindowHours: e.target.value })) }} className="input-field">
-              <option value="24">Last 24 hours</option>
-              <option value="72">Last 72 hours</option>
-              <option value="168">Last 7 days</option>
-              <option value="720">Last 30 days</option>
-              <option value="8760">All orders (last 12 months)</option>
+            <select value={filters.timeWindow} onChange={(e) => { setPagination((prev) => ({ ...prev, page: 1 })); setFilters(prev => ({ ...prev, timeWindow: e.target.value })) }} className="input-field">
+              <option value="24h">Last 24 hours</option>
+              <option value="7d">Last 7 days</option>
+              <option value="30d">Last 30 days</option>
+              <option value="12m">Last 12 months</option>
+              <option value="all">All history</option>
             </select>
 
             <select value={filters.slaBreached} onChange={(e) => { setPagination((prev) => ({ ...prev, page: 1 })); setFilters(prev => ({ ...prev, slaBreached: e.target.value })) }} className="input-field">

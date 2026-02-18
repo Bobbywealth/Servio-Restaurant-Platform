@@ -230,6 +230,23 @@ const resolveDays = (value: unknown, fallback = 30, max = 365): number => {
   return Math.min(Math.floor(parsed), max);
 };
 
+const ORDER_TIME_WINDOW_INTERVALS = {
+  '24h': '24 hours',
+  '7d': '7 days',
+  '30d': '30 days',
+  '12m': '12 months'
+} as const;
+
+type OrderTimeWindow = keyof typeof ORDER_TIME_WINDOW_INTERVALS | 'all';
+
+const resolveOrderTimeWindow = (value: unknown): OrderTimeWindow => {
+  if (value === 'all') return 'all';
+  if (typeof value === 'string' && value in ORDER_TIME_WINDOW_INTERVALS) {
+    return value as keyof typeof ORDER_TIME_WINDOW_INTERVALS;
+  }
+  return '7d';
+};
+
 const parseTableRows = (rows: any[]): any[] => {
   return rows.map((row) => {
     const parsed = { ...row };
@@ -1580,12 +1597,16 @@ router.get('/orders', async (req, res) => {
     const restaurantId = typeof req.query.restaurantId === 'string' ? req.query.restaurantId.trim() : '';
     const channel = typeof req.query.channel === 'string' ? req.query.channel.trim() : '';
     const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
-    const timeWindowHours = resolveLimit(req.query.timeWindowHours, 24 * 7, 24 * 30);
+    const timeWindow = resolveOrderTimeWindow(req.query.timeWindow);
     const slaBreach = parseBooleanQuery(req.query.slaBreached);
     const slaMinutes = resolveLimit(req.query.slaMinutes, 15, 180);
 
-    const whereParts: string[] = [`o.created_at >= NOW() - INTERVAL '${timeWindowHours} hours'`];
+    const whereParts: string[] = [];
     const params: any[] = [];
+
+    if (timeWindow !== 'all') {
+      whereParts.push(`o.created_at >= NOW() - INTERVAL '${ORDER_TIME_WINDOW_INTERVALS[timeWindow]}'`);
+    }
 
     if (status && status !== 'all') {
       whereParts.push('o.status = ?');
@@ -1618,7 +1639,7 @@ router.get('/orders', async (req, res) => {
       params.push('pending');
     }
 
-    const whereClause = `WHERE ${whereParts.join(' AND ')}`;
+    const whereClause = whereParts.length > 0 ? `WHERE ${whereParts.join(' AND ')}` : '';
 
     const orders = await db.all(
       `
