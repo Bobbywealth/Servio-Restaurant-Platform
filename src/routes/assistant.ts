@@ -30,6 +30,12 @@ const upload = multer({
 const assistantService = new AssistantService();
 const voiceConversationService = VoiceConversationService.getInstance();
 
+const highCostEndpointRateLimits = {
+  processAudio: assistantRateLimit({ endpoint: '/process-audio', maxRequests: 6, windowMs: 60_000 }),
+  processText: assistantRateLimit({ endpoint: '/process-text', maxRequests: 20, windowMs: 60_000 }),
+  processTextStream: assistantRateLimit({ endpoint: '/process-text-stream', maxRequests: 10, windowMs: 60_000 })
+};
+
 const parsePositiveNumber = (value: unknown): number => {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
@@ -82,7 +88,7 @@ const parseRecentErrors = async (limit = 5): Promise<Array<{ message: string; le
  * POST /api/assistant/process-audio
  * Process audio input from microphone
  */
-router.post('/process-audio', upload.single('audio'), asyncHandler(async (req: Request, res: Response) => {
+router.post('/process-audio', highCostEndpointRateLimits.processAudio, upload.single('audio'), asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user?.id;
   const audioFile = req.file;
 
@@ -122,7 +128,7 @@ router.post('/process-audio', upload.single('audio'), asyncHandler(async (req: R
  * POST /api/assistant/process-text
  * Process text input (from quick commands or typed input)
  */
-router.post('/process-text', asyncHandler(async (req: Request, res: Response) => {
+router.post('/process-text', highCostEndpointRateLimits.processText, asyncHandler(async (req: Request, res: Response) => {
   const { text } = req.body;
   const userId = req.user?.id;
 
@@ -162,7 +168,7 @@ router.post('/process-text', asyncHandler(async (req: Request, res: Response) =>
  * POST /api/assistant/process-text-stream
  * Process text input with streaming response (Server-Sent Events)
  */
-router.post('/process-text-stream', asyncHandler(async (req: Request, res: Response) => {
+router.post('/process-text-stream', highCostEndpointRateLimits.processTextStream, asyncHandler(async (req: Request, res: Response) => {
   const { text } = req.body;
   const userId = req.user?.id;
 
@@ -285,6 +291,8 @@ router.get('/status', asyncHandler(async (req: Request, res: Response) => {
     occurredAt: entry.occurredAt
   }));
 
+  const rateLimitTelemetry = getAssistantRateLimitTelemetry();
+
   const status = {
     service: 'online',
     aiProvider,
@@ -313,6 +321,9 @@ router.get('/status', asyncHandler(async (req: Request, res: Response) => {
       averageMessagesPerConversation: parsePositiveNumber(normalizedStats.avgMessages)
     },
     incidents: [...recentIncidentsFromConversations, ...recentIncidentsFromLogs].slice(0, 10),
+    telemetry: {
+      assistantRateLimits: rateLimitTelemetry
+    },
     probes: [
       {
         name: 'assistant-service',
@@ -345,10 +356,15 @@ router.get('/status', asyncHandler(async (req: Request, res: Response) => {
 }));
 
 /**
- * GET /api/assistant/conversation/:userId
+ * GET /api/assistant/conversation
  * Get conversation history for a user (if we implement conversation storage)
  */
-router.get('/conversation/:userId', asyncHandler(async (req: Request, res: Response) => {
+router.get('/conversation', asyncHandler(async (req: Request, res: Response) => {
+  const userId = req.user?.id;
+
+  if (!userId) {
+    throw new UnauthorizedError();
+  }
 
   // For now, return empty - this could be implemented to store conversation history
   res.json({
@@ -361,11 +377,15 @@ router.get('/conversation/:userId', asyncHandler(async (req: Request, res: Respo
 }));
 
 /**
- * DELETE /api/assistant/conversation/:userId
+ * DELETE /api/assistant/conversation
  * Clear conversation history for a user
  */
-router.delete('/conversation/:userId', asyncHandler(async (req: Request, res: Response) => {
-  const { userId } = req.params;
+router.delete('/conversation', asyncHandler(async (req: Request, res: Response) => {
+  const userId = req.user?.id;
+
+  if (!userId) {
+    throw new UnauthorizedError();
+  }
 
   // For now, just return success - this could clear stored conversation history
   logger.info(`Conversation history cleared for user ${userId}`);
@@ -381,13 +401,26 @@ router.delete('/conversation/:userId', asyncHandler(async (req: Request, res: Re
  * Submit feedback about assistant responses
  */
 router.post('/feedback', asyncHandler(async (req: Request, res: Response) => {
-  const { userId, messageId, rating, comment } = req.body;
+  const { messageId, rating, comment } = req.body;
+  const userId = req.user?.id;
 
-  if (!userId || !messageId || rating === undefined) {
+  if (!userId) {
+    throw new UnauthorizedError();
+  }
+
+  if (!messageId || rating === undefined) {
     return res.status(400).json({
       success: false,
-      error: { message: 'userId, messageId, and rating are required' }
+      error: { message: 'messageId and rating are required' }
     });
+  }
+
+  if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+    throw new BadRequestError('rating must be an integer between 1 and 5');
+  }
+
+  if (comment !== undefined && (typeof comment !== 'string' || comment.length > 500)) {
+    throw new BadRequestError('comment must be a string up to 500 characters');
   }
 
   // Log feedback for analysis

@@ -66,7 +66,24 @@ function getChannelConfig(channel: string) {
   return channelConfig[channel.toLowerCase()] || { label: channel, color: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300', icon: <Globe className="w-3 h-3" /> }
 }
 
-function OrderTimer({ createdAt, status }: { createdAt: string; status?: string }) {
+function formatElapsed(seconds: number): string {
+  if (seconds < 60) return '<1m'
+
+  const totalMinutes = Math.floor(seconds / 60)
+
+  if (totalMinutes < 60) return `${totalMinutes}m`
+
+  const hours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+
+  if (hours < 24) return `${hours}h ${minutes}m`
+
+  const days = Math.floor(hours / 24)
+  const remainingHours = hours % 24
+  return `${days}d ${remainingHours}h`
+}
+
+function OrderTimer({ createdAt, updatedAt, status }: { createdAt: string; updatedAt?: string; status?: string }) {
   const [elapsed, setElapsed] = useState('')
   const [minutes, setMinutes] = useState(0)
 
@@ -74,31 +91,40 @@ function OrderTimer({ createdAt, status }: { createdAt: string; status?: string 
   const isFinalStatus = status === 'completed' || status === 'cancelled'
 
   useEffect(() => {
-    // Skip interval setup for final statuses
-    if (isFinalStatus) {
-      const created = new Date(createdAt).getTime()
-      const now = Date.now()
-      const diff = Math.floor((now - created) / 1000)
-      const mins = Math.floor(diff / 60)
-      setMinutes(mins)
-      setElapsed(mins > 0 ? `${mins}m` : '<1m')
+    const created = new Date(createdAt).getTime()
+    if (!Number.isFinite(created)) {
+      setMinutes(0)
+      setElapsed('—')
       return
     }
 
-    const updateElapsed = () => {
-      const created = new Date(createdAt).getTime()
-      const now = Date.now()
-      const diff = Math.floor((now - created) / 1000)
+    const getDiffSeconds = () => {
+      const endTime = isFinalStatus && updatedAt ? new Date(updatedAt).getTime() : Date.now()
 
-      const mins = Math.floor(diff / 60)
+      if (!Number.isFinite(endTime)) {
+        return Math.max(0, Math.floor((Date.now() - created) / 1000))
+      }
+
+      return Math.max(0, Math.floor((endTime - created) / 1000))
+    }
+
+    const updateElapsed = () => {
+      const diffSeconds = getDiffSeconds()
+      const mins = Math.floor(diffSeconds / 60)
       setMinutes(mins)
-      setElapsed(mins > 0 ? `${mins}m` : '<1m')
+      setElapsed(formatElapsed(diffSeconds))
+    }
+
+    // Skip interval setup for final statuses
+    if (isFinalStatus) {
+      updateElapsed()
+      return
     }
 
     updateElapsed()
     const interval = setInterval(updateElapsed, 1000)
     return () => clearInterval(interval)
-  }, [createdAt, isFinalStatus])
+  }, [createdAt, updatedAt, isFinalStatus])
 
   const timerColor = isFinalStatus 
     ? 'text-gray-400 dark:text-gray-500' 
@@ -171,7 +197,7 @@ function OrderDetailModal({ order, onClose }: { order: Order | null; onClose: ()
           <div className="px-6 py-4 overflow-y-auto max-h-[calc(90vh-200px)]">
             {/* Timer & Time */}
             <div className="flex items-center justify-between mb-4">
-              <OrderTimer createdAt={order.created_at || ''} status={order.status} />
+              <OrderTimer createdAt={order.created_at || ''} updatedAt={order.updated_at} status={order.status} />
               <span className="text-sm text-gray-500 dark:text-gray-400">
                 {order.created_at && new Date(order.created_at).toLocaleString()}
               </span>
@@ -636,7 +662,7 @@ export default function OrdersPage() {
                           )}
                         </td>
                         <td className="py-3 px-2">
-                          <OrderTimer createdAt={o.created_at || ''} status={o.status} />
+                          <OrderTimer createdAt={o.created_at || ''} updatedAt={o.updated_at} status={o.status} />
                         </td>
                         <td className="py-3 px-2 text-surface-700 dark:text-surface-300">
                           {o.customer_name || '—'}
@@ -729,7 +755,7 @@ export default function OrdersPage() {
                           </div>
                         )}
                       </div>
-                      <OrderTimer createdAt={o.created_at || ''} status={o.status} />
+                      <OrderTimer createdAt={o.created_at || ''} updatedAt={o.updated_at} status={o.status} />
                     </div>
 
                     <div className="grid grid-cols-2 gap-3 mb-3">

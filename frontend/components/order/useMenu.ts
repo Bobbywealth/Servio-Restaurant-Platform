@@ -175,9 +175,22 @@ export function useMenu(restaurantSlug: string | undefined) {
   }, [categories, filteredItems]);
 
   const visibleCategories = useMemo(() => {
+    const hasActiveSearchOrFilters = Boolean(searchQuery.trim()) || activeFilters.length > 0;
+
+    if (hasActiveSearchOrFilters) {
+      return categories.filter(category => (itemsByCategory[category] || []).length > 0);
+    }
+
     if (showAllCategories) return categories;
     return categories.slice(0, visibleCategoryCount);
-  }, [categories, showAllCategories, visibleCategoryCount]);
+  }, [
+    activeFilters.length,
+    categories,
+    itemsByCategory,
+    searchQuery,
+    showAllCategories,
+    visibleCategoryCount,
+  ]);
 
   const toggleFilter = useCallback((filter: string) => {
     setActiveFilters(prev =>

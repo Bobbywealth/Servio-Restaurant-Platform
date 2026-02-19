@@ -12,6 +12,7 @@ interface MenuGridProps {
   showAllCategories: boolean;
   visibleCategoryCount: number;
   filteredItemCount: number;
+  hasActiveSearchOrFilters: boolean;
   onToggleCategory: (cat: string) => void;
   onOpenItem: (item: MenuItem) => void;
   onShowMore: () => void;
@@ -28,6 +29,7 @@ export function MenuGrid({
   showAllCategories,
   visibleCategoryCount,
   filteredItemCount,
+  hasActiveSearchOrFilters,
   onToggleCategory,
   onOpenItem,
   onShowMore,
@@ -144,7 +146,7 @@ export function MenuGrid({
           );
         })}
 
-        {!showAllCategories && allCategories.length > 2 && (
+        {!hasActiveSearchOrFilters && !showAllCategories && allCategories.length > 2 && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="text-center py-6">
             <button
               onClick={onShowMore}
@@ -163,7 +165,7 @@ export function MenuGrid({
           </motion.div>
         )}
 
-        {showAllCategories && allCategories.length > 2 && (
+        {!hasActiveSearchOrFilters && showAllCategories && allCategories.length > 2 && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="text-center py-6">
             <button
               onClick={onShowLess}
