@@ -550,8 +550,8 @@ export default function OrdersPage() {
           )}
 
           {/* Filters */}
-          <div className="card">
-            <div className="flex flex-wrap items-end gap-4">
+          <div className="card sticky top-2 z-10 bg-white/95 dark:bg-surface-800/95 backdrop-blur sm:static">
+            <div className="flex flex-col sm:flex-row sm:flex-wrap items-end gap-4">
               {/* Search */}
               <div className="flex-1 min-w-[200px]">
                 <label className="flex flex-col gap-1.5 text-sm text-surface-700 dark:text-surface-300">
@@ -796,10 +796,10 @@ export default function OrdersPage() {
                               <button
                                 key={status}
                                 type="button"
-                                className={`px-3 py-2 rounded-lg text-xs font-medium transition-all ${
-                                  o.status === status
-                                    ? statusConfig[status].color
-                                    : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
+                            className={`px-3 py-2 min-h-[44px] min-w-[44px] rounded-lg text-xs font-medium transition-all ${
+                              o.status === status
+                                ? statusConfig[status].color
+                                : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
                                 }`}
                                 onClick={() => updateOrderStatus(o.id, status)}
                                 disabled={updatingOrderId === o.id}

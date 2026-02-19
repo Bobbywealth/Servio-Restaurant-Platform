@@ -441,7 +441,7 @@ export default function TimeClockPage() {
                       <div className="flex space-x-2">
                         <button
                           onClick={() => handleBreak(staff.user_id, staff.is_on_break)}
-                          className={`p-2 rounded-lg transition-colors ${
+                          className={`min-h-[44px] min-w-[44px] p-2 rounded-lg transition-colors ${
                             staff.is_on_break
                               ? 'bg-orange-100 text-orange-600 hover:bg-orange-200'
                               : 'bg-blue-100 text-blue-600 hover:bg-blue-200'
@@ -452,7 +452,7 @@ export default function TimeClockPage() {
 
                         <button
                           onClick={() => handleClockOut(staff.user_id)}
-                          className="p-2 bg-red-100 text-red-600 hover:bg-red-200 rounded-lg transition-colors"
+                          className="min-h-[44px] min-w-[44px] p-2 bg-red-100 text-red-600 hover:bg-red-200 rounded-lg transition-colors"
                         >
                           <CheckCircle className="w-4 h-4" />
                         </button>
@@ -473,7 +473,7 @@ export default function TimeClockPage() {
         >
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Today&apos;s Time Entries</h2>
 
-          <div className="overflow-x-auto">
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr className="border-b border-gray-200">
@@ -518,6 +518,33 @@ export default function TimeClockPage() {
               </tbody>
             </table>
 
+            {recentEntries.length === 0 && (
+              <div className="text-center py-8 text-gray-500">
+                <Clock className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                <p>No time entries for today</p>
+              </div>
+            )}
+          </div>
+
+          <div className="md:hidden space-y-3">
+            {recentEntries.map((entry) => (
+              <div key={entry.id} className="rounded-xl border border-gray-200 p-4">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="font-medium text-gray-900">{entry.user_name}</p>
+                    <p className="text-xs text-gray-600">{entry.user_role}</p>
+                  </div>
+                  {!entry.clock_out_time && <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-green-100 text-green-800">Working</span>}
+                </div>
+                <div className="mt-3 space-y-2 text-sm">
+                  <div className="flex justify-between"><span className="text-gray-500">Clock In</span><span className="text-gray-900">{formatTime(entry.clock_in_time)}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-500">Clock Out</span><span className="text-gray-900">{entry.clock_out_time ? formatTime(entry.clock_out_time) : '—'}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-500">Break</span><span className="text-gray-900">{entry.break_minutes > 0 ? `${entry.break_minutes} min` : '-'}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-500">Hours</span><span className="text-gray-900">{entry.total_hours ? `${formatHours(entry.total_hours)} hrs` : '-'}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-500">Position</span><span className="text-gray-900">{entry.position || '-'}</span></div>
+                </div>
+              </div>
+            ))}
             {recentEntries.length === 0 && (
               <div className="text-center py-8 text-gray-500">
                 <Clock className="w-12 h-12 mx-auto mb-3 text-gray-300" />

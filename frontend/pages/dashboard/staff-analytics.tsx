@@ -281,14 +281,14 @@ export default function StaffAnalyticsPage() {
           )}
 
           {/* Filters */}
-          <div className="flex flex-col sm:flex-row gap-4 bg-white dark:bg-surface-800 rounded-2xl p-4 border border-surface-200 dark:border-surface-700">
+          <div className="sticky top-2 z-10 flex flex-col gap-3 bg-white/95 dark:bg-surface-800/95 backdrop-blur rounded-2xl p-4 border border-surface-200 dark:border-surface-700 sm:static sm:flex-row">
             <div className="flex items-center gap-2 flex-1">
               <Calendar className="w-4 h-4 text-surface-400" />
               <input
                 type="date"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
-                className="flex-1 px-3 py-2 text-sm rounded-xl border border-surface-200 dark:border-surface-600 bg-white dark:bg-surface-700 text-surface-900 dark:text-surface-100 focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500 transition-all outline-none"
+                className="flex-1 px-3 py-2 min-h-[44px] text-sm rounded-xl border border-surface-200 dark:border-surface-600 bg-white dark:bg-surface-700 text-surface-900 dark:text-surface-100 focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500 transition-all outline-none"
               />
             </div>
             <div className="flex items-center gap-2 flex-1">
@@ -297,13 +297,13 @@ export default function StaffAnalyticsPage() {
                 type="date"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
-                className="flex-1 px-3 py-2 text-sm rounded-xl border border-surface-200 dark:border-surface-600 bg-white dark:bg-surface-700 text-surface-900 dark:text-surface-100 focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500 transition-all outline-none"
+                className="flex-1 px-3 py-2 min-h-[44px] text-sm rounded-xl border border-surface-200 dark:border-surface-600 bg-white dark:bg-surface-700 text-surface-900 dark:text-surface-100 focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500 transition-all outline-none"
               />
             </div>
             <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value as any)}
-              className="px-3 py-2 text-sm rounded-xl border border-surface-200 dark:border-surface-600 bg-white dark:bg-surface-700 text-surface-900 dark:text-surface-100 focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500 transition-all outline-none"
+              className="px-3 py-2 min-h-[44px] w-full sm:w-auto text-sm rounded-xl border border-surface-200 dark:border-surface-600 bg-white dark:bg-surface-700 text-surface-900 dark:text-surface-100 focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500 transition-all outline-none"
             >
               <option value="all">All Status</option>
               <option value="active">Active Only</option>
@@ -362,7 +362,7 @@ export default function StaffAnalyticsPage() {
                 Time Logs ({timeLogs.length})
               </h3>
             </div>
-            <div className="overflow-x-auto">
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full">
                 <thead className="bg-surface-50 dark:bg-surface-900/50">
                   <tr>
@@ -430,6 +430,27 @@ export default function StaffAnalyticsPage() {
                   ))}
                 </tbody>
               </table>
+            </div>
+            <div className="md:hidden p-4 space-y-3">
+              {timeLogs.map((log, index) => (
+                <motion.div key={log.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} className="rounded-xl border border-surface-200 dark:border-surface-700 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-medium text-surface-900 dark:text-surface-100">{log.user_name}</p>
+                      <p className="text-xs text-surface-600 dark:text-surface-400">{log.user_role}</p>
+                    </div>
+                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${log.status === 'active' ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400' : 'bg-slate-100 dark:bg-slate-900/30 text-slate-700 dark:text-slate-400'}`}>
+                      {log.status === 'active' ? 'Active' : 'Completed'}
+                    </span>
+                  </div>
+                  <div className="mt-3 space-y-2 text-sm">
+                    <div className="flex justify-between gap-3"><span className="text-surface-500">Clock In</span><span className="text-right text-surface-900 dark:text-surface-100">{new Date(log.clock_in_time).toLocaleString()}</span></div>
+                    <div className="flex justify-between gap-3"><span className="text-surface-500">Clock Out</span><span className="text-right text-surface-900 dark:text-surface-100">{log.clock_out_time ? new Date(log.clock_out_time).toLocaleString() : '—'}</span></div>
+                    <div className="flex justify-between gap-3"><span className="text-surface-500">Hours</span><span className="font-medium text-surface-900 dark:text-surface-100">{log.total_hours ? `${log.total_hours.toFixed(1)}h` : '—'}</span></div>
+                    <div className="flex justify-between gap-3"><span className="text-surface-500">Break</span><span className="text-surface-900 dark:text-surface-100">{log.break_minutes}m</span></div>
+                  </div>
+                </motion.div>
+              ))}
             </div>
             {timeLogs.length === 0 && (
               <div className="text-center py-12">

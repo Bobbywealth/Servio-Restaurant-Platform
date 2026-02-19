@@ -519,13 +519,13 @@ export default function InventoryPage() {
           </div>
 
           {/* Search and Filters */}
-          <div className="flex flex-col sm:flex-row gap-4">
+          <div className="sticky top-2 z-10 bg-white/95 dark:bg-surface-900/95 backdrop-blur rounded-xl p-3 border border-surface-200 dark:border-surface-700 flex flex-col gap-3 sm:static sm:bg-transparent sm:border-0 sm:p-0 sm:flex-row sm:gap-4">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-surface-400 w-4 h-4" />
               <input
                 type="text"
                 placeholder="Search inventory items..."
-                className="input-field pl-10"
+                className="input-field pl-10 min-h-[44px]"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
@@ -533,7 +533,7 @@ export default function InventoryPage() {
             <div className="flex items-center space-x-2">
               <Filter className="w-4 h-4 text-surface-500" />
               <select
-                className="input-field"
+                className="input-field min-h-[44px] w-full"
                 value={selectedCategory}
                 onChange={(e) => setSelectedCategory(e.target.value)}
               >

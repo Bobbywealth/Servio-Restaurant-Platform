@@ -80,8 +80,30 @@ type OrderFilter = {
 };
 
 type PendingAction =
-  | { id: string; orderId: string; type: 'status'; payload: { status: string }; queuedAt: number }
-  | { id: string; orderId: string; type: 'prep-time'; payload: { prepMinutes: number }; queuedAt: number };
+  | {
+      id: string;
+      orderId: string;
+      type: 'status';
+      payload: { status: string };
+      queuedAt: number;
+      idempotencyKey: string;
+      retryCount: number;
+      lastError: string | null;
+      lastAttemptAt?: number;
+      permanentFailure?: boolean;
+    }
+  | {
+      id: string;
+      orderId: string;
+      type: 'prep-time';
+      payload: { prepMinutes: number };
+      queuedAt: number;
+      idempotencyKey: string;
+      retryCount: number;
+      lastError: string | null;
+      lastAttemptAt?: number;
+      permanentFailure?: boolean;
+    };
 
 async function apiGet<T>(path: string): Promise<T> {
   const res = await api.get(path);
@@ -213,6 +235,27 @@ function statusBadgeClassesForStatus(status: string) {
 
 const ACTION_QUEUE_KEY = 'servio_tablet_action_queue';
 const ORDER_CACHE_KEY = 'servio_cached_orders';
+const ACTION_RETRY_THRESHOLD = 3;
+
+function normalizeQueuedAction(action: any): PendingAction | null {
+  if (!action || typeof action !== 'object') return null;
+  if (!action.id || !action.orderId || !action.type || !action.payload) return null;
+  if (action.type !== 'status' && action.type !== 'prep-time') return null;
+  const idempotencyKey = action.idempotencyKey
+    || (action.type === 'status'
+      ? `status:${action.orderId}:${String(action.payload?.status || '').toLowerCase()}`
+      : `prep-time:${action.orderId}:${action.queuedAt || Date.now()}`);
+
+  return {
+    ...action,
+    queuedAt: Number(action.queuedAt) || Date.now(),
+    idempotencyKey,
+    retryCount: Number(action.retryCount) || 0,
+    lastError: typeof action.lastError === 'string' ? action.lastError : null,
+    lastAttemptAt: typeof action.lastAttemptAt === 'number' ? action.lastAttemptAt : undefined,
+    permanentFailure: Boolean(action.permanentFailure)
+  } as PendingAction;
+}
 
 function loadActionQueue(): PendingAction[] {
   if (typeof window === 'undefined') return [];
@@ -221,7 +264,9 @@ function loadActionQueue(): PendingAction[] {
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed as PendingAction[];
+    return parsed
+      .map((entry) => normalizeQueuedAction(entry))
+      .filter((entry): entry is PendingAction => Boolean(entry));
   } catch {
     return [];
   }
@@ -273,6 +318,9 @@ export default function TabletOrdersPage() {
   const [isOnline, setIsOnline] = useState<boolean>(true);
   const [socketConnected, setSocketConnected] = useState<boolean>(false);
   const [showUpdateBanner, setShowUpdateBanner] = useState(false);
+  const [actionQueue, setActionQueue] = useState<PendingAction[]>(() => loadActionQueue());
+  const [lastSuccessfulSyncAt, setLastSuccessfulSyncAt] = useState<number | null>(null);
+  const [syncAttemptStatus, setSyncAttemptStatus] = useState<'idle' | 'syncing' | 'success' | 'error'>('idle');
   
   // New feature toggles
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -306,6 +354,7 @@ export default function TabletOrdersPage() {
     setIsOnline(navigator.onLine);
     const handleOnline = () => {
       setIsOnline(true);
+      processActionQueue();
     };
     const handleOffline = () => {
       setIsOnline(false);
@@ -480,44 +529,93 @@ export default function TabletOrdersPage() {
     loadPrinterSettings();
   }, []);
 
-  const enqueueAction = (action: PendingAction) => {
-    const current = loadActionQueue();
-    const next = [...current, action];
+  const persistActionQueue = useCallback((next: PendingAction[]) => {
     saveActionQueue(next);
+    setActionQueue(next);
     setPendingActions((prev) => {
-      const updated = new Set(prev);
-      updated.add(action.orderId);
+      const updated = new Set<string>();
+      next.forEach((queuedAction) => updated.add(queuedAction.orderId));
       return updated;
     });
+  }, []);
+
+  const enqueueAction = (action: Omit<PendingAction, 'idempotencyKey' | 'retryCount' | 'lastError'>) => {
+    const current = loadActionQueue();
+    const idempotencyKey = action.type === 'status'
+      ? `status:${action.orderId}:${action.payload.status.toLowerCase()}`
+      : `prep-time:${action.orderId}:${action.queuedAt}`;
+    const nextAction: PendingAction = { ...action, idempotencyKey, retryCount: 0, lastError: null } as PendingAction;
+    const dedupedQueue = action.type === 'status'
+      ? current.filter((queuedAction) => !(queuedAction.type === 'status' && queuedAction.idempotencyKey === idempotencyKey))
+      : current;
+    const next = [...dedupedQueue, nextAction];
+    persistActionQueue(next);
   };
 
-  const clearPendingForOrder = (orderId: string) => {
-    setPendingActions((prev) => {
-      const next = new Set(prev);
-      next.delete(orderId);
-      return next;
-    });
-  };
-
-  const processActionQueue = async () => {
+  const processActionQueue = async (force = false) => {
     if (typeof window === 'undefined') return;
     if (!navigator.onLine) return;
     const queue = loadActionQueue();
     if (queue.length === 0) return;
+    setSyncAttemptStatus('syncing');
     const remaining: PendingAction[] = [];
+    let needsReload = false;
     for (const action of queue) {
+      if (!force && (action.permanentFailure || action.retryCount >= ACTION_RETRY_THRESHOLD)) {
+        remaining.push(action);
+        continue;
+      }
+
       try {
         if (action.type === 'status') {
-          await apiPost(`/api/orders/${encodeURIComponent(action.orderId)}/status`, action.payload);
+          await apiPost(`/api/orders/${encodeURIComponent(action.orderId)}/status`, {
+            ...action.payload,
+            idempotencyKey: action.idempotencyKey
+          });
         } else if (action.type === 'prep-time') {
-          await apiPost(`/api/orders/${encodeURIComponent(action.orderId)}/prep-time`, action.payload);
+          await apiPost(`/api/orders/${encodeURIComponent(action.orderId)}/prep-time`, {
+            ...action.payload,
+            idempotencyKey: action.idempotencyKey
+          });
         }
-        clearPendingForOrder(action.orderId);
-      } catch {
-        remaining.push(action);
+      } catch (error: any) {
+        const statusCode = error?.response?.status;
+        const message = error?.response?.data?.error?.message || error?.message || 'Sync failed';
+        const permanentFailure = statusCode === 400 || statusCode === 404 || statusCode === 409 || statusCode === 422;
+        const nextRetryCount = (action.retryCount || 0) + 1;
+        remaining.push({
+          ...action,
+          retryCount: nextRetryCount,
+          lastError: String(message),
+          lastAttemptAt: Date.now(),
+          permanentFailure
+        });
+        if (permanentFailure) needsReload = true;
       }
     }
-    saveActionQueue(remaining);
+    persistActionQueue(remaining);
+    if (remaining.length === queue.length) {
+      setSyncAttemptStatus('error');
+    } else {
+      setSyncAttemptStatus('success');
+      setLastSuccessfulSyncAt(Date.now());
+    }
+    if (needsReload) {
+      await refresh();
+    }
+  };
+
+  const retryQueueNow = async () => {
+    if (!window.confirm('Retry all failed and queued sync actions now?')) return;
+    const resetQueue = loadActionQueue().map((action) => ({ ...action, permanentFailure: false }));
+    persistActionQueue(resetQueue);
+    await processActionQueue(true);
+  };
+
+  const clearFailedActions = () => {
+    if (!window.confirm('Clear failed actions that exceeded retry limits? This cannot be undone.')) return;
+    const next = loadActionQueue().filter((action) => !action.permanentFailure && action.retryCount < ACTION_RETRY_THRESHOLD);
+    persistActionQueue(next);
   };
 
   async function refresh() {
@@ -1210,6 +1308,35 @@ export default function TabletOrdersPage() {
   }, [now, pendingActions, selectedOrder?.id]);
   const { soundEnabled, toggleSound } = useOrderAlerts(receivedOrders.length);
 
+  const orderSyncIssues = useMemo(() => {
+    const map = new Map<string, { retryCount: number; lastError: string | null; permanentFailure: boolean }>();
+    actionQueue.forEach((action) => {
+      const existing = map.get(action.orderId);
+      if (!existing || action.retryCount > existing.retryCount) {
+        map.set(action.orderId, {
+          retryCount: action.retryCount,
+          lastError: action.lastError,
+          permanentFailure: Boolean(action.permanentFailure)
+        });
+      }
+    });
+    return map;
+  }, [actionQueue]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (receivedOrders.length > 0 && soundEnabled) {
+      if (alarmIntervalRef.current === null) {
+        playAlarmTone();
+        alarmIntervalRef.current = window.setInterval(() => {
+          playAlarmTone();
+        }, 2500);
+      }
+    } else if (alarmIntervalRef.current !== null) {
+      window.clearInterval(alarmIntervalRef.current);
+      alarmIntervalRef.current = null;
+    }
+  }, [receivedOrders.length, soundEnabled]);
 
   useEffect(() => {
     // Avoid printing everything on initial load; mark existing active orders as already-seen.
@@ -1305,6 +1432,40 @@ export default function TabletOrdersPage() {
                 </div>
                 <div className="px-3 py-1.5 rounded-lg bg-[var(--tablet-success)]/30 text-[var(--tablet-text)] text-xs font-semibold">
                   {activeOrders.filter(o => normalizeStatus(o.status) === 'ready').length} Ready
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-[var(--tablet-border)] bg-[var(--tablet-surface)] p-3 flex flex-wrap gap-3 items-center justify-between">
+                <div className="flex flex-wrap items-center gap-3 text-xs sm:text-sm">
+                  <span className="font-semibold">Sync Queue: {actionQueue.length}</span>
+                  <span className="text-[var(--tablet-muted)]">
+                    Last Success: {lastSuccessfulSyncAt ? new Date(lastSuccessfulSyncAt).toLocaleTimeString() : 'Never'}
+                  </span>
+                  <span className={clsx(
+                    'px-2 py-1 rounded-full text-xs font-semibold uppercase',
+                    syncAttemptStatus === 'syncing' && 'bg-[var(--tablet-info)]/30 text-[var(--tablet-text)]',
+                    syncAttemptStatus === 'success' && 'bg-[var(--tablet-success)]/30 text-[var(--tablet-text)]',
+                    syncAttemptStatus === 'error' && 'bg-[var(--tablet-danger)]/30 text-[var(--tablet-text)]',
+                    syncAttemptStatus === 'idle' && 'bg-[var(--tablet-border)] text-[var(--tablet-muted-strong)]'
+                  )}>
+                    {syncAttemptStatus}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={retryQueueNow}
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[var(--tablet-info)]/30 border border-[var(--tablet-border)]"
+                  >
+                    Retry Now
+                  </button>
+                  <button
+                    type="button"
+                    onClick={clearFailedActions}
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[var(--tablet-danger)]/20 border border-[var(--tablet-border)]"
+                  >
+                    Clear Failed
+                  </button>
                 </div>
               </div>
 
