@@ -6,7 +6,8 @@ import { AssistantService } from '../services/AssistantService';
 import { VoiceConversationService } from '../services/VoiceConversationService';
 import { DatabaseService } from '../services/DatabaseService';
 import { logger } from '../utils/logger';
-import { asyncHandler, BadRequestError, UnauthorizedError } from '../middleware/errorHandler';
+import { safePreview } from '../utils/safePreview';
+import { asyncHandler, UnauthorizedError } from '../middleware/errorHandler';
 
 const router = Router();
 
@@ -142,7 +143,7 @@ router.post('/process-text', highCostEndpointRateLimits.processText, asyncHandle
     throw new UnauthorizedError();
   }
 
-  logger.info(`Processing text for user ${userId}: "${text.substring(0, 100)}${text.length > 100 ? '...' : ''}"`);
+  logger.info('[assistant.route] processing text', { userId, textPreview: safePreview(text, 100) });
 
   try {
     const result = await assistantService.processText(text, userId);
@@ -182,7 +183,7 @@ router.post('/process-text-stream', highCostEndpointRateLimits.processTextStream
     throw new UnauthorizedError();
   }
 
-  logger.info(`Processing text stream for user ${userId}: "${text.substring(0, 100)}${text.length > 100 ? '...' : ''}"`);
+  logger.info('[assistant.route] processing text stream', { userId, textPreview: safePreview(text, 100) });
 
   // Set headers for Server-Sent Events
   res.setHeader('Content-Type', 'text/event-stream');
