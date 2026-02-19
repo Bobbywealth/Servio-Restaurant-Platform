@@ -285,7 +285,37 @@ router.get('/public/:slug', asyncHandler(async (req: Request, res: Response) => 
   const { slug } = req.params;
   const db = DatabaseService.getInstance().getDatabase();
 
-  const restaurant = await db.get('SELECT id, name, settings, logo_url, cover_image_url, address, phone, description FROM restaurants WHERE slug = ? AND is_active = TRUE', [slug]);
+  const restaurantTableInfo = await db.all("PRAGMA table_info('restaurants')");
+  const availableRestaurantColumns = new Set(
+    restaurantTableInfo
+      .map((column: any) => String(column?.name || '').trim())
+      .filter((columnName: string) => columnName.length > 0)
+  );
+
+  const requestedColumns = [
+    'id',
+    'name',
+    'settings',
+    'logo_url',
+    'cover_image_url',
+    'address',
+    'phone',
+    'description'
+  ];
+  const selectedColumns = requestedColumns.filter((column) => availableRestaurantColumns.has(column));
+
+  if (!selectedColumns.includes('id') || !selectedColumns.includes('name')) {
+    throw new Error('restaurants table is missing required public menu columns');
+  }
+
+  const isActiveClause = availableRestaurantColumns.has('is_active')
+    ? " AND LOWER(CAST(COALESCE(is_active, 1) AS TEXT)) IN ('1', 'true')"
+    : '';
+
+  const restaurant = await db.get(
+    `SELECT ${selectedColumns.join(', ')} FROM restaurants WHERE slug = ?${isActiveClause}`,
+    [slug]
+  );
   if (!restaurant) {
     return res.status(404).json({ success: false, error: { message: 'Restaurant not found' } });
   }
