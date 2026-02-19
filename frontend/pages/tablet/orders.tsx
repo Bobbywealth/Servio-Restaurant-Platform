@@ -221,15 +221,15 @@ function getChannelIcon(channel: string | null | undefined): string {
 function statusBadgeClassesForStatus(status: string) {
   switch (status) {
     case 'received':
-      return 'bg-[var(--tablet-accent)] text-[var(--tablet-accent-contrast)]';
+      return 'bg-[var(--tablet-surface-alt)] text-[var(--tablet-muted-strong)] border border-[var(--tablet-border)]';
     case 'preparing':
-      return 'bg-[var(--tablet-border-strong)] text-[var(--tablet-text)] ring-1 ring-[var(--tablet-info)]';
+      return 'bg-[var(--tablet-surface-alt)] text-[var(--tablet-text)] border border-[var(--tablet-border)]';
     case 'ready':
       return 'bg-[var(--tablet-success)] text-white';
     case 'scheduled':
-      return 'bg-[var(--tablet-border)] text-[var(--tablet-muted-strong)]';
+      return 'bg-[var(--tablet-surface-alt)] text-[var(--tablet-muted-strong)] border border-[var(--tablet-border)]';
     default:
-      return 'bg-[var(--tablet-border-strong)] text-[var(--tablet-text)]';
+      return 'bg-[var(--tablet-surface-alt)] text-[var(--tablet-text)] border border-[var(--tablet-border)]';
   }
 }
 
@@ -1199,8 +1199,6 @@ export default function TabletOrdersPage() {
     const isSelected = selectedOrder?.id === o.id;
 
     const statusLabel = isNew ? 'NEW' : isPreparing ? 'IN PROGRESS' : isReady ? 'READY' : isScheduled ? 'SCHEDULED' : 'ACTIVE';
-    const statusBadgeClasses = statusBadgeClassesForStatus(status);
-
     const prepTimeData = isPreparing
       ? formatPrepTimeRemaining(o.prep_minutes || 15, o.created_at, now)
       : null;
@@ -1209,6 +1207,11 @@ export default function TabletOrdersPage() {
       : 'normal';
     const prepTimeColorClass = getPrepTimeColorClass(prepWarningLevel);
     const isOverdue = prepTimeData?.isOverdue;
+    const cardStatusBadgeClasses = isPreparing && (prepWarningLevel === 'critical' || prepWarningLevel === 'warning')
+      ? prepWarningLevel === 'critical'
+        ? 'bg-[var(--tablet-danger)] text-white'
+        : 'bg-[var(--tablet-warning)] text-[var(--tablet-text)]'
+      : statusBadgeClassesForStatus(status);
 
     return (
       <button
@@ -1224,16 +1227,13 @@ export default function TabletOrdersPage() {
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className={clsx('text-xs font-semibold tracking-widest px-2.5 py-1.5 rounded-full', statusBadgeClasses)}>
+            <span className={clsx('text-xs font-semibold tracking-widest px-2.5 py-1.5 rounded-full', cardStatusBadgeClasses)}>
               {statusLabel}
-            </span>
-            <span className="text-xl" title={o.channel || 'Unknown'}>
-              {getChannelIcon(o.channel)}
             </span>
           </div>
           <div className="flex items-center gap-2">
             {isLatest && (
-              <span className="text-xs font-semibold uppercase text-[var(--tablet-accent)] hidden sm:inline">Newest</span>
+              <span className="text-xs font-semibold uppercase text-[var(--tablet-muted)] hidden sm:inline">Newest</span>
             )}
             {isPreparing && prepTimeData && (
               <span className={clsx(
@@ -1276,8 +1276,11 @@ export default function TabletOrdersPage() {
         <div className="mt-3 flex items-center justify-between text-sm text-[var(--tablet-muted)]">
           <div className="flex items-center gap-2">
             <span>{itemCount} item{itemCount !== 1 ? 's' : ''}</span>
+            <span className="px-2.5 py-0.5 rounded-full text-xs bg-[var(--tablet-surface-alt)] border border-[var(--tablet-border)] text-[var(--tablet-muted-strong)] normal-case">
+              {getChannelIcon(o.channel)} {o.channel || 'POS'}
+            </span>
             {o.order_type && (
-              <span className="px-2.5 py-0.5 rounded text-xs bg-[var(--tablet-border)] uppercase tracking-wide">
+              <span className="px-2.5 py-0.5 rounded-full text-xs bg-[var(--tablet-surface-alt)] border border-[var(--tablet-border)] text-[var(--tablet-muted-strong)] uppercase tracking-wide">
                 {o.order_type}
               </span>
             )}
