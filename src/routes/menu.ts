@@ -66,6 +66,17 @@ const normalizeKey = (value: string): string =>
     .toLowerCase()
     .replace(/[^a-z0-9]/g, '');
 
+function normalizeBoolean(value: unknown): boolean {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value !== 0;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (['true', '1', 'yes', 'on'].includes(normalized)) return true;
+    if (['false', '0', 'no', 'off', ''].includes(normalized)) return false;
+  }
+  return false;
+}
+
 function parsePrice(value: string): number | null {
   const cleaned = value.replace(/[^0-9.]/g, '');
   const price = Number.parseFloat(cleaned);
@@ -282,11 +293,11 @@ router.get('/public/:slug', asyncHandler(async (req: Request, res: Response) => 
   const items = await db.all(`
     SELECT mi.*, mc.name as category_name, mc.sort_order as category_sort_order
     FROM menu_items mi
-    LEFT JOIN menu_categories mc ON mi.category_id = mc.id
+    INNER JOIN menu_categories mc ON mi.category_id = mc.id
     WHERE mi.restaurant_id = ?
-      AND mi.is_available = TRUE
-      AND mc.is_active = TRUE
-      AND COALESCE(mc.is_hidden, FALSE) = FALSE
+      AND LOWER(CAST(COALESCE(mi.is_available, 1) AS TEXT)) IN ('1', 'true')
+      AND LOWER(CAST(COALESCE(mc.is_active, 1) AS TEXT)) IN ('1', 'true')
+      AND LOWER(CAST(COALESCE(mc.is_hidden, 0) AS TEXT)) IN ('0', 'false')
     ORDER BY mc.sort_order ASC, mi.sort_order ASC, mi.name ASC
   `, [restaurant.id]);
 
@@ -749,7 +760,7 @@ router.delete('/categories/:id', asyncHandler(async (req: Request, res: Response
  */
 router.put('/categories/:id/visibility', asyncHandler(async (req: Request, res: Response) => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const { isHidden } = req.body || {};
+  const isHidden = normalizeBoolean(req.body?.isHidden ?? req.body?.is_hidden);
   const restaurantId = req.user?.restaurantId;
   if (!restaurantId) throw new UnauthorizedError();
   const db = DatabaseService.getInstance().getDatabase();
