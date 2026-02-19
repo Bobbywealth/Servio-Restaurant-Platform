@@ -29,6 +29,12 @@ const upload = multer({
 const assistantService = new AssistantService();
 const voiceConversationService = VoiceConversationService.getInstance();
 
+const highCostEndpointRateLimits = {
+  processAudio: assistantRateLimit({ endpoint: '/process-audio', maxRequests: 6, windowMs: 60_000 }),
+  processText: assistantRateLimit({ endpoint: '/process-text', maxRequests: 20, windowMs: 60_000 }),
+  processTextStream: assistantRateLimit({ endpoint: '/process-text-stream', maxRequests: 10, windowMs: 60_000 })
+};
+
 const parsePositiveNumber = (value: unknown): number => {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
@@ -81,7 +87,7 @@ const parseRecentErrors = async (limit = 5): Promise<Array<{ message: string; le
  * POST /api/assistant/process-audio
  * Process audio input from microphone
  */
-router.post('/process-audio', upload.single('audio'), asyncHandler(async (req: Request, res: Response) => {
+router.post('/process-audio', highCostEndpointRateLimits.processAudio, upload.single('audio'), asyncHandler(async (req: Request, res: Response) => {
   const userId = req.user?.id;
   const audioFile = req.file;
 
@@ -121,7 +127,7 @@ router.post('/process-audio', upload.single('audio'), asyncHandler(async (req: R
  * POST /api/assistant/process-text
  * Process text input (from quick commands or typed input)
  */
-router.post('/process-text', asyncHandler(async (req: Request, res: Response) => {
+router.post('/process-text', highCostEndpointRateLimits.processText, asyncHandler(async (req: Request, res: Response) => {
   const { text } = req.body;
   const userId = req.user?.id;
 
@@ -161,7 +167,7 @@ router.post('/process-text', asyncHandler(async (req: Request, res: Response) =>
  * POST /api/assistant/process-text-stream
  * Process text input with streaming response (Server-Sent Events)
  */
-router.post('/process-text-stream', asyncHandler(async (req: Request, res: Response) => {
+router.post('/process-text-stream', highCostEndpointRateLimits.processTextStream, asyncHandler(async (req: Request, res: Response) => {
   const { text } = req.body;
   const userId = req.user?.id;
 
@@ -284,6 +290,8 @@ router.get('/status', asyncHandler(async (req: Request, res: Response) => {
     occurredAt: entry.occurredAt
   }));
 
+  const rateLimitTelemetry = getAssistantRateLimitTelemetry();
+
   const status = {
     service: 'online',
     aiProvider,
@@ -312,6 +320,9 @@ router.get('/status', asyncHandler(async (req: Request, res: Response) => {
       averageMessagesPerConversation: parsePositiveNumber(normalizedStats.avgMessages)
     },
     incidents: [...recentIncidentsFromConversations, ...recentIncidentsFromLogs].slice(0, 10),
+    telemetry: {
+      assistantRateLimits: rateLimitTelemetry
+    },
     probes: [
       {
         name: 'assistant-service',

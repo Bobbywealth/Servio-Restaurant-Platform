@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react'
 import Head from 'next/head'
-import { CheckCircle, Plus, Filter, Clock, User, Calendar, Trash2, Edit, LayoutList, LayoutGrid, GripVertical, Sparkles, FileText, X, Upload, Wand2 } from 'lucide-react'
+import { CheckCircle, Plus, Filter, Clock, User, Calendar, Trash2, Edit, LayoutList, LayoutGrid, GripVertical, Sparkles, FileText, X, Upload, Wand2, Repeat } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 import DashboardLayout from '../../components/Layout/DashboardLayout'
 import { useUser } from '../../contexts/UserContext'
@@ -14,6 +14,7 @@ interface Task {
   description?: string
   status: 'pending' | 'in_progress' | 'completed'
   priority: 'low' | 'medium' | 'high'
+  type: 'daily' | 'weekly' | 'monthly' | 'one_time'
   assignedTo?: string
   assignedToName?: string
   dueDate?: string
@@ -238,6 +239,11 @@ export default function TasksPage() {
       default:
         return ''
     }
+  }
+
+  const formatTaskType = (type: Task['type']) => {
+    if (type === 'one_time') return 'One-time'
+    return `${type.charAt(0).toUpperCase()}${type.slice(1)}`
   }
 
   const pendingTasks = tasks.filter((t) => t.status === 'pending')
@@ -492,6 +498,12 @@ export default function TasksPage() {
                                   <span>{new Date(task.dueDate).toLocaleDateString()}</span>
                                 </div>
                               )}
+                              {task.type !== 'one_time' && (
+                                <div className="flex items-center gap-1">
+                                  <Repeat className="w-3 h-3" />
+                                  <span>{formatTaskType(task.type)}</span>
+                                </div>
+                              )}
                             </div>
                           </div>
 
@@ -666,6 +678,11 @@ function KanbanColumn({
   onDelete?: (taskId: string) => void
   getPriorityBadgeClass: (priority: Task['priority']) => string
 }) {
+  const formatTaskType = (type: Task['type']) => {
+    if (type === 'one_time') return null
+    return `${type.charAt(0).toUpperCase()}${type.slice(1)}`
+  }
+
   const colorClasses = {
     amber: {
       bg: 'bg-amber-500',
@@ -754,6 +771,12 @@ function KanbanColumn({
                         {new Date(task.dueDate).toLocaleDateString()}
                       </span>
                     )}
+                    {formatTaskType(task.type) && (
+                      <span className="flex items-center gap-1">
+                        <Repeat className="w-3 h-3" />
+                        {formatTaskType(task.type)}
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -805,6 +828,7 @@ function TaskFormModal({ staff, onClose, onSuccess }: { staff: StaffMember[]; on
     description: '',
     status: 'pending' as Task['status'],
     priority: 'medium' as Task['priority'],
+    type: 'one_time' as Task['type'],
     assignedTo: '',
     dueDate: '',
   })
@@ -902,6 +926,24 @@ function TaskFormModal({ staff, onClose, onSuccess }: { staff: StaffMember[]; on
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-2">
+                  Task Type
+                </label>
+                <select
+                  className="input-field w-full min-h-[44px]"
+                  value={formData.type}
+                  onChange={(e) =>
+                    setFormData({ ...formData, type: e.target.value as Task['type'] })
+                  }
+                >
+                  <option value="one_time">One-time</option>
+                  <option value="daily">Daily</option>
+                  <option value="weekly">Weekly</option>
+                  <option value="monthly">Monthly</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-2">
                   Status
                 </label>
                 <select
@@ -916,24 +958,28 @@ function TaskFormModal({ staff, onClose, onSuccess }: { staff: StaffMember[]; on
                   <option value="completed">Completed</option>
                 </select>
               </div>
-
-              <div>
-                <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-2">
-                  Priority
-                </label>
-                <select
-                  className="input-field w-full min-h-[44px]"
-                  value={formData.priority}
-                  onChange={(e) =>
-                    setFormData({ ...formData, priority: e.target.value as Task['priority'] })
-                  }
-                >
-                  <option value="low">Low</option>
-                  <option value="medium">Medium</option>
-                  <option value="high">High</option>
-                </select>
-              </div>
             </div>
+
+            <div>
+              <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-2">
+                Priority
+              </label>
+              <select
+                className="input-field w-full min-h-[44px]"
+                value={formData.priority}
+                onChange={(e) =>
+                  setFormData({ ...formData, priority: e.target.value as Task['priority'] })
+                }
+              >
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+              </select>
+            </div>
+
+            <p className="text-xs text-surface-500 dark:text-surface-400">
+              Use Task Type to make this task recur automatically (daily, weekly, or monthly).
+            </p>
 
             <div>
               <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-2">
