@@ -1425,16 +1425,15 @@ export default function TabletOrdersPage() {
                       const isOverdue = prepTimeData?.isOverdue;
 
                       return (
-                        <button
+                        <article
                           key={o.id}
-                          type="button"
-                          onClick={() => setSelectedOrder(o)}
                           className={clsx(
                             'w-full text-left rounded-xl border border-[var(--tablet-border)] p-4 sm:p-5 shadow-[0_2px_8px_rgba(0,0,0,0.3)] transition transform hover:brightness-110 hover:scale-[1.01] touch-manipulation',
                             isSelected && 'bg-[var(--tablet-info)] border-[var(--tablet-info)] shadow-[0_4px_12px_rgba(93,112,153,0.45)]',
                             !isSelected && 'bg-[var(--tablet-card)]',
                             isOverdue && 'order-overdue'
                           )}
+                          aria-label={`Order ${o.external_id ? o.external_id.slice(-4).toUpperCase() : o.id.slice(-4).toUpperCase()} for ${o.customer_name || 'Guest'}`}
                         >
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
@@ -1506,20 +1505,32 @@ export default function TabletOrdersPage() {
                             </div>
                           )}
 
-                          {/* View Details Button */}
+                          {/* Order Actions */}
                           <div className="mt-4 flex items-center gap-2">
                             <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setOrderDetailsOrder(o);
-                              }}
+                              type="button"
+                              onClick={() => setSelectedOrder(o)}
+                              aria-pressed={isSelected}
+                              aria-label={`Select order ${o.external_id ? o.external_id.slice(-4).toUpperCase() : o.id.slice(-4).toUpperCase()}`}
+                              className={clsx(
+                                'flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-xs font-semibold uppercase border transition touch-manipulation',
+                                isSelected
+                                  ? 'bg-[var(--tablet-info)] text-white border-[var(--tablet-info)]'
+                                  : 'bg-[var(--tablet-surface-alt)] border border-[var(--tablet-border)] hover:bg-[var(--tablet-border)]'
+                              )}
+                            >
+                              Select
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setOrderDetailsOrder(o)}
                               className="flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-xs font-semibold uppercase bg-[var(--tablet-surface-alt)] border border-[var(--tablet-border)] hover:bg-[var(--tablet-border)] transition touch-manipulation"
                             >
                               <Eye className="h-4 w-4" />
                               View Details
                             </button>
                           </div>
-                        </button>
+                        </article>
                       );
                     })}
                   </div>
