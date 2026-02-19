@@ -3,6 +3,8 @@
 import React, { useEffect, useState } from 'react';
 import { AlertTriangle, Download, Loader2, Link2, ShieldCheck } from 'lucide-react';
 import { api } from '@/lib/api';
+import AdminRowActions from './AdminRowActions';
+import StatusChip from './StatusChip';
 
 interface Subscription {
   id: string;
@@ -114,6 +116,13 @@ export function CompanyBilling({ onClose }: CompanyBillingProps) {
     .filter((sub) => sub.status === 'active')
     .reduce((sum, sub) => sum + Number(sub.amount || 0), 0);
 
+  const subscriptionStatusClass = (status: string) => {
+    if (status === 'active') return 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-300';
+    if (status === 'trialing') return 'bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300';
+    if (status === 'past_due') return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-300';
+    return 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200';
+  };
+
   return (
     <div className="space-y-6">
       <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800 flex items-center justify-between">
@@ -160,7 +169,41 @@ export function CompanyBilling({ onClose }: CompanyBillingProps) {
         <div className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800 text-gray-500 flex items-center"><Loader2 className="w-5 h-5 animate-spin mr-2" />Loading billing data...</div>
       ) : (
         <>
-          <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
+          <div className="rounded-xl border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
+            <div className="space-y-3 p-4 md:hidden">
+              {subscriptions.map((sub) => (
+                <article key={sub.id} className="rounded-xl border border-gray-200 dark:border-gray-700 p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h4 className="font-medium text-gray-900 dark:text-white">{sub.restaurant_name}</h4>
+                      <p className="text-xs text-gray-500">ID: {sub.restaurant_id}</p>
+                    </div>
+                    <StatusChip label={sub.status} toneClassName={subscriptionStatusClass(sub.status)} />
+                  </div>
+                  <div className="text-sm text-gray-600 dark:text-gray-300 space-y-1">
+                    <p>Package: <span className="font-medium">{sub.package_name}</span></p>
+                    <p>Cycle: <span className="font-medium">{sub.billing_cycle}</span></p>
+                    <p>Amount: <span className="font-medium">${Number(sub.amount || 0).toFixed(2)}</span></p>
+                  </div>
+                  <AdminRowActions className="justify-start">
+                    <select disabled={updatingId === sub.id} value={sub.package_name} onChange={(e) => updateSubscription(sub.id, { package_name: e.target.value })} className="input-field py-1">
+                      <option value="starter">starter</option>
+                      <option value="operations">operations</option>
+                      <option value="voice">voice</option>
+                    </select>
+                    <select disabled={updatingId === sub.id} value={sub.status} onChange={(e) => updateSubscription(sub.id, { status: e.target.value })} className="input-field py-1">
+                      <option value="active">active</option>
+                      <option value="trialing">trialing</option>
+                      <option value="past_due">past_due</option>
+                      <option value="canceled">canceled</option>
+                    </select>
+                    <button disabled={updatingId === sub.id} className="btn-secondary" onClick={() => updateSubscription(sub.id, { billing_cycle: sub.billing_cycle === 'monthly' ? 'yearly' : 'monthly' })}>{sub.billing_cycle}</button>
+                  </AdminRowActions>
+                </article>
+              ))}
+            </div>
+
+            <div className="hidden overflow-x-auto md:block">
             <table className="min-w-full text-sm">
               <thead className="bg-gray-50 dark:bg-gray-900/20">
                 <tr>
@@ -183,12 +226,15 @@ export function CompanyBilling({ onClose }: CompanyBillingProps) {
                       </select>
                     </td>
                     <td className="px-4 py-3">
-                      <select disabled={updatingId === sub.id} value={sub.status} onChange={(e) => updateSubscription(sub.id, { status: e.target.value })} className="input-field py-1">
-                        <option value="active">active</option>
-                        <option value="trialing">trialing</option>
-                        <option value="past_due">past_due</option>
-                        <option value="canceled">canceled</option>
-                      </select>
+                      <div className="flex items-center gap-2">
+                        <StatusChip label={sub.status} toneClassName={subscriptionStatusClass(sub.status)} />
+                        <select disabled={updatingId === sub.id} value={sub.status} onChange={(e) => updateSubscription(sub.id, { status: e.target.value })} className="input-field py-1">
+                          <option value="active">active</option>
+                          <option value="trialing">trialing</option>
+                          <option value="past_due">past_due</option>
+                          <option value="canceled">canceled</option>
+                        </select>
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       <button disabled={updatingId === sub.id} className="btn-secondary" onClick={() => updateSubscription(sub.id, { billing_cycle: sub.billing_cycle === 'monthly' ? 'yearly' : 'monthly' })}>{sub.billing_cycle}</button>
@@ -198,6 +244,7 @@ export function CompanyBilling({ onClose }: CompanyBillingProps) {
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
 
           <div className="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-700 dark:bg-gray-800">
@@ -217,7 +264,7 @@ export function CompanyBilling({ onClose }: CompanyBillingProps) {
                       <p className="text-xs text-gray-500">Last attempt: {row.last_payment_attempt_at ? `${new Date(row.last_payment_attempt_at).toLocaleString()} (${row.last_payment_attempt_status || 'unknown'})` : 'No attempts yet'}</p>
                       {row.last_payment_attempt_error && <p className="text-xs text-red-500">Error: {row.last_payment_attempt_error}</p>}
                     </div>
-                    <div className="flex items-center gap-2 flex-wrap justify-end">
+                    <AdminRowActions>
                       {row.invoice_url && <a href={row.invoice_url} target="_blank" rel="noreferrer" className="btn-secondary"><Download className="w-4 h-4" /></a>}
                       <button disabled={!allowed.has('collect_payment') || Boolean(inFlightAction)} className="btn-secondary" onClick={() => runInvoiceAction(row.id, 'collect_payment')}>
                         {inFlightAction === 'collect_payment' ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Collect payment'}
@@ -231,7 +278,7 @@ export function CompanyBilling({ onClose }: CompanyBillingProps) {
                       <button disabled={!allowed.has('void') || Boolean(inFlightAction)} className="btn-secondary" onClick={() => runInvoiceAction(row.id, 'void')}>
                         Void
                       </button>
-                    </div>
+                    </AdminRowActions>
                   </div>
                 );
               })}
