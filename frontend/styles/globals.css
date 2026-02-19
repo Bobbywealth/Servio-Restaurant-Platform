@@ -359,15 +359,15 @@ html {
     --tablet-border-strong: #3a3a3a;
     --tablet-sidebar: #161616;
     --tablet-sidebar-border: #202020;
-    --tablet-muted: #6a6a6a;
-    --tablet-muted-strong: #8a8a8a;
-    --tablet-text: #ffffff;
-    --tablet-accent: #c4a661;
+    --tablet-muted: #7a7a7a;
+    --tablet-muted-strong: #9a9a9a;
+    --tablet-text: #f2f2f2;
+    --tablet-accent: #b79d6a;
     --tablet-accent-contrast: #1a1a1a;
-    --tablet-success: #4a7c59;
-    --tablet-warning: #b8860b;
-    --tablet-danger: #c44536;
-    --tablet-info: #4a5f8c;
+    --tablet-success: #537663;
+    --tablet-warning: #a97e2f;
+    --tablet-danger: #b7594e;
+    --tablet-info: #5d6f91;
   }
 
   .light .tablet-theme {
@@ -379,15 +379,15 @@ html {
     --tablet-border-strong: #d1d5db;
     --tablet-sidebar: #ffffff;
     --tablet-sidebar-border: #e5e7eb;
-    --tablet-muted: #6b7280;
-    --tablet-muted-strong: #9ca3af;
+    --tablet-muted: #5f6775;
+    --tablet-muted-strong: #7e8797;
     --tablet-text: #111827;
-    --tablet-accent: #b08a3a;
+    --tablet-accent: #a4884d;
     --tablet-accent-contrast: #111827;
-    --tablet-success: #2e7d32;
-    --tablet-warning: #d97706;
-    --tablet-danger: #dc2626;
-    --tablet-info: #3651a3;
+    --tablet-success: #3f7f46;
+    --tablet-warning: #bd7a2d;
+    --tablet-danger: #c45050;
+    --tablet-info: #516aa1;
   }
 
   html {
@@ -993,15 +993,15 @@ html {
   --tablet-border-strong: #3a3a3a;
   --tablet-sidebar: #161616;
   --tablet-sidebar-border: #202020;
-  --tablet-muted: #6a6a6a;
-  --tablet-muted-strong: #8a8a8a;
-  --tablet-text: #ffffff;
-  --tablet-accent: #c4a661;
+  --tablet-muted: #7a7a7a;
+  --tablet-muted-strong: #9a9a9a;
+  --tablet-text: #f2f2f2;
+  --tablet-accent: #b79d6a;
   --tablet-accent-contrast: #1a1a1a;
-  --tablet-success: #4a7c59;
-  --tablet-warning: #b8860b;
-  --tablet-danger: #c44536;
-  --tablet-info: #4a5f8c;
+  --tablet-success: #537663;
+  --tablet-warning: #a97e2f;
+  --tablet-danger: #b7594e;
+  --tablet-info: #5d6f91;
 }
 
 /* ORDER STATUS BADGES */

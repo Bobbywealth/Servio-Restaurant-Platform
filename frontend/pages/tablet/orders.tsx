@@ -191,11 +191,11 @@ function getPrepTimeWarningLevel(percentRemaining: number): 'normal' | 'warning'
 function getPrepTimeColorClass(level: 'normal' | 'warning' | 'critical'): string {
   switch (level) {
     case 'critical':
-      return 'bg-[var(--tablet-danger)] text-white';
+      return 'bg-[var(--tablet-danger)] text-[var(--tablet-text)]';
     case 'warning':
       return 'bg-[var(--tablet-warning)] text-[var(--tablet-text)]';
     default:
-      return 'bg-[var(--tablet-success)] text-white';
+      return 'bg-[var(--tablet-success)] text-[var(--tablet-text)]';
   }
 }
 
@@ -232,15 +232,15 @@ function getChannelIcon(channel: string | null | undefined): string {
 function statusBadgeClassesForStatus(status: string) {
   switch (status) {
     case 'received':
-      return 'bg-[var(--tablet-accent)] text-[var(--tablet-accent-contrast)]';
+      return 'bg-[var(--tablet-surface-alt)] text-[var(--tablet-muted-strong)] border border-[var(--tablet-border)]';
     case 'preparing':
-      return 'bg-[var(--tablet-border-strong)] text-[var(--tablet-text)] ring-1 ring-[var(--tablet-info)]';
+      return 'bg-[var(--tablet-surface-alt)] text-[var(--tablet-text)] border border-[var(--tablet-border)]';
     case 'ready':
-      return 'bg-[var(--tablet-success)] text-white';
+      return 'bg-[var(--tablet-success)] text-[var(--tablet-text)]';
     case 'scheduled':
-      return 'bg-[var(--tablet-border)] text-[var(--tablet-muted-strong)]';
+      return 'bg-[var(--tablet-surface-alt)] text-[var(--tablet-muted-strong)] border border-[var(--tablet-border)]';
     default:
-      return 'bg-[var(--tablet-border-strong)] text-[var(--tablet-text)]';
+      return 'bg-[var(--tablet-surface-alt)] text-[var(--tablet-text)] border border-[var(--tablet-border)]';
   }
 }
 
@@ -1210,8 +1210,6 @@ export default function TabletOrdersPage() {
     const isSelected = selectedOrder?.id === o.id;
 
     const statusLabel = isNew ? 'NEW' : isPreparing ? 'IN PROGRESS' : isReady ? 'READY' : isScheduled ? 'SCHEDULED' : 'ACTIVE';
-    const statusBadgeClasses = statusBadgeClassesForStatus(status);
-
     const prepTimeData = isPreparing
       ? formatPrepTimeRemaining(o.prep_minutes || 15, o.created_at, now)
       : null;
@@ -1220,6 +1218,11 @@ export default function TabletOrdersPage() {
       : 'normal';
     const prepTimeColorClass = getPrepTimeColorClass(prepWarningLevel);
     const isOverdue = prepTimeData?.isOverdue;
+    const cardStatusBadgeClasses = isPreparing && (prepWarningLevel === 'critical' || prepWarningLevel === 'warning')
+      ? prepWarningLevel === 'critical'
+        ? 'bg-[var(--tablet-danger)] text-white'
+        : 'bg-[var(--tablet-warning)] text-[var(--tablet-text)]'
+      : statusBadgeClassesForStatus(status);
 
     return (
       <button
@@ -1228,23 +1231,20 @@ export default function TabletOrdersPage() {
         onClick={() => setSelectedOrder(o)}
         className={clsx(
           'w-full text-left rounded-xl border border-[var(--tablet-border)] p-4 sm:p-5 shadow-[0_2px_8px_rgba(0,0,0,0.3)] transition transform hover:brightness-110 hover:scale-[1.01] touch-manipulation',
-          isSelected && 'bg-[var(--tablet-info)] border-[var(--tablet-info)] shadow-[0_4px_12px_rgba(93,112,153,0.45)]',
+          isSelected && 'bg-[color-mix(in_srgb,var(--tablet-info)_35%,var(--tablet-card))] border-[var(--tablet-info)] shadow-[0_4px_12px_rgba(64,84,122,0.35)]',
           !isSelected && 'bg-[var(--tablet-card)]',
           isOverdue && 'border-l-4 border-l-[var(--tablet-danger)] pl-3 sm:pl-4'
         )}
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className={clsx('text-xs font-semibold tracking-widest px-2.5 py-1.5 rounded-full', statusBadgeClasses)}>
+            <span className={clsx('text-sm font-semibold tracking-wide px-2.5 py-1.5 rounded-full', statusBadgeClasses)}>
               {statusLabel}
-            </span>
-            <span className="text-xl" title={o.channel || 'Unknown'}>
-              {getChannelIcon(o.channel)}
             </span>
           </div>
           <div className="flex items-center gap-2">
             {isLatest && (
-              <span className="text-xs font-semibold uppercase text-[var(--tablet-accent)] hidden sm:inline">Newest</span>
+              <span className="text-sm font-semibold text-[var(--tablet-accent)] hidden sm:inline">Newest</span>
             )}
             {isPreparing && prepTimeData && (
               <span className={clsx(
@@ -1259,15 +1259,13 @@ export default function TabletOrdersPage() {
           </div>
         </div>
 
-        <div className="mt-3 flex items-center justify-between">
-          <div className={clsx('text-lg font-semibold truncate', 'text-[var(--tablet-text)]')}>
-            {o.customer_name || 'Guest'}
+        <div className="mt-3 flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <div className={clsx('text-xl font-bold truncate', 'text-[var(--tablet-text)]')}>
+              {o.customer_name || 'Guest'}
+            </div>
+            <div className="text-lg font-bold text-[var(--tablet-text)] tabular-nums">{formatMoney(o.total_amount)}</div>
           </div>
-          <div className="flex items-center gap-2 text-sm text-[var(--tablet-muted)]">
-            <Clock className="h-4 w-4" />
-            <span className="tabular-nums">{timeStr}</span>
-          </div>
-        </div>
 
         {isPreparing && prepTimeData && (
           <div className="mt-3">
@@ -1284,37 +1282,41 @@ export default function TabletOrdersPage() {
               />
             </div>
           </div>
-        )}
 
-        <div className="mt-3 flex items-center justify-between text-sm text-[var(--tablet-muted)]">
+          {isPreparing && prepTimeData && !prepTimeData.isOverdue && (
+            <div>
+              <div className="h-2 rounded-full bg-[var(--tablet-border)] overflow-hidden">
+                <div
+                  className={clsx(
+                    'h-full rounded-full prep-time-progress-bar',
+                    prepWarningLevel === 'critical' ? 'bg-[var(--tablet-danger)]' :
+                    prepWarningLevel === 'warning' ? 'bg-[var(--tablet-warning)]' :
+                    'bg-[var(--tablet-success)]'
+                  )}
+                  style={{ width: `${prepTimeData.percentRemaining}%` }}
+                />
+              </div>
+            </div>
+          )}
+
+          {hasPendingAction && (
+            <div className="text-sm font-semibold text-[var(--tablet-accent)]">
+              Pending sync
+            </div>
+          )}
+
           <div className="flex items-center gap-2">
-            <span>{itemCount} item{itemCount !== 1 ? 's' : ''}</span>
-            {o.order_type && (
-              <span className="px-2.5 py-0.5 rounded text-xs bg-[var(--tablet-border)] uppercase tracking-wide">
-                {o.order_type}
-              </span>
-            )}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setOrderDetailsOrder(o);
+              }}
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-sm font-semibold bg-[var(--tablet-surface-alt)] border border-[var(--tablet-border)] hover:bg-[var(--tablet-border)] transition touch-manipulation"
+            >
+              <Eye className="h-4 w-4" />
+              View details
+            </button>
           </div>
-          <span className="text-[var(--tablet-text)] font-semibold">{formatMoney(o.total_amount)}</span>
-        </div>
-
-        {hasPendingAction && (
-          <div className="mt-2 text-xs font-semibold uppercase text-[var(--tablet-accent)]">
-            Pending Sync
-          </div>
-        )}
-
-        <div className="mt-4 flex items-center gap-2">
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setOrderDetailsOrder(o);
-            }}
-            className="flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-xs font-semibold uppercase bg-[var(--tablet-surface-alt)] border border-[var(--tablet-border)] hover:bg-[var(--tablet-border)] transition touch-manipulation"
-          >
-            <Eye className="h-4 w-4" />
-            View Details
-          </button>
         </div>
       </button>
     );
@@ -1437,13 +1439,13 @@ export default function TabletOrdersPage() {
                 <div className="px-3 py-1.5 rounded-lg bg-[var(--tablet-accent)] text-[var(--tablet-accent-contrast)] text-xs font-semibold">
                   {activeOrders.length} Active
                 </div>
-                <div className="px-3 py-1.5 rounded-lg bg-[var(--tablet-accent)]/50 text-[var(--tablet-text)] text-xs font-semibold">
+                <div className="px-3 py-1.5 rounded-lg bg-[var(--tablet-accent)]/35 text-[var(--tablet-text)] text-xs font-semibold">
                   {receivedOrders.length} New
                 </div>
-                <div className="px-3 py-1.5 rounded-lg bg-[var(--tablet-info)]/30 text-[var(--tablet-text)] text-xs font-semibold">
+                <div className="px-3 py-1.5 rounded-lg bg-[var(--tablet-info)]/22 text-[var(--tablet-text)] text-xs font-semibold">
                   {activeOrders.filter(o => normalizeStatus(o.status) === 'preparing').length} In Progress
                 </div>
-                <div className="px-3 py-1.5 rounded-lg bg-[var(--tablet-success)]/30 text-[var(--tablet-text)] text-xs font-semibold">
+                <div className="px-3 py-1.5 rounded-lg bg-[var(--tablet-success)]/24 text-[var(--tablet-text)] text-xs font-semibold">
                   {activeOrders.filter(o => normalizeStatus(o.status) === 'ready').length} Ready
                 </div>
               </div>
@@ -1456,9 +1458,9 @@ export default function TabletOrdersPage() {
                   </span>
                   <span className={clsx(
                     'px-2 py-1 rounded-full text-xs font-semibold uppercase',
-                    syncAttemptStatus === 'syncing' && 'bg-[var(--tablet-info)]/30 text-[var(--tablet-text)]',
-                    syncAttemptStatus === 'success' && 'bg-[var(--tablet-success)]/30 text-[var(--tablet-text)]',
-                    syncAttemptStatus === 'error' && 'bg-[var(--tablet-danger)]/30 text-[var(--tablet-text)]',
+                    syncAttemptStatus === 'syncing' && 'bg-[var(--tablet-info)]/20 text-[var(--tablet-text)]',
+                    syncAttemptStatus === 'success' && 'bg-[var(--tablet-success)]/20 text-[var(--tablet-text)]',
+                    syncAttemptStatus === 'error' && 'bg-[var(--tablet-danger)]/20 text-[var(--tablet-text)]',
                     syncAttemptStatus === 'idle' && 'bg-[var(--tablet-border)] text-[var(--tablet-muted-strong)]'
                   )}>
                     {syncAttemptStatus}
@@ -1468,14 +1470,14 @@ export default function TabletOrdersPage() {
                   <button
                     type="button"
                     onClick={retryQueueNow}
-                    className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[var(--tablet-info)]/30 border border-[var(--tablet-border)]"
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[var(--tablet-info)]/20 border border-[var(--tablet-border)] text-[var(--tablet-text)]"
                   >
                     Retry Now
                   </button>
                   <button
                     type="button"
                     onClick={clearFailedActions}
-                    className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[var(--tablet-danger)]/20 border border-[var(--tablet-border)]"
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[var(--tablet-danger)]/15 border border-[var(--tablet-border)] text-[var(--tablet-text)]"
                   >
                     Clear Failed
                   </button>
@@ -1637,7 +1639,7 @@ export default function TabletOrdersPage() {
                 <div className="flex flex-wrap gap-2 items-center">
                   <span className="text-xs text-[var(--tablet-muted)]">Showing:</span>
                   {searchQuery && (
-                    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-[var(--tablet-info)] text-white">
+                    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-[var(--tablet-info)]/25 text-[var(--tablet-text)] border border-[var(--tablet-border)]">
                       Search: "{searchQuery}"
                       <button onClick={() => setSearchQuery('')} className="ml-1">
                         <X className="h-3 w-3" />
@@ -1853,7 +1855,7 @@ export default function TabletOrdersPage() {
                           <button
                             disabled={busyId === selectedOrder.id}
                             onClick={() => setStatus(selectedOrder.id, 'ready')}
-                            className="h-14 rounded-full bg-[var(--tablet-success)] text-white font-semibold uppercase shadow-[0_2px_8px_rgba(0,0,0,0.3)] transition hover:brightness-110 active:scale-95 disabled:opacity-50 touch-manipulation"
+                            className="h-14 rounded-full bg-[var(--tablet-success)] text-[var(--tablet-text)] font-semibold uppercase shadow-[0_2px_8px_rgba(0,0,0,0.3)] transition hover:brightness-110 active:scale-95 disabled:opacity-50 touch-manipulation"
                           >
                             Ready for Pickup
                           </button>
@@ -1877,7 +1879,7 @@ export default function TabletOrdersPage() {
                                 setSelectedOrder(null);
                               }
                             }}
-                            className="h-14 rounded-full bg-[var(--tablet-success)] text-white font-semibold uppercase shadow-[0_2px_8px_rgba(0,0,0,0.3)] transition hover:brightness-110 active:scale-95 disabled:opacity-50 touch-manipulation"
+                            className="h-14 rounded-full bg-[var(--tablet-success)] text-[var(--tablet-text)] font-semibold uppercase shadow-[0_2px_8px_rgba(0,0,0,0.3)] transition hover:brightness-110 active:scale-95 disabled:opacity-50 touch-manipulation"
                           >
                             Complete Order
                           </button>
