@@ -1224,7 +1224,7 @@ export default function TabletOrdersPage() {
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className={clsx('text-xs font-semibold tracking-widest px-2.5 py-1.5 rounded-full', statusBadgeClasses)}>
+            <span className={clsx('text-sm font-semibold tracking-wide px-2.5 py-1.5 rounded-full', statusBadgeClasses)}>
               {statusLabel}
             </span>
             <span className="text-xl" title={o.channel || 'Unknown'}>
@@ -1233,11 +1233,11 @@ export default function TabletOrdersPage() {
           </div>
           <div className="flex items-center gap-2">
             {isLatest && (
-              <span className="text-xs font-semibold uppercase text-[var(--tablet-accent)] hidden sm:inline">Newest</span>
+              <span className="text-sm font-semibold text-[var(--tablet-accent)] hidden sm:inline">Newest</span>
             )}
             {isPreparing && prepTimeData && (
               <span className={clsx(
-                'text-xs font-semibold px-2.5 py-1.5 rounded-full',
+                'text-sm font-semibold px-2.5 py-1.5 rounded-full tabular-nums',
                 prepTimeColorClass,
                 prepWarningLevel === 'critical' && 'prep-time-critical'
               )}>
@@ -1247,61 +1247,63 @@ export default function TabletOrdersPage() {
           </div>
         </div>
 
-        <div className="mt-3 flex items-center justify-between">
-          <div className={clsx('text-lg font-semibold truncate', 'text-[var(--tablet-text)]')}>
-            {o.customer_name || 'Guest'}
+        <div className="mt-3 flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <div className={clsx('text-xl font-bold truncate', 'text-[var(--tablet-text)]')}>
+              {o.customer_name || 'Guest'}
+            </div>
+            <div className="text-lg font-bold text-[var(--tablet-text)] tabular-nums">{formatMoney(o.total_amount)}</div>
           </div>
-          <div className="flex items-center gap-2 text-sm text-[var(--tablet-muted)]">
-            <Clock className="h-4 w-4" />
-            <span className="tabular-nums">{timeStr}</span>
-          </div>
-        </div>
 
-        {isPreparing && prepTimeData && !prepTimeData.isOverdue && (
-          <div className="mt-3">
-            <div className="h-2 rounded-full bg-[var(--tablet-border)] overflow-hidden">
-              <div
-                className={clsx(
-                  'h-full rounded-full prep-time-progress-bar',
-                  prepWarningLevel === 'critical' ? 'bg-[var(--tablet-danger)]' :
-                  prepWarningLevel === 'warning' ? 'bg-[var(--tablet-warning)]' :
-                  'bg-[var(--tablet-success)]'
-                )}
-                style={{ width: `${prepTimeData.percentRemaining}%` }}
-              />
+          <div className="flex items-center justify-between text-sm text-[var(--tablet-muted)]">
+            <div className="flex items-center gap-2">
+              <Clock className="h-4 w-4" />
+              <span className="tabular-nums">{timeStr}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span>{itemCount} item{itemCount !== 1 ? 's' : ''}</span>
+              {o.order_type && (
+                <span className="px-2.5 py-0.5 rounded text-sm bg-[var(--tablet-border)] tracking-wide">
+                  {o.order_type}
+                </span>
+              )}
             </div>
           </div>
-        )}
 
-        <div className="mt-3 flex items-center justify-between text-sm text-[var(--tablet-muted)]">
+          {isPreparing && prepTimeData && !prepTimeData.isOverdue && (
+            <div>
+              <div className="h-2 rounded-full bg-[var(--tablet-border)] overflow-hidden">
+                <div
+                  className={clsx(
+                    'h-full rounded-full prep-time-progress-bar',
+                    prepWarningLevel === 'critical' ? 'bg-[var(--tablet-danger)]' :
+                    prepWarningLevel === 'warning' ? 'bg-[var(--tablet-warning)]' :
+                    'bg-[var(--tablet-success)]'
+                  )}
+                  style={{ width: `${prepTimeData.percentRemaining}%` }}
+                />
+              </div>
+            </div>
+          )}
+
+          {hasPendingAction && (
+            <div className="text-sm font-semibold text-[var(--tablet-accent)]">
+              Pending sync
+            </div>
+          )}
+
           <div className="flex items-center gap-2">
-            <span>{itemCount} item{itemCount !== 1 ? 's' : ''}</span>
-            {o.order_type && (
-              <span className="px-2.5 py-0.5 rounded text-xs bg-[var(--tablet-border)] uppercase tracking-wide">
-                {o.order_type}
-              </span>
-            )}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setOrderDetailsOrder(o);
+              }}
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-sm font-semibold bg-[var(--tablet-surface-alt)] border border-[var(--tablet-border)] hover:bg-[var(--tablet-border)] transition touch-manipulation"
+            >
+              <Eye className="h-4 w-4" />
+              View details
+            </button>
           </div>
-          <span className="text-[var(--tablet-text)] font-semibold">{formatMoney(o.total_amount)}</span>
-        </div>
-
-        {hasPendingAction && (
-          <div className="mt-2 text-xs font-semibold uppercase text-[var(--tablet-accent)]">
-            Pending Sync
-          </div>
-        )}
-
-        <div className="mt-4 flex items-center gap-2">
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setOrderDetailsOrder(o);
-            }}
-            className="flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-xs font-semibold uppercase bg-[var(--tablet-surface-alt)] border border-[var(--tablet-border)] hover:bg-[var(--tablet-border)] transition touch-manipulation"
-          >
-            <Eye className="h-4 w-4" />
-            View Details
-          </button>
         </div>
       </button>
     );
