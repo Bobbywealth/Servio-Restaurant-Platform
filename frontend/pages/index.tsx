@@ -25,7 +25,30 @@ interface PublicPricingPlan {
 export default function HomePage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [pricingPlans, setPricingPlans] = useState<PublicPricingPlan[]>([])
+  const [isSmallScreen, setIsSmallScreen] = useState(false)
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false)
 
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return
+
+    const reducedMotionMedia = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const smallScreenMedia = window.matchMedia('(max-width: 767px)')
+
+    const updateAnimationPreferences = () => {
+      setPrefersReducedMotion(reducedMotionMedia.matches)
+      setIsSmallScreen(smallScreenMedia.matches)
+    }
+
+    updateAnimationPreferences()
+
+    reducedMotionMedia.addEventListener('change', updateAnimationPreferences)
+    smallScreenMedia.addEventListener('change', updateAnimationPreferences)
+
+    return () => {
+      reducedMotionMedia.removeEventListener('change', updateAnimationPreferences)
+      smallScreenMedia.removeEventListener('change', updateAnimationPreferences)
+    }
+  }, [])
 
   useEffect(() => {
     const base = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_BACKEND_URL
@@ -42,6 +65,45 @@ export default function HomePage() {
       .catch(() => undefined)
   }, [])
 
+  const renderAnimatedBlob = (
+    positionClasses: string,
+    colorClasses: string,
+    desktopSize: number,
+    desktopBlur: number,
+    motionConfig: { x: number[]; y: number[]; scale?: number[] },
+    duration: number,
+    mobileVisible = true,
+  ) => {
+    if (isSmallScreen && !mobileVisible) {
+      return null
+    }
+
+    const size = isSmallScreen ? Math.round(desktopSize * 0.55) : desktopSize
+    const blur = isSmallScreen ? Math.round(desktopBlur * 0.5) : desktopBlur
+
+    const baseClasses = `absolute ${positionClasses} ${colorClasses} rounded-full`
+    const blobStyle = { width: size, height: size, filter: `blur(${blur}px)` }
+
+    if (prefersReducedMotion) {
+      return <div className={baseClasses} style={blobStyle} />
+    }
+
+    const mobileMotion = {
+      x: motionConfig.x.map((value) => Math.round(value * 0.4)),
+      y: motionConfig.y.map((value) => Math.round(value * 0.4)),
+      ...(motionConfig.scale ? { scale: [1, 1.05, 1] } : {}),
+    }
+
+    return (
+      <motion.div
+        className={baseClasses}
+        style={blobStyle}
+        animate={isSmallScreen ? mobileMotion : motionConfig}
+        transition={{ duration: isSmallScreen ? duration * 1.6 : duration, repeat: Infinity }}
+      />
+    )
+  }
+
   return (
     <>
       <Head>
@@ -57,33 +119,21 @@ export default function HomePage() {
         <div className="min-h-screen bg-gray-900 text-white overflow-x-hidden">
           {/* Animated Background Blobs */}
           <div className="fixed inset-0 pointer-events-none overflow-hidden">
-            <motion.div
-              className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-primary-500/20 rounded-full blur-[100px]"
-              animate={{
-                x: [0, 50, 0],
-                y: [0, 30, 0],
-                scale: [1, 1.2, 1],
-              }}
-              transition={{ duration: 10, repeat: Infinity }}
-            />
-            <motion.div
-              className="absolute top-1/3 right-1/4 w-[400px] h-[400px] bg-servio-orange-500/15 rounded-full blur-[100px]"
-              animate={{
-                x: [0, -40, 0],
-                y: [0, 40, 0],
-                scale: [1, 1.3, 1],
-              }}
-              transition={{ duration: 8, repeat: Infinity }}
-            />
-            <motion.div
-              className="absolute bottom-0 left-1/3 w-[600px] h-[600px] bg-servio-purple-500/10 rounded-full blur-[120px]"
-              animate={{
-                x: [0, 60, 0],
-                y: [0, -30, 0],
-                scale: [1, 1.1, 1],
-              }}
-              transition={{ duration: 12, repeat: Infinity }}
-            />
+            {renderAnimatedBlob('top-0 left-1/4', 'bg-primary-500/20', 500, 100, {
+              x: [0, 50, 0],
+              y: [0, 30, 0],
+              scale: [1, 1.2, 1],
+            }, 10)}
+            {renderAnimatedBlob('top-1/3 right-1/4', 'bg-servio-orange-500/15', 400, 100, {
+              x: [0, -40, 0],
+              y: [0, 40, 0],
+              scale: [1, 1.3, 1],
+            }, 8, false)}
+            {renderAnimatedBlob('bottom-0 left-1/3', 'bg-servio-purple-500/10', 600, 120, {
+              x: [0, 60, 0],
+              y: [0, -30, 0],
+              scale: [1, 1.1, 1],
+            }, 12)}
           </div>
 
           {/* Navigation */}
