@@ -121,6 +121,7 @@ const MenuManagement: React.FC = () => {
   const selectedItemIdRef = useRef<string | null>(null);
   const editorClosedByUserRef = useRef(false);
   const previousActiveCategoryIdRef = useRef<string | null>(null);
+  const latestCategoryReorderAttemptRef = useRef(0);
   const [editorTab, setEditorTab] = useState<'basics' | 'availability' | 'modifiers' | 'preview'>('basics');
   const [basicsDirty, setBasicsDirty] = useState(false);
   const [pendingSelection, setPendingSelection] = useState<{ type: 'category' | 'item'; id: string } | null>(null);
@@ -653,6 +654,7 @@ const MenuManagement: React.FC = () => {
   };
 
   const handleReorderCategories = async (nextOrderedIds: string[]) => {
+    const reorderAttempt = ++latestCategoryReorderAttemptRef.current;
     const previousCategories = categories;
     const existingIds = categories.map((category) => category.id);
     const orderedIds = [
@@ -683,14 +685,21 @@ const MenuManagement: React.FC = () => {
       // Refresh data in background and verify persisted ordering.
       loadMenuData()
         .then((reloadedCategories) => {
+          if (reorderAttempt !== latestCategoryReorderAttemptRef.current) {
+            return;
+          }
+
           if (!Array.isArray(reloadedCategories)) return;
 
           const requestedOrder = orderedIds.map((id, index) => ({ id, sortOrder: index }));
+          const requestedSet = new Set(orderedIds);
           const returnedOrder = reloadedCategories
             .map((category) => ({ id: category.id, sortOrder: Number(category.sort_order ?? 0) }))
             .sort((a, b) => a.sortOrder - b.sortOrder || a.id.localeCompare(b.id));
 
-          const persistedIds = returnedOrder.map((entry) => entry.id);
+          const persistedIds = returnedOrder
+            .map((entry) => entry.id)
+            .filter((id) => requestedSet.has(id));
           const expectedIds = requestedOrder.map((entry) => entry.id);
           const mismatch =
             persistedIds.length !== expectedIds.length ||
