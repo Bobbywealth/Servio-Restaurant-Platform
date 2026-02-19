@@ -166,6 +166,7 @@ export default function PublicProfile() {
             showAllCategories={menu.showAllCategories}
             visibleCategoryCount={menu.visibleCategoryCount}
             filteredItemCount={menu.filteredItems.length}
+            hasActiveSearchOrFilters={Boolean(menu.searchQuery.trim()) || menu.activeFilters.length > 0}
             onToggleCategory={menu.toggleCategory}
             onOpenItem={setSelectedItem}
             onShowMore={menu.handleShowMoreCategories}
