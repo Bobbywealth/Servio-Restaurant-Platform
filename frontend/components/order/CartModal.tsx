@@ -2,7 +2,7 @@ import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft, ArrowRight, Plus, Minus, Loader2, CheckCircle2,
-  CreditCard, Wallet, AlertTriangle, User, Phone
+  CreditCard, Wallet, AlertTriangle, User, Phone, Mail
 } from 'lucide-react';
 import type { CartItem, CustomerInfo, CheckoutStep } from './types';
 
@@ -232,6 +232,23 @@ function CustomerDetailsStep({
             className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none text-lg scroll-mt-24"
           />
           <p className="text-sm text-gray-500 mt-1">We'll text you when your order is ready</p>
+        </div>
+
+        <div>
+          <label className="block text-sm font-semibold text-gray-700 mb-2">
+            <Mail className="w-4 h-4 inline mr-2" />
+            Email (optional)
+          </label>
+          <input
+            type="email"
+            inputMode="email"
+            value={customerInfo.email}
+            onChange={(e) => setCustomerInfo((prev: CustomerInfo) => ({ ...prev, email: e.target.value }))}
+            onFocus={(e) => { setTimeout(() => { e.target.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 300); }}
+            placeholder="you@example.com"
+            className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none text-lg scroll-mt-24"
+          />
+          <p className="text-sm text-gray-500 mt-1">We'll email your order confirmation if you provide this.</p>
         </div>
 
         <div>

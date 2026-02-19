@@ -1,5 +1,6 @@
 import { DatabaseService } from './DatabaseService';
 import { SmsService } from './SmsService';
+import { EmailService } from './EmailService';
 import { logger } from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -14,21 +15,11 @@ interface OrderNotificationSettings {
 export class OrderNotificationService {
   private static instance: OrderNotificationService;
   private smsService: SmsService;
-  private emailTransporter: any;
+  private emailService: EmailService;
 
   private constructor() {
     this.smsService = SmsService.getInstance();
-    // Dynamically require nodemailer to avoid type issues
-    const nodemailer = require('nodemailer');
-    this.emailTransporter = nodemailer.createTransport({
-      host: process.env.EMAIL_HOST || 'smtp.gmail.com',
-      port: parseInt(process.env.EMAIL_PORT || '587'),
-      secure: false,
-      auth: {
-        user: process.env.EMAIL_USER || '',
-        pass: process.env.EMAIL_PASS || ''
-      }
-    });
+    this.emailService = EmailService.getInstance();
   }
 
   public static getInstance(): OrderNotificationService {
@@ -134,7 +125,7 @@ export class OrderNotificationService {
 
       // Send Email if opted in
       if (customer.email && customer.opt_in_email) {
-        await this.emailTransporter.sendMail({
+        await this.emailService.sendMail({
           from: process.env.EMAIL_FROM || 'noreply@servio.com',
           to: customer.email,
           subject: `Order ${newStatus.charAt(0).toUpperCase() + newStatus.slice(1)} - Order #${orderId.substring(0, 8)}`,
@@ -183,7 +174,7 @@ export class OrderNotificationService {
 
       // Send Email
       if ((method === 'email' || method === 'both') && staff.email) {
-        const emailResult = await this.emailTransporter.sendMail({
+        const emailResult = await this.emailService.sendMail({
           from: process.env.EMAIL_FROM || 'noreply@servio.com',
           to: staff.email,
           subject: 'Message from Restaurant',
@@ -326,7 +317,7 @@ export class OrderNotificationService {
     const message = this.formatTemplate(settings.emailTemplate, order);
 
     try {
-      await this.emailTransporter.sendMail({
+      await this.emailService.sendMail({
         from: process.env.EMAIL_FROM || 'noreply@servio.com',
         to: customer.email,
         subject: subject,

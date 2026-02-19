@@ -9,6 +9,7 @@ export interface EnvStatus {
     assistant: 'available' | 'unavailable';
     auth: 'secure' | 'insecure';
     uploads: 'configured' | 'default';
+    email: 'configured' | 'missing' | 'partial';
   };
 }
 
@@ -64,6 +65,19 @@ export function validateEnvironment(): EnvStatus {
     warnings.push('OPENAI_API_KEY not set - Assistant features will be disabled');
   }
 
+
+  // === EMAIL (optional but required for email notifications) ===
+  const emailHost = process.env.EMAIL_HOST;
+  const emailUser = process.env.EMAIL_USER;
+  const emailPass = process.env.EMAIL_PASS;
+  const emailFrom = process.env.EMAIL_FROM;
+  const hasAnyEmail = Boolean(emailHost || emailUser || emailPass || emailFrom);
+  const hasFullEmail = Boolean(emailHost && emailUser && emailPass && emailFrom);
+
+  if (hasAnyEmail && !hasFullEmail) {
+    warnings.push('Email is partially configured. Set EMAIL_HOST, EMAIL_USER, EMAIL_PASS, and EMAIL_FROM for Outlook/Microsoft 365 notifications.');
+  }
+
   // === UPLOADS_DIR (optional) ===
   const uploadsDir = process.env.UPLOADS_DIR;
   if (isProd && !uploadsDir) {
@@ -81,6 +95,7 @@ export function validateEnvironment(): EnvStatus {
   logger.info(`FRONTEND_URL:    ${frontendUrl || '[NOT SET - localhost]'}`);
   logger.info(`OPENAI_API_KEY:  ${hasOpenAI ? '[CONFIGURED]' : '[NOT SET]'}`);
   logger.info(`UPLOADS_DIR:     ${uploadsDir || '[DEFAULT: ./uploads]'}`);
+  logger.info(`EMAIL:           ${hasFullEmail ? '[CONFIGURED]' : hasAnyEmail ? '[PARTIAL]' : '[NOT SET]'}`);
   logger.info('----------------------------------------');
 
   if (errors.length > 0) {
@@ -117,6 +132,7 @@ export function validateEnvironment(): EnvStatus {
       assistant: hasOpenAI ? 'available' : 'unavailable',
       auth: isInsecureJwt ? 'insecure' : 'secure',
       uploads: uploadsDir ? 'configured' : 'default',
+      email: hasFullEmail ? 'configured' : hasAnyEmail ? 'partial' : 'missing',
     }
   };
 }
