@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { DatabaseService } from '../services/DatabaseService';
-import { asyncHandler, UnauthorizedError } from '../middleware/errorHandler';
+import { asyncHandler, UnauthorizedError, BadRequestError, NotFoundError } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
 import { ensureUploadsDir, getUploadsPath } from '../utils/uploads';
 import multer from 'multer';
@@ -285,13 +285,6 @@ router.get('/public/:slug', asyncHandler(async (req: Request, res: Response) => 
   const { slug } = req.params;
   const db = DatabaseService.getInstance().getDatabase();
 
-  const restaurantTableInfo = await db.all("SELECT column_name AS name FROM information_schema.columns WHERE table_name = 'restaurants'");
-  const availableRestaurantColumns = new Set(
-    restaurantTableInfo
-      .map((column: any) => String(column?.name || '').trim())
-      .filter((columnName: string) => columnName.length > 0)
-  );
-
   const requestedColumns = [
     'id',
     'name',
@@ -302,15 +295,36 @@ router.get('/public/:slug', asyncHandler(async (req: Request, res: Response) => 
     'phone',
     'description'
   ];
-  const selectedColumns = requestedColumns.filter((column) => availableRestaurantColumns.has(column));
 
-  if (!selectedColumns.includes('id') || !selectedColumns.includes('name')) {
-    throw new Error('restaurants table is missing required public menu columns');
+  let selectedColumns = requestedColumns;
+  let isActiveClause = " AND LOWER(CAST(COALESCE(is_active, 1) AS TEXT)) IN ('1', 'true')";
+
+  try {
+    const restaurantTableInfo = await db.all("SELECT column_name AS name FROM information_schema.columns WHERE table_name = 'restaurants'");
+    const availableRestaurantColumns = new Set(
+      restaurantTableInfo
+        .map((column: any) => String(column?.name || '').trim())
+        .filter((columnName: string) => columnName.length > 0)
+    );
+
+    if (availableRestaurantColumns.size > 0) {
+      selectedColumns = requestedColumns.filter((column) => availableRestaurantColumns.has(column));
+
+      if (!selectedColumns.includes('id') || !selectedColumns.includes('name')) {
+        throw new BadRequestError('restaurants table is missing required public menu columns');
+      }
+
+      isActiveClause = availableRestaurantColumns.has('is_active')
+        ? " AND LOWER(CAST(COALESCE(is_active, 1) AS TEXT)) IN ('1', 'true')"
+        : '';
+    }
+  } catch (schemaError: any) {
+    if (schemaError instanceof BadRequestError) throw schemaError;
+    logger.warn('[menu.public] information_schema query failed, using default columns', {
+      slug,
+      error: schemaError?.message || 'Unknown'
+    });
   }
-
-  const isActiveClause = availableRestaurantColumns.has('is_active')
-    ? " AND LOWER(CAST(COALESCE(is_active, 1) AS TEXT)) IN ('1', 'true')"
-    : '';
 
   const restaurant = await db.get(
     `SELECT ${selectedColumns.join(', ')} FROM restaurants WHERE slug = ?${isActiveClause}`,
@@ -342,145 +356,163 @@ router.get('/public/:slug', asyncHandler(async (req: Request, res: Response) => 
 
   if (itemIds.length) {
     const itemIdPlaceholders = itemIds.map(() => '?').join(',');
-    const modifierGroups = await db.all(`
-      SELECT *
-      FROM modifier_groups
-      WHERE restaurant_id = ?
-        AND is_active = TRUE
-        AND deleted_at IS NULL
-      ORDER BY display_order ASC, name ASC
-    `, [restaurant.id]);
 
-    if (modifierGroups.length) {
-      groupsById = modifierGroups.reduce((acc: Record<string, any>, g: any) => {
-        acc[g.id] = g;
-        return acc;
-      }, {});
-
-      const modifierOptions = await db.all(`
+    // Load modifiers with graceful degradation - tables may not exist for all restaurants
+    try {
+      const modifierGroups = await db.all(`
         SELECT *
-        FROM modifier_options
+        FROM modifier_groups
         WHERE restaurant_id = ?
           AND is_active = TRUE
           AND deleted_at IS NULL
         ORDER BY display_order ASC, name ASC
       `, [restaurant.id]);
 
-      optionsByGroup = modifierOptions.reduce((acc: Record<string, any[]>, opt: any) => {
-        if (!acc[opt.group_id]) acc[opt.group_id] = [];
-        acc[opt.group_id].push(opt);
-        return acc;
-      }, {});
+      if (modifierGroups.length) {
+        groupsById = modifierGroups.reduce((acc: Record<string, any>, g: any) => {
+          acc[g.id] = g;
+          return acc;
+        }, {});
 
-      const itemModifierRows = await db.all(`
-        SELECT *
-        FROM item_modifier_groups
-        WHERE item_id IN (${itemIdPlaceholders})
-          AND deleted_at IS NULL
-        ORDER BY display_order ASC
-      `, itemIds);
+        const modifierOptions = await db.all(`
+          SELECT *
+          FROM modifier_options
+          WHERE restaurant_id = ?
+            AND is_active = TRUE
+            AND deleted_at IS NULL
+          ORDER BY display_order ASC, name ASC
+        `, [restaurant.id]);
 
-      itemGroupsMap = itemModifierRows.reduce((acc: Record<string, any[]>, row: any) => {
-        const baseGroup = groupsById[row.group_id];
-        if (!baseGroup) return acc;
-        const effectiveMin = row.override_min !== null && row.override_min !== undefined ? row.override_min : baseGroup.min_selections;
-        const effectiveMax = row.override_max !== null && row.override_max !== undefined ? row.override_max : baseGroup.max_selections;
-        const effectiveRequired = row.override_required !== null && row.override_required !== undefined ? row.override_required : baseGroup.is_required;
+        optionsByGroup = modifierOptions.reduce((acc: Record<string, any[]>, opt: any) => {
+          if (!acc[opt.group_id]) acc[opt.group_id] = [];
+          acc[opt.group_id].push(opt);
+          return acc;
+        }, {});
 
-        const enriched = {
-          id: baseGroup.id,
-          name: baseGroup.name,
-          description: baseGroup.description,
-          selectionType: baseGroup.selection_type,
-          minSelections: effectiveMin,
-          maxSelections: effectiveMax,
-          isRequired: effectiveRequired,
-          displayOrder: row.display_order ?? baseGroup.display_order ?? 0,
-          assignmentLevel: 'item',
-          options: (optionsByGroup[baseGroup.id] || []).map((opt: any) => ({
-            id: opt.id,
-            name: opt.name,
-            description: opt.description ?? null,
-            priceDelta: Number(opt.price_delta || 0),
-            isActive: Boolean(opt.is_active),
-            isSoldOut: Boolean(opt.is_sold_out),
-            isPreselected: Boolean(opt.is_preselected),
-            displayOrder: opt.display_order ?? 0
-          }))
-        };
+        const itemModifierRows = await db.all(`
+          SELECT *
+          FROM item_modifier_groups
+          WHERE item_id IN (${itemIdPlaceholders})
+            AND deleted_at IS NULL
+          ORDER BY display_order ASC
+        `, itemIds);
 
-        if (!acc[row.item_id]) acc[row.item_id] = [];
-        acc[row.item_id].push(enriched);
-        return acc;
-      }, {});
+        itemGroupsMap = itemModifierRows.reduce((acc: Record<string, any[]>, row: any) => {
+          const baseGroup = groupsById[row.group_id];
+          if (!baseGroup) return acc;
+          const effectiveMin = row.override_min !== null && row.override_min !== undefined ? row.override_min : baseGroup.min_selections;
+          const effectiveMax = row.override_max !== null && row.override_max !== undefined ? row.override_max : baseGroup.max_selections;
+          const effectiveRequired = row.override_required !== null && row.override_required !== undefined ? row.override_required : baseGroup.is_required;
+
+          const enriched = {
+            id: baseGroup.id,
+            name: baseGroup.name,
+            description: baseGroup.description,
+            selectionType: baseGroup.selection_type,
+            minSelections: effectiveMin,
+            maxSelections: effectiveMax,
+            isRequired: effectiveRequired,
+            displayOrder: row.display_order ?? baseGroup.display_order ?? 0,
+            assignmentLevel: 'item',
+            options: (optionsByGroup[baseGroup.id] || []).map((opt: any) => ({
+              id: opt.id,
+              name: opt.name,
+              description: opt.description ?? null,
+              priceDelta: Number(opt.price_delta || 0),
+              isActive: Boolean(opt.is_active),
+              isSoldOut: Boolean(opt.is_sold_out),
+              isPreselected: Boolean(opt.is_preselected),
+              displayOrder: opt.display_order ?? 0
+            }))
+          };
+
+          if (!acc[row.item_id]) acc[row.item_id] = [];
+          acc[row.item_id].push(enriched);
+          return acc;
+        }, {});
+      }
+
+      // Load category-level modifier group assignments (inherited)
+      if (categoryIds.length && Object.keys(groupsById).length) {
+        const catPlaceholders = categoryIds.map(() => '?').join(',');
+        const categoryModifierRows = await db.all(
+          `
+            SELECT *
+            FROM category_modifier_groups
+            WHERE category_id IN (${catPlaceholders})
+            ORDER BY display_order ASC
+          `,
+          categoryIds
+        );
+
+        categoryGroupsMap = categoryModifierRows.reduce((acc: Record<string, any[]>, row: any) => {
+          const baseGroup = groupsById[row.group_id];
+          if (!baseGroup) return acc;
+
+          const enriched = {
+            id: baseGroup.id,
+            name: baseGroup.name,
+            description: baseGroup.description,
+            selectionType: baseGroup.selection_type,
+            minSelections: baseGroup.min_selections,
+            maxSelections: baseGroup.max_selections,
+            isRequired: baseGroup.is_required,
+            displayOrder: row.display_order ?? baseGroup.display_order ?? 0,
+            assignmentLevel: 'category',
+            options: (optionsByGroup[baseGroup.id] || []).map((opt: any) => ({
+              id: opt.id,
+              name: opt.name,
+              description: opt.description ?? null,
+              priceDelta: Number(opt.price_delta || 0),
+              isActive: Boolean(opt.is_active),
+              isSoldOut: Boolean(opt.is_sold_out),
+              isPreselected: Boolean(opt.is_preselected),
+              displayOrder: opt.display_order ?? 0
+            }))
+          };
+
+          if (!acc[row.category_id]) acc[row.category_id] = [];
+          acc[row.category_id].push(enriched);
+          return acc;
+        }, {});
+      }
+    } catch (modifierError: any) {
+      logger.warn('[menu.public] Failed to load modifiers, serving menu without them', {
+        slug,
+        restaurantId: restaurant.id,
+        error: modifierError?.message || 'Unknown'
+      });
     }
 
-    // Load category-level modifier group assignments (inherited)
-    if (categoryIds.length && Object.keys(groupsById).length) {
-      const catPlaceholders = categoryIds.map(() => '?').join(',');
-      const categoryModifierRows = await db.all(
+    // Load item sizes with graceful degradation
+    try {
+      const sizeRows = await db.all(
         `
           SELECT *
-          FROM category_modifier_groups
-          WHERE category_id IN (${catPlaceholders})
-          ORDER BY display_order ASC
+          FROM item_sizes
+          WHERE item_id IN (${itemIdPlaceholders})
+          ORDER BY display_order ASC, size_name ASC
         `,
-        categoryIds
+        itemIds
       );
-
-      categoryGroupsMap = categoryModifierRows.reduce((acc: Record<string, any[]>, row: any) => {
-        const baseGroup = groupsById[row.group_id];
-        if (!baseGroup) return acc;
-
-        const enriched = {
-          id: baseGroup.id,
-          name: baseGroup.name,
-          description: baseGroup.description,
-          selectionType: baseGroup.selection_type,
-          minSelections: baseGroup.min_selections,
-          maxSelections: baseGroup.max_selections,
-          isRequired: baseGroup.is_required,
-          displayOrder: row.display_order ?? baseGroup.display_order ?? 0,
-          assignmentLevel: 'category',
-          options: (optionsByGroup[baseGroup.id] || []).map((opt: any) => ({
-            id: opt.id,
-            name: opt.name,
-            description: opt.description ?? null,
-            priceDelta: Number(opt.price_delta || 0),
-            isActive: Boolean(opt.is_active),
-            isSoldOut: Boolean(opt.is_sold_out),
-            isPreselected: Boolean(opt.is_preselected),
-            displayOrder: opt.display_order ?? 0
-          }))
-        };
-
-        if (!acc[row.category_id]) acc[row.category_id] = [];
-        acc[row.category_id].push(enriched);
+      sizesByItem = sizeRows.reduce((acc: Record<string, any[]>, row: any) => {
+        if (!acc[row.item_id]) acc[row.item_id] = [];
+        acc[row.item_id].push({
+          id: row.id,
+          sizeName: row.size_name,
+          price: Number(row.price || 0),
+          isPreselected: Boolean(row.is_preselected),
+          displayOrder: Number(row.display_order || 0)
+        });
         return acc;
       }, {});
-    }
-
-    // Load item sizes
-    const sizeRows = await db.all(
-      `
-        SELECT *
-        FROM item_sizes
-        WHERE item_id IN (${itemIdPlaceholders})
-        ORDER BY display_order ASC, size_name ASC
-      `,
-      itemIds
-    );
-    sizesByItem = sizeRows.reduce((acc: Record<string, any[]>, row: any) => {
-      if (!acc[row.item_id]) acc[row.item_id] = [];
-      acc[row.item_id].push({
-        id: row.id,
-        sizeName: row.size_name,
-        price: Number(row.price || 0),
-        isPreselected: Boolean(row.is_preselected),
-        displayOrder: Number(row.display_order || 0)
+    } catch (sizeError: any) {
+      logger.warn('[menu.public] Failed to load item sizes, serving menu without them', {
+        slug,
+        restaurantId: restaurant.id,
+        error: sizeError?.message || 'Unknown'
       });
-      return acc;
-    }, {});
+    }
   }
 
   const itemsWithModifiers = items.map((item: any) => {

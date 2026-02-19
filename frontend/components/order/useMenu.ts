@@ -49,6 +49,9 @@ const getMenuErrorState = (error: unknown): MenuErrorState => {
   return { code: 'unknown', message: 'Unable to load restaurant menu', statusCode: null, requestId: null };
 };
 
+const MAX_AUTO_RETRIES = 2;
+const AUTO_RETRY_DELAY_MS = 2000;
+
 export function useMenu(restaurantSlug: string | undefined) {
   const [restaurant, setRestaurant] = useState<RestaurantInfo | null>(null);
   const [items, setItems] = useState<MenuItem[]>([]);
@@ -70,62 +73,92 @@ export function useMenu(restaurantSlug: string | undefined) {
     if (!restaurantSlug) return;
     let isMounted = true;
 
+    const isRetryableError = (errState: MenuErrorState) =>
+      errState.code === 'restaurant_unavailable' || errState.code === 'connection_issue';
+
     const fetchData = async () => {
       setIsLoading(true);
       setError(null);
       setErrorState(null);
 
-      try {
-        const resp = await api.get(`/api/menu/public/${restaurantSlug}`);
+      let lastError: MenuErrorState | null = null;
+
+      for (let attempt = 0; attempt <= MAX_AUTO_RETRIES; attempt++) {
         if (!isMounted) return;
 
-        setRestaurant(resp.data.data.restaurant);
-        const rawItems = resp.data.data.items || [];
-        const normalized = rawItems.map((item: any) => {
-          let images: string[] = [];
-          if (Array.isArray(item.images)) {
-            images = item.images;
-          } else if (typeof item.images === 'string') {
-            try {
-              images = JSON.parse(item.images);
-            } catch {
-              images = [];
-            }
-          }
-          return {
-            ...item,
-            description: item.description || '',
-            images,
-            image: images[0]
-          } as MenuItem;
-        });
-        setItems(normalized);
-        const settings = resp.data.data.restaurant?.settings;
-        if (settings?.online_payments_enabled) {
-          setOnlinePaymentsEnabled(true);
+        // Wait before retrying (skip delay on first attempt)
+        if (attempt > 0) {
+          await new Promise(resolve => setTimeout(resolve, AUTO_RETRY_DELAY_MS * attempt));
+          if (!isMounted) return;
         }
-      } catch (fetchError) {
-        if (!isMounted) return;
 
-        const nextErrorState = getMenuErrorState(fetchError);
+        try {
+          const resp = await api.get(`/api/menu/public/${restaurantSlug}`);
+          if (!isMounted) return;
+
+          setRestaurant(resp.data.data.restaurant);
+          const rawItems = resp.data.data.items || [];
+          const normalized = rawItems.map((item: any) => {
+            let images: string[] = [];
+            if (Array.isArray(item.images)) {
+              images = item.images;
+            } else if (typeof item.images === 'string') {
+              try {
+                images = JSON.parse(item.images);
+              } catch {
+                images = [];
+              }
+            }
+            return {
+              ...item,
+              description: item.description || '',
+              images,
+              image: images[0]
+            } as MenuItem;
+          });
+          setItems(normalized);
+          const settings = resp.data.data.restaurant?.settings;
+          if (settings?.online_payments_enabled) {
+            setOnlinePaymentsEnabled(true);
+          }
+          return; // Success - exit retry loop
+        } catch (fetchError) {
+          if (!isMounted) return;
+
+          lastError = getMenuErrorState(fetchError);
+          console.warn(`[menu.fetch.attempt] attempt=${attempt + 1}/${MAX_AUTO_RETRIES + 1}`, {
+            slug: restaurantSlug,
+            errorCode: lastError.code,
+            statusCode: lastError.statusCode,
+          });
+
+          // Only auto-retry transient errors
+          if (!isRetryableError(lastError) || attempt === MAX_AUTO_RETRIES) {
+            break;
+          }
+        }
+      }
+
+      // All retries exhausted or non-retryable error
+      if (isMounted && lastError) {
         setRestaurant(null);
         setItems([]);
-        setError(nextErrorState.message);
-        setErrorState(nextErrorState);
+        setError(lastError.message);
+        setErrorState(lastError);
         console.error('[menu.fetch.failed]', {
           slug: restaurantSlug,
-          errorCode: nextErrorState.code,
-          statusCode: nextErrorState.statusCode,
-          requestId: nextErrorState.requestId,
+          errorCode: lastError.code,
+          statusCode: lastError.statusCode,
+          requestId: lastError.requestId,
         });
-      } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
       }
     };
 
-    fetchData();
+    fetchData().finally(() => {
+      if (isMounted) {
+        setIsLoading(false);
+      }
+    });
 
     return () => {
       isMounted = false;
