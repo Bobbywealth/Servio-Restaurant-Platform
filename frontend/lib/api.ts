@@ -33,6 +33,7 @@ const refreshClient = axios.create({
 let refreshInFlight: Promise<string | null> | null = null
 let lastRefreshTime = 0
 const MIN_REFRESH_INTERVAL = 30_000 // Don't refresh more than once per 30 seconds
+let lastSyncedServiceWorkerToken: string | null = null
 
 // Cache for token expiry to avoid parsing JWT on every request
 let cachedTokenExpiry: { token: string; expiresAt: number } | null = null
@@ -323,6 +324,7 @@ function isOnline(): boolean {
 // Sync auth token to service worker for offline/PWA support
 export function syncTokenToServiceWorker(token: string | null): void {
   if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
+  if (token === lastSyncedServiceWorkerToken) return
 
   navigator.serviceWorker.ready.then((registration) => {
     if (registration.active) {
@@ -336,6 +338,8 @@ export function syncTokenToServiceWorker(token: string | null): void {
           type: 'CLEAR_AUTH_TOKEN'
         })
       }
+
+      lastSyncedServiceWorkerToken = token
     }
   }).catch(() => {
     // Service worker not available
