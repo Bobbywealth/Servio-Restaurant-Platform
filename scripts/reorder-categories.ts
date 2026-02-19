@@ -3,21 +3,17 @@
 /**
  * Reorder Sashey's Menu Categories
  * 
- * Arranges categories in a logical order for a Jamaican restaurant menu:
- * 1. Breakfast - Start with breakfast items
- * 2. Daily Special - Limited time offers
- * 3. Entrees - Main dishes
- * 4. Roti - Breads
- * 5. Wings - Popular appetizers
- * 6. Patties - Savory pastries
+ * Arranges categories in daypart progression from light/early to heavy/later:
+ * 1. Breakfast - Start-of-day menu
+ * 2. Brunch - Mid-morning transition (if available)
+ * 3. Lunch - Midday meals
+ * 4. Snacks - Light bites
+ * 5. Dinner / Entrees - Main evening dishes
+ * 6. Family Meals / Catering - Large-format meals
  * 7. Sides - Accompaniments
- * 8. Soups - Starters
- * 9. Salads - Fresh options
- * 10. Desserts - Sweets
- * 11. Juices and Sodas - Beverages
- * 12. Bread and Buns - Baked goods
- * 13. Snacks - Light bites
- * 14. Catering - Party trays
+ * 8. Desserts - Sweets
+ * 9. Beverages - Drinks
+ * 10. Kids Menu - Family-focused section
  */
 
 import dotenv from 'dotenv';
@@ -27,23 +23,23 @@ import { DatabaseService } from '../src/services/DatabaseService';
 
 const RESTAURANT_ID = 'sasheys-kitchen-union';
 
-// Logical category order for a Jamaican restaurant
-// Flow: Breakfast -> Starters -> Mains -> Sides -> Desserts -> Drinks -> Baked goods -> Snacks -> Catering
+// Requested category progression:
+// Breakfast -> Brunch -> Lunch -> Snacks -> Dinner/Entrees -> Family Meals/Catering -> Sides -> Desserts -> Beverages -> Kids Menu
 const CATEGORY_ORDER = [
-  'Breakfast',           // Start with breakfast
-  'Soups',               // Starters
-  'Salads',              // Light options
-  'Wings',               // Popular appetizer
-  'Patties',             // Savory pastries
-  'Entrees',             // Main dishes
-  'Roti',                // Breads with meals
-  'Sides',               // Accompaniments
-  'Catering',            // Party trays (separate section)
-  'Desserts',            // Sweets
-  'Juices and Sodas',    // Beverages
-  'Bread and Buns',      // Baked goods
-  'Snacks',              // Light bites
-  'Daily Special',       // Limited time offers at the end
+  'Breakfast',
+  'Brunch',
+  'Lunch',
+  'Snacks',
+  'Dinner',
+  'Entrees',
+  'Main Courses',
+  'Family Meals',
+  'Catering',
+  'Sides',
+  'Desserts',
+  'Beverages',
+  'Juices and Sodas',
+  'Kids Menu',
 ];
 
 async function reorderCategories() {
