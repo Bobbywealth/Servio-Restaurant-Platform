@@ -3,6 +3,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Loader2, Mail, Search, UserPlus, X } from 'lucide-react';
 import { api } from '@/lib/api';
+import StatusChip from './StatusChip';
+import AdminRowActions from './AdminRowActions';
 
 interface CompanyUser {
   id: string;
@@ -137,7 +139,47 @@ export function CompanyUserManager({ onClose }: CompanyUserManagerProps) {
         {loading ? (
           <div className="p-8 flex items-center justify-center text-gray-500"><Loader2 className="w-5 h-5 animate-spin mr-2" />Loading users...</div>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+            <div className="space-y-3 p-4 md:hidden">
+              {filteredUsers.map((user) => (
+                <article key={user.id} className="rounded-xl border border-gray-200 dark:border-gray-700 p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h3 className="font-medium text-gray-900 dark:text-white">{user.name}</h3>
+                      <p className="text-sm text-gray-500">{user.email}</p>
+                      <p className="text-xs text-gray-500 mt-1">ID: {user.id}</p>
+                    </div>
+                    <StatusChip label={user.is_active ? 'Active' : 'Inactive'} toneClassName={user.is_active ? 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-300' : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200'} />
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
+                    <span>Invited: {user.invited_at ? new Date(user.invited_at).toLocaleDateString() : '—'}</span>
+                    <StatusChip label={user.role} toneClassName={roleBadge[user.role]} />
+                  </div>
+
+                  <AdminRowActions className="justify-start">
+                    <select
+                      value={user.role}
+                      onChange={(e) => handleRoleUpdate(user.id, e.target.value as CompanyUser['role'])}
+                      className="input-field py-1"
+                      disabled={updatingUserId === user.id}
+                    >
+                      {roleOptions.map((role) => <option key={role} value={role}>{role}</option>)}
+                    </select>
+                    <button
+                      className="btn-secondary"
+                      onClick={() => handleDeactivate(user.id, Boolean(user.is_active))}
+                      disabled={updatingUserId === user.id}
+                    >
+                      {user.is_active ? 'Deactivate' : 'Activate'}
+                    </button>
+                  </AdminRowActions>
+                </article>
+              ))}
+              {filteredUsers.length === 0 && <div className="p-8 text-center text-gray-500">No users found.</div>}
+            </div>
+
+            <div className="hidden overflow-x-auto md:block">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-200 dark:border-gray-700 text-left text-gray-500">
@@ -156,12 +198,14 @@ export function CompanyUserManager({ onClose }: CompanyUserManagerProps) {
                       <div className="text-gray-500">{user.email}</div>
                     </td>
                     <td className="px-6 py-3">
-                      <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${roleBadge[user.role]}`}>{user.role}</span>
+                      <StatusChip label={user.role} toneClassName={roleBadge[user.role]} />
                     </td>
-                    <td className="px-6 py-3">{user.is_active ? 'Active' : 'Inactive'}</td>
+                    <td className="px-6 py-3">
+                      <StatusChip label={user.is_active ? 'Active' : 'Inactive'} toneClassName={user.is_active ? 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-300' : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200'} />
+                    </td>
                     <td className="px-6 py-3">{user.invited_at ? new Date(user.invited_at).toLocaleDateString() : '—'}</td>
                     <td className="px-6 py-3 text-right">
-                      <div className="inline-flex items-center gap-2">
+                      <AdminRowActions className="inline-flex">
                         <select
                           value={user.role}
                           onChange={(e) => handleRoleUpdate(user.id, e.target.value as CompanyUser['role'])}
@@ -177,7 +221,7 @@ export function CompanyUserManager({ onClose }: CompanyUserManagerProps) {
                         >
                           {user.is_active ? 'Deactivate' : 'Activate'}
                         </button>
-                      </div>
+                      </AdminRowActions>
                     </td>
                   </tr>
                 ))}
@@ -185,6 +229,7 @@ export function CompanyUserManager({ onClose }: CompanyUserManagerProps) {
             </table>
             {filteredUsers.length === 0 && <div className="p-8 text-center text-gray-500">No users found.</div>}
           </div>
+          </>
         )}
       </div>
 
