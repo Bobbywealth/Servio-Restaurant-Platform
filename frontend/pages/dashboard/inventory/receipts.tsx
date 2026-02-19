@@ -161,6 +161,11 @@ export default function ReceiptsPage() {
     }
   }
 
+  const handleMatchItem = (item: ReceiptItem) => {
+    const searchValue = item.matched_item_name || item.item_name
+    router.push(`/dashboard/inventory?search=${encodeURIComponent(searchValue)}`)
+  }
+
   const handleApplyToInventory = async () => {
     if (!selectedReceipt) return
     const matchedCount = lineItems.filter(i => i.inventory_item_id).length
@@ -638,7 +643,7 @@ export default function ReceiptsPage() {
                       </button>
                     </div>
 
-                    <div className="border border-surface-200 dark:border-surface-700 rounded-xl overflow-hidden">
+                    <div className="hidden md:block border border-surface-200 dark:border-surface-700 rounded-xl overflow-hidden">
                       <table className="min-w-full divide-y divide-surface-200 dark:divide-surface-700">
                         <thead className="bg-surface-50 dark:bg-surface-800">
                           <tr>
@@ -666,6 +671,12 @@ export default function ReceiptsPage() {
                                 )}
                               </td>
                               <td className="px-4 py-3 text-right">
+                                <button
+                                  onClick={() => handleMatchItem(item)}
+                                  className="text-primary-600 hover:text-primary-700 text-sm font-medium px-2 py-1"
+                                >
+                                  Match
+                                </button>
                                 <button onClick={() => handleDeleteItem(item.id)} className="text-surface-400 hover:text-servio-red-500 p-1">
                                   <Trash2 className="w-4 h-4" />
                                 </button>
@@ -735,6 +746,136 @@ export default function ReceiptsPage() {
                           )}
                         </tbody>
                       </table>
+                    </div>
+
+                    <div className="md:hidden space-y-3">
+                      {lineItems.map(item => (
+                        <div key={item.id} className="border border-surface-200 dark:border-surface-700 rounded-xl p-4 space-y-3 bg-white dark:bg-surface-900">
+                          <div>
+                            <p className="text-xs font-bold uppercase text-surface-500">Description</p>
+                            <p className="text-sm font-medium text-surface-900 dark:text-surface-100 mt-1">{item.item_name}</p>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <p className="text-xs font-bold uppercase text-surface-500">Qty</p>
+                              <p className="text-sm text-surface-900 dark:text-surface-100 mt-1">{item.quantity}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs font-bold uppercase text-surface-500">Cost</p>
+                              <p className="text-sm text-surface-900 dark:text-surface-100 mt-1">${item.unit_cost.toFixed(2)}</p>
+                            </div>
+                          </div>
+
+                          <div>
+                            <p className="text-xs font-bold uppercase text-surface-500">Matched Inventory</p>
+                            {item.inventory_item_id ? (
+                              <button
+                                type="button"
+                                onClick={() => handleMatchItem(item)}
+                                className="mt-1 inline-flex items-center gap-2 text-sm font-medium text-servio-green-600 dark:text-servio-green-400 hover:underline min-h-11"
+                              >
+                                <PackageCheck className="w-4 h-4" />
+                                <span>{item.matched_item_name}</span>
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleMatchItem(item)}
+                                className="mt-1 text-sm font-medium text-primary-600 hover:underline min-h-11"
+                              >
+                                Match inventory
+                              </button>
+                            )}
+                          </div>
+
+                          <div className="pt-3 border-t border-surface-200 dark:border-surface-700 space-y-2">
+                            <button
+                              type="button"
+                              onClick={() => handleMatchItem(item)}
+                              className="w-full min-h-11 rounded-lg border border-primary-200 text-primary-700 dark:text-primary-300 dark:border-primary-700 font-medium"
+                            >
+                              Match Item
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteItem(item.id)}
+                              className="w-full min-h-11 rounded-lg border border-servio-red-200 text-servio-red-600 dark:border-servio-red-700 dark:text-servio-red-400 font-medium"
+                            >
+                              Delete Item
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+
+                      {isAddingItem && (
+                        <div className="border border-primary-200 dark:border-primary-800 rounded-xl p-4 space-y-4 bg-primary-50/30 dark:bg-primary-900/10">
+                          <div className="space-y-1">
+                            <label className="text-xs font-bold text-surface-500 uppercase">Description</label>
+                            <input
+                              className="input-field"
+                              placeholder="Item name..."
+                              value={newItem.itemName}
+                              onChange={e => setNewItem({ ...newItem, itemName: e.target.value })}
+                            />
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1">
+                              <label className="text-xs font-bold text-surface-500 uppercase">Qty</label>
+                              <input
+                                type="number"
+                                className="input-field"
+                                value={newItem.quantity}
+                                onChange={e => setNewItem({ ...newItem, quantity: parseFloat(e.target.value) })}
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-xs font-bold text-surface-500 uppercase">Unit Cost</label>
+                              <input
+                                type="number"
+                                className="input-field"
+                                value={newItem.unitCost}
+                                onChange={e => setNewItem({ ...newItem, unitCost: parseFloat(e.target.value) })}
+                              />
+                            </div>
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-xs font-bold text-surface-500 uppercase">Match inventory</label>
+                            <div className="relative">
+                              <input
+                                className="input-field"
+                                placeholder="Search inventory..."
+                                value={invSearch}
+                                onChange={e => setInvSearch(e.target.value)}
+                              />
+                              {invSearch && (
+                                <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-white dark:bg-surface-800 shadow-xl rounded-lg border border-surface-200 dark:border-surface-700 max-h-40 overflow-y-auto">
+                                  {filteredInv.map(inv => (
+                                    <button
+                                      key={inv.id}
+                                      className="w-full text-left px-3 py-2 text-sm hover:bg-surface-100 dark:hover:bg-surface-700 flex justify-between"
+                                      onClick={() => {
+                                        setNewItem({ ...newItem, inventoryItemId: inv.id, itemName: newItem.itemName || inv.name })
+                                        setInvSearch(inv.name)
+                                      }}
+                                    >
+                                      <span>{inv.name}</span>
+                                      <span className="text-2xs text-surface-400">{inv.unit_type}</span>
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="space-y-2">
+                            <button onClick={handleAddLineItem} className="btn-primary w-full min-h-11">Add Line Item</button>
+                            <button onClick={() => setIsAddingItem(false)} className="btn-secondary w-full min-h-11">Cancel</button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

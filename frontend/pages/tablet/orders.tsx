@@ -4,7 +4,6 @@ import { useRouter } from 'next/router';
 import clsx from 'clsx';
 import {
   CheckCircle2,
-  RefreshCcw,
   ChevronDown,
   Printer,
   Clock,
@@ -12,24 +11,24 @@ import {
   Filter,
   X,
   AlertTriangle,
-  CheckCircle,
-  ChefHat,
   Eye,
   Calendar,
   ArrowUpDown,
   Zap,
   Bell,
   BellOff,
-  Maximize2,
-  Minimize2,
-  Volume2,
-  VolumeX,
   LayoutGrid,
   List
 } from 'lucide-react';
 import { useSocket } from '../../lib/socket';
 import { PrintReceipt } from '../../components/PrintReceipt';
 import { TabletSidebar } from '../../components/tablet/TabletSidebar';
+import { OrdersHeader } from '../../components/tablet/orders/OrdersHeader';
+import { OrderFiltersBar } from '../../components/tablet/orders/OrderFiltersBar';
+import { OrderDetailsModal } from '../../components/tablet/orders/OrderDetailsModal';
+import { OrderDetailsPanel } from '../../components/tablet/orders/OrderDetailsPanel';
+import { CustomerActionsPanel } from '../../components/tablet/orders/CustomerActionsPanel';
+import { useOrderAlerts } from '../../hooks/tablet/useOrderAlerts';
 import type { ReceiptPaperWidth, ReceiptOrder, ReceiptRestaurant } from '../../utils/receiptGenerator';
 import { generateReceiptHtml, generateStandaloneReceiptHtml } from '../../utils/receiptGenerator';
 import { api } from '../../lib/api'
@@ -234,92 +233,6 @@ function statusBadgeClassesForStatus(status: string) {
   }
 }
 
-// Audio handling with browser autoplay unlock
-let audioUnlocked = false;
-let notificationAudio: HTMLAudioElement | null = null;
-
-function initAudio() {
-  if (typeof window === 'undefined') return;
-  
-  // Try to load custom notification sound
-  try {
-    notificationAudio = new Audio('/sounds/order-alert.mp3');
-    notificationAudio.preload = 'auto';
-    notificationAudio.volume = 1.0;
-  } catch {
-    // Fallback to synthesized beep
-  }
-}
-
-function unlockAudio() {
-  if (audioUnlocked) return;
-  audioUnlocked = true;
-  
-  // Play silent audio to unlock
-  try {
-    const AudioContext = (window as any).AudioContext || (window as any).webkitAudioContext;
-    if (AudioContext) {
-      const ctx = new AudioContext();
-      const buffer = ctx.createBuffer(1, 1, 22050);
-      const source = ctx.createBufferSource();
-      source.buffer = buffer;
-      source.connect(ctx.destination);
-      source.start(0);
-      ctx.resume?.();
-    }
-    
-    // Also try to load the audio element
-    if (notificationAudio) {
-      notificationAudio.load();
-    }
-  } catch {
-    // ignore
-  }
-}
-
-function beep() {
-  // Louder, more noticeable synthesized beep
-  try {
-    const AudioContext = (window as any).AudioContext || (window as any).webkitAudioContext;
-    if (!AudioContext) return;
-    const ctx = new AudioContext();
-    const o = ctx.createOscillator();
-    const g = ctx.createGain();
-    o.type = 'square';
-    o.frequency.value = 1000; // Higher pitch
-    g.gain.value = 0.5; // Louder
-    o.connect(g);
-    g.connect(ctx.destination);
-    o.start();
-    window.setTimeout(() => {
-      o.stop();
-      ctx.close?.().catch(() => {});
-    }, 200); // Longer duration
-  } catch {
-    // ignore
-  }
-}
-
-function playAlarmTone() {
-  // Try custom sound first, fallback to synthesized beep
-  if (notificationAudio) {
-    notificationAudio.currentTime = 0;
-    notificationAudio.play().catch(() => {
-      // Fallback to beep if audio file fails
-      beepSequence();
-    });
-  } else {
-    beepSequence();
-  }
-}
-
-function beepSequence() {
-  // Play a more noticeable beep pattern
-  beep();
-  window.setTimeout(() => beep(), 300);
-  window.setTimeout(() => beep(), 600);
-}
-
 const ACTION_QUEUE_KEY = 'servio_tablet_action_queue';
 const ORDER_CACHE_KEY = 'servio_cached_orders';
 const ACTION_RETRY_THRESHOLD = 3;
@@ -389,7 +302,6 @@ export default function TabletOrdersPage() {
   const [lastPrintResult, setLastPrintResult] = useState<{ status: 'success' | 'error'; message?: string } | null>(null);
   const [autoPrintPendingId, setAutoPrintPendingId] = useState<string | null>(null);
   const lastAutoPromptedId = useRef<string | null>(null);
-  const alarmIntervalRef = useRef<number | null>(null);
   const [prepModalOrder, setPrepModalOrder] = useState<Order | null>(null);
   const [prepMinutes, setPrepMinutes] = useState<number>(15);
   const [printingOrderId, setPrintingOrderId] = useState<string | null>(null);
@@ -411,10 +323,7 @@ export default function TabletOrdersPage() {
   const [syncAttemptStatus, setSyncAttemptStatus] = useState<'idle' | 'syncing' | 'success' | 'error'>('idle');
   
   // New feature toggles
-  const [soundEnabled, setSoundEnabled] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-
   // Search and filter state
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<OrderFilter['status']>('all');
@@ -505,27 +414,6 @@ export default function TabletOrdersPage() {
     }
   }, []);
 
-  // Initialize audio on mount
-  useEffect(() => {
-    initAudio();
-    
-    // Unlock audio on any user interaction
-    const handleInteraction = () => {
-      unlockAudio();
-      // Remove listeners after first interaction
-      document.removeEventListener('click', handleInteraction);
-      document.removeEventListener('touchstart', handleInteraction);
-    };
-    
-    document.addEventListener('click', handleInteraction);
-    document.addEventListener('touchstart', handleInteraction);
-    
-    return () => {
-      document.removeEventListener('click', handleInteraction);
-      document.removeEventListener('touchstart', handleInteraction);
-    };
-  }, []);
-
   // Extended idle timeout - 8 hours for tablet use (restaurant shift duration)
   // Session is kept alive by _app.tsx proactive token refresh
   useEffect(() => {
@@ -588,11 +476,6 @@ export default function TabletOrdersPage() {
       }
     }
     
-    // Load sound setting
-    const storedSound = safeLocalStorage.getItem('servio_sound_enabled');
-    if (storedSound !== null) {
-      setSoundEnabled(storedSound === 'true');
-    }
   }, []);
 
   // Fullscreen toggle effect
@@ -1289,6 +1172,7 @@ export default function TabletOrdersPage() {
   }, [activeOrders]);
 
   const filtered = filteredOrders;
+  const { soundEnabled, toggleSound } = useOrderAlerts(receivedOrders.length);
 
   const orderSyncIssues = useMemo(() => {
     const map = new Map<string, { retryCount: number; lastError: string | null; permanentFailure: boolean }>();
@@ -1382,68 +1266,24 @@ export default function TabletOrdersPage() {
           <div className="flex flex-col gap-5 lg:gap-6">
             {/* Header with search and filters */}
             <div className="flex flex-col gap-4">
-              <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                <div>
-                  <div className="text-xs uppercase tracking-[0.2em] text-[var(--tablet-muted)]">Order Management</div>
-                  <div className="text-2xl md:text-3xl font-semibold">All Orders</div>
-                </div>
-                <div className="flex flex-wrap items-center gap-3 md:justify-end">
-                  <div className={`px-3 py-1.5 text-xs font-semibold uppercase border rounded-full ${connectionClasses}`}>
-                    {connectionLabel}
-                  </div>
-                  {cachedAt && (
-                    <div className="text-xs text-[var(--tablet-muted)] font-medium hidden sm:block">
-                      Cached: {new Date(cachedAt).toLocaleTimeString()}
-                    </div>
-                  )}
-                  
-                  {/* Sound Toggle */}
-                  <button
-                    onClick={() => {
-                      const newValue = !soundEnabled;
-                      setSoundEnabled(newValue);
-                      safeLocalStorage.setItem('servio_sound_enabled', newValue ? 'true' : 'false');
-                    }}
-                    className={clsx(
-                      'p-2.5 rounded-full transition touch-manipulation',
-                      soundEnabled 
-                        ? 'bg-[var(--tablet-success)] text-white' 
-                        : 'bg-[var(--tablet-surface-alt)] text-[var(--tablet-muted)]'
-                    )}
-                    aria-label={soundEnabled ? 'Mute sounds' : 'Enable sounds'}
-                  >
-                    {soundEnabled ? <Volume2 className="h-5 w-5" /> : <VolumeX className="h-5 w-5" />}
-                  </button>
-                  
-                  {/* Fullscreen Toggle */}
-                  <button
-                    onClick={() => {
-                      if (!document.fullscreenElement) {
-                        document.documentElement.requestFullscreen();
-                      } else {
-                        document.exitFullscreen();
-                      }
-                    }}
-                    className="bg-[var(--tablet-surface-alt)] hover:brightness-110 p-2.5 rounded-full transition shadow-[0_2px_8px_rgba(0,0,0,0.3)] touch-manipulation"
-                    aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
-                  >
-                    {isFullscreen ? <Minimize2 className="h-5 w-5" /> : <Maximize2 className="h-5 w-5" />}
-                  </button>
-                  
-                  <div className="text-right">
-                    <div className="text-xl md:text-2xl font-semibold tabular-nums">
-                      {now ? new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--'}
-                    </div>
-                  </div>
-                  <button
-                    onClick={refresh}
-                    className="bg-[var(--tablet-surface-alt)] hover:brightness-110 p-3 rounded-full transition shadow-[0_2px_8px_rgba(0,0,0,0.3)] touch-manipulation"
-                    aria-label="Refresh"
-                  >
-                    <RefreshCcw className={clsx('h-5 w-5', loading && 'animate-spin')} />
-                  </button>
-                </div>
-              </div>
+              <OrdersHeader
+                connectionClasses={connectionClasses}
+                connectionLabel={connectionLabel}
+                cachedAt={cachedAt}
+                soundEnabled={soundEnabled}
+                toggleSound={toggleSound}
+                isFullscreen={isFullscreen}
+                onFullscreenToggle={() => {
+                  if (!document.fullscreenElement) {
+                    document.documentElement.requestFullscreen();
+                  } else {
+                    document.exitFullscreen();
+                  }
+                }}
+                now={now}
+                refresh={refresh}
+                loading={loading}
+              />
 
               {/* Quick Stats Bar */}
               <div className="flex flex-wrap gap-2">
@@ -1496,7 +1336,7 @@ export default function TabletOrdersPage() {
               </div>
 
               {/* Search and Filter Bar */}
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <OrderFiltersBar>
                 {/* Search Input */}
                 <div className="relative flex-1">
                   <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-[var(--tablet-muted)]" />
@@ -1546,7 +1386,7 @@ export default function TabletOrdersPage() {
                   <option value="oldest">Oldest First</option>
                   <option value="prep-time">Prep Time</option>
                 </select>
-              </div>
+              </OrderFiltersBar>
 
               {/* Quick Filter Chips */}
               <div className="flex flex-wrap gap-2 mt-2">
@@ -1744,16 +1584,15 @@ export default function TabletOrdersPage() {
                       const isOverdue = prepTimeData?.isOverdue;
 
                       return (
-                        <button
+                        <article
                           key={o.id}
-                          type="button"
-                          onClick={() => setSelectedOrder(o)}
                           className={clsx(
                             'w-full text-left rounded-xl border border-[var(--tablet-border)] p-4 sm:p-5 shadow-[0_2px_8px_rgba(0,0,0,0.3)] transition transform hover:brightness-110 hover:scale-[1.01] touch-manipulation',
                             isSelected && 'bg-[var(--tablet-info)] border-[var(--tablet-info)] shadow-[0_4px_12px_rgba(93,112,153,0.45)]',
                             !isSelected && 'bg-[var(--tablet-card)]',
                             isOverdue && 'order-overdue'
                           )}
+                          aria-label={`Order ${o.external_id ? o.external_id.slice(-4).toUpperCase() : o.id.slice(-4).toUpperCase()} for ${o.customer_name || 'Guest'}`}
                         >
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
@@ -1836,27 +1675,39 @@ export default function TabletOrdersPage() {
                             </div>
                           )}
 
-                          {/* View Details Button */}
+                          {/* Order Actions */}
                           <div className="mt-4 flex items-center gap-2">
                             <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setOrderDetailsOrder(o);
-                              }}
+                              type="button"
+                              onClick={() => setSelectedOrder(o)}
+                              aria-pressed={isSelected}
+                              aria-label={`Select order ${o.external_id ? o.external_id.slice(-4).toUpperCase() : o.id.slice(-4).toUpperCase()}`}
+                              className={clsx(
+                                'flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-xs font-semibold uppercase border transition touch-manipulation',
+                                isSelected
+                                  ? 'bg-[var(--tablet-info)] text-white border-[var(--tablet-info)]'
+                                  : 'bg-[var(--tablet-surface-alt)] border border-[var(--tablet-border)] hover:bg-[var(--tablet-border)]'
+                              )}
+                            >
+                              Select
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setOrderDetailsOrder(o)}
                               className="flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-xs font-semibold uppercase bg-[var(--tablet-surface-alt)] border border-[var(--tablet-border)] hover:bg-[var(--tablet-border)] transition touch-manipulation"
                             >
                               <Eye className="h-4 w-4" />
                               View Details
                             </button>
                           </div>
-                        </button>
+                        </article>
                       );
                     })}
                   </div>
                 </section>
 
                 {/* Middle Panel: Order Details */}
-                <section className="flex flex-col gap-5 hidden md:flex">
+                <OrderDetailsPanel>
                   {/* Order Details */}
                   <div className="bg-[var(--tablet-surface)] rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.3)] border border-[var(--tablet-border)]">
                     <div className="px-5 py-4 border-b border-[var(--tablet-border)]">
@@ -1902,10 +1753,10 @@ export default function TabletOrdersPage() {
                     )}
                   </div>
 
-                </section>
+                </OrderDetailsPanel>
 
                 {/* Right Panel: Customer + Actions */}
-                <section className="flex flex-col gap-5 hidden xl:flex">
+                <CustomerActionsPanel>
                   <div className="bg-[var(--tablet-surface)] rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.3)] border border-[var(--tablet-border)]">
                     <div className="px-5 py-4 border-b border-[var(--tablet-border)]">
                       <div className="text-lg font-semibold">Customer</div>
@@ -2026,7 +1877,7 @@ export default function TabletOrdersPage() {
                       )}
                     </div>
                   )}
-                </section>
+                </CustomerActionsPanel>
               </div>
             )}
           </div>
@@ -2034,7 +1885,17 @@ export default function TabletOrdersPage() {
       </div>
 
       {/* Order Details Modal */}
-      {orderDetailsOrder && (
+      <OrderDetailsModal
+        order={orderDetailsOrder}
+        onClose={() => setOrderDetailsOrder(null)}
+        onPrint={(orderId) => {
+          printOrder(orderId);
+          setOrderDetailsOrder(null);
+        }}
+        formatMoney={formatMoney}
+      />
+
+      {false && (
         <div className="no-print fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
           <div className="bg-[var(--tablet-surface)] rounded-3xl shadow-[0_12px_30px_rgba(0,0,0,0.5)] w-full max-w-2xl max-h-[90vh] overflow-hidden border border-[var(--tablet-border)] flex flex-col">
             {/* Modal Header */}
