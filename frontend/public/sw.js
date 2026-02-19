@@ -9,6 +9,7 @@ const FONT_CACHE_NAME = `servio-fonts-${CACHE_VERSION}`
 // AUTH TOKEN STORAGE (IndexedDB)
 let cachedAuthToken = null
 let cachedAuthTokenTime = 0
+let lastPersistedAuthToken = null
 const TOKEN_CACHE_MS = 60 * 60 * 1000 // 1 hour
 
 // AGGRESSIVE PRE-CACHING FOR INSTANT LOADS
@@ -244,7 +245,11 @@ async function getTokenFromIndexedDB() {
 
           getRequest.onsuccess = () => {
             const result = getRequest.result
-            resolve(result?.value || null)
+            const token = result?.value || null
+            if (token) {
+              lastPersistedAuthToken = token
+            }
+            resolve(token)
           }
 
           getRequest.onerror = () => {
@@ -278,6 +283,10 @@ async function getTokenFromIndexedDB() {
 }
 
 async function saveTokenToIndexedDB(token) {
+  if (!token || token === lastPersistedAuthToken) {
+    return true
+  }
+
   return new Promise((resolve) => {
     try {
       // First try to open existing database
@@ -316,6 +325,7 @@ async function saveTokenToIndexedDB(token) {
           store.put({ id: 'accessToken', value: token, timestamp: Date.now() })
 
           tx.oncomplete = () => {
+            lastPersistedAuthToken = token
             console.log('SW: Token saved to IndexedDB')
             resolve(true)
           }
@@ -761,6 +771,10 @@ self.addEventListener('message', (event) => {
     case 'SET_AUTH_TOKEN':
       // Store auth token from frontend
       if (payload?.token) {
+        if (payload.token === cachedAuthToken) {
+          return
+        }
+
         cachedAuthToken = payload.token
         cachedAuthTokenTime = Date.now()
         // Also save to IndexedDB for persistence
