@@ -4,7 +4,6 @@ import { useRouter } from 'next/router';
 import clsx from 'clsx';
 import {
   CheckCircle2,
-  ChevronDown,
   Printer,
   Clock,
   Search,
@@ -1197,11 +1196,19 @@ export default function TabletOrdersPage() {
   }, [filteredOrders]);
 
   const filtered = filteredOrders;
-  const laneGroups: Array<{ key: 'received' | 'preparing' | 'ready'; label: string; orders: Order[] }> = [
-    { key: 'received', label: 'Received', orders: receivedOrders },
-    { key: 'preparing', label: 'Preparing', orders: preparingOrders },
-    { key: 'ready', label: 'Ready', orders: readyOrders }
-  ];
+  const queueSections = useMemo<Array<{ key: 'received' | 'preparing' | 'ready'; label: string; orders: Order[] }>>(() => {
+    const sections: Array<{ key: 'received' | 'preparing' | 'ready'; label: string; orders: Order[] }> = [
+      { key: 'received', label: 'New', orders: receivedOrders },
+      { key: 'preparing', label: 'In Progress', orders: preparingOrders },
+      { key: 'ready', label: 'Ready', orders: readyOrders }
+    ];
+
+    if (statusFilter === 'all') {
+      return sections.filter((section) => section.orders.length > 0);
+    }
+
+    return sections.filter((section) => section.key === statusFilter);
+  }, [receivedOrders, preparingOrders, readyOrders, statusFilter]);
 
   const renderOrderCard = useCallback((o: Order, laneIndex: number) => {
     const status = normalizeStatus(o.status);
@@ -1683,34 +1690,41 @@ export default function TabletOrdersPage() {
                 {/* Left Panel: Order Queue */}
                 <section className="bg-[var(--tablet-surface)] rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.3)] border border-[var(--tablet-border)] flex flex-col min-h-[50vh] md:min-h-[60vh] lg:min-h-[70vh]">
                   <div className="px-4 py-4 border-b border-[var(--tablet-border)] flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-sm font-semibold uppercase text-[var(--tablet-accent)]">
-                      Order Lanes
-                      <ChevronDown className="h-4 w-4" />
+                    <div>
+                      <div className="text-sm font-semibold uppercase text-[var(--tablet-accent)]">Active Orders</div>
+                      <p className="text-xs text-[var(--tablet-muted)] mt-1">Simple queue view inspired by major delivery apps.</p>
                     </div>
                     <div className="text-xs font-semibold text-[var(--tablet-muted)]">{filtered.length} Active</div>
                   </div>
 
                   <div className="flex-1 overflow-y-auto p-4 scrollbar-thin">
-                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 h-full">
-                      {laneGroups.map((lane) => (
-                        <div key={lane.key} className="rounded-xl border border-[var(--tablet-border)] bg-[var(--tablet-card)]/40 flex flex-col min-h-[260px]">
-                          <div className="px-3 py-3 border-b border-[var(--tablet-border)] flex items-center justify-between">
-                            <span className="text-xs font-semibold uppercase tracking-wide text-[var(--tablet-muted)]">{lane.label}</span>
+                    <div className="space-y-5">
+                      {queueSections.map((section) => (
+                        <div key={section.key} className="space-y-3">
+                          <div className="flex items-center justify-between">
+                            <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--tablet-muted)]">{section.label}</h3>
                             <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-[var(--tablet-surface-alt)] text-[var(--tablet-text)]">
-                              {lane.orders.length}
+                              {section.orders.length}
                             </span>
                           </div>
-                          <div className="p-3 space-y-3 overflow-y-auto max-h-[52vh]">
-                            {lane.orders.length === 0 ? (
-                              <div className="text-xs text-[var(--tablet-muted)] uppercase tracking-wide py-6 text-center">
-                                No {lane.label.toLowerCase()} orders
-                              </div>
-                            ) : (
-                              lane.orders.map((o, index) => renderOrderCard(o, index))
-                            )}
-                          </div>
+
+                          {section.orders.length === 0 ? (
+                            <div className="text-xs text-[var(--tablet-muted)] uppercase tracking-wide py-4 text-center border border-dashed border-[var(--tablet-border)] rounded-xl">
+                              No {section.label.toLowerCase()} orders
+                            </div>
+                          ) : (
+                            <div className="space-y-3">
+                              {section.orders.map((o, index) => renderOrderCard(o, index))}
+                            </div>
+                          )}
                         </div>
                       ))}
+
+                      {queueSections.length === 0 && (
+                        <div className="text-xs text-[var(--tablet-muted)] uppercase tracking-wide py-4 text-center border border-dashed border-[var(--tablet-border)] rounded-xl">
+                          No orders in this view
+                        </div>
+                      )}
                     </div>
                   </div>
                 </section>
