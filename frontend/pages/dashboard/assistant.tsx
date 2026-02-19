@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react'
+import React, { useState, useCallback, useEffect, useRef, useReducer } from 'react'
 import Head from 'next/head'
 import DashboardLayout from '../../components/Layout/DashboardLayout'
 import RealisticAvatar from '../../components/Assistant/RealisticAvatar'
@@ -8,6 +8,7 @@ import ChatInput from '../../components/Assistant/ChatInput'
 import { useUser } from '../../contexts/UserContext'
 import { api } from '../../lib/api'
 import { WakeWordService, isWakeWordSupported, getDefaultWakeWordConfig } from '../../lib/WakeWordService'
+import { assistantStateReducer, initialAssistantMachineState } from '../../lib/assistant/stateMachine'
 
 interface AssistantState {
   isRecording: boolean
@@ -37,6 +38,7 @@ interface AssistantState {
 
 export default function AssistantPage() {
   const { user } = useUser()
+  const [machineState, dispatchMachine] = useReducer(assistantStateReducer, initialAssistantMachineState)
   const [state, setState] = useState<AssistantState>({
     isRecording: false,
     isProcessing: false,
