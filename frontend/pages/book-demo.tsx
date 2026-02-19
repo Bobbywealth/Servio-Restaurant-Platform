@@ -1,8 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import Head from 'next/head'
 import Link from 'next/link'
-import { motion } from 'framer-motion'
-import { CalendarDays, Clock, ArrowLeft, CheckCircle2, AlertCircle } from 'lucide-react'
+import { AnimatePresence, motion } from 'framer-motion'
+import { CalendarDays, Clock, ArrowLeft, CheckCircle2, AlertCircle, Menu, X } from 'lucide-react'
 import { api } from '../lib/api'
 
 type BookingSlot = { booking_date: string; booking_time: string }
@@ -69,6 +69,7 @@ function buildTimeSlots() {
 }
 
 export default function BookDemoPage() {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [month, setMonth] = useState(() => startOfMonth(new Date()))
   const [selectedDate, setSelectedDate] = useState<Date | null>(new Date())
   const [selectedTime, setSelectedTime] = useState<string>('')
@@ -83,6 +84,7 @@ export default function BookDemoPage() {
   const [submitting, setSubmitting] = useState(false)
   const [successId, setSuccessId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const mobileMenuCloseRef = useRef<HTMLButtonElement>(null)
 
   const timeSlots = useMemo(() => buildTimeSlots(), [])
   const calendarCells = useMemo(() => buildCalendarGrid(month), [month])
@@ -128,6 +130,27 @@ export default function BookDemoPage() {
     }
   }, [range.start, range.end])
 
+  useEffect(() => {
+    if (!mobileMenuOpen) return
+
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    mobileMenuCloseRef.current?.focus()
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setMobileMenuOpen(false)
+      }
+    }
+
+    window.addEventListener('keydown', onKeyDown)
+
+    return () => {
+      document.body.style.overflow = previousOverflow
+      window.removeEventListener('keydown', onKeyDown)
+    }
+  }, [mobileMenuOpen])
+
   const selectedYmd = selectedDate ? toYmd(selectedDate) : ''
   const isWeekend = selectedDate ? [0, 6].includes(selectedDate.getDay()) : false
 
@@ -170,7 +193,7 @@ export default function BookDemoPage() {
         <meta name="description" content="Book a Servio demo with our team." />
       </Head>
 
-      <div className="min-h-screen bg-gray-900 text-white relative">
+      <div className="min-h-screen bg-gray-900 text-white relative overflow-x-hidden">
         {/* Restaurant Background */}
         <div className="absolute inset-0">
           <img 
@@ -200,9 +223,91 @@ export default function BookDemoPage() {
                 <Link href="/#faq" className="text-gray-300 hover:text-white font-medium transition-colors">FAQ</Link>
                 <Link href="/login" className="text-gray-300 hover:text-white font-medium transition-colors">Login</Link>
               </div>
+              <button
+                onClick={() => setMobileMenuOpen(true)}
+                className="md:hidden p-2 rounded-lg text-gray-300 hover:text-white hover:bg-white/10 transition-colors"
+                aria-label="Open menu"
+                aria-expanded={mobileMenuOpen}
+                aria-controls="book-demo-mobile-menu"
+                type="button"
+              >
+                <Menu className="w-6 h-6" />
+              </button>
             </div>
           </div>
         </nav>
+
+        <AnimatePresence>
+          {mobileMenuOpen && (
+            <>
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setMobileMenuOpen(false)}
+                className="fixed inset-0 bg-black/60 z-50 md:hidden backdrop-blur-sm"
+              />
+              <motion.aside
+                id="book-demo-mobile-menu"
+                initial={{ x: '100%' }}
+                animate={{ x: 0 }}
+                exit={{ x: '100%' }}
+                transition={{ type: 'tween', duration: 0.25 }}
+                className="fixed top-0 right-0 bottom-0 w-4/5 max-w-xs bg-gray-900 border-l border-white/10 z-50 md:hidden"
+              >
+                <div className="flex items-center justify-between p-4 border-b border-white/10">
+                  <span className="text-lg font-bold text-white">Menu</span>
+                  <button
+                    ref={mobileMenuCloseRef}
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="p-2 rounded-lg text-gray-300 hover:text-white hover:bg-white/10 transition-colors"
+                    aria-label="Close menu"
+                    type="button"
+                  >
+                    <X className="w-6 h-6" />
+                  </button>
+                </div>
+                <nav className="flex flex-col p-4 space-y-1">
+                  <Link
+                    href="/#services"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="px-4 py-3 rounded-xl text-gray-300 hover:text-white hover:bg-white/10 font-medium transition-colors"
+                  >
+                    Services
+                  </Link>
+                  <Link
+                    href="/#features"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="px-4 py-3 rounded-xl text-gray-300 hover:text-white hover:bg-white/10 font-medium transition-colors"
+                  >
+                    Features
+                  </Link>
+                  <Link
+                    href="/#pricing"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="px-4 py-3 rounded-xl text-gray-300 hover:text-white hover:bg-white/10 font-medium transition-colors"
+                  >
+                    Pricing
+                  </Link>
+                  <Link
+                    href="/#faq"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="px-4 py-3 rounded-xl text-gray-300 hover:text-white hover:bg-white/10 font-medium transition-colors"
+                  >
+                    FAQ
+                  </Link>
+                  <Link
+                    href="/login"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="px-4 py-3 rounded-xl text-gray-300 hover:text-white hover:bg-white/10 font-medium transition-colors"
+                  >
+                    Login
+                  </Link>
+                </nav>
+              </motion.aside>
+            </>
+          )}
+        </AnimatePresence>
 
         <div className="relative max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
           <div className="flex items-center justify-between mb-10">
