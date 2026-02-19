@@ -6,8 +6,7 @@ import { AssistantService } from '../services/AssistantService';
 import { VoiceConversationService } from '../services/VoiceConversationService';
 import { DatabaseService } from '../services/DatabaseService';
 import { logger } from '../utils/logger';
-import { safePreview } from '../utils/safePreview';
-import { asyncHandler, UnauthorizedError } from '../middleware/errorHandler';
+import { asyncHandler, ForbiddenError, UnauthorizedError } from '../middleware/errorHandler';
 
 const router = Router();
 
@@ -51,6 +50,18 @@ const parseRestaurantId = (value: unknown): string => {
   }
 
   return parseSafeString(value, '');
+};
+
+const isConversationOwnedByUser = (metadata: unknown, userId: string): boolean => {
+  if (!metadata || typeof metadata !== 'object') {
+    return false;
+  }
+
+  const record = metadata as Record<string, unknown>;
+  const metadataUserId = record.userId;
+  const metadataCreatedByUserId = record.createdByUserId;
+
+  return metadataUserId === userId || metadataCreatedByUserId === userId;
 };
 
 const parseRecentErrors = async (limit = 5): Promise<Array<{ message: string; level: string; occurredAt: string; source: string }>> => {
@@ -359,19 +370,70 @@ router.get('/status', asyncHandler(async (req: Request, res: Response) => {
  * GET /api/assistant/conversation
  * Get conversation history for a user (if we implement conversation storage)
  */
-router.get('/conversation', asyncHandler(async (req: Request, res: Response) => {
-  const userId = req.user?.id;
+router.get('/conversation/:userId', asyncHandler(async (req: Request, res: Response) => {
+  const authenticatedUserId = req.user?.id;
+  const restaurantId = parseRestaurantId(req.user?.restaurantId);
+  const { userId } = req.params;
+  const limit = Math.min(50, Math.max(1, Number(req.query.limit) || 10));
+  const offset = Math.max(0, Number(req.query.offset) || 0);
 
-  if (!userId) {
+  if (!authenticatedUserId) {
     throw new UnauthorizedError();
   }
 
-  // For now, return empty - this could be implemented to store conversation history
+  if (!restaurantId) {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'Restaurant context is required' }
+    });
+  }
+
+  if (authenticatedUserId !== userId) {
+    throw new ForbiddenError('You can only access your own conversation history');
+  }
+
+  const conversationResult = await voiceConversationService.listConversations(restaurantId, {
+    limit: 100,
+    offset: 0
+  });
+
+  const userConversations = conversationResult.conversations.filter((conversation) =>
+    isConversationOwnedByUser(conversation.metadata, userId)
+  );
+
+  const paginatedConversations = userConversations.slice(offset, offset + limit);
+  const conversationDetails = await Promise.all(
+    paginatedConversations.map(async (conversation) => {
+      const messages = await voiceConversationService.getMessages(conversation.id, 100);
+      return {
+        id: conversation.id,
+        sessionId: conversation.session_id,
+        status: conversation.status,
+        startedAt: conversation.started_at,
+        lastActivityAt: conversation.last_activity_at,
+        endedAt: conversation.ended_at,
+        metadata: conversation.metadata,
+        messageCount: messages.length,
+        messages: messages.map((message) => ({
+          id: message.id,
+          role: message.role,
+          content: message.content,
+          audioUrl: message.audio_url,
+          metadata: message.metadata,
+          createdAt: message.created_at
+        }))
+      };
+    })
+  );
+
   res.json({
     success: true,
     data: {
-      messages: [],
-      totalCount: 0
+      conversations: conversationDetails,
+      totalCount: userConversations.length,
+      returnedCount: conversationDetails.length,
+      limit,
+      offset
     }
   });
 }));
@@ -380,19 +442,77 @@ router.get('/conversation', asyncHandler(async (req: Request, res: Response) => 
  * DELETE /api/assistant/conversation
  * Clear conversation history for a user
  */
-router.delete('/conversation', asyncHandler(async (req: Request, res: Response) => {
-  const userId = req.user?.id;
+router.delete('/conversation/:userId', asyncHandler(async (req: Request, res: Response) => {
+  const authenticatedUserId = req.user?.id;
+  const restaurantId = parseRestaurantId(req.user?.restaurantId);
+  const { userId } = req.params;
+  const action = req.query.action === 'archive' ? 'archive' : 'delete';
 
-  if (!userId) {
+  if (!authenticatedUserId) {
     throw new UnauthorizedError();
   }
 
-  // For now, just return success - this could clear stored conversation history
-  logger.info(`Conversation history cleared for user ${userId}`);
+  if (!restaurantId) {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'Restaurant context is required' }
+    });
+  }
+
+  if (authenticatedUserId !== userId) {
+    throw new ForbiddenError('You can only manage your own conversation history');
+  }
+
+  const conversationResult = await voiceConversationService.listConversations(restaurantId, {
+    limit: 100,
+    offset: 0
+  });
+
+  const userConversations = conversationResult.conversations.filter((conversation) =>
+    isConversationOwnedByUser(conversation.metadata, userId)
+  );
+
+  let affectedConversations = 0;
+  let affectedMessages = 0;
+
+  if (action === 'archive') {
+    const conversationsToArchive = userConversations.filter((conversation) => conversation.status !== 'abandoned');
+    await Promise.all(
+      conversationsToArchive.map(async (conversation) => {
+        await voiceConversationService.updateConversationStatus(conversation.id, 'abandoned');
+      })
+    );
+    affectedConversations = conversationsToArchive.length;
+    affectedMessages = (await Promise.all(userConversations.map((conversation) =>
+      voiceConversationService.getMessageCount(conversation.id)
+    ))).reduce((sum, count) => sum + count, 0);
+  } else {
+    const messageCounts = await Promise.all(userConversations.map((conversation) =>
+      voiceConversationService.getMessageCount(conversation.id)
+    ));
+
+    const deleteResults = await Promise.all(userConversations.map((conversation) =>
+      voiceConversationService.deleteConversation(conversation.id, restaurantId)
+    ));
+
+    affectedConversations = deleteResults.filter(Boolean).length;
+    affectedMessages = messageCounts.reduce((sum, count) => sum + count, 0);
+  }
+
+  logger.info(`Conversation history ${action}d for user ${userId}`, {
+    restaurantId,
+    affectedConversations,
+    affectedMessages
+  });
 
   res.json({
     success: true,
-    message: 'Conversation history cleared'
+    message: action === 'archive' ? 'Conversation history archived' : 'Conversation history deleted',
+    data: {
+      action,
+      affectedConversations,
+      affectedMessages
+    }
   });
 }));
 
