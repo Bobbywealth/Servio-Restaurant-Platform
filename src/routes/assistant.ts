@@ -6,8 +6,7 @@ import { AssistantService } from '../services/AssistantService';
 import { VoiceConversationService } from '../services/VoiceConversationService';
 import { DatabaseService } from '../services/DatabaseService';
 import { logger } from '../utils/logger';
-import { asyncHandler, UnauthorizedError } from '../middleware/errorHandler';
-import { assistantRateLimit, getAssistantRateLimitTelemetry } from '../middleware/assistantRateLimit';
+import { asyncHandler, BadRequestError, UnauthorizedError } from '../middleware/errorHandler';
 
 const router = Router();
 
@@ -356,10 +355,15 @@ router.get('/status', asyncHandler(async (req: Request, res: Response) => {
 }));
 
 /**
- * GET /api/assistant/conversation/:userId
+ * GET /api/assistant/conversation
  * Get conversation history for a user (if we implement conversation storage)
  */
-router.get('/conversation/:userId', asyncHandler(async (req: Request, res: Response) => {
+router.get('/conversation', asyncHandler(async (req: Request, res: Response) => {
+  const userId = req.user?.id;
+
+  if (!userId) {
+    throw new UnauthorizedError();
+  }
 
   // For now, return empty - this could be implemented to store conversation history
   res.json({
@@ -372,11 +376,15 @@ router.get('/conversation/:userId', asyncHandler(async (req: Request, res: Respo
 }));
 
 /**
- * DELETE /api/assistant/conversation/:userId
+ * DELETE /api/assistant/conversation
  * Clear conversation history for a user
  */
-router.delete('/conversation/:userId', asyncHandler(async (req: Request, res: Response) => {
-  const { userId } = req.params;
+router.delete('/conversation', asyncHandler(async (req: Request, res: Response) => {
+  const userId = req.user?.id;
+
+  if (!userId) {
+    throw new UnauthorizedError();
+  }
 
   // For now, just return success - this could clear stored conversation history
   logger.info(`Conversation history cleared for user ${userId}`);
@@ -392,13 +400,26 @@ router.delete('/conversation/:userId', asyncHandler(async (req: Request, res: Re
  * Submit feedback about assistant responses
  */
 router.post('/feedback', asyncHandler(async (req: Request, res: Response) => {
-  const { userId, messageId, rating, comment } = req.body;
+  const { messageId, rating, comment } = req.body;
+  const userId = req.user?.id;
 
-  if (!userId || !messageId || rating === undefined) {
+  if (!userId) {
+    throw new UnauthorizedError();
+  }
+
+  if (!messageId || rating === undefined) {
     return res.status(400).json({
       success: false,
-      error: { message: 'userId, messageId, and rating are required' }
+      error: { message: 'messageId and rating are required' }
     });
+  }
+
+  if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+    throw new BadRequestError('rating must be an integer between 1 and 5');
+  }
+
+  if (comment !== undefined && (typeof comment !== 'string' || comment.length > 500)) {
+    throw new BadRequestError('comment must be a string up to 500 characters');
   }
 
   // Log feedback for analysis
