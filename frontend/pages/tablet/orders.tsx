@@ -221,15 +221,15 @@ function getChannelIcon(channel: string | null | undefined): string {
 function statusBadgeClassesForStatus(status: string) {
   switch (status) {
     case 'received':
-      return 'bg-[var(--tablet-accent)] text-[var(--tablet-accent-contrast)]';
+      return 'bg-[var(--tablet-surface-alt)] text-[var(--tablet-muted-strong)] border border-[var(--tablet-border)]';
     case 'preparing':
-      return 'bg-[var(--tablet-border-strong)] text-[var(--tablet-text)] ring-1 ring-[var(--tablet-info)]';
+      return 'bg-[var(--tablet-surface-alt)] text-[var(--tablet-text)] border border-[var(--tablet-border)]';
     case 'ready':
       return 'bg-[var(--tablet-success)] text-white';
     case 'scheduled':
-      return 'bg-[var(--tablet-border)] text-[var(--tablet-muted-strong)]';
+      return 'bg-[var(--tablet-surface-alt)] text-[var(--tablet-muted-strong)] border border-[var(--tablet-border)]';
     default:
-      return 'bg-[var(--tablet-border-strong)] text-[var(--tablet-text)]';
+      return 'bg-[var(--tablet-surface-alt)] text-[var(--tablet-text)] border border-[var(--tablet-border)]';
   }
 }
 
@@ -1199,8 +1199,6 @@ export default function TabletOrdersPage() {
     const isSelected = selectedOrder?.id === o.id;
 
     const statusLabel = isNew ? 'NEW' : isPreparing ? 'IN PROGRESS' : isReady ? 'READY' : isScheduled ? 'SCHEDULED' : 'ACTIVE';
-    const statusBadgeClasses = statusBadgeClassesForStatus(status);
-
     const prepTimeData = isPreparing
       ? formatPrepTimeRemaining(o.prep_minutes || 15, o.created_at, now)
       : null;
@@ -1209,6 +1207,11 @@ export default function TabletOrdersPage() {
       : 'normal';
     const prepTimeColorClass = getPrepTimeColorClass(prepWarningLevel);
     const isOverdue = prepTimeData?.isOverdue;
+    const cardStatusBadgeClasses = isPreparing && (prepWarningLevel === 'critical' || prepWarningLevel === 'warning')
+      ? prepWarningLevel === 'critical'
+        ? 'bg-[var(--tablet-danger)] text-white'
+        : 'bg-[var(--tablet-warning)] text-[var(--tablet-text)]'
+      : statusBadgeClassesForStatus(status);
 
     return (
       <button
@@ -1217,7 +1220,7 @@ export default function TabletOrdersPage() {
         onClick={() => setSelectedOrder(o)}
         className={clsx(
           'w-full text-left rounded-xl border border-[var(--tablet-border)] p-4 sm:p-5 shadow-[0_2px_8px_rgba(0,0,0,0.3)] transition transform hover:brightness-110 hover:scale-[1.01] touch-manipulation',
-          isSelected && 'bg-[var(--tablet-info)] border-[var(--tablet-info)] shadow-[0_4px_12px_rgba(93,112,153,0.45)]',
+          isSelected && 'bg-[var(--tablet-surface)] border-[var(--tablet-border-strong)] border-l-4 border-l-[var(--tablet-info)] ring-2 ring-[var(--tablet-info)] shadow-[0_4px_12px_rgba(93,112,153,0.2)]',
           !isSelected && 'bg-[var(--tablet-card)]',
           isOverdue && 'order-overdue'
         )}
@@ -1226,9 +1229,6 @@ export default function TabletOrdersPage() {
           <div className="flex items-center gap-2">
             <span className={clsx('text-sm font-semibold tracking-wide px-2.5 py-1.5 rounded-full', statusBadgeClasses)}>
               {statusLabel}
-            </span>
-            <span className="text-xl" title={o.channel || 'Unknown'}>
-              {getChannelIcon(o.channel)}
             </span>
           </div>
           <div className="flex items-center gap-2">
