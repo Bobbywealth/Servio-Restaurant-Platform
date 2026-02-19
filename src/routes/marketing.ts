@@ -4,8 +4,8 @@ import { asyncHandler } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
 import twilio from 'twilio';
-import nodemailer from 'nodemailer';
 import { SocketService } from '../services/SocketService';
+import { EmailService } from '../services/EmailService';
 
 const router = Router();
 
@@ -93,16 +93,7 @@ function formatPhoneNumber(phone: string): { formatted: string; isValid: boolean
   };
 }
 
-// Initialize email transporter (configure for your email provider)
-const emailTransporter = nodemailer.createTransport({
-  host: process.env.EMAIL_HOST || 'smtp.gmail.com',
-  port: parseInt(process.env.EMAIL_PORT || '587'),
-  secure: false,
-  auth: {
-    user: process.env.EMAIL_USER || 'your_email@gmail.com',
-    pass: process.env.EMAIL_PASS || 'your_app_password'
-  }
-});
+const emailService = EmailService.getInstance();
 
 // ============================================================================
 // CUSTOMER MANAGEMENT
@@ -752,7 +743,7 @@ router.post('/send-email', asyncHandler(async (req: Request, res: Response) => {
   }
 
   try {
-    const result = await emailTransporter.sendMail({
+    const result = await emailService.sendMail({
       from: process.env.EMAIL_FROM || 'noreply@servio.com',
       to: email,
       subject: subject,
@@ -968,7 +959,7 @@ async function sendCampaign(campaignId: string) {
             to: phoneResult.formatted
           });
         } else if (campaign.type === 'email') {
-          await emailTransporter.sendMail({
+          await emailService.sendMail({
             from: process.env.EMAIL_FROM || 'noreply@servio.com',
             to: customer.email,
             subject: campaign.subject || 'Message from Restaurant',

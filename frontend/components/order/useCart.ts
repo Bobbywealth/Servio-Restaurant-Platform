@@ -14,6 +14,7 @@ export function useCart(restaurantSlug: string | undefined) {
   const [customerInfo, setCustomerInfo] = useState<CustomerInfo>({
     name: '',
     phone: '',
+    email: '',
     orderType: 'pickup',
     specialInstructions: ''
   });
@@ -116,6 +117,14 @@ export function useCart(restaurantSlug: string | undefined) {
       toast.error('Please enter a valid phone number');
       return false;
     }
+    const normalizedEmail = customerInfo.email.trim();
+    if (normalizedEmail) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(normalizedEmail)) {
+        toast.error('Please enter a valid email address or leave it blank');
+        return false;
+      }
+    }
     return true;
   }, [customerInfo]);
 
@@ -147,6 +156,7 @@ export function useCart(restaurantSlug: string | undefined) {
         })),
         customerName: customerInfo.name.trim(),
         customerPhone: customerInfo.phone.trim(),
+        customerEmail: customerInfo.email.trim() || null,
         orderType: customerInfo.orderType,
         specialInstructions: customerInfo.specialInstructions.trim() || null,
         paymentMethod,
@@ -157,7 +167,7 @@ export function useCart(restaurantSlug: string | undefined) {
       setCart([]);
       setIsCartOpen(false);
       setCheckoutStep('cart');
-      setCustomerInfo({ name: '', phone: '', orderType: 'pickup', specialInstructions: '' });
+      setCustomerInfo({ name: '', phone: '', email: '', orderType: 'pickup', specialInstructions: '' });
       setMarketingConsent(false);
     } catch {
       toast.error('Failed to place order');

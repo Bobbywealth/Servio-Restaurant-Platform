@@ -539,6 +539,21 @@ router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) =>
     return res.status(400).json({ success: false, error: { message: 'Items are required' } });
   }
 
+  const normalizedCustomerEmail =
+    typeof customerEmail === 'string' && customerEmail.trim().length > 0
+      ? customerEmail.trim().toLowerCase()
+      : null;
+
+  if (normalizedCustomerEmail) {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(normalizedCustomerEmail)) {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'customerEmail must be a valid email address when provided' }
+      });
+    }
+  }
+
   const orderId = uuidv4();
   // Calculate total and validate items (simplified for v1 fast build)
   let totalAmount = 0;
@@ -555,8 +570,8 @@ router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) =>
     await db.run(`
       INSERT INTO orders (
         id, restaurant_id, channel, status, total_amount, payment_status,
-        items, customer_name, customer_phone, order_type, special_instructions, marketing_consent, created_at, updated_at
-      ) VALUES (?, ?, 'website', 'received', ?, 'unpaid', ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        items, customer_name, customer_phone, customer_email, order_type, special_instructions, marketing_consent, created_at, updated_at
+      ) VALUES (?, ?, 'website', 'received', ?, 'unpaid', ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     `, [
       orderId,
       restaurantId,
@@ -564,6 +579,7 @@ router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) =>
       JSON.stringify(parsedItems),
       customerName || null,
       customerPhone || null,
+      normalizedCustomerEmail,
       orderType || 'pickup',
       specialInstructions || null,
       marketingConsent === true || marketingConsent === 'true' ? 1 : 0

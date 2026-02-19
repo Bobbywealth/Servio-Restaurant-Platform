@@ -6,6 +6,7 @@
 import { Router, Request, Response } from 'express'
 import { v4 as uuidv4 } from 'uuid'
 import { AppError, InternalServerError } from '../lib/errors'
+import { EmailService } from '../services/EmailService'
 
 const router = Router()
 
@@ -125,11 +126,17 @@ function checkIntegrations(): {
     }
   }
 
-  // Check Email integration (Nodemailer)
-  if (process.env.EMAIL_HOST) {
+  // Check Email integration (SMTP / Microsoft 365 / Outlook)
+  const emailStatus = EmailService.getInstance().getConfigStatus()
+  if (emailStatus.configured) {
     integrations.email = {
       status: 'healthy',
-      message: 'Email configured'
+      message: `Email configured (${emailStatus.host}:${emailStatus.port})`
+    }
+  } else if (emailStatus.host || emailStatus.hasUser || emailStatus.hasPass || emailStatus.from) {
+    integrations.email = {
+      status: 'unhealthy',
+      message: 'Email partially configured (set EMAIL_HOST, EMAIL_USER, EMAIL_PASS, EMAIL_FROM)'
     }
   } else {
     integrations.email = {
