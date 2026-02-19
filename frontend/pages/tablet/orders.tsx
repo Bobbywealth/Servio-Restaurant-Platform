@@ -12,20 +12,11 @@ import {
   Filter,
   X,
   AlertTriangle,
-  CheckCircle,
-  ChefHat,
   Eye,
-  Calendar,
-  ArrowUpDown,
-  Zap,
-  Bell,
-  BellOff,
   Maximize2,
   Minimize2,
   Volume2,
-  VolumeX,
-  LayoutGrid,
-  List
+  VolumeX
 } from 'lucide-react';
 import { useSocket } from '../../lib/socket';
 import { PrintReceipt } from '../../components/PrintReceipt';
@@ -365,8 +356,6 @@ export default function TabletOrdersPage() {
   // New feature toggles
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-
   // Search and filter state
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<OrderFilter['status']>('all');
