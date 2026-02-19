@@ -11,8 +11,6 @@ import {
   Filter,
   X,
   AlertTriangle,
-  CheckCircle,
-  ChefHat,
   Eye,
   Calendar,
   ArrowUpDown,
@@ -278,8 +276,6 @@ export default function TabletOrdersPage() {
   
   // New feature toggles
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-
   // Search and filter state
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<OrderFilter['status']>('all');
