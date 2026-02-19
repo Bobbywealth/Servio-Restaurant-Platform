@@ -3,7 +3,6 @@ import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import clsx from 'clsx';
 import {
-  CheckCircle2,
   Printer,
   Clock,
   Search,
@@ -25,8 +24,6 @@ import { TabletSidebar } from '../../components/tablet/TabletSidebar';
 import { OrdersHeader } from '../../components/tablet/orders/OrdersHeader';
 import { OrderFiltersBar } from '../../components/tablet/orders/OrderFiltersBar';
 import { OrderDetailsModal } from '../../components/tablet/orders/OrderDetailsModal';
-import { OrderDetailsPanel } from '../../components/tablet/orders/OrderDetailsPanel';
-import { CustomerActionsPanel } from '../../components/tablet/orders/CustomerActionsPanel';
 import { useOrderAlerts } from '../../hooks/tablet/useOrderAlerts';
 import type { ReceiptPaperWidth, ReceiptOrder, ReceiptRestaurant } from '../../utils/receiptGenerator';
 import { generateReceiptHtml, generateStandaloneReceiptHtml } from '../../utils/receiptGenerator';
@@ -1204,7 +1201,7 @@ export default function TabletOrdersPage() {
     ];
 
     if (statusFilter === 'all') {
-      return sections.filter((section) => section.orders.length > 0);
+      return sections;
     }
 
     return sections.filter((section) => section.key === statusFilter);
@@ -1679,230 +1676,38 @@ export default function TabletOrdersPage() {
               </div>
             )}
 
-            {filtered.length === 0 && !loading ? (
-              <div className="flex flex-col items-center justify-center py-20 sm:py-32 text-[var(--tablet-muted)]">
-                <CheckCircle2 className="h-24 w-24 mb-6 opacity-20" />
-                <h2 className="text-3xl font-semibold">All Clear</h2>
-                <p className="text-base mt-3 font-medium uppercase tracking-widest">No active orders</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-5 tablet-orders-responsive">
-                {/* Left Panel: Order Queue */}
-                <section className="bg-[var(--tablet-surface)] rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.3)] border border-[var(--tablet-border)] flex flex-col min-h-[50vh] md:min-h-[60vh] lg:min-h-[70vh]">
-                  <div className="px-4 py-4 border-b border-[var(--tablet-border)] flex items-center justify-between">
-                    <div>
-                      <div className="text-sm font-semibold uppercase text-[var(--tablet-accent)]">Active Orders</div>
-                      <p className="text-xs text-[var(--tablet-muted)] mt-1">Simple queue view inspired by major delivery apps.</p>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-5 tablet-orders-responsive">
+              {queueSections.map((section) => {
+                const emptyStateByLane = {
+                  received: 'No new orders',
+                  preparing: 'No in progress orders',
+                  ready: 'No ready orders'
+                } as const;
+
+                return (
+                  <section key={section.key} className="bg-[var(--tablet-surface)] rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.3)] border border-[var(--tablet-border)] flex flex-col min-h-[50vh] md:min-h-[60vh] lg:min-h-[70vh]">
+                    <div className="px-4 py-4 border-b border-[var(--tablet-border)] flex items-center justify-between">
+                      <h3 className="text-sm font-semibold uppercase text-[var(--tablet-accent)]">{section.label}</h3>
+                      <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-[var(--tablet-surface-alt)] text-[var(--tablet-text)]">
+                        {section.orders.length}
+                      </span>
                     </div>
-                    <div className="text-xs font-semibold text-[var(--tablet-muted)]">{filtered.length} Active</div>
-                  </div>
 
-                  <div className="flex-1 overflow-y-auto p-4 scrollbar-thin">
-                    <div className="space-y-5">
-                      {queueSections.map((section) => (
-                        <div key={section.key} className="space-y-3">
-                          <div className="flex items-center justify-between">
-                            <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--tablet-muted)]">{section.label}</h3>
-                            <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-[var(--tablet-surface-alt)] text-[var(--tablet-text)]">
-                              {section.orders.length}
-                            </span>
-                          </div>
-
-                          {section.orders.length === 0 ? (
-                            <div className="text-xs text-[var(--tablet-muted)] uppercase tracking-wide py-4 text-center border border-dashed border-[var(--tablet-border)] rounded-xl">
-                              No {section.label.toLowerCase()} orders
-                            </div>
-                          ) : (
-                            <div className="space-y-3">
-                              {section.orders.map((o, index) => renderOrderCard(o, index))}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-
-                      {queueSections.length === 0 && (
+                    <div className="flex-1 overflow-y-auto p-4 scrollbar-thin">
+                      {section.orders.length === 0 ? (
                         <div className="text-xs text-[var(--tablet-muted)] uppercase tracking-wide py-4 text-center border border-dashed border-[var(--tablet-border)] rounded-xl">
-                          No orders in this view
+                          {emptyStateByLane[section.key]}
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {section.orders.map((o, index) => renderOrderCard(o, index))}
                         </div>
                       )}
                     </div>
-                  </div>
-                </section>
-
-                {/* Middle Panel: Order Details */}
-                <OrderDetailsPanel>
-                  {/* Order Details */}
-                  <div className="bg-[var(--tablet-surface)] rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.3)] border border-[var(--tablet-border)]">
-                    <div className="px-5 py-4 border-b border-[var(--tablet-border)]">
-                      <div className="text-xl font-semibold">
-                        {selectedOrder ? (
-                          <>ORDER #{selectedOrder.external_id ? selectedOrder.external_id.slice(-4).toUpperCase() : selectedOrder.id.slice(-4).toUpperCase()} - {(selectedOrder.customer_name || 'Guest').toUpperCase()}</>
-                        ) : (
-                          'ORDER DETAILS'
-                        )}
-                      </div>
-                    </div>
-                    {selectedOrder ? (
-                      <div className="px-5 py-5 space-y-5">
-                        <div className="flex items-center justify-between border-b border-[var(--tablet-border)] pb-4">
-                          <span className="text-sm text-[var(--tablet-muted)] uppercase">Total Cost</span>
-                          <span className="text-2xl font-semibold">{formatMoney(selectedOrder.total_amount)}</span>
-                        </div>
-
-                        <div>
-                          <div className="text-lg font-semibold mb-3">Items ({selectedOrder.items?.length || 0})</div>
-                          <div className="space-y-3 max-h-[280px] sm:max-h-[320px] overflow-y-auto pr-2 scrollbar-thin">
-                            {(selectedOrder.items || []).map((it, idx) => (
-                              <div key={idx} className="flex items-center gap-4 pb-3 border-b border-[var(--tablet-border)] last:border-0">
-                                <div className="h-12 w-12 rounded-lg bg-[var(--tablet-border-strong)] flex items-center justify-center text-sm text-[var(--tablet-muted)] font-semibold">
-                                  {it.quantity || 1}
-                                </div>
-                                <div className="flex-1">
-                                  <div className="text-base font-semibold">{it.name}</div>
-                                  <div className="text-sm text-[var(--tablet-muted)]">Prepared fresh</div>
-                                </div>
-                                <div className="text-base font-semibold">
-                                  {formatMoney((it.unit_price || it.price || 0) * (it.quantity || 1))}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="px-5 py-16 text-center text-[var(--tablet-muted)]">
-                        Select an order to view details.
-                      </div>
-                    )}
-                  </div>
-
-                </OrderDetailsPanel>
-
-                {/* Right Panel: Customer + Actions */}
-                <CustomerActionsPanel>
-                  <div className="bg-[var(--tablet-surface)] rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.3)] border border-[var(--tablet-border)]">
-                    <div className="px-5 py-4 border-b border-[var(--tablet-border)]">
-                      <div className="text-lg font-semibold">Customer</div>
-                    </div>
-                    {selectedOrder ? (
-                      <div className="px-5 py-5 space-y-5">
-                        <div className="flex items-center gap-4">
-                          <div className="h-12 w-12 rounded-full bg-[var(--tablet-border-strong)] flex items-center justify-center text-lg font-semibold">
-                            {(selectedOrder.customer_name || 'G')[0]}
-                          </div>
-                          <div className="flex-1">
-                            <div className="text-lg font-semibold">{selectedOrder.customer_name || 'Guest'}</div>
-                            <div className="text-sm text-[var(--tablet-muted)]">{selectedOrder.customer_phone || 'No contact provided'}</div>
-                          </div>
-                        </div>
-
-                        <div className="flex flex-wrap gap-3 text-sm">
-                          <span className="text-xs uppercase tracking-widest text-[var(--tablet-muted)]">
-                            {selectedOrder.order_type || 'Pickup'}
-                          </span>
-                          <span className="text-[var(--tablet-text)]">
-                            {selectedOrder.pickup_time
-                              ? new Date(selectedOrder.pickup_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                              : 'Ready ASAP'}
-                          </span>
-                          <span className="text-[var(--tablet-muted)]">
-                            {selectedOrder.pickup_time
-                              ? new Date(selectedOrder.pickup_time).toLocaleDateString()
-                              : new Date().toLocaleDateString()}
-                          </span>
-                        </div>
-
-                        <div className="flex flex-wrap gap-2">
-                          <span className={clsx('px-3 py-1 rounded-full text-xs font-semibold uppercase text-center', statusBadgeClassesForStatus(normalizeStatus(selectedOrder.status)))}>
-                            {normalizeStatus(selectedOrder.status)}
-                          </span>
-                          <span className="px-3 py-1 rounded-full text-xs font-semibold uppercase text-center bg-[var(--tablet-border)] text-[var(--tablet-muted-strong)]">
-                            {selectedOrder.channel || 'POS'}
-                          </span>
-                        </div>
-
-                        {selectedOrder.special_instructions && (
-                          <div className="bg-[var(--tablet-border)] rounded-lg p-4">
-                            <div className="text-xs uppercase tracking-widest text-[var(--tablet-accent)] mb-2">
-                              Special Instructions
-                            </div>
-                            <div className="text-sm text-[var(--tablet-text)] opacity-90">{selectedOrder.special_instructions}</div>
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="px-5 py-12 text-center text-[var(--tablet-muted)]">
-                        Select an order to view customer details.
-                      </div>
-                    )}
-                  </div>
-
-                  {selectedOrder && (
-                    <div className="flex flex-col gap-3">
-                      {normalizeStatus(selectedOrder.status) === 'received' && (
-                        <>
-                          <button
-                            disabled={busyId === selectedOrder.id}
-                            onClick={() => acceptOrder(selectedOrder)}
-                            className="h-14 rounded-full bg-[var(--tablet-accent)] text-[var(--tablet-accent-contrast)] font-semibold uppercase shadow-[0_2px_8px_rgba(0,0,0,0.3)] transition hover:brightness-110 active:scale-95 disabled:opacity-50 touch-manipulation"
-                          >
-                            Confirm Order
-                          </button>
-                          <button
-                            disabled={busyId === selectedOrder.id}
-                            onClick={() => declineOrder(selectedOrder)}
-                            className="h-14 rounded-full border-2 border-[var(--tablet-border-strong)] text-[var(--tablet-text)] font-semibold uppercase transition hover:brightness-110 active:scale-95 disabled:opacity-50 touch-manipulation"
-                          >
-                            Decline
-                          </button>
-                        </>
-                      )}
-                      {normalizeStatus(selectedOrder.status) === 'preparing' && (
-                        <>
-                          <button
-                            disabled={busyId === selectedOrder.id}
-                            onClick={() => setStatus(selectedOrder.id, 'ready')}
-                            className="h-14 rounded-full bg-[var(--tablet-success)] text-[var(--tablet-text)] font-semibold uppercase shadow-[0_2px_8px_rgba(0,0,0,0.3)] transition hover:brightness-110 active:scale-95 disabled:opacity-50 touch-manipulation"
-                          >
-                            Ready for Pickup
-                          </button>
-                          <button
-                            onClick={() => printOrder(selectedOrder.id)}
-                            disabled={printingOrderId === selectedOrder.id}
-                            className="h-14 rounded-full border-2 border-[var(--tablet-border-strong)] text-[var(--tablet-text)] font-semibold uppercase transition hover:brightness-110 active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2 touch-manipulation"
-                          >
-                            <Printer className="h-5 w-5" />
-                            Print
-                          </button>
-                        </>
-                      )}
-                      {normalizeStatus(selectedOrder.status) === 'ready' && (
-                        <>
-                          <button
-                            disabled={busyId === selectedOrder.id}
-                            onClick={() => {
-                              if (window.confirm('Mark this order as completed?')) {
-                                setStatus(selectedOrder.id, 'completed');
-                                setSelectedOrder(null);
-                              }
-                            }}
-                            className="h-14 rounded-full bg-[var(--tablet-success)] text-[var(--tablet-text)] font-semibold uppercase shadow-[0_2px_8px_rgba(0,0,0,0.3)] transition hover:brightness-110 active:scale-95 disabled:opacity-50 touch-manipulation"
-                          >
-                            Complete Order
-                          </button>
-                          <button
-                            className="h-14 rounded-full border-2 border-[var(--tablet-border-strong)] text-[var(--tablet-text)] font-semibold uppercase transition hover:brightness-110 active:scale-95 touch-manipulation"
-                            type="button"
-                          >
-                            Assign Driver
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  )}
-                </CustomerActionsPanel>
-              </div>
-            )}
+                  </section>
+                );
+              })}
+            </div>
           </div>
         </main>
       </div>
