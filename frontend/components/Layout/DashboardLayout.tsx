@@ -252,6 +252,15 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     
     // AI & COMMUNICATION SECTION
     {
+      name: 'Assistant',
+      href: '/dashboard/assistant',
+      icon: Mic,
+      description: 'Voice & text assistant',
+      color: 'text-servio-blue-500',
+      roles: ['staff', 'manager', 'owner'],
+      section: 'ai'
+    },
+    {
       name: 'Conversations',
       href: '/dashboard/conversations',
       icon: FileText,
