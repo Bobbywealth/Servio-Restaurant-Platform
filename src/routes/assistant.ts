@@ -154,7 +154,7 @@ router.post('/process-text', highCostEndpointRateLimits.processText, asyncHandle
     throw new UnauthorizedError();
   }
 
-  logger.info(`Processing text for user ${userId}: "${text.substring(0, 100)}${text.length > 100 ? '...' : ''}"`);
+  logger.info('[assistant.route] processing text', { userId, textPreview: safePreview(text, 100) });
 
   try {
     const result = await assistantService.processText(text, userId);
@@ -194,7 +194,7 @@ router.post('/process-text-stream', highCostEndpointRateLimits.processTextStream
     throw new UnauthorizedError();
   }
 
-  logger.info(`Processing text stream for user ${userId}: "${text.substring(0, 100)}${text.length > 100 ? '...' : ''}"`);
+  logger.info('[assistant.route] processing text stream', { userId, textPreview: safePreview(text, 100) });
 
   // Set headers for Server-Sent Events
   res.setHeader('Content-Type', 'text/event-stream');

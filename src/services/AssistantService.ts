@@ -6,6 +6,7 @@ import { DatabaseService } from './DatabaseService';
 import { MiniMaxService } from './MiniMaxService';
 import { VoiceConversationService } from './VoiceConversationService';
 import { logger } from '../utils/logger';
+import { safePreview } from '../utils/safePreview';
 import { ensureUploadsDir } from '../utils/uploads';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -237,7 +238,7 @@ export class AssistantService {
     try {
       // 1. Speech-to-Text
       const transcript = await this.transcribeAudio(audioBuffer);
-      logger.info(`Transcribed audio: "${transcript}"`);
+      logger.info('[assistant] transcribed audio', { transcriptPreview: safePreview(transcript, 200) });
 
       if (!transcript || transcript.trim().length === 0) {
         return {
@@ -275,11 +276,11 @@ export class AssistantService {
     const startTime = Date.now();
 
     try {
-      logger.info('[assistant] processText start', { userId, sessionId, textPreview: text?.slice?.(0, 200) });
+      logger.info('[assistant] processText start', { userId, sessionId, textPreview: safePreview(text, 200) });
 
       // Detect sentiment for voice adaptation (free optimization)
       const sentiment = this.detectSentiment(text);
-      logger.info('[assistant] detected sentiment', { sentiment, textPreview: text?.slice?.(50) });
+      logger.info('[assistant] detected sentiment', { sentiment, textPreview: safePreview(text, 50) });
 
       // Get conversation context with database persistence (free optimization)
       const conversationHistory = await this.getConversationHistory(sessionId, userId);
@@ -402,7 +403,7 @@ export class AssistantService {
     const startTime = Date.now();
 
     try {
-      logger.info('[assistant] processTextStream start', { userId, textPreview: text?.slice?.(200) });
+      logger.info('[assistant] processTextStream start', { userId, textPreview: safePreview(text, 200) });
 
       // Get system prompt with current context
       const systemPrompt = await this.getSystemPrompt(userId);
