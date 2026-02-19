@@ -180,11 +180,11 @@ function getPrepTimeWarningLevel(percentRemaining: number): 'normal' | 'warning'
 function getPrepTimeColorClass(level: 'normal' | 'warning' | 'critical'): string {
   switch (level) {
     case 'critical':
-      return 'bg-[var(--tablet-danger)] text-white';
+      return 'bg-[var(--tablet-danger)] text-[var(--tablet-text)]';
     case 'warning':
       return 'bg-[var(--tablet-warning)] text-[var(--tablet-text)]';
     default:
-      return 'bg-[var(--tablet-success)] text-white';
+      return 'bg-[var(--tablet-success)] text-[var(--tablet-text)]';
   }
 }
 
@@ -225,7 +225,7 @@ function statusBadgeClassesForStatus(status: string) {
     case 'preparing':
       return 'bg-[var(--tablet-surface-alt)] text-[var(--tablet-text)] border border-[var(--tablet-border)]';
     case 'ready':
-      return 'bg-[var(--tablet-success)] text-white';
+      return 'bg-[var(--tablet-success)] text-[var(--tablet-text)]';
     case 'scheduled':
       return 'bg-[var(--tablet-surface-alt)] text-[var(--tablet-muted-strong)] border border-[var(--tablet-border)]';
     default:
@@ -1220,7 +1220,7 @@ export default function TabletOrdersPage() {
         onClick={() => setSelectedOrder(o)}
         className={clsx(
           'w-full text-left rounded-xl border border-[var(--tablet-border)] p-4 sm:p-5 shadow-[0_2px_8px_rgba(0,0,0,0.3)] transition transform hover:brightness-110 hover:scale-[1.01] touch-manipulation',
-          isSelected && 'bg-[var(--tablet-surface)] border-[var(--tablet-border-strong)] border-l-4 border-l-[var(--tablet-info)] ring-2 ring-[var(--tablet-info)] shadow-[0_4px_12px_rgba(93,112,153,0.2)]',
+          isSelected && 'bg-[color-mix(in_srgb,var(--tablet-info)_35%,var(--tablet-card))] border-[var(--tablet-info)] shadow-[0_4px_12px_rgba(64,84,122,0.35)]',
           !isSelected && 'bg-[var(--tablet-card)]',
           isOverdue && 'order-overdue'
         )}
@@ -1426,13 +1426,13 @@ export default function TabletOrdersPage() {
                 <div className="px-3 py-1.5 rounded-lg bg-[var(--tablet-accent)] text-[var(--tablet-accent-contrast)] text-xs font-semibold">
                   {activeOrders.length} Active
                 </div>
-                <div className="px-3 py-1.5 rounded-lg bg-[var(--tablet-accent)]/50 text-[var(--tablet-text)] text-xs font-semibold">
+                <div className="px-3 py-1.5 rounded-lg bg-[var(--tablet-accent)]/35 text-[var(--tablet-text)] text-xs font-semibold">
                   {receivedOrders.length} New
                 </div>
-                <div className="px-3 py-1.5 rounded-lg bg-[var(--tablet-info)]/30 text-[var(--tablet-text)] text-xs font-semibold">
+                <div className="px-3 py-1.5 rounded-lg bg-[var(--tablet-info)]/22 text-[var(--tablet-text)] text-xs font-semibold">
                   {activeOrders.filter(o => normalizeStatus(o.status) === 'preparing').length} In Progress
                 </div>
-                <div className="px-3 py-1.5 rounded-lg bg-[var(--tablet-success)]/30 text-[var(--tablet-text)] text-xs font-semibold">
+                <div className="px-3 py-1.5 rounded-lg bg-[var(--tablet-success)]/24 text-[var(--tablet-text)] text-xs font-semibold">
                   {activeOrders.filter(o => normalizeStatus(o.status) === 'ready').length} Ready
                 </div>
               </div>
@@ -1445,9 +1445,9 @@ export default function TabletOrdersPage() {
                   </span>
                   <span className={clsx(
                     'px-2 py-1 rounded-full text-xs font-semibold uppercase',
-                    syncAttemptStatus === 'syncing' && 'bg-[var(--tablet-info)]/30 text-[var(--tablet-text)]',
-                    syncAttemptStatus === 'success' && 'bg-[var(--tablet-success)]/30 text-[var(--tablet-text)]',
-                    syncAttemptStatus === 'error' && 'bg-[var(--tablet-danger)]/30 text-[var(--tablet-text)]',
+                    syncAttemptStatus === 'syncing' && 'bg-[var(--tablet-info)]/20 text-[var(--tablet-text)]',
+                    syncAttemptStatus === 'success' && 'bg-[var(--tablet-success)]/20 text-[var(--tablet-text)]',
+                    syncAttemptStatus === 'error' && 'bg-[var(--tablet-danger)]/20 text-[var(--tablet-text)]',
                     syncAttemptStatus === 'idle' && 'bg-[var(--tablet-border)] text-[var(--tablet-muted-strong)]'
                   )}>
                     {syncAttemptStatus}
@@ -1457,14 +1457,14 @@ export default function TabletOrdersPage() {
                   <button
                     type="button"
                     onClick={retryQueueNow}
-                    className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[var(--tablet-info)]/30 border border-[var(--tablet-border)]"
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[var(--tablet-info)]/20 border border-[var(--tablet-border)] text-[var(--tablet-text)]"
                   >
                     Retry Now
                   </button>
                   <button
                     type="button"
                     onClick={clearFailedActions}
-                    className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[var(--tablet-danger)]/20 border border-[var(--tablet-border)]"
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[var(--tablet-danger)]/15 border border-[var(--tablet-border)] text-[var(--tablet-text)]"
                   >
                     Clear Failed
                   </button>
@@ -1626,7 +1626,7 @@ export default function TabletOrdersPage() {
                 <div className="flex flex-wrap gap-2 items-center">
                   <span className="text-xs text-[var(--tablet-muted)]">Showing:</span>
                   {searchQuery && (
-                    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-[var(--tablet-info)] text-white">
+                    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-[var(--tablet-info)]/25 text-[var(--tablet-text)] border border-[var(--tablet-border)]">
                       Search: "{searchQuery}"
                       <button onClick={() => setSearchQuery('')} className="ml-1">
                         <X className="h-3 w-3" />
@@ -1842,7 +1842,7 @@ export default function TabletOrdersPage() {
                           <button
                             disabled={busyId === selectedOrder.id}
                             onClick={() => setStatus(selectedOrder.id, 'ready')}
-                            className="h-14 rounded-full bg-[var(--tablet-success)] text-white font-semibold uppercase shadow-[0_2px_8px_rgba(0,0,0,0.3)] transition hover:brightness-110 active:scale-95 disabled:opacity-50 touch-manipulation"
+                            className="h-14 rounded-full bg-[var(--tablet-success)] text-[var(--tablet-text)] font-semibold uppercase shadow-[0_2px_8px_rgba(0,0,0,0.3)] transition hover:brightness-110 active:scale-95 disabled:opacity-50 touch-manipulation"
                           >
                             Ready for Pickup
                           </button>
@@ -1866,7 +1866,7 @@ export default function TabletOrdersPage() {
                                 setSelectedOrder(null);
                               }
                             }}
-                            className="h-14 rounded-full bg-[var(--tablet-success)] text-white font-semibold uppercase shadow-[0_2px_8px_rgba(0,0,0,0.3)] transition hover:brightness-110 active:scale-95 disabled:opacity-50 touch-manipulation"
+                            className="h-14 rounded-full bg-[var(--tablet-success)] text-[var(--tablet-text)] font-semibold uppercase shadow-[0_2px_8px_rgba(0,0,0,0.3)] transition hover:brightness-110 active:scale-95 disabled:opacity-50 touch-manipulation"
                           >
                             Complete Order
                           </button>
