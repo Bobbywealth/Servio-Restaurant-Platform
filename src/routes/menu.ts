@@ -285,7 +285,7 @@ router.get('/public/:slug', asyncHandler(async (req: Request, res: Response) => 
   const { slug } = req.params;
   const db = DatabaseService.getInstance().getDatabase();
 
-  const restaurantTableInfo = await db.all("PRAGMA table_info('restaurants')");
+  const restaurantTableInfo = await db.all("SELECT column_name AS name FROM information_schema.columns WHERE table_name = 'restaurants'");
   const availableRestaurantColumns = new Set(
     restaurantTableInfo
       .map((column: any) => String(column?.name || '').trim())
