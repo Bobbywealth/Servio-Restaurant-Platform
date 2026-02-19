@@ -9,7 +9,6 @@ import {
   Filter,
   X,
   AlertTriangle,
-  Eye,
   Calendar,
   ArrowUpDown,
   Zap,
@@ -1238,7 +1237,10 @@ export default function TabletOrdersPage() {
       <button
         key={o.id}
         type="button"
-        onClick={() => setSelectedOrder(o)}
+        onClick={() => {
+          setSelectedOrder(o);
+          setOrderDetailsOrder(o);
+        }}
         className={clsx(
           'w-full text-left rounded-xl border border-[var(--tablet-border)] p-4 sm:p-5 shadow-[0_2px_8px_rgba(0,0,0,0.3)] transition transform hover:brightness-110 hover:scale-[1.01] touch-manipulation',
           isSelected && 'bg-[color-mix(in_srgb,var(--tablet-info)_14%,var(--tablet-card))] border-[color-mix(in_srgb,var(--tablet-info)_50%,var(--tablet-border))] shadow-[0_4px_12px_rgba(64,84,122,0.2)]',
@@ -1316,18 +1318,6 @@ export default function TabletOrdersPage() {
             </div>
           )}
 
-          <div className="flex items-center gap-2">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setOrderDetailsOrder(o);
-              }}
-              className="flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-sm font-semibold bg-[var(--tablet-surface-alt)] border border-[var(--tablet-border)] hover:bg-[var(--tablet-border)] transition touch-manipulation"
-            >
-              <Eye className="h-4 w-4" />
-              View details
-            </button>
-          </div>
         </div>
       </button>
     );
@@ -1716,10 +1706,25 @@ export default function TabletOrdersPage() {
       <OrderDetailsModal
         order={orderDetailsOrder}
         onClose={() => setOrderDetailsOrder(null)}
-        onPrint={(orderId) => {
-          printOrder(orderId);
+        onConfirmOrder={(order) => {
+          acceptOrder(order);
           setOrderDetailsOrder(null);
         }}
+        onDeclineOrder={(order) => {
+          declineOrder(order);
+          setOrderDetailsOrder(null);
+        }}
+        onSetStatus={(orderId, status) => {
+          setStatus(orderId, status);
+          if (status === 'completed') {
+            setOrderDetailsOrder(null);
+          }
+        }}
+        onPrintOrder={(orderId) => {
+          printOrder(orderId);
+        }}
+        busyOrderId={busyId}
+        printingOrderId={printingOrderId}
         formatMoney={formatMoney}
       />
 
