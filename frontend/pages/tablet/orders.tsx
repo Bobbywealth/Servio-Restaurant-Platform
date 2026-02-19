@@ -148,7 +148,11 @@ function normalizeStatus(s: string | null | undefined) {
 }
 
 // Prep time countdown function
-function formatPrepTimeRemaining(prepMinutes: number | null | undefined, createdAt: string | null | undefined, now: number | null): { text: string; isOverdue: boolean; percentRemaining: number } | null {
+function formatPrepTimeRemaining(
+  prepMinutes: number | null | undefined,
+  createdAt: string | null | undefined,
+  now: number | null
+): { text: string; isOverdue: boolean; percentRemaining: number; overdueMinutes: number | null } | null {
   if (!prepMinutes || !createdAt || now === null) return null;
 
   const created = new Date(createdAt).getTime();
@@ -160,14 +164,21 @@ function formatPrepTimeRemaining(prepMinutes: number | null | undefined, created
   const percentRemaining = Math.max(0, Math.min(100, (remainingMs / totalMs) * 100));
 
   if (remainingMs <= 0) {
-    return { text: 'Overdue', isOverdue: true, percentRemaining: 0 };
+    const overdueMinutes = Math.ceil(Math.abs(remainingMs) / 60000);
+    return {
+      text: overdueMinutes > 0 ? `Overdue by ${overdueMinutes} min` : 'Overdue',
+      isOverdue: true,
+      percentRemaining: 0,
+      overdueMinutes
+    };
   }
 
   const minsRemaining = Math.ceil(remainingMs / 60000);
   return {
     text: `${minsRemaining}m`,
     isOverdue: false,
-    percentRemaining
+    percentRemaining,
+    overdueMinutes: null
   };
 }
 
@@ -1222,7 +1233,7 @@ export default function TabletOrdersPage() {
           'w-full text-left rounded-xl border border-[var(--tablet-border)] p-4 sm:p-5 shadow-[0_2px_8px_rgba(0,0,0,0.3)] transition transform hover:brightness-110 hover:scale-[1.01] touch-manipulation',
           isSelected && 'bg-[color-mix(in_srgb,var(--tablet-info)_35%,var(--tablet-card))] border-[var(--tablet-info)] shadow-[0_4px_12px_rgba(64,84,122,0.35)]',
           !isSelected && 'bg-[var(--tablet-card)]',
-          isOverdue && 'order-overdue'
+          isOverdue && 'border-l-4 border-l-[var(--tablet-danger)] pl-3 sm:pl-4'
         )}
       >
         <div className="flex items-center justify-between">
@@ -1237,10 +1248,11 @@ export default function TabletOrdersPage() {
             )}
             {isPreparing && prepTimeData && (
               <span className={clsx(
-                'text-sm font-semibold px-2.5 py-1.5 rounded-full tabular-nums',
+                'text-xs font-semibold px-2.5 py-1.5 rounded-full inline-flex items-center gap-1.5',
                 prepTimeColorClass,
                 prepWarningLevel === 'critical' && 'prep-time-critical'
               )}>
+                {prepTimeData.isOverdue && <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />}
                 {prepTimeData.text}
               </span>
             )}
@@ -1255,18 +1267,19 @@ export default function TabletOrdersPage() {
             <div className="text-lg font-bold text-[var(--tablet-text)] tabular-nums">{formatMoney(o.total_amount)}</div>
           </div>
 
-          <div className="flex items-center justify-between text-sm text-[var(--tablet-muted)]">
-            <div className="flex items-center gap-2">
-              <Clock className="h-4 w-4" />
-              <span className="tabular-nums">{timeStr}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span>{itemCount} item{itemCount !== 1 ? 's' : ''}</span>
-              {o.order_type && (
-                <span className="px-2.5 py-0.5 rounded text-sm bg-[var(--tablet-border)] tracking-wide">
-                  {o.order_type}
-                </span>
-              )}
+        {isPreparing && prepTimeData && (
+          <div className="mt-3">
+            <div className="h-2 rounded-full bg-[var(--tablet-border)] overflow-hidden">
+              <div
+                className={clsx(
+                  'h-full rounded-full prep-time-progress-bar',
+                  prepTimeData.isOverdue ? 'bg-[var(--tablet-muted)] opacity-60' :
+                  prepWarningLevel === 'critical' ? 'bg-[var(--tablet-danger)]' :
+                  prepWarningLevel === 'warning' ? 'bg-[var(--tablet-warning)]' :
+                  'bg-[var(--tablet-success)]'
+                )}
+                style={{ width: `${prepTimeData.isOverdue ? 100 : prepTimeData.percentRemaining}%` }}
+              />
             </div>
           </div>
 
