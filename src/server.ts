@@ -400,7 +400,15 @@ app.use((req, res, next) => {
   if (req.method !== 'GET') return next();
 
   // Skip caching for auth, timeclock, and other real-time endpoints
-  const skipCachePatterns = ['/auth', '/timeclock', '/socket.io', '/health', '/notifications', '/push'];
+  const skipCachePatterns = [
+    '/auth',
+    '/timeclock',
+    '/socket.io',
+    '/health',
+    '/notifications',
+    '/push',
+    '/menu/public'
+  ];
   if (skipCachePatterns.some(pattern => req.url.includes(pattern))) {
     return next();
   }
