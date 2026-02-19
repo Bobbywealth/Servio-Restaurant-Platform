@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
-import { Loader2 } from 'lucide-react';
+import { Loader2, WifiOff, ServerCrash, SearchX, AlertTriangle } from 'lucide-react';
 import { api } from '../../lib/api';
 import {
   OrderConfirmation,
@@ -72,21 +72,64 @@ export default function PublicProfile() {
   }
 
   if (menu.error || !menu.restaurant) {
+    const errorCode = menu.errorState?.code || 'unknown';
+
+    const errorConfig: Record<string, { icon: React.ReactNode; title: string; description: string; showRetry: boolean }> = {
+      restaurant_not_found: {
+        icon: <SearchX className="h-12 w-12 text-slate-400" />,
+        title: 'Restaurant not found',
+        description: 'This restaurant page may have moved or the link may be incorrect. Please check the URL and try again.',
+        showRetry: false,
+      },
+      restaurant_unavailable: {
+        icon: <ServerCrash className="h-12 w-12 text-orange-400" />,
+        title: 'Temporarily unavailable',
+        description: 'This restaurant\'s menu is temporarily unavailable. This is usually resolved quickly — please try again.',
+        showRetry: true,
+      },
+      connection_issue: {
+        icon: <WifiOff className="h-12 w-12 text-blue-400" />,
+        title: 'Connection problem',
+        description: 'Unable to reach the server. Please check your internet connection and try again.',
+        showRetry: true,
+      },
+      unknown: {
+        icon: <AlertTriangle className="h-12 w-12 text-amber-400" />,
+        title: 'Something went wrong',
+        description: 'An unexpected error occurred while loading the menu. Please try again.',
+        showRetry: true,
+      },
+    };
+
+    const config = errorConfig[errorCode] || errorConfig.unknown;
+
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-4 px-4 text-center">
-        <p className="font-bold text-red-600">{menu.error || 'Restaurant not found'}</p>
-        {menu.errorState?.code && (
-          <p className="text-sm text-slate-500">
-            Error code: <span className="font-mono">{menu.errorState.code}</span>
-          </p>
+      <div className="min-h-screen flex flex-col items-center justify-center gap-5 px-4 text-center bg-gradient-to-b from-slate-50 to-white">
+        <div className="rounded-full bg-slate-100 p-4">
+          {config.icon}
+        </div>
+        <div className="space-y-2 max-w-sm">
+          <h1 className="text-xl font-bold text-slate-800">{config.title}</h1>
+          <p className="text-sm text-slate-500 leading-relaxed">{config.description}</p>
+        </div>
+        {config.showRetry && (
+          <button
+            type="button"
+            onClick={menu.retryFetch}
+            className="inline-flex items-center rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 active:bg-blue-800"
+          >
+            Try again
+          </button>
         )}
-        <button
-          type="button"
-          onClick={menu.retryFetch}
-          className="inline-flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700"
-        >
-          Retry
-        </button>
+        {errorCode === 'restaurant_not_found' && (
+          <button
+            type="button"
+            onClick={() => router.push('/')}
+            className="inline-flex items-center rounded-lg bg-slate-100 px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-200"
+          >
+            Go to homepage
+          </button>
+        )}
       </div>
     );
   }
