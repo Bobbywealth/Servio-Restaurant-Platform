@@ -1231,7 +1231,7 @@ export default function TabletOrdersPage() {
         onClick={() => setSelectedOrder(o)}
         className={clsx(
           'w-full text-left rounded-xl border border-[var(--tablet-border)] p-4 sm:p-5 shadow-[0_2px_8px_rgba(0,0,0,0.3)] transition transform hover:brightness-110 hover:scale-[1.01] touch-manipulation',
-          isSelected && 'bg-[color-mix(in_srgb,var(--tablet-info)_35%,var(--tablet-card))] border-[var(--tablet-info)] shadow-[0_4px_12px_rgba(64,84,122,0.35)]',
+          isSelected && 'bg-[color-mix(in_srgb,var(--tablet-info)_14%,var(--tablet-card))] border-[color-mix(in_srgb,var(--tablet-info)_50%,var(--tablet-border))] shadow-[0_4px_12px_rgba(64,84,122,0.2)]',
           !isSelected && 'bg-[var(--tablet-card)]',
           isOverdue && 'border-l-4 border-l-[var(--tablet-danger)] pl-3 sm:pl-4'
         )}
