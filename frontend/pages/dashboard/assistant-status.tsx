@@ -262,6 +262,7 @@ export default function AssistantStatusPage() {
                   icon={RefreshCw}
                   onClick={() => fetchStatus(true)}
                   disabled={refreshing}
+                  className="min-h-[44px] min-w-[44px]"
                 >
                   {refreshing ? 'Refreshing...' : 'Refresh'}
                 </Button>
@@ -335,7 +336,8 @@ export default function AssistantStatusPage() {
                   </div>
 
                   {payload?.incidents.length ? (
-                    <div className="overflow-x-auto">
+                    <>
+                    <div className="hidden md:block overflow-x-auto">
                       <table className="min-w-full divide-y divide-surface-200 dark:divide-surface-700">
                         <thead className="bg-surface-50 dark:bg-surface-900/40">
                           <tr>
@@ -369,6 +371,27 @@ export default function AssistantStatusPage() {
                         </tbody>
                       </table>
                     </div>
+                    <div className="md:hidden divide-y divide-surface-200 dark:divide-surface-700">
+                      {payload.incidents.map((incident) => (
+                        <div key={incident.id} className="p-4 space-y-2">
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="font-medium text-surface-900 dark:text-surface-100">{incident.source}</p>
+                            <span
+                              className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${
+                                incident.severity === 'critical'
+                                  ? 'bg-servio-red-100 text-servio-red-700 dark:bg-servio-red-900/20 dark:text-servio-red-300'
+                                  : 'bg-amber-100 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300'
+                              }`}
+                            >
+                              {incident.severity}
+                            </span>
+                          </div>
+                          <p className="text-sm text-surface-700 dark:text-surface-300">{incident.message}</p>
+                          <p className="text-xs text-surface-500 dark:text-surface-400">{new Date(incident.timestamp).toLocaleString()}</p>
+                        </div>
+                      ))}
+                    </div>
+                    </>
                   ) : (
                     <div className="p-8">
                       <EmptyState

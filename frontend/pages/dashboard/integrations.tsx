@@ -229,20 +229,22 @@ export default function IntegrationsPage() {
           </div>
 
           {/* Search */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-surface-400 w-4 h-4" />
-            <input
-              type="text"
-              placeholder="Search integrations..."
-              className="input-field pl-10"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
+          <div className="sticky top-2 z-10 rounded-xl bg-white/95 dark:bg-surface-900/95 backdrop-blur p-3 border border-surface-200 dark:border-surface-700 sm:static sm:bg-transparent sm:border-0 sm:p-0">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-surface-400 w-4 h-4" />
+              <input
+                type="text"
+                placeholder="Search integrations..."
+                className="input-field pl-10 min-h-[44px]"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
           </div>
 
           {/* Integrations Table */}
           <div className="card overflow-hidden">
-            <div className="overflow-x-auto">
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-surface-200 dark:border-surface-700 bg-surface-50 dark:bg-surface-800/50">
@@ -271,7 +273,7 @@ export default function IntegrationsPage() {
                     >
                       {/* Status Column */}
                       <td className="py-4 px-4">
-                        <label className="relative inline-flex items-center cursor-pointer">
+                        <label className="relative inline-flex items-center justify-center cursor-pointer min-h-[44px] min-w-[44px]">
                           <input
                             type="checkbox"
                             className="sr-only"
@@ -385,7 +387,7 @@ export default function IntegrationsPage() {
                       <td className="py-4 px-4">
                         <div className="flex items-center justify-end space-x-2">
                           <button
-                            className="p-2 text-surface-400 hover:text-surface-600 dark:text-surface-500 dark:hover:text-surface-300"
+                            className="min-h-[44px] min-w-[44px] p-2 text-surface-400 hover:text-surface-600 dark:text-surface-500 dark:hover:text-surface-300"
                             title="More options"
                           >
                             <MoreVertical className="w-4 h-4" />
@@ -396,6 +398,44 @@ export default function IntegrationsPage() {
                   ))}
                 </tbody>
               </table>
+            </div>
+
+            <div className="md:hidden divide-y divide-surface-200 dark:divide-surface-700">
+              {filteredIntegrations.map((integration) => (
+                <div key={integration.id} className="p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      {getStatusIcon(integration.status)}
+                      <div>
+                        <p className="font-medium text-surface-900 dark:text-surface-100">{integration.name}</p>
+                        <p className="text-xs text-surface-500 dark:text-surface-400">{integration.apiType}</p>
+                      </div>
+                    </div>
+                    <label className="relative inline-flex items-center justify-center cursor-pointer min-h-[44px] min-w-[44px]">
+                      <input
+                        type="checkbox"
+                        className="sr-only"
+                        checked={integration.status === 'active'}
+                        onChange={() => toggleIntegrationStatus(integration.id)}
+                      />
+                      <div className={`w-11 h-6 rounded-full transition-colors ${integration.status === 'active' ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'}`}>
+                        <div className={`w-4 h-4 bg-white rounded-full shadow-sm transform transition-transform ${integration.status === 'active' ? 'translate-x-6' : 'translate-x-1'} mt-1`} />
+                      </div>
+                    </label>
+                  </div>
+                  <div className="space-y-1 text-xs text-surface-600 dark:text-surface-400">
+                    {integration.referenceId && <p><span className="font-semibold">Reference:</span> {integration.referenceId}</p>}
+                    {integration.restaurantKey && <p><span className="font-semibold">Restaurant Key:</span> {integration.restaurantKey}</p>}
+                    {integration.contactEmail && <p><span className="font-semibold">Contact:</span> {integration.contactEmail}</p>}
+                    {integration.endpoint && <p className="break-all"><span className="font-semibold">Endpoint:</span> {integration.endpoint}</p>}
+                  </div>
+                  <div className="flex justify-end">
+                    <button className="min-h-[44px] min-w-[44px] p-2 text-surface-400 hover:text-surface-600 dark:text-surface-500 dark:hover:text-surface-300" title="More options">
+                      <MoreVertical className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
 
             {/* Empty State */}
