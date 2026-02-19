@@ -7,6 +7,7 @@ import {
   Search,
   Filter,
   ChevronDown,
+  ChevronUp,
   ChevronRight,
   Edit3,
   Trash2,
@@ -153,6 +154,9 @@ const MenuManagement: React.FC = () => {
   const [modifierGroups, setModifierGroups] = useState<ModifierGroup[]>([]);
   const [modifierOptions, setModifierOptions] = useState<Record<string, ModifierOption[]>>({});
   const [expandedModifierGroups, setExpandedModifierGroups] = useState<Set<string>>(new Set());
+  const [expandedMobileItems, setExpandedMobileItems] = useState<Set<string>>(new Set());
+  const [mobileStep, setMobileStep] = useState<1 | 2 | 3>(1);
+  const [isTouchDevice, setIsTouchDevice] = useState(false);
   const [isCreatingItemModifier, setIsCreatingItemModifier] = useState(false);
   const [itemNewModifierGroup, setItemNewModifierGroup] = useState({
     name: '',
@@ -203,6 +207,28 @@ const MenuManagement: React.FC = () => {
     selectionType: 'single' as 'single' | 'multiple' | 'quantity'
   });
   const [newModifierOptionDrafts, setNewModifierOptionDrafts] = useState<Record<string, { name: string; description: string; priceModifier: string }>>({});
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const coarsePointer = window.matchMedia('(pointer: coarse)');
+    const touchCapable = window.matchMedia('(hover: none) and (pointer: coarse)');
+
+    const updateTouchState = () => {
+      setIsTouchDevice(coarsePointer.matches || touchCapable.matches || navigator.maxTouchPoints > 0);
+    };
+
+    updateTouchState();
+    coarsePointer.addEventListener('change', updateTouchState);
+    touchCapable.addEventListener('change', updateTouchState);
+
+    return () => {
+      coarsePointer.removeEventListener('change', updateTouchState);
+      touchCapable.removeEventListener('change', updateTouchState);
+    };
+  }, []);
+
+  const isMobileMode = isTouchDevice;
 
   // Load menu data
   const loadMenuData = useCallback(async (showSpinner = false) => {
@@ -324,6 +350,9 @@ const MenuManagement: React.FC = () => {
 
   const activeCategoryId = selectedCategory !== 'all' ? selectedCategory : categories[0]?.id || null;
   const activeCategory = activeCategoryId ? categories.find((c) => c.id === activeCategoryId) : null;
+  const effectiveEditorTab = isMobileMode
+    ? (mobileStep === 3 ? 'modifiers' : editorTab === 'modifiers' ? 'basics' : editorTab)
+    : editorTab;
 
   const cancelBasicsChanges = useCallback(() => {
     if (!editingItem) return;
@@ -414,8 +443,12 @@ const MenuManagement: React.FC = () => {
         return;
       }
       await openEditItemModal(item);
+      if (isMobileMode) {
+        setEditorTab('basics');
+        setMobileStep(2);
+      }
     },
-    [basicsDirty]
+    [basicsDirty, isMobileMode]
   );
 
   // Memoized helper functions to prevent re-renders in child components
@@ -481,6 +514,16 @@ const MenuManagement: React.FC = () => {
     void openEditItemModal(items[0]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeCategoryId, categories, loading, basicsDirty]);
+
+
+  useEffect(() => {
+    if (!isMobileMode) return;
+    if (selectedItemId && editingItem) {
+      setMobileStep((prev) => (prev === 1 ? 2 : prev));
+    } else {
+      setMobileStep(1);
+    }
+  }, [isMobileMode, selectedItemId, editingItem]);
 
   const loadModifierGroups = useCallback(async () => {
     try {
@@ -802,6 +845,24 @@ const MenuManagement: React.FC = () => {
       );
       toast.error('Failed to save item order');
     }
+  };
+
+  const handleMoveItem = (categoryId: string, itemId: string, direction: 'up' | 'down') => {
+    const category = categories.find((cat) => cat.id === categoryId);
+    if (!category) return;
+
+    const ordered = (category.items || [])
+      .slice()
+      .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+      .map((item) => item.id);
+    const currentIndex = ordered.indexOf(itemId);
+    if (currentIndex === -1) return;
+
+    const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+    if (targetIndex < 0 || targetIndex >= ordered.length) return;
+
+    const nextOrder = arrayMove(ordered, currentIndex, targetIndex);
+    handleReorderItems(categoryId, nextOrder);
   };
 
   const filterImageFiles = (files: File[]) => {
@@ -1765,28 +1826,31 @@ const MenuManagement: React.FC = () => {
           ) : (
             <div className="flex flex-col md:flex-row gap-3 lg:gap-4 xl:gap-6 h-full">
               {/* Category Sidebar - Collapsible on mobile */}
-              <CategorySidebar
-                categories={categories.map((c) => ({
-                  id: c.id,
-                  name: c.name,
-                  description: c.description,
-                  sort_order: c.sort_order,
-                  is_active: c.is_active,
-                  is_hidden: Boolean((c as any).is_hidden),
-                  item_count: c.item_count
-                }))}
-                selectedCategoryId={activeCategoryId}
-                onSelectCategory={(id) => {
-                  requestSelectCategory(id);
-                }}
-                onAddCategory={() => setShowAddCategoryModal(true)}
-                onToggleHidden={handleToggleCategoryHidden}
-                onReorderCategories={handleReorderCategories}
-                onDeleteCategory={handleDeleteCategory}
-              />
+              {(!isMobileMode || mobileStep === 1) && (
+                <CategorySidebar
+                  categories={categories.map((c) => ({
+                    id: c.id,
+                    name: c.name,
+                    description: c.description,
+                    sort_order: c.sort_order,
+                    is_active: c.is_active,
+                    is_hidden: Boolean((c as any).is_hidden),
+                    item_count: c.item_count
+                  }))}
+                  selectedCategoryId={activeCategoryId}
+                  onSelectCategory={(id) => {
+                    requestSelectCategory(id);
+                  }}
+                  onAddCategory={() => setShowAddCategoryModal(true)}
+                  onToggleHidden={handleToggleCategoryHidden}
+                  onReorderCategories={handleReorderCategories}
+                  onDeleteCategory={handleDeleteCategory}
+                />
+              )}
 
               {/* Middle pane: Items */}
-              <div className="flex-1 min-w-0 lg:min-w-[280px] bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 flex flex-col">
+              {(!isMobileMode || mobileStep === 1) && (
+                <div className="flex-1 min-w-0 lg:min-w-[280px] bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 flex flex-col">
                 <div className="p-3 sm:p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between gap-2 sm:gap-3 shrink-0">
                   <div className="min-w-0 flex-1">
                     <div className="text-base sm:text-sm font-bold text-gray-900 dark:text-white truncate">
@@ -1836,48 +1900,116 @@ const MenuManagement: React.FC = () => {
                         </div>
                       );
                     }
+                    const orderedItems = items
+                      .slice()
+                      .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+
                     return (
                       <div className="flex-1 overflow-auto -mx-3 sm:mx-0 max-h-[calc(100vh-320px)] sm:max-h-[calc(100vh-300px)]">
-                        <table className="w-full text-sm min-w-[400px] sm:min-w-0">
-                          <thead className="sticky top-0 bg-gray-50 dark:bg-gray-900/40 z-10">
-                            <tr className="text-left text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                              <th className="px-3 sm:px-4 py-3">Item</th>
-                              <th className="hidden sm:table-cell px-4 py-3">Price</th>
-                              <th className="px-3 sm:px-4 py-3">Status</th>
-                              <th className="hidden md:table-cell px-4 py-3">Modifiers</th>
-                              <th className="px-3 sm:px-4 py-3 text-right">Actions</th>
-                            </tr>
-                          </thead>
-                          <DndContext
-                            sensors={itemTableSensors}
-                            onDragEnd={(event) => {
-                              if (searchTerm.trim()) return; // avoid surprising reorder while filtered
-                              const { active, over } = event;
-                              if (!over) return;
-                              const activeId = String(active.id);
-                              const overId = String(over.id);
-                              if (activeId === overId) return;
-                              const ordered = items.slice().sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
-                              const ids = ordered.map((i) => String(i.id));
-                              const oldIndex = ids.indexOf(activeId);
-                              const newIndex = ids.indexOf(overId);
-                              if (oldIndex === -1 || newIndex === -1) return;
-                              const next = arrayMove(ids, oldIndex, newIndex);
-                              handleReorderItems(activeCategory.id, next);
-                            }}
-                          >
-                            <SortableContext
-                              items={items
-                                .slice()
-                                .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
-                                .map((i) => String(i.id))}
-                              strategy={verticalListSortingStrategy}
+                        {isMobileMode ? (
+                          <div className="space-y-2 p-3">
+                            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-900/20 dark:text-amber-200">
+                              Desktop drag-and-drop is disabled on touch devices. Use the move up/down actions in each card.
+                            </div>
+                            {orderedItems.map((item, index) => {
+                              const expanded = expandedMobileItems.has(item.id);
+                              const itemPrice = Number(item.fromPrice ?? item.price ?? 0);
+                              return (
+                                <div key={item.id} className="rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
+                                  <button
+                                    type="button"
+                                    className="w-full p-3 flex items-start justify-between gap-3 text-left"
+                                    onClick={() => {
+                                      setExpandedMobileItems((prev) => {
+                                        const next = new Set(prev);
+                                        if (next.has(item.id)) next.delete(item.id);
+                                        else next.add(item.id);
+                                        return next;
+                                      });
+                                    }}
+                                  >
+                                    <div className="min-w-0">
+                                      <div className="font-semibold text-gray-900 dark:text-white truncate">{item.name}</div>
+                                      <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                        {Array.isArray(item.sizes) && item.sizes.length > 0 ? `From ${formatMoney(itemPrice)}` : formatMoney(itemPrice)}
+                                      </div>
+                                    </div>
+                                    {expanded ? <ChevronUp className="h-4 w-4 text-gray-500" /> : <ChevronDown className="h-4 w-4 text-gray-500" />}
+                                  </button>
+
+                                  {expanded ? (
+                                    <div className="px-3 pb-3 space-y-2">
+                                      <div className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2">
+                                        {item.description || 'No description'}
+                                      </div>
+                                      <div className="text-xs font-medium text-gray-600 dark:text-gray-300">
+                                        {modifierSummaryForItem(item)}
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <button
+                                          type="button"
+                                          className="px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-semibold disabled:opacity-40 dark:border-gray-600"
+                                          disabled={index === 0 || Boolean(searchTerm.trim())}
+                                          onClick={() => handleMoveItem(activeCategory.id, item.id, 'up')}
+                                        >
+                                          Move up
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-semibold disabled:opacity-40 dark:border-gray-600"
+                                          disabled={index === orderedItems.length - 1 || Boolean(searchTerm.trim())}
+                                          onClick={() => handleMoveItem(activeCategory.id, item.id, 'down')}
+                                        >
+                                          Move down
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="ml-auto px-3 py-1.5 rounded-lg bg-red-600 text-white text-xs font-semibold"
+                                          onClick={() => requestSelectItem(item)}
+                                        >
+                                          Edit
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ) : null}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <table className="w-full text-sm min-w-[400px] sm:min-w-0">
+                            <thead className="sticky top-0 bg-gray-50 dark:bg-gray-900/40 z-10">
+                              <tr className="text-left text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                                <th className="px-3 sm:px-4 py-3">Item</th>
+                                <th className="hidden sm:table-cell px-4 py-3">Price</th>
+                                <th className="px-3 sm:px-4 py-3">Status</th>
+                                <th className="hidden md:table-cell px-4 py-3">Modifiers</th>
+                                <th className="px-3 sm:px-4 py-3 text-right">Actions</th>
+                              </tr>
+                            </thead>
+                            <DndContext
+                              sensors={itemTableSensors}
+                              onDragEnd={(event) => {
+                                if (searchTerm.trim()) return;
+                                const { active, over } = event;
+                                if (!over) return;
+                                const activeId = String(active.id);
+                                const overId = String(over.id);
+                                if (activeId === overId) return;
+                                const ids = orderedItems.map((i) => String(i.id));
+                                const oldIndex = ids.indexOf(activeId);
+                                const newIndex = ids.indexOf(overId);
+                                if (oldIndex === -1 || newIndex === -1) return;
+                                const next = arrayMove(ids, oldIndex, newIndex);
+                                handleReorderItems(activeCategory.id, next);
+                              }}
                             >
-                              <tbody>
-                                {items
-                                  .slice()
-                                  .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
-                                  .map((item) => (
+                              <SortableContext
+                                items={orderedItems.map((i) => String(i.id))}
+                                strategy={verticalListSortingStrategy}
+                              >
+                                <tbody>
+                                  {orderedItems.map((item, index) => (
                                     <SortableItemTableRow
                                       key={item.id}
                                       item={item}
@@ -1889,12 +2021,18 @@ const MenuManagement: React.FC = () => {
                                       isDeleting={deletingItemId === item.id}
                                       modifierSummary={modifierSummaryForItem(item)}
                                       formatMoney={formatMoney}
+                                      showExplicitReorder={false}
+                                      canMoveUp={index > 0}
+                                      canMoveDown={index < orderedItems.length - 1}
+                                      onMoveUp={() => handleMoveItem(activeCategory.id, item.id, 'up')}
+                                      onMoveDown={() => handleMoveItem(activeCategory.id, item.id, 'down')}
                                     />
                                   ))}
-                              </tbody>
-                            </SortableContext>
-                          </DndContext>
-                        </table>
+                                </tbody>
+                              </SortableContext>
+                            </DndContext>
+                          </table>
+                        )}
                         {searchTerm.trim() ? (
                           <div className="px-4 py-2 text-xs text-gray-500 dark:text-gray-400">
                             Reordering is disabled while searching.
@@ -1904,11 +2042,12 @@ const MenuManagement: React.FC = () => {
                     );
                   })()
                 )}
-              </div>
+                </div>
+              )}
 
               {/* Right pane: Item editor - Only shows when item selected */}
               <AnimatePresence>
-                {editingItem && selectedItemId && (
+                {editingItem && selectedItemId && (!isMobileMode || mobileStep > 1) && (
                   <motion.div
                     initial={{ opacity: 0, x: 20 }}
                     animate={{ opacity: 1, x: 0 }}
@@ -1925,6 +2064,37 @@ const MenuManagement: React.FC = () => {
                             <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
                               {activeCategory?.name ? `Category: ${activeCategory.name}` : ''}
                             </div>
+                            {isMobileMode ? (
+                              <div className="mt-2 flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  className="px-2 py-1 rounded-md border border-gray-200 text-xs font-semibold dark:border-gray-600"
+                                  onClick={() => setMobileStep(1)}
+                                >
+                                  Back to list
+                                </button>
+                                {mobileStep === 2 ? (
+                                  <button
+                                    type="button"
+                                    className="px-2 py-1 rounded-md bg-red-600 text-white text-xs font-semibold"
+                                    onClick={() => {
+                                      setEditorTab('modifiers');
+                                      setMobileStep(3);
+                                    }}
+                                  >
+                                    Modifiers & options
+                                  </button>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    className="px-2 py-1 rounded-md border border-gray-200 text-xs font-semibold dark:border-gray-600"
+                                    onClick={() => setMobileStep(2)}
+                                  >
+                                    Item details
+                                  </button>
+                                )}
+                              </div>
+                            ) : null}
                           </div>
                           <div className="flex items-center gap-1">
                             <button
@@ -1943,6 +2113,7 @@ const MenuManagement: React.FC = () => {
                                 editorClosedByUserRef.current = true;
                                 setSelectedItemId(null);
                                 setEditingItem(null);
+                                setMobileStep(1);
                               }}
                               title="Close editor"
                             >
@@ -1951,37 +2122,42 @@ const MenuManagement: React.FC = () => {
                           </div>
                         </div>
 
-                      {/* Editor Tabs - Scrollable on mobile */}
-                      <div className="mt-3 -mx-3 sm:mx-0 px-3 sm:px-0 overflow-x-auto scrollbar-hide">
-                        <div className="flex items-center gap-1.5 sm:gap-2 min-w-max sm:min-w-0">
-                          {(['basics', 'availability', 'modifiers', 'preview'] as const).map((tab) => (
-                            <button
-                              key={tab}
-                              type="button"
-                              className={clsx(
-                                'rounded-lg px-2.5 sm:px-3 py-2 text-xs sm:text-sm font-bold whitespace-nowrap min-h-[36px] sm:min-h-[40px] touch-manipulation',
-                                editorTab === tab
-                                  ? 'bg-red-600 text-white'
-                                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200 active:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600'
-                              )}
-                              onClick={() => setEditorTab(tab)}
-                            >
-                              {tab === 'basics'
-                                ? 'Basics'
-                                : tab === 'availability'
-                                  ? 'Avail.'
-                                  : tab === 'modifiers'
-                                    ? 'Mods'
-                                    : 'Preview'}
-                            </button>
-                          ))}
+                      {isMobileMode ? (
+                        <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800 dark:border-blue-900/50 dark:bg-blue-900/20 dark:text-blue-200">
+                          Step {mobileStep} of 3 · Use simplified mobile actions for item details and modifiers.
                         </div>
-                      </div>
+                      ) : (
+                        <div className="mt-3 -mx-3 sm:mx-0 px-3 sm:px-0 overflow-x-auto scrollbar-hide">
+                          <div className="flex items-center gap-1.5 sm:gap-2 min-w-max sm:min-w-0">
+                            {(['basics', 'availability', 'modifiers', 'preview'] as const).map((tab) => (
+                              <button
+                                key={tab}
+                                type="button"
+                                className={clsx(
+                                  'rounded-lg px-2.5 sm:px-3 py-2 text-xs sm:text-sm font-bold whitespace-nowrap min-h-[36px] sm:min-h-[40px] touch-manipulation',
+                                  effectiveEditorTab === tab
+                                    ? 'bg-red-600 text-white'
+                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200 active:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600'
+                                )}
+                                onClick={() => setEditorTab(tab)}
+                              >
+                                {tab === 'basics'
+                                  ? 'Basics'
+                                  : tab === 'availability'
+                                    ? 'Avail.'
+                                    : tab === 'modifiers'
+                                      ? 'Mods'
+                                      : 'Preview'}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* Editor Content - Scrollable */}
                     <div className="p-3 sm:p-4 overflow-auto flex-1">
-                      {editorTab === 'basics' ? (
+                      {effectiveEditorTab === 'basics' ? (
                         <div className="space-y-4">
                           <div>
                             <label className="block text-sm font-bold text-gray-700 dark:text-gray-300">Name</label>
@@ -2216,7 +2392,7 @@ const MenuManagement: React.FC = () => {
                             </button>
                           </div>
                         </div>
-                      ) : editorTab === 'availability' ? (
+                      ) : effectiveEditorTab === 'availability' ? (
                         <div className="space-y-4">
                           <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
                             <div className="flex items-center justify-between">
@@ -2239,8 +2415,13 @@ const MenuManagement: React.FC = () => {
                             </div>
                           </div>
                         </div>
-                      ) : editorTab === 'modifiers' ? (
+                      ) : effectiveEditorTab === 'modifiers' ? (
                         <div className="space-y-6">
+                          {isMobileMode ? (
+                            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-900/20 dark:text-amber-200">
+                              Drag-to-sort controls are desktop only in this section. Use the simplified add/remove and save actions below.
+                            </div>
+                          ) : null}
                           {/* Create Item-Specific Modifier Section */}
                           <div className="card border-l-4 border-l-primary-500">
                             <div className="flex items-center justify-between mb-4">
@@ -3627,7 +3808,12 @@ const SortableItemTableRow = memo(function SortableItemTableRow({
   onDelete,
   isDeleting,
   modifierSummary,
-  formatMoney
+  formatMoney,
+  showExplicitReorder,
+  canMoveUp,
+  canMoveDown,
+  onMoveUp,
+  onMoveDown
 }: {
   item: MenuItem;
   selected: boolean;
@@ -3638,6 +3824,11 @@ const SortableItemTableRow = memo(function SortableItemTableRow({
   isDeleting: boolean;
   modifierSummary: string;
   formatMoney: (v: number) => string;
+  showExplicitReorder: boolean;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: String(item.id)
@@ -3661,24 +3852,26 @@ const SortableItemTableRow = memo(function SortableItemTableRow({
       )}
       onClick={onSelect}
     >
-      {/* Item info cell - mobile optimized with touch-friendly drag handle */}
+      {/* Item info cell */}
       <td className="px-3 sm:px-4 py-3">
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-          <button
-            type="button"
-            className={clsx(
-              'shrink-0 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 p-1.5 min-h-[44px] min-w-[44px] flex items-center justify-center touch-manipulation',
-              disableDrag && 'opacity-40 cursor-not-allowed'
-            )}
-            onClick={(e) => e.stopPropagation()}
-            disabled={disableDrag}
-            {...(!disableDrag ? attributes : {})}
-            {...(!disableDrag ? listeners : {})}
-            aria-label="Drag to reorder"
-            title={disableDrag ? 'Reorder disabled while searching' : 'Drag to reorder'}
-          >
-            <GripVertical className="h-5 w-5" />
-          </button>
+          {!showExplicitReorder ? (
+            <button
+              type="button"
+              className={clsx(
+                'shrink-0 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 p-1.5 min-h-[44px] min-w-[44px] flex items-center justify-center touch-manipulation',
+                disableDrag && 'opacity-40 cursor-not-allowed'
+              )}
+              onClick={(e) => e.stopPropagation()}
+              disabled={disableDrag}
+              {...(!disableDrag ? attributes : {})}
+              {...(!disableDrag ? listeners : {})}
+              aria-label="Drag to reorder"
+              title={disableDrag ? 'Reorder disabled while searching' : 'Drag to reorder'}
+            >
+              <GripVertical className="h-5 w-5" />
+            </button>
+          ) : null}
 
           <div className="h-12 w-12 sm:h-14 sm:w-14 rounded-lg bg-gray-100 dark:bg-gray-700 overflow-hidden shrink-0">
             {thumb ? (
@@ -3730,6 +3923,33 @@ const SortableItemTableRow = memo(function SortableItemTableRow({
       {/* Actions - touch-friendly buttons */}
       <td className="px-3 sm:px-4 py-3 text-right">
         <div className="inline-flex items-center gap-2">
+          {showExplicitReorder ? (
+            <>
+              <button
+                type="button"
+                className="inline-flex items-center justify-center rounded-lg border border-gray-200 px-2 py-2 text-xs font-semibold disabled:opacity-40 dark:border-gray-600"
+                disabled={!canMoveUp || disableDrag}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onMoveUp();
+                }}
+              >
+                Up
+              </button>
+              <button
+                type="button"
+                className="inline-flex items-center justify-center rounded-lg border border-gray-200 px-2 py-2 text-xs font-semibold disabled:opacity-40 dark:border-gray-600"
+                disabled={!canMoveDown || disableDrag}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onMoveDown();
+                }}
+              >
+                Down
+              </button>
+            </>
+          ) : null}
+
           <button
             type="button"
             className="inline-flex items-center justify-center gap-1 sm:gap-2 rounded-lg bg-gray-100 hover:bg-gray-200 active:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 px-3 sm:px-3 py-2 font-bold text-gray-800 dark:text-gray-100 min-h-[40px] touch-manipulation"
