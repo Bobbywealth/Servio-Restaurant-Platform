@@ -152,43 +152,57 @@ export class DatabaseService {
   }
 
   private async connect(): Promise<void> {
-    try {
-      const databaseUrl = process.env.DATABASE_URL;
+    const databaseUrl = process.env.DATABASE_URL;
 
-      if (!databaseUrl || !databaseUrl.startsWith('postgres')) {
-        throw new Error('DATABASE_URL is required and must be a PostgreSQL connection string');
+    if (!databaseUrl || !databaseUrl.startsWith('postgres')) {
+      throw new Error('DATABASE_URL is required and must be a PostgreSQL connection string');
+    }
+
+    const ssl =
+      process.env.DATABASE_SSL === 'true'
+        ? { rejectUnauthorized: false }
+        : undefined;
+
+    // OPTIMIZED CONNECTION POOL CONFIGURATION
+    this.pgPool = new Pool({
+      connectionString: databaseUrl,
+      ssl,
+      // CONNECTION POOL OPTIMIZATION
+      max: 20,                    // Maximum pool size
+      min: 2,                     // Minimum connections
+      idleTimeoutMillis: 30000,   // Close idle connections after 30s
+      connectionTimeoutMillis: 10000, // Connection timeout (increased for Render cold starts)
+      // PERFORMANCE TUNING
+      query_timeout: 10000,       // 10s query timeout
+      statement_timeout: 15000,   // 15s statement timeout
+      idle_in_transaction_session_timeout: 10000 // 10s idle transaction timeout
+    });
+
+    // Retry logic for database connection (handles Render cold starts and temporary network issues)
+    const maxRetries = 5;
+    const retryDelayMs = 2000;
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        // sanity query
+        await this.pgPool.query('SELECT 1 as ok');
+        logger.info('Connected to PostgreSQL database via DATABASE_URL');
+
+        // Apply optimizations
+        await this.optimizeDatabase();
+        return; // Success - exit function
+      } catch (error: any) {
+        const isLastAttempt = attempt === maxRetries;
+        const errorMessage = error?.message || String(error);
+        
+        if (isLastAttempt) {
+          logger.error(`Failed to connect to database after ${maxRetries} attempts:`, errorMessage);
+          throw error;
+        }
+        
+        logger.warn(`Database connection attempt ${attempt}/${maxRetries} failed: ${errorMessage}. Retrying in ${retryDelayMs}ms...`);
+        await new Promise(resolve => setTimeout(resolve, retryDelayMs));
       }
-
-      const ssl =
-        process.env.DATABASE_SSL === 'true'
-          ? { rejectUnauthorized: false }
-          : undefined;
-
-      // OPTIMIZED CONNECTION POOL CONFIGURATION
-      this.pgPool = new Pool({
-        connectionString: databaseUrl,
-        ssl,
-        // CONNECTION POOL OPTIMIZATION
-        max: 20,                    // Maximum pool size
-        min: 2,                     // Minimum connections
-        idleTimeoutMillis: 30000,   // Close idle connections after 30s
-        connectionTimeoutMillis: 5000, // Connection timeout
-        // PERFORMANCE TUNING
-        query_timeout: 10000,       // 10s query timeout
-        statement_timeout: 15000,   // 15s statement timeout
-        idle_in_transaction_session_timeout: 10000 // 10s idle transaction timeout
-      });
-
-      // sanity query
-      await this.pgPool.query('SELECT 1 as ok');
-
-      logger.info('Connected to PostgreSQL database via DATABASE_URL');
-
-      // Apply optimizations
-      await this.optimizeDatabase();
-    } catch (error) {
-      logger.error('Failed to connect to database:', error);
-      throw error;
     }
   }
 
