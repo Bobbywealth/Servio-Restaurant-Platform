@@ -692,14 +692,41 @@ router.delete('/categories/:id', asyncHandler(async (req: Request, res: Response
     return res.status(404).json({ success: false, error: { message: 'Category not found' } });
   }
 
-  // Check if there are menu items referencing this category
-  const itemsCount = await db.get('SELECT COUNT(*) as count FROM menu_items WHERE category_id = ?', [id]);
-  if (itemsCount && itemsCount.count > 0) {
-    return res.status(400).json({
-      success: false,
-      error: { message: `Cannot delete category with ${itemsCount.count} menu items. Please move or delete the items first.` }
-    });
+  const categoryItems = await db.all<{ id: string; images: string }>(
+    'SELECT id, images FROM menu_items WHERE category_id = ? AND restaurant_id = ?',
+    [id, restaurantId]
+  );
+
+  for (const item of categoryItems) {
+    const itemImages: string[] = JSON.parse(item.images || '[]');
+    for (const img of itemImages) {
+      try {
+        const relativeUploadsPath = img.replace(/^\/?uploads\//, '');
+        const filePath = img.startsWith('/uploads/') || img.startsWith('uploads/')
+          ? getUploadsPath(relativeUploadsPath)
+          : (path.isAbsolute(img) ? img : path.join(process.cwd(), img));
+        await fs.unlink(filePath);
+      } catch (err: any) {
+        if (err?.code !== 'ENOENT') {
+          logger.warn(`Failed to delete image file on category delete: ${img}`, err);
+        }
+      }
+    }
   }
+
+  const categoryItemIds = categoryItems.map((item) => item.id);
+  if (categoryItemIds.length > 0) {
+    const itemPlaceholders = categoryItemIds.map(() => '?').join(', ');
+
+    await db.run(`UPDATE order_items SET menu_item_id = NULL WHERE menu_item_id IN (${itemPlaceholders})`, categoryItemIds);
+    await db.run(`DELETE FROM delivery_platform_menu_mappings WHERE menu_item_id IN (${itemPlaceholders})`, categoryItemIds);
+    await db.run(`DELETE FROM item_sizes WHERE item_id IN (${itemPlaceholders})`, categoryItemIds);
+    await db.run(`DELETE FROM item_modifier_groups WHERE item_id IN (${itemPlaceholders})`, categoryItemIds);
+    await db.run(`DELETE FROM menu_item_modifiers WHERE menu_item_id IN (${itemPlaceholders})`, categoryItemIds);
+    await db.run(`DELETE FROM menu_items WHERE id IN (${itemPlaceholders}) AND restaurant_id = ?`, [...categoryItemIds, restaurantId]);
+  }
+
+  await db.run('DELETE FROM category_modifier_groups WHERE category_id = ?', [id]);
 
   // Delete the category
   await db.run('DELETE FROM menu_categories WHERE id = ? AND restaurant_id = ?', [id, restaurantId]);
@@ -1220,6 +1247,7 @@ router.delete('/items/:id', asyncHandler(async (req: Request, res: Response) => 
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const restaurantId = req.user?.restaurantId;
   const db = DatabaseService.getInstance().getDatabase();
+  if (!restaurantId) throw new UnauthorizedError();
 
   const item = await db.get('SELECT id, name, images FROM menu_items WHERE id = ? AND restaurant_id = ?', [id, restaurantId]);
   if (!item) {
@@ -1246,6 +1274,7 @@ router.delete('/items/:id', asyncHandler(async (req: Request, res: Response) => 
   }
 
   await db.run('UPDATE order_items SET menu_item_id = NULL WHERE menu_item_id = ?', [id]);
+  await db.run('DELETE FROM delivery_platform_menu_mappings WHERE menu_item_id = ?', [id]);
   await db.run('DELETE FROM item_sizes WHERE item_id = ?', [id]);
   await db.run('DELETE FROM item_modifier_groups WHERE item_id = ?', [id]);
   await db.run('DELETE FROM menu_item_modifiers WHERE menu_item_id = ?', [id]);
