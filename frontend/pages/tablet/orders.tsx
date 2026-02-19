@@ -105,6 +105,12 @@ type PendingAction =
       permanentFailure?: boolean;
     };
 
+type EnqueueAction = PendingAction extends infer Action
+  ? Action extends PendingAction
+    ? Omit<Action, 'idempotencyKey' | 'retryCount' | 'lastError'>
+    : never
+  : never;
+
 async function apiGet<T>(path: string): Promise<T> {
   const res = await api.get(path);
   return res.data as T;
@@ -550,7 +556,7 @@ export default function TabletOrdersPage() {
     });
   }, []);
 
-  const enqueueAction = (action: Omit<PendingAction, 'idempotencyKey' | 'retryCount' | 'lastError'>) => {
+  const enqueueAction = (action: EnqueueAction) => {
     const current = loadActionQueue();
     const idempotencyKey = action.type === 'status'
       ? `status:${action.orderId}:${action.payload.status.toLowerCase()}`
@@ -1238,7 +1244,7 @@ export default function TabletOrdersPage() {
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className={clsx('text-sm font-semibold tracking-wide px-2.5 py-1.5 rounded-full', statusBadgeClasses)}>
+            <span className={clsx('text-sm font-semibold tracking-wide px-2.5 py-1.5 rounded-full', cardStatusBadgeClasses)}>
               {statusLabel}
             </span>
           </div>
@@ -1282,6 +1288,7 @@ export default function TabletOrdersPage() {
               />
             </div>
           </div>
+        )}
 
           {isPreparing && prepTimeData && !prepTimeData.isOverdue && (
             <div>
@@ -1338,20 +1345,6 @@ export default function TabletOrdersPage() {
     return map;
   }, [actionQueue]);
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    if (receivedOrders.length > 0 && soundEnabled) {
-      if (alarmIntervalRef.current === null) {
-        playAlarmTone();
-        alarmIntervalRef.current = window.setInterval(() => {
-          playAlarmTone();
-        }, 2500);
-      }
-    } else if (alarmIntervalRef.current !== null) {
-      window.clearInterval(alarmIntervalRef.current);
-      alarmIntervalRef.current = null;
-    }
-  }, [receivedOrders.length, soundEnabled]);
 
   useEffect(() => {
     // Avoid printing everything on initial load; mark existing active orders as already-seen.
@@ -1911,130 +1904,7 @@ export default function TabletOrdersPage() {
         formatMoney={formatMoney}
       />
 
-      {false && (
-        <div className="no-print fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="bg-[var(--tablet-surface)] rounded-3xl shadow-[0_12px_30px_rgba(0,0,0,0.5)] w-full max-w-2xl max-h-[90vh] overflow-hidden border border-[var(--tablet-border)] flex flex-col">
-            {/* Modal Header */}
-            <div className="px-6 py-4 border-b border-[var(--tablet-border)] flex items-center justify-between">
-              <div>
-                <h3 className="text-xl font-semibold">
-                  Order #{orderDetailsOrder.external_id ? orderDetailsOrder.external_id.slice(-4).toUpperCase() : orderDetailsOrder.id.slice(-4).toUpperCase()}
-                </h3>
-                <p className="text-sm text-[var(--tablet-muted)]">
-                  {orderDetailsOrder.customer_name || 'Guest'} • {getChannelIcon(orderDetailsOrder.channel)} {orderDetailsOrder.channel || 'POS'}
-                </p>
-              </div>
-              <button
-                onClick={() => setOrderDetailsOrder(null)}
-                className="p-2 rounded-full hover:bg-[var(--tablet-border)] transition"
-              >
-                <X className="h-6 w-6 text-[var(--tablet-muted)]" />
-              </button>
-            </div>
 
-            {/* Modal Content - Scrollable */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-6">
-              {/* Order Info */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                <div className="bg-[var(--tablet-bg)] rounded-xl p-3">
-                  <div className="text-xs text-[var(--tablet-muted)] uppercase tracking-wide">Status</div>
-                  <div className="mt-1">
-                    <span className={clsx('px-2 py-1 rounded-full text-xs font-semibold', statusBadgeClassesForStatus(normalizeStatus(orderDetailsOrder.status)))}>
-                      {normalizeStatus(orderDetailsOrder.status)}
-                    </span>
-                  </div>
-                </div>
-                <div className="bg-[var(--tablet-bg)] rounded-xl p-3">
-                  <div className="text-xs text-[var(--tablet-muted)] uppercase tracking-wide">Type</div>
-                  <div className="mt-1 font-semibold">{orderDetailsOrder.order_type || 'Pickup'}</div>
-                </div>
-                <div className="bg-[var(--tablet-bg)] rounded-xl p-3">
-                  <div className="text-xs text-[var(--tablet-muted)] uppercase tracking-wide">Time</div>
-                  <div className="mt-1 font-semibold">
-                    {orderDetailsOrder.pickup_time
-                      ? new Date(orderDetailsOrder.pickup_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                      : 'ASAP'}
-                  </div>
-                </div>
-                <div className="bg-[var(--tablet-bg)] rounded-xl p-3">
-                  <div className="text-xs text-[var(--tablet-muted)] uppercase tracking-wide">Total</div>
-                  <div className="mt-1 text-lg font-semibold">{formatMoney(orderDetailsOrder.total_amount)}</div>
-                </div>
-              </div>
-
-              {/* Customer Info */}
-              <div className="bg-[var(--tablet-bg)] rounded-xl p-4">
-                <h4 className="text-sm font-semibold uppercase tracking-wide text-[var(--tablet-muted)] mb-3">Customer</h4>
-                <div className="flex items-center gap-4">
-                  <div className="h-12 w-12 rounded-full bg-[var(--tablet-border-strong)] flex items-center justify-center text-lg font-semibold">
-                    {(orderDetailsOrder.customer_name || 'G')[0]}
-                  </div>
-                  <div>
-                    <div className="font-semibold">{orderDetailsOrder.customer_name || 'Guest'}</div>
-                    <div className="text-sm text-[var(--tablet-muted)]">{orderDetailsOrder.customer_phone || 'No contact provided'}</div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Items */}
-              <div>
-                <h4 className="text-sm font-semibold uppercase tracking-wide text-[var(--tablet-muted)] mb-3">Items ({orderDetailsOrder.items?.length || 0})</h4>
-                <div className="space-y-3">
-                  {(orderDetailsOrder.items || []).map((item, idx) => (
-                    <div key={idx} className="flex items-center gap-4 p-3 bg-[var(--tablet-bg)] rounded-xl">
-                      <div className="h-10 w-10 rounded-lg bg-[var(--tablet-border-strong)] flex items-center justify-center font-semibold text-sm">
-                        {item.quantity || 1}
-                      </div>
-                      <div className="flex-1">
-                        <div className="font-semibold">{item.name}</div>
-                        <div className="text-sm text-[var(--tablet-muted)]">
-                          {formatMoney(item.unit_price || item.price || 0)} each
-                        </div>
-                      </div>
-                      <div className="font-semibold">
-                        {formatMoney((item.unit_price || item.price || 0) * (item.quantity || 1))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Special Instructions */}
-              {orderDetailsOrder.special_instructions && (
-                <div className="bg-[var(--tablet-warning)]/10 border border-[var(--tablet-warning)]/30 rounded-xl p-4">
-                  <div className="flex items-start gap-3">
-                    <AlertTriangle className="h-5 w-5 text-[var(--tablet-warning)] flex-shrink-0 mt-0.5" />
-                    <div>
-                      <div className="font-semibold text-[var(--tablet-warning)] mb-1">Special Instructions</div>
-                      <div className="text-sm">{orderDetailsOrder.special_instructions}</div>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Modal Footer */}
-            <div className="px-6 py-4 border-t border-[var(--tablet-border)] flex gap-3">
-              <button
-                onClick={() => {
-                  printOrder(orderDetailsOrder.id);
-                  setOrderDetailsOrder(null);
-                }}
-                className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-[var(--tablet-border-strong)] font-semibold uppercase transition hover:brightness-110"
-              >
-                <Printer className="h-5 w-5" />
-                Print
-              </button>
-              <button
-                onClick={() => setOrderDetailsOrder(null)}
-                className="flex-1 py-3 rounded-xl bg-[var(--tablet-accent)] text-[var(--tablet-accent-contrast)] font-semibold uppercase transition hover:opacity-90"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Print Prompt Modal (when auto-print is OFF) */}
       {showPrintPrompt && (
