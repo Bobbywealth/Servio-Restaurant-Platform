@@ -1044,16 +1044,23 @@ router.put('/categories/:id/items/reorder', asyncHandler(async (req: Request, re
   ];
 
   let updatedCount = 0;
-  for (let i = 0; i < orderedIds.length; i++) {
-    const result = await db.run(
-      `
-        UPDATE menu_items
-        SET sort_order = ?, updated_at = CURRENT_TIMESTAMP
-        WHERE id = ? AND restaurant_id = ? AND category_id = ?
-      `,
-      [i, orderedIds[i], restaurantId, categoryId]
-    );
-    updatedCount += result.changes || 0;
+  if (orderedIds.length > 0) {
+    await db.run('BEGIN TRANSACTION');
+    try {
+      for (let i = 0; i < orderedIds.length; i++) {
+        const result = await db.run(
+          `UPDATE menu_items
+           SET sort_order = ?, updated_at = CURRENT_TIMESTAMP
+           WHERE id = ? AND restaurant_id = ? AND category_id = ?`,
+          [i, orderedIds[i], restaurantId, categoryId]
+        );
+        updatedCount += result.changes || 0;
+      }
+      await db.run('COMMIT');
+    } catch (error) {
+      await db.run('ROLLBACK');
+      throw error;
+    }
   }
 
   await DatabaseService.getInstance().logAudit(

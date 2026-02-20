@@ -122,7 +122,6 @@ const MenuManagement: React.FC = () => {
   const selectedItemIdRef = useRef<string | null>(null);
   const editorClosedByUserRef = useRef(false);
   const previousActiveCategoryIdRef = useRef<string | null>(null);
-  const latestCategoryReorderAttemptRef = useRef(0);
   const [editorTab, setEditorTab] = useState<'basics' | 'availability' | 'modifiers' | 'preview'>('basics');
   const [basicsDirty, setBasicsDirty] = useState(false);
   const [pendingSelection, setPendingSelection] = useState<{ type: 'category' | 'item'; id: string } | null>(null);
@@ -336,7 +335,17 @@ const MenuManagement: React.FC = () => {
         .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name));
 
       setCategories(mergedCategories);
-      setExpandedCategories(new Set(mergedCategories.map((cat) => cat.id)));
+      setExpandedCategories((prev) => {
+        // On first load (nothing expanded yet), expand all categories.
+        // On subsequent loads, preserve the user's current expanded state and
+        // also expand any newly-added categories so they're visible.
+        if (prev.size === 0) return new Set(mergedCategories.map((cat) => cat.id));
+        const next = new Set(prev);
+        mergedCategories.forEach((cat) => {
+          if (!prev.has(cat.id)) next.add(cat.id);
+        });
+        return next;
+      });
       setSelectedCategory((prev) => (prev === 'all' && mergedCategories[0]?.id ? mergedCategories[0].id : prev));
       return mergedCategories;
     } catch (error) {
@@ -697,7 +706,6 @@ const MenuManagement: React.FC = () => {
   };
 
   const handleReorderCategories = async (nextOrderedIds: string[]) => {
-    const reorderAttempt = ++latestCategoryReorderAttemptRef.current;
     const previousCategories = categories;
     const existingIds = categories.map((category) => category.id);
     const orderedIds = [
@@ -711,9 +719,7 @@ const MenuManagement: React.FC = () => {
         const c = byId.get(id);
         return c ? { ...c, sort_order: idx } : null;
       }).filter(Boolean) as CategoryWithItems[];
-      // Append anything not in nextOrderedIds (safety)
-      const remaining = prev.filter((c) => !orderedIds.includes(c.id));
-      return [...next, ...remaining];
+      return next;
     });
 
     try {
@@ -723,43 +729,6 @@ const MenuManagement: React.FC = () => {
       });
       const { updated } = response.data || {};
       console.log('[handleReorderCategories] Category order saved:', { requested: orderedIds.length, updated });
-      toast.success('Category order saved');
-
-      // Refresh data in background and verify persisted ordering.
-      loadMenuData()
-        .then((reloadedCategories) => {
-          if (reorderAttempt !== latestCategoryReorderAttemptRef.current) {
-            return;
-          }
-
-          if (!Array.isArray(reloadedCategories)) return;
-
-          const requestedOrder = orderedIds.map((id, index) => ({ id, sortOrder: index }));
-          const requestedSet = new Set(orderedIds);
-          const returnedOrder = reloadedCategories
-            .map((category) => ({ id: category.id, sortOrder: Number(category.sort_order ?? 0) }))
-            .sort((a, b) => a.sortOrder - b.sortOrder || a.id.localeCompare(b.id));
-
-          const persistedIds = returnedOrder
-            .map((entry) => entry.id)
-            .filter((id) => requestedSet.has(id));
-          const expectedIds = requestedOrder.map((entry) => entry.id);
-          const mismatch =
-            persistedIds.length !== expectedIds.length ||
-            expectedIds.some((id, index) => id !== persistedIds[index]);
-
-          if (mismatch) {
-            console.error('[handleReorderCategories] Category reorder persistence mismatch', {
-              restaurantId: user?.restaurantId,
-              requestedOrder,
-              returnedOrder
-            });
-            toast.error('Category order could not be verified after save. Please refresh and try again.');
-          }
-        })
-        .catch((err) => {
-          console.warn('[handleReorderCategories] Background refresh failed (order was saved):', err);
-        });
     } catch (error) {
       console.error('Failed to persist category order', error);
       setCategories(previousCategories);
@@ -820,24 +789,31 @@ const MenuManagement: React.FC = () => {
     const previousCategoryItems =
       categories.find((cat) => cat.id === categoryId)?.items?.map((item) => ({ ...item })) || [];
 
+    // Build full ordered list: reordered ids first, then any remaining items not in the list
+    const orderedSet = new Set(orderedItemIds);
+    const remainingIds = previousCategoryItems
+      .filter((i) => !orderedSet.has(i.id))
+      .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+      .map((i) => i.id);
+    const fullOrderedIds = [...orderedItemIds, ...remainingIds];
+
     // Optimistic reorder in UI
     setCategories((prev) =>
       prev.map((cat) => {
         if (cat.id !== categoryId) return cat;
         const byId = new Map((cat.items || []).map((i) => [i.id, i] as const));
-        const nextItems = orderedItemIds
+        const nextItems = fullOrderedIds
           .map((id, idx) => {
             const it = byId.get(id);
             return it ? { ...it, sort_order: idx } : null;
           })
           .filter(Boolean) as MenuItem[];
-        const remaining = (cat.items || []).filter((i) => !orderedItemIds.includes(i.id));
-        return { ...cat, items: [...nextItems, ...remaining] };
+        return { ...cat, items: nextItems };
       })
     );
 
     try {
-      await api.put(`/api/menu/categories/${encodeURIComponent(categoryId)}/items/reorder`, { itemIds: orderedItemIds });
+      await api.put(`/api/menu/categories/${encodeURIComponent(categoryId)}/items/reorder`, { itemIds: fullOrderedIds });
     } catch (error) {
       console.error('Failed to save item order', error);
       setCategories((prev) =>
@@ -4307,7 +4283,9 @@ const CategorySection: React.FC<CategorySectionProps> = ({
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
   const itemIds = filteredItems.map((i) => i.id);
 
+  const disableDrag = searchTerm.trim() !== '';
   const handleDragEnd = (event: DragEndEvent) => {
+    if (disableDrag) return;
     const { active, over } = event;
     if (!over) return;
     const activeId = String(active.id);
@@ -4323,7 +4301,7 @@ const CategorySection: React.FC<CategorySectionProps> = ({
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
       {/* Category Header */}
-      <div 
+      <div
         className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors"
         onClick={onToggle}
       >
