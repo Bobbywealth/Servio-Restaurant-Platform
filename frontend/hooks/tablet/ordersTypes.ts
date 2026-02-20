@@ -2,8 +2,11 @@ export type OrderItem = {
   id?: string;
   name?: string;
   quantity?: number;
+  qty?: number;
   unit_price?: number;
   price?: number;
+  modifiers?: Record<string, unknown> | string[];
+  notes?: string | null;
 };
 
 export type Order = {

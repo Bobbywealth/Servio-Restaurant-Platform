@@ -62,7 +62,27 @@ export function OrderDetailsModal({
   const isBusy = busyOrderId === order.id;
   const isPrinting = printingOrderId === order.id;
   const orderNumber = (order.external_id || order.id).slice(-6).toUpperCase();
-  const totalItems = (order.items || []).reduce((sum, item) => sum + (item.quantity || 1), 0);
+  const totalItems = (order.items || []).reduce((sum, item) => sum + (item.quantity || item.qty || 1), 0);
+
+  const renderModifiers = (modifiers: Record<string, unknown> | string[] | undefined) => {
+    if (!modifiers) return null;
+
+    if (Array.isArray(modifiers) && modifiers.length > 0) {
+      return modifiers.map((modifier, idx) => (
+        <div key={`mod-array-${idx}`}>• {String(modifier)}</div>
+      ));
+    }
+
+    if (typeof modifiers === 'object') {
+      const entries = Object.entries(modifiers);
+      if (entries.length === 0) return null;
+      return entries.map(([group, value]) => (
+        <div key={group}>• {group}: {Array.isArray(value) ? value.join(', ') : String(value)}</div>
+      ));
+    }
+
+    return null;
+  };
 
   return (
     <div className="no-print fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
@@ -123,12 +143,18 @@ export function OrderDetailsModal({
             </div>
             <div className="space-y-2">
               {(order.items || []).map((item, idx) => {
-                const quantity = item.quantity || 1;
+                const quantity = item.quantity || item.qty || 1;
                 const linePrice = (item.unit_price || item.price || 0) * quantity;
+                const modifiers = renderModifiers(item.modifiers);
                 return (
-                  <div key={`${order.id}-${idx}`} className="flex items-center justify-between text-sm">
-                    <div className="font-medium">{quantity}× {item.name || 'Item'}</div>
-                    <div>{formatMoney(linePrice)}</div>
+                  <div key={`${order.id}-${idx}`} className="text-sm border-b border-[var(--tablet-border)]/40 pb-2 last:border-b-0">
+                    <div className="flex items-center justify-between">
+                      <div className="font-medium">{quantity}× {item.name || 'Item'}</div>
+                      <div>{formatMoney(linePrice)}</div>
+                    </div>
+                    {modifiers && (
+                      <div className="mt-1 ml-4 text-xs text-[var(--tablet-muted)] space-y-0.5">{modifiers}</div>
+                    )}
                   </div>
                 );
               })}

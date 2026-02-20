@@ -17,6 +17,44 @@ const getRequestId = (req: Request) => {
   return headerId || uuidv4();
 };
 
+
+const parseJson = <T>(value: unknown, fallback: T): T => {
+  if (value == null) return fallback;
+  if (typeof value !== 'string') {
+    return (value as T) ?? fallback;
+  }
+
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return fallback;
+  }
+};
+
+const hasOrderItems = (items: unknown): boolean => Array.isArray(items) && items.length > 0;
+
+const hydrateOrderItemsFromRows = async (db: any, orderId: string): Promise<any[]> => {
+  const rows = await db.all(
+    `SELECT name, item_name_snapshot, item_id, quantity, qty, unit_price, price, modifiers_json, notes
+     FROM order_items WHERE order_id = ? ORDER BY created_at ASC`,
+    [orderId]
+  );
+
+  return rows.map((row: any) => {
+    const modifiers = parseJson<Record<string, unknown> | string[]>(row.modifiers_json, {});
+    return {
+      name: row.name || row.item_name_snapshot || row.item_id || 'Item',
+      quantity: num(row.quantity || row.qty || 1),
+      qty: num(row.qty || row.quantity || 1),
+      unit_price: num(row.unit_price || row.price || 0),
+      price: num(row.price || row.unit_price || 0),
+      modifiers,
+      notes: row.notes || null
+    };
+  });
+};
+
+
 /**
  * GET /api/orders
  * Get orders with optional filtering
@@ -84,10 +122,8 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
 
   // Parse JSON fields
   const formattedOrders = orders.map((order: any) => {
-    let items: any[] = [];
-    try {
-      items = JSON.parse(order.items || '[]');
-    } catch {
+    const items = parseJson<any[]>(order.items, []);
+    if (order.items && !Array.isArray(items)) {
       logger.warn(
         `[orders.list] invalid_items_json ${JSON.stringify({
           requestId,
@@ -95,9 +131,10 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
         })}`
       );
     }
+
     return {
       ...order,
-      items
+      items: Array.isArray(items) ? items : []
     };
   });
 
@@ -144,9 +181,14 @@ router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
     });
   }
 
+  let items = parseJson<any[]>(order.items, []);
+  if (!hasOrderItems(items)) {
+    items = await hydrateOrderItemsFromRows(db, id);
+  }
+
   const formattedOrder = {
     ...order,
-    items: JSON.parse(order.items || '[]')
+    items
   };
 
   res.json({
