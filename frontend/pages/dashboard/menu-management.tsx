@@ -1977,7 +1977,7 @@ const MenuManagement: React.FC = () => {
                             })}
                           </div>
                         ) : (
-                          <table className="w-full text-sm min-w-[400px] sm:min-w-0">
+                          <table className="w-full text-sm min-w-[400px] sm:min-w-0 table-fixed">
                             <thead className="sticky top-0 bg-gray-50 dark:bg-gray-900/40 z-10">
                               <tr className="text-left text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
                                 <th className="px-3 sm:px-4 py-3">Item</th>
@@ -3884,10 +3884,10 @@ const SortableItemTableRow = memo(function SortableItemTableRow({
           <div className="min-w-0 flex-1">
             <div className="font-semibold text-gray-900 dark:text-white truncate text-base sm:text-base">{item.name}</div>
             {item.description ? (
-              <div className="relative mt-0.5">
+              <div className="relative mt-0.5 max-w-full">
                 <button
                   type="button"
-                  className="text-left text-xs text-gray-500 dark:text-gray-400 truncate max-w-[180px] sm:max-w-[320px]"
+                  className="block w-full text-left text-xs text-gray-500 dark:text-gray-400 truncate"
                   onClick={(e) => {
                     e.stopPropagation();
                     setIsDescriptionExpanded((prev) => !prev);
