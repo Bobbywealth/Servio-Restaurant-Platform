@@ -297,7 +297,7 @@ router.get('/public/:slug', asyncHandler(async (req: Request, res: Response) => 
   ];
 
   let selectedColumns = requestedColumns;
-  let isActiveClause = " AND LOWER(CAST(COALESCE(is_active, 1) AS TEXT)) IN ('1', 'true')";
+  let isActiveClause = " AND LOWER(COALESCE(CAST(is_active AS TEXT), '1')) IN ('1', 'true', 't')";
 
   try {
     const restaurantTableInfo = await db.all("SELECT column_name AS name FROM information_schema.columns WHERE table_name = 'restaurants'");
@@ -315,7 +315,7 @@ router.get('/public/:slug', asyncHandler(async (req: Request, res: Response) => 
       }
 
       isActiveClause = availableRestaurantColumns.has('is_active')
-        ? " AND LOWER(CAST(COALESCE(is_active, 1) AS TEXT)) IN ('1', 'true')"
+        ? " AND LOWER(COALESCE(CAST(is_active AS TEXT), '1')) IN ('1', 'true', 't')"
         : '';
     }
   } catch (schemaError: any) {
@@ -339,9 +339,9 @@ router.get('/public/:slug', asyncHandler(async (req: Request, res: Response) => 
     FROM menu_items mi
     INNER JOIN menu_categories mc ON mi.category_id = mc.id
     WHERE mi.restaurant_id = ?
-      AND LOWER(CAST(COALESCE(mi.is_available, 1) AS TEXT)) IN ('1', 'true')
-      AND LOWER(CAST(COALESCE(mc.is_active, 1) AS TEXT)) IN ('1', 'true')
-      AND LOWER(CAST(COALESCE(mc.is_hidden, 0) AS TEXT)) IN ('0', 'false')
+      AND LOWER(COALESCE(CAST(mi.is_available AS TEXT), '1')) IN ('1', 'true', 't')
+      AND LOWER(COALESCE(CAST(mc.is_active AS TEXT), '1')) IN ('1', 'true', 't')
+      AND LOWER(COALESCE(CAST(mc.is_hidden AS TEXT), '0')) IN ('0', 'false', 'f')
     ORDER BY mc.sort_order ASC, mi.sort_order ASC, mi.name ASC
   `, [restaurant.id]);
 
