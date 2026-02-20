@@ -25,7 +25,7 @@ import { OrderFiltersBar } from '../../components/tablet/orders/OrderFiltersBar'
 import { OrderDetailsModal } from '../../components/tablet/orders/OrderDetailsModal';
 import { useOrderAlerts } from '../../hooks/tablet/useOrderAlerts';
 import type { ReceiptPaperWidth, ReceiptOrder, ReceiptRestaurant } from '../../utils/receiptGenerator';
-import { generateReceiptHtml, generateStandaloneReceiptHtml } from '../../utils/receiptGenerator';
+import { generateReceiptHtml, generateStandaloneReceiptHtml, getReceiptItemModifiers } from '../../utils/receiptGenerator';
 import { api } from '../../lib/api'
 import { safeLocalStorage } from '../../lib/utils';
 import { generatePlainTextReceipt, printViaRawBT } from '../../utils/escpos';
@@ -698,7 +698,7 @@ export default function TabletOrdersPage() {
           name: it.name || 'Item',
           quantity: it.quantity || 1,
           price: it.unit_price || it.price || 0,
-          modifiers: it.modifiers || []
+          modifiers: getReceiptItemModifiers(it)
         }));
 
         const orderAny = order as any;
@@ -849,7 +849,7 @@ export default function TabletOrdersPage() {
             name: it.name,
             quantity: it.quantity || 1,
             price: it.unit_price || it.price || 0,
-            modifiers: it.modifiers || []
+            modifiers: getReceiptItemModifiers(it)
           })),
           total: (testOrder.items || []).reduce((sum: number, it: any) => {
             const qty = it.quantity || 1;
