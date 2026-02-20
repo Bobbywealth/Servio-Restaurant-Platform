@@ -1780,10 +1780,13 @@ export default function TabletOrdersPage() {
             font-size: 1.25rem;
           }
         }
-        /* Tablet portrait */
-        @media (min-width: 640px) and (max-width: 1023px) {
-          .tablet-theme main {
-            padding: 1rem;
+        /* 8-inch+ tablets */
+        @media (min-width: 768px) and (max-width: 1023px) {
+          .tablet-theme .text-3xl {
+            font-size: 1.9rem;
+          }
+          .tablet-theme .text-2xl {
+            font-size: 1.45rem;
           }
         }
         /* Ensure touch targets are large enough */
