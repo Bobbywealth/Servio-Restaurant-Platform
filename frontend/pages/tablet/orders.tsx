@@ -4,18 +4,10 @@ import { useRouter } from 'next/router';
 import clsx from 'clsx';
 import {
   Printer,
-  Clock,
   Search,
   Filter,
   X,
   AlertTriangle,
-  Calendar,
-  ArrowUpDown,
-  Zap,
-  Bell,
-  BellOff,
-  LayoutGrid,
-  List
 } from 'lucide-react';
 import { useSocket } from '../../lib/socket';
 import { PrintReceipt } from '../../components/PrintReceipt';
@@ -230,20 +222,6 @@ function getChannelIcon(channel: string | null | undefined): string {
   return '📋';
 }
 
-function statusBadgeClassesForStatus(status: string) {
-  switch (status) {
-    case 'received':
-      return 'bg-[var(--tablet-surface-alt)] text-[var(--tablet-muted-strong)] border border-[var(--tablet-border)]';
-    case 'preparing':
-      return 'bg-[var(--tablet-surface-alt)] text-[var(--tablet-text)] border border-[var(--tablet-border)]';
-    case 'ready':
-      return 'bg-[var(--tablet-success)] text-[var(--tablet-text)]';
-    case 'scheduled':
-      return 'bg-[var(--tablet-surface-alt)] text-[var(--tablet-muted-strong)] border border-[var(--tablet-border)]';
-    default:
-      return 'bg-[var(--tablet-surface-alt)] text-[var(--tablet-text)] border border-[var(--tablet-border)]';
-  }
-}
 
 const ACTION_QUEUE_KEY = 'servio_tablet_action_queue';
 const ORDER_CACHE_KEY = 'servio_cached_orders';
@@ -1211,14 +1189,12 @@ export default function TabletOrdersPage() {
     const isNew = status === 'received';
     const isPreparing = status === 'preparing';
     const isReady = status === 'ready';
-    const isScheduled = status === 'scheduled';
     const timeStr = formatTimeAgo(o.created_at, now);
     const itemCount = (o.items || []).reduce((sum, it) => sum + (it.quantity || 1), 0);
     const hasPendingAction = pendingActions.has(o.id);
     const isLatest = laneIndex === 0;
     const isSelected = selectedOrder?.id === o.id;
 
-    const statusLabel = isNew ? 'NEW' : isPreparing ? 'IN PROGRESS' : isReady ? 'READY' : isScheduled ? 'SCHEDULED' : 'ACTIVE';
     const prepTimeData = isPreparing
       ? formatPrepTimeRemaining(o.prep_minutes || 15, o.created_at, now)
       : null;
@@ -1227,11 +1203,6 @@ export default function TabletOrdersPage() {
       : 'normal';
     const prepTimeColorClass = getPrepTimeColorClass(prepWarningLevel);
     const isOverdue = prepTimeData?.isOverdue;
-    const cardStatusBadgeClasses = isPreparing && (prepWarningLevel === 'critical' || prepWarningLevel === 'warning')
-      ? prepWarningLevel === 'critical'
-        ? 'bg-[var(--tablet-danger)] text-white'
-        : 'bg-[var(--tablet-warning)] text-[var(--tablet-text)]'
-      : statusBadgeClassesForStatus(status);
     const openOrderDetails = () => {
       setSelectedOrder(o);
       setOrderDetailsOrder(o);
@@ -1243,50 +1214,76 @@ export default function TabletOrdersPage() {
         type="button"
         onClickCapture={openOrderDetails}
         className={clsx(
-          'w-full text-left rounded-xl border border-[var(--tablet-border)] p-4 sm:p-5 shadow-[0_2px_8px_rgba(0,0,0,0.3)] transition transform hover:brightness-110 hover:scale-[1.01] touch-manipulation',
-          isSelected && 'bg-[color-mix(in_srgb,var(--tablet-info)_14%,var(--tablet-card))] border-[color-mix(in_srgb,var(--tablet-info)_50%,var(--tablet-border))] shadow-[0_4px_12px_rgba(64,84,122,0.2)]',
-          !isSelected && 'bg-[var(--tablet-card)]',
-          isOverdue && 'border-l-4 border-l-[var(--tablet-danger)] pl-3 sm:pl-4'
+          'w-full text-left rounded-xl border shadow-sm transition transform hover:brightness-105 hover:scale-[1.01] touch-manipulation overflow-hidden relative',
+          isSelected
+            ? 'border-[var(--tablet-info)] shadow-[0_0_0_1px_var(--tablet-info)] bg-[color-mix(in_srgb,var(--tablet-info)_8%,var(--tablet-card))]'
+            : 'border-[var(--tablet-border)] bg-[var(--tablet-card)]',
         )}
       >
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className={clsx('text-sm font-semibold tracking-wide px-2.5 py-1.5 rounded-full', cardStatusBadgeClasses)}>
-              {statusLabel}
+        {/* Status colored left border strip */}
+        <div className={clsx(
+          'absolute left-0 top-0 bottom-0 w-1',
+          isOverdue ? 'bg-[var(--tablet-danger)]' :
+          isNew ? 'bg-[var(--tablet-danger)]' :
+          isPreparing ? 'bg-[var(--tablet-warning)]' :
+          isReady ? 'bg-[var(--tablet-success)]' : 'bg-[var(--tablet-border)]'
+        )} />
+
+        <div className="pl-4 pr-4 pt-3.5 pb-3.5">
+          {/* Top row: time ago + prep time badge */}
+          <div className="flex items-center justify-between mb-2">
+            <span className={clsx(
+              'text-xs font-semibold',
+              timeStr === 'NEW' ? 'text-[var(--tablet-danger)]' : 'text-[var(--tablet-muted)]'
+            )}>
+              {timeStr === 'NEW' ? '● NEW' : `${timeStr} ago`}
             </span>
-          </div>
-          <div className="flex items-center gap-2">
-            {isLatest && (
-              <span className="text-sm font-semibold text-[var(--tablet-accent)] hidden sm:inline">Newest</span>
-            )}
-            {isPreparing && prepTimeData && (
-              <span className={clsx(
-                'text-xs font-semibold px-2.5 py-1.5 rounded-full inline-flex items-center gap-1.5',
-                prepTimeColorClass,
-                prepWarningLevel === 'critical' && 'prep-time-critical'
-              )}>
-                {prepTimeData.isOverdue && <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />}
-                {prepTimeData.text}
-              </span>
-            )}
-          </div>
-        </div>
-
-        <div className="mt-3 flex flex-col gap-3">
-          <div className="flex items-center justify-between">
-            <div className={clsx('text-xl font-bold truncate', 'text-[var(--tablet-text)]')}>
-              {o.customer_name || 'Guest'}
+            <div className="flex items-center gap-2">
+              {isLatest && (
+                <span className="text-xs font-semibold text-[var(--tablet-accent)] hidden sm:inline">Latest</span>
+              )}
+              {isPreparing && prepTimeData && (
+                <span className={clsx(
+                  'text-xs font-bold px-2 py-0.5 rounded-md inline-flex items-center gap-1',
+                  prepTimeColorClass,
+                  prepWarningLevel === 'critical' && 'prep-time-critical'
+                )}>
+                  {prepTimeData.isOverdue && <AlertTriangle className="h-3 w-3" aria-hidden="true" />}
+                  {prepTimeData.text}
+                </span>
+              )}
             </div>
-            <div className="text-lg font-bold text-[var(--tablet-text)] tabular-nums">{formatMoney(o.total_amount)}</div>
           </div>
 
-        {isPreparing && prepTimeData && (
-          <div className="mt-3">
-            <div className="h-2 rounded-full bg-[var(--tablet-border)] overflow-hidden">
+          {/* Customer name - prominent */}
+          <div className="text-[1.1rem] font-bold text-[var(--tablet-text)] truncate mb-1">
+            {o.customer_name || 'Guest'}
+          </div>
+
+          {/* Items + channel info */}
+          <div className="flex items-center gap-2 text-xs text-[var(--tablet-muted)] mb-3 flex-wrap">
+            <span>{itemCount} item{itemCount !== 1 ? 's' : ''}</span>
+            {o.channel && (
+              <>
+                <span>·</span>
+                <span>{getChannelIcon(o.channel)} {o.channel}</span>
+              </>
+            )}
+            {o.order_type && o.order_type.toLowerCase() !== (o.channel || '').toLowerCase() && (
+              <>
+                <span>·</span>
+                <span className="capitalize">{o.order_type}</span>
+              </>
+            )}
+          </div>
+
+          {/* Prep time progress bar (single, no duplicate) */}
+          {isPreparing && prepTimeData && (
+            <div className="h-1.5 rounded-full bg-[var(--tablet-border)] overflow-hidden mb-3">
               <div
                 className={clsx(
-                  'h-full rounded-full prep-time-progress-bar',
-                  prepTimeData.isOverdue ? 'bg-[var(--tablet-muted)] opacity-60' :
+                  'h-full rounded-full prep-time-progress-bar transition-all duration-1000',
+                  prepTimeData.isOverdue ? 'bg-[var(--tablet-danger)] opacity-70' :
                   prepWarningLevel === 'critical' ? 'bg-[var(--tablet-danger)]' :
                   prepWarningLevel === 'warning' ? 'bg-[var(--tablet-warning)]' :
                   'bg-[var(--tablet-success)]'
@@ -1294,31 +1291,17 @@ export default function TabletOrdersPage() {
                 style={{ width: `${prepTimeData.isOverdue ? 100 : prepTimeData.percentRemaining}%` }}
               />
             </div>
+          )}
+
+          {/* Bottom row: total + sync indicator */}
+          <div className="flex items-center justify-between">
+            <span className="text-base font-bold text-[var(--tablet-text)] tabular-nums">
+              {formatMoney(o.total_amount)}
+            </span>
+            {hasPendingAction && (
+              <span className="text-xs text-[var(--tablet-accent)] font-semibold">↻ Syncing</span>
+            )}
           </div>
-        )}
-
-          {isPreparing && prepTimeData && !prepTimeData.isOverdue && (
-            <div>
-              <div className="h-2 rounded-full bg-[var(--tablet-border)] overflow-hidden">
-                <div
-                  className={clsx(
-                    'h-full rounded-full prep-time-progress-bar',
-                    prepWarningLevel === 'critical' ? 'bg-[var(--tablet-danger)]' :
-                    prepWarningLevel === 'warning' ? 'bg-[var(--tablet-warning)]' :
-                    'bg-[var(--tablet-success)]'
-                  )}
-                  style={{ width: `${prepTimeData.percentRemaining}%` }}
-                />
-              </div>
-            </div>
-          )}
-
-          {hasPendingAction && (
-            <div className="text-sm font-semibold text-[var(--tablet-accent)]">
-              Pending sync
-            </div>
-          )}
-
         </div>
       </button>
     );
@@ -1423,53 +1406,31 @@ export default function TabletOrdersPage() {
               />
 
               {/* Quick Stats Bar */}
-              <div className="flex flex-wrap gap-2">
-                <div className="px-3 py-1.5 rounded-lg bg-[var(--tablet-accent)] text-[var(--tablet-accent-contrast)] text-xs font-semibold">
+              <div className="flex flex-wrap gap-2 items-center">
+                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--tablet-accent)] text-[var(--tablet-accent-contrast)] text-xs font-bold">
                   {activeOrders.length} Active
                 </div>
-                <div className="px-3 py-1.5 rounded-lg bg-[var(--tablet-accent)]/35 text-[var(--tablet-text)] text-xs font-semibold">
+                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--tablet-danger)]/12 border border-[var(--tablet-danger)]/25 text-xs font-semibold text-[var(--tablet-text)]">
+                  <span className="h-2 w-2 rounded-full bg-[var(--tablet-danger)] inline-block" />
                   {receivedOrders.length} New
                 </div>
-                <div className="px-3 py-1.5 rounded-lg bg-[var(--tablet-info)]/22 text-[var(--tablet-text)] text-xs font-semibold">
+                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--tablet-warning)]/12 border border-[var(--tablet-warning)]/25 text-xs font-semibold text-[var(--tablet-text)]">
+                  <span className="h-2 w-2 rounded-full bg-[var(--tablet-warning)] inline-block" />
                   {activeOrders.filter(o => normalizeStatus(o.status) === 'preparing').length} In Progress
                 </div>
-                <div className="px-3 py-1.5 rounded-lg bg-[var(--tablet-success)]/24 text-[var(--tablet-text)] text-xs font-semibold">
+                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--tablet-success)]/12 border border-[var(--tablet-success)]/25 text-xs font-semibold text-[var(--tablet-text)]">
+                  <span className="h-2 w-2 rounded-full bg-[var(--tablet-success)] inline-block" />
                   {activeOrders.filter(o => normalizeStatus(o.status) === 'ready').length} Ready
                 </div>
-              </div>
-
-              <div className="rounded-xl border border-[var(--tablet-border)] bg-[var(--tablet-surface)] p-3 flex flex-wrap gap-3 items-center justify-between">
-                <div className="flex flex-wrap items-center gap-3 text-xs sm:text-sm">
-                  <span className="font-semibold">Sync Queue: {actionQueue.length}</span>
-                  <span className="text-[var(--tablet-muted)]">
-                    Last Success: {lastSuccessfulSyncAt ? new Date(lastSuccessfulSyncAt).toLocaleTimeString() : 'Never'}
-                  </span>
-                  <span className={clsx(
-                    'px-2 py-1 rounded-full text-xs font-semibold uppercase',
-                    syncAttemptStatus === 'syncing' && 'bg-[var(--tablet-info)]/20 text-[var(--tablet-text)]',
-                    syncAttemptStatus === 'success' && 'bg-[var(--tablet-success)]/20 text-[var(--tablet-text)]',
-                    syncAttemptStatus === 'error' && 'bg-[var(--tablet-danger)]/20 text-[var(--tablet-text)]',
-                    syncAttemptStatus === 'idle' && 'bg-[var(--tablet-border)] text-[var(--tablet-muted-strong)]'
-                  )}>
-                    {syncAttemptStatus}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
+                {actionQueue.length > 0 && (
                   <button
                     type="button"
                     onClick={retryQueueNow}
-                    className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[var(--tablet-info)]/20 border border-[var(--tablet-border)] text-[var(--tablet-text)]"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--tablet-warning)]/15 border border-[var(--tablet-warning)]/30 text-xs font-semibold text-[var(--tablet-warning)] touch-manipulation"
                   >
-                    Retry Now
+                    ↻ {actionQueue.length} Pending Sync
                   </button>
-                  <button
-                    type="button"
-                    onClick={clearFailedActions}
-                    className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[var(--tablet-danger)]/15 border border-[var(--tablet-border)] text-[var(--tablet-text)]"
-                  >
-                    Clear Failed
-                  </button>
-                </div>
+                )}
               </div>
 
               {/* Search and Filter Bar */}
@@ -1526,7 +1487,7 @@ export default function TabletOrdersPage() {
               </OrderFiltersBar>
 
               {/* Quick Filter Chips */}
-              <div className="flex flex-wrap gap-2 mt-2">
+              <div className="flex flex-wrap gap-2 mt-1">
                 <button
                   onClick={() => setStatusFilter('all')}
                   className={clsx(
@@ -1536,14 +1497,14 @@ export default function TabletOrdersPage() {
                       : 'bg-[var(--tablet-surface)] border border-[var(--tablet-border)] text-[var(--tablet-text)] hover:bg-[var(--tablet-surface-alt)]'
                   )}
                 >
-                  All
+                  All ({activeOrders.length})
                 </button>
                 <button
                   onClick={() => setStatusFilter('received')}
                   className={clsx(
                     'px-3 py-1.5 rounded-lg text-xs font-semibold transition touch-manipulation',
                     statusFilter === 'received'
-                      ? 'bg-[var(--tablet-accent)] text-[var(--tablet-accent-contrast)]'
+                      ? 'bg-[var(--tablet-danger)] text-white'
                       : 'bg-[var(--tablet-surface)] border border-[var(--tablet-border)] text-[var(--tablet-text)] hover:bg-[var(--tablet-surface-alt)]'
                   )}
                 >
@@ -1554,22 +1515,22 @@ export default function TabletOrdersPage() {
                   className={clsx(
                     'px-3 py-1.5 rounded-lg text-xs font-semibold transition touch-manipulation',
                     statusFilter === 'preparing'
-                      ? 'bg-[var(--tablet-accent)] text-[var(--tablet-accent-contrast)]'
+                      ? 'bg-[var(--tablet-warning)] text-[var(--tablet-accent-contrast)]'
                       : 'bg-[var(--tablet-surface)] border border-[var(--tablet-border)] text-[var(--tablet-text)] hover:bg-[var(--tablet-surface-alt)]'
                   )}
                 >
-                  In Progress
+                  In Progress ({preparingOrders.length})
                 </button>
                 <button
                   onClick={() => setStatusFilter('ready')}
                   className={clsx(
                     'px-3 py-1.5 rounded-lg text-xs font-semibold transition touch-manipulation',
                     statusFilter === 'ready'
-                      ? 'bg-[var(--tablet-accent)] text-[var(--tablet-accent-contrast)]'
+                      ? 'bg-[var(--tablet-success)] text-white'
                       : 'bg-[var(--tablet-surface)] border border-[var(--tablet-border)] text-[var(--tablet-text)] hover:bg-[var(--tablet-surface-alt)]'
                   )}
                 >
-                  Ready
+                  Ready ({readyOrders.length})
                 </button>
               </div>
 
@@ -1671,26 +1632,46 @@ export default function TabletOrdersPage() {
               {queueSections.map((section) => {
                 const emptyStateByLane = {
                   received: 'No new orders',
-                  preparing: 'No in progress orders',
-                  ready: 'No ready orders'
+                  preparing: 'No orders in progress',
+                  ready: 'No orders ready'
+                } as const;
+
+                const columnAccentClass = {
+                  received: 'text-[var(--tablet-danger)]',
+                  preparing: 'text-[var(--tablet-warning)]',
+                  ready: 'text-[var(--tablet-success)]',
+                } as const;
+
+                const columnBadgeClass = {
+                  received: 'bg-[var(--tablet-danger)]/15 text-[var(--tablet-danger)]',
+                  preparing: 'bg-[var(--tablet-warning)]/15 text-[var(--tablet-warning)]',
+                  ready: 'bg-[var(--tablet-success)]/18 text-[var(--tablet-success)]',
+                } as const;
+
+                const columnBorderClass = {
+                  received: 'border-b-2 border-b-[var(--tablet-danger)]/35',
+                  preparing: 'border-b-2 border-b-[var(--tablet-warning)]/35',
+                  ready: 'border-b-2 border-b-[var(--tablet-success)]/35',
                 } as const;
 
                 return (
-                  <section key={section.key} className="bg-[var(--tablet-surface)] rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.3)] border border-[var(--tablet-border)] flex flex-col min-h-[50vh] md:min-h-[60vh] lg:min-h-[70vh]">
-                    <div className="px-4 py-4 border-b border-[var(--tablet-border)] flex items-center justify-between">
-                      <h3 className="text-sm font-semibold uppercase text-[var(--tablet-accent)]">{section.label}</h3>
-                      <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-[var(--tablet-surface-alt)] text-[var(--tablet-text)]">
+                  <section key={section.key} className="bg-[var(--tablet-surface)] rounded-2xl shadow-sm border border-[var(--tablet-border)] flex flex-col min-h-[50vh] md:min-h-[60vh] lg:min-h-[70vh] overflow-hidden">
+                    <div className={clsx('px-4 py-3.5 border-b border-[var(--tablet-border)] flex items-center justify-between', columnBorderClass[section.key])}>
+                      <h3 className={clsx('text-sm font-bold uppercase tracking-wider', columnAccentClass[section.key])}>
+                        {section.label}
+                      </h3>
+                      <span className={clsx('px-2.5 py-0.5 rounded-full text-xs font-bold', columnBadgeClass[section.key])}>
                         {section.orders.length}
                       </span>
                     </div>
 
-                    <div className="flex-1 overflow-y-auto p-4 scrollbar-thin">
+                    <div className="flex-1 overflow-y-auto p-3 scrollbar-thin">
                       {section.orders.length === 0 ? (
-                        <div className="text-xs text-[var(--tablet-muted)] uppercase tracking-wide py-4 text-center border border-dashed border-[var(--tablet-border)] rounded-xl">
+                        <div className="text-xs text-[var(--tablet-muted)] uppercase tracking-wide py-6 text-center border border-dashed border-[var(--tablet-border)] rounded-xl mt-1">
                           {emptyStateByLane[section.key]}
                         </div>
                       ) : (
-                        <div className="space-y-3">
+                        <div className="space-y-2.5">
                           {section.orders.map((o, index) => renderOrderCard(o, index))}
                         </div>
                       )}
