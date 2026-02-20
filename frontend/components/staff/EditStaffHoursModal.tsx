@@ -58,6 +58,7 @@ export default function EditStaffHoursModal({
   const [success, setSuccess] = useState<string | null>(null)
   const [expandedRow, setExpandedRow] = useState<string | null>(null)
   const [isEditingActiveEntry, setIsEditingActiveEntry] = useState(false)
+  const [isCreatingEntry, setIsCreatingEntry] = useState(false)
 
   const [editForm, setEditForm] = useState({
     clockInTime: '',
@@ -162,6 +163,29 @@ export default function EditStaffHoursModal({
     })
     setFormErrors({ clockInTime: '', clockOutTime: '' })
     setOverlapWarning(null)
+  }
+
+  const openCreateForm = () => {
+    const now = new Date()
+    const oneHourLater = new Date(now.getTime() + 60 * 60 * 1000)
+
+    setIsCreatingEntry(true)
+    setExpandedRow(null)
+    setIsEditingActiveEntry(false)
+    setEditForm({
+      clockInTime: toLocalDateTime(now.toISOString()),
+      clockOutTime: toLocalDateTime(oneHourLater.toISOString()),
+      breakMinutes: '0',
+      position: '',
+      notes: ''
+    })
+    setFormErrors({ clockInTime: '', clockOutTime: '' })
+    setOverlapWarning(null)
+  }
+
+  const closeCreateForm = () => {
+    setIsCreatingEntry(false)
+    closeEditForm()
   }
 
   const toLocalDateTime = (isoString: string) => {
@@ -276,6 +300,41 @@ export default function EditStaffHoursModal({
     }
   }
 
+  const handleCreateEntry = async () => {
+    if (!staffMember || !validateForm()) return
+
+    setActionLoading('create-entry')
+    setError(null)
+    setSuccess(null)
+
+    try {
+      const response = await api.post('/api/timeclock/entries', {
+        userId: staffMember.id,
+        clockInTime: fromLocalDateTime(editForm.clockInTime),
+        clockOutTime: fromLocalDateTime(editForm.clockOutTime),
+        breakMinutes: parseInt(editForm.breakMinutes) || 0,
+        position: editForm.position || undefined,
+        notes: editForm.notes || undefined
+      })
+
+      if (response.data.success) {
+        setSuccess('Time entry added successfully')
+        closeCreateForm()
+        onRefresh()
+        setTimeout(() => {
+          loadTimeEntries()
+          setSuccess(null)
+        }, 500)
+      } else {
+        setError(response.data.error?.message || 'Failed to add time entry')
+      }
+    } catch (err: any) {
+      setError(err.response?.data?.error?.message || 'Failed to add time entry')
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
   const handleWeekChange = (direction: 'prev' | 'next') => {
     setWeekOffset(prev => prev + (direction === 'next' ? 1 : -1))
     setExpandedRow(null)
@@ -379,6 +438,20 @@ export default function EditStaffHoursModal({
               </button>
             </div>
 
+            {canEdit && (
+              <div className="px-6 py-3 border-b border-gray-200 dark:border-surface-700 bg-gray-50/60 dark:bg-surface-800/60 flex items-center justify-between">
+                <p className="text-xs text-surface-600 dark:text-surface-400">
+                  Need to add missed hours from previous days? Create a backdated entry below.
+                </p>
+                <button
+                  onClick={isCreatingEntry ? closeCreateForm : openCreateForm}
+                  className="px-3 py-1.5 rounded-lg text-sm font-medium bg-primary-500 hover:bg-primary-600 text-white transition-colors"
+                >
+                  {isCreatingEntry ? 'Cancel' : 'Add Entry'}
+                </button>
+              </div>
+            )}
+
             <div className="flex-1 overflow-y-auto p-6">
               {error && (
                 <div className="mb-4 flex items-center gap-2 text-red-600 text-sm bg-red-50 dark:bg-red-900/20 px-4 py-3 rounded-xl">
@@ -391,6 +464,82 @@ export default function EditStaffHoursModal({
                 <div className="mb-4 flex items-center gap-2 text-green-600 text-sm bg-green-50 dark:bg-green-900/20 px-4 py-3 rounded-xl">
                   <CheckCircle className="w-5 h-5" />
                   <span>{success}</span>
+                </div>
+              )}
+
+              {isCreatingEntry && (
+                <div className="mb-4 border border-primary-200 dark:border-primary-800 rounded-xl p-4 bg-primary-50/60 dark:bg-primary-900/20">
+                  <h3 className="text-sm font-semibold text-surface-900 dark:text-surface-100 mb-3">Add Time Entry</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-2">Clock In Time</label>
+                      <input
+                        type="datetime-local"
+                        value={editForm.clockInTime}
+                        onChange={(e) => {
+                          setEditForm({ ...editForm, clockInTime: e.target.value })
+                          if (formErrors.clockInTime) {
+                            setFormErrors({ ...formErrors, clockInTime: '' })
+                          }
+                        }}
+                        className={`w-full px-3 py-2 rounded-lg border text-sm focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500 outline-none dark:bg-surface-700 dark:text-surface-100 ${
+                          formErrors.clockInTime
+                            ? 'border-red-300 focus:border-red-500 dark:border-red-700'
+                            : 'border-gray-200 dark:border-surface-600'
+                        }`}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-2">Clock Out Time</label>
+                      <input
+                        type="datetime-local"
+                        value={editForm.clockOutTime}
+                        onChange={(e) => {
+                          setEditForm({ ...editForm, clockOutTime: e.target.value })
+                          if (formErrors.clockOutTime) {
+                            setFormErrors({ ...formErrors, clockOutTime: '' })
+                          }
+                        }}
+                        className={`w-full px-3 py-2 rounded-lg border text-sm focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500 outline-none dark:bg-surface-700 dark:text-surface-100 ${
+                          formErrors.clockOutTime
+                            ? 'border-red-300 focus:border-red-500 dark:border-red-700'
+                            : 'border-gray-200 dark:border-surface-600'
+                        }`}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-2">Break Minutes</label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={editForm.breakMinutes}
+                        onChange={(e) => setEditForm({ ...editForm, breakMinutes: e.target.value })}
+                        className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-surface-600 text-sm focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500 outline-none dark:bg-surface-700 dark:text-surface-100"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-2">Position (Optional)</label>
+                      <input
+                        type="text"
+                        value={editForm.position}
+                        onChange={(e) => setEditForm({ ...editForm, position: e.target.value })}
+                        className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-surface-600 text-sm focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500 outline-none dark:bg-surface-700 dark:text-surface-100"
+                      />
+                    </div>
+                  </div>
+                  <div className="mt-4 flex items-center justify-between">
+                    <div className="text-sm text-surface-600 dark:text-surface-400">
+                      Estimated hours: <span className="font-semibold text-surface-900 dark:text-surface-100">{formatDuration(calculateTotalHours())}</span>
+                    </div>
+                    <button
+                      onClick={handleCreateEntry}
+                      disabled={actionLoading === 'create-entry'}
+                      className="px-4 py-2 rounded-lg bg-primary-500 hover:bg-primary-600 text-white text-sm font-medium disabled:opacity-60 inline-flex items-center gap-2"
+                    >
+                      {actionLoading === 'create-entry' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                      Save Entry
+                    </button>
+                  </div>
                 </div>
               )}
 
