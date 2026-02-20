@@ -1004,6 +1004,51 @@ html {
   --tablet-info: #5d6f91;
 }
 
+
+
+/* 8-inch+ tablet ergonomics */
+.tablet-theme {
+  --tablet-page-padding: 1rem;
+  --tablet-content-max: 100%;
+  --tablet-font-scale: 1;
+  font-size: calc(16px * var(--tablet-font-scale));
+}
+
+.tablet-theme main {
+  width: 100%;
+  max-width: var(--tablet-content-max);
+  margin-inline: auto;
+  padding-inline: var(--tablet-page-padding);
+}
+
+@media (min-width: 768px) {
+  .tablet-theme {
+    --tablet-page-padding: 1.25rem;
+    --tablet-content-max: 1280px;
+    --tablet-font-scale: 1.03;
+  }
+
+  .tablet-theme .rounded-2xl {
+    border-radius: 1.125rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .tablet-theme {
+    --tablet-page-padding: 1.5rem;
+    --tablet-content-max: 1600px;
+    --tablet-font-scale: 1.06;
+  }
+}
+
+@media (min-width: 768px) and (pointer: coarse) {
+  .tablet-theme button,
+  .tablet-theme [role="button"],
+  .tablet-theme a {
+    min-height: 48px;
+  }
+}
+
 /* ORDER STATUS BADGES */
 .order-status-new {
   @apply bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300 border-blue-200 dark:border-blue-800;
