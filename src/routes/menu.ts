@@ -540,15 +540,26 @@ router.get('/public/:slug', asyncHandler(async (req: Request, res: Response) => 
   });
 
   // Safe JSON parsing for restaurant data
-  const safeJsonParse = (str: string | null | undefined, fallback: any = {}) => {
-    if (!str || str.trim() === '' || str === 'null' || str === 'undefined') {
+  const safeJsonParse = (value: unknown, fallback: any = {}) => {
+    if (value === null || value === undefined) {
       return fallback;
     }
+
+    if (typeof value !== 'string') {
+      if (typeof value === 'object') return value;
+      return fallback;
+    }
+
+    const normalized = value.trim();
+    if (normalized === '' || normalized === 'null' || normalized === 'undefined') {
+      return fallback;
+    }
+
     try {
-      return JSON.parse(str);
+      return JSON.parse(normalized);
     } catch (e) {
       logger.warn('[BUG-1] JSON parse warning:', {
-        field: str.substring(0, 50) + '...',
+        field: normalized.substring(0, 50) + '...',
         error: e instanceof Error ? e.message : 'Unknown error'
       });
       return fallback;
