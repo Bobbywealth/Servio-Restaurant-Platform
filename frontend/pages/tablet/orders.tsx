@@ -17,7 +17,7 @@ import { OrderFiltersBar } from '../../components/tablet/orders/OrderFiltersBar'
 import { OrderDetailsModal } from '../../components/tablet/orders/OrderDetailsModal';
 import { useOrderAlerts } from '../../hooks/tablet/useOrderAlerts';
 import type { ReceiptPaperWidth, ReceiptOrder, ReceiptRestaurant } from '../../utils/receiptGenerator';
-import { generateReceiptHtml, generateStandaloneReceiptHtml } from '../../utils/receiptGenerator';
+import { generateReceiptHtml, generateStandaloneReceiptHtml, getReceiptItemModifiers } from '../../utils/receiptGenerator';
 import { api } from '../../lib/api'
 import { safeLocalStorage } from '../../lib/utils';
 import { generatePlainTextReceipt, printViaRawBT } from '../../utils/escpos';
@@ -27,8 +27,11 @@ type OrderItem = {
   id?: string;
   name?: string;
   quantity?: number;
+  qty?: number;
   unit_price?: number;
   price?: number;
+  modifiers?: Record<string, unknown> | string[];
+  notes?: string | null;
 };
 
 type Order = {
@@ -138,6 +141,34 @@ function normalizeStatus(s: string | null | undefined) {
   const lower = v.toLowerCase();
   if (lower === 'new') return 'received';
   return lower;
+}
+
+function normalizeOrderItems(items: unknown): OrderItem[] {
+  if (!Array.isArray(items)) return [];
+
+  return items.map((item: any) => {
+    const parsedQuantity = Number(item?.quantity ?? item?.qty ?? 1);
+    const quantity = Number.isFinite(parsedQuantity) && parsedQuantity > 0 ? parsedQuantity : 1;
+
+    let modifiers = item?.modifiers;
+    if ((!modifiers || typeof modifiers !== 'object') && typeof item?.notes === 'string') {
+      try {
+        const parsedNotes = JSON.parse(item.notes);
+        if (parsedNotes?.modifiers) {
+          modifiers = parsedNotes.modifiers;
+        }
+      } catch {
+        // Notes can be plain text; ignore parse errors.
+      }
+    }
+
+    return {
+      ...item,
+      name: item?.name || item?.item_name_snapshot || item?.item_id || 'Item',
+      quantity,
+      modifiers
+    };
+  });
 }
 
 // Prep time countdown function
@@ -616,7 +647,7 @@ export default function TabletOrdersPage() {
       }
       const json = await apiGet<OrdersResponse>('/api/orders?limit=50&offset=0');
       const list = Array.isArray(json?.data?.orders) ? json.data!.orders! : [];
-      setOrders(list);
+      setOrders(list.map((order) => ({ ...order, items: normalizeOrderItems(order.items) })));
       if (typeof window !== 'undefined') {
         const payload = JSON.stringify({ orders: list, cachedAt: new Date().toISOString() });
         safeLocalStorage.setItem(ORDER_CACHE_KEY, payload);
@@ -676,7 +707,7 @@ export default function TabletOrdersPage() {
           name: it.name || 'Item',
           quantity: it.quantity || 1,
           price: it.unit_price || it.price || 0,
-          modifiers: it.modifiers || []
+          modifiers: getReceiptItemModifiers(it)
         }));
 
         const orderAny = order as any;
@@ -827,7 +858,7 @@ export default function TabletOrdersPage() {
             name: it.name,
             quantity: it.quantity || 1,
             price: it.unit_price || it.price || 0,
-            modifiers: it.modifiers || []
+            modifiers: getReceiptItemModifiers(it)
           })),
           total: (testOrder.items || []).reduce((sum: number, it: any) => {
             const qty = it.quantity || 1;
@@ -1203,9 +1234,24 @@ export default function TabletOrdersPage() {
       : 'normal';
     const prepTimeColorClass = getPrepTimeColorClass(prepWarningLevel);
     const isOverdue = prepTimeData?.isOverdue;
-    const openOrderDetails = () => {
+    const cardStatusBadgeClasses = isPreparing && (prepWarningLevel === 'critical' || prepWarningLevel === 'warning')
+      ? prepWarningLevel === 'critical'
+        ? 'bg-[var(--tablet-danger)] text-white'
+        : 'bg-[var(--tablet-warning)] text-[var(--tablet-text)]'
+      : statusBadgeClassesForStatus(status);
+    const openOrderDetails = async () => {
       setSelectedOrder(o);
-      setOrderDetailsOrder(o);
+      setOrderDetailsOrder({ ...o, items: normalizeOrderItems(o.items) });
+
+      try {
+        const response = await apiGet<{ success: boolean; data?: Order }>(`/api/orders/${encodeURIComponent(o.id)}`);
+        if (!response?.success || !response.data) return;
+        const detailedOrder = { ...response.data, items: normalizeOrderItems(response.data.items) };
+        setOrderDetailsOrder(detailedOrder);
+        setSelectedOrder((prev) => (prev?.id === detailedOrder.id ? detailedOrder : prev));
+      } catch (error) {
+        console.warn('Failed to load full order details', error);
+      }
     };
 
     return (

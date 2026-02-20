@@ -5,7 +5,7 @@ import { PrintReceipt } from '../../../components/PrintReceipt';
 import { api } from '../../../lib/api';
 import { safeLocalStorage } from '../../../lib/utils';
 import type { ReceiptOrder, ReceiptPaperWidth, ReceiptRestaurant } from '../../../utils/receiptGenerator';
-import { generateReceiptHtml, generateStandaloneReceiptHtml } from '../../../utils/receiptGenerator';
+import { generateReceiptHtml, generateStandaloneReceiptHtml, getReceiptItemModifiers } from '../../../utils/receiptGenerator';
 import { generatePlainTextReceipt, printViaRawBT } from '../../../utils/escpos';
 
 type PrintMode = 'bluetooth' | 'system' | 'bridge' | 'rawbt';
@@ -94,7 +94,7 @@ export default function TabletPrintPage() {
         name: it.name || 'Item',
         quantity: it.quantity || 1,
         price: it.unit_price || it.price || 0,
-        modifiers: it.modifiers || []
+        modifiers: getReceiptItemModifiers(it)
       }));
 
       const orderAny = order as any;

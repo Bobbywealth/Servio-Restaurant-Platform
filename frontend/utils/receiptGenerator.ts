@@ -15,6 +15,10 @@ export type ReceiptOrderItem = {
   unit_price?: number | null;
   price?: number | null;
   modifiers?: any;
+  selectedModifiers?: any;
+  modifyItems?: any;
+  modifications?: any;
+  selections?: any;
 };
 
 export type ReceiptOrder = {
@@ -90,6 +94,73 @@ export function calculateOrderTotals(order: ReceiptOrder) {
   return { subtotal, tax, total };
 }
 
+function extractModifierLabel(modifier: any): string {
+  if (!modifier) return '';
+  if (typeof modifier === 'string') return modifier.trim();
+  if (typeof modifier !== 'object') return String(modifier).trim();
+
+  const quantity = typeof modifier.quantity === 'number' && modifier.quantity > 1
+    ? `${modifier.quantity}x `
+    : '';
+
+  const mainLabel = (
+    modifier.optionName ||
+    modifier.option_name ||
+    modifier.name ||
+    modifier.value ||
+    modifier.label ||
+    modifier.choiceName ||
+    modifier.choice_name ||
+    ''
+  ).toString().trim();
+
+  const groupLabel = (
+    modifier.groupName ||
+    modifier.group_name ||
+    modifier.category ||
+    ''
+  ).toString().trim();
+
+  if (mainLabel && groupLabel) return `${quantity}${groupLabel}: ${mainLabel}`;
+  if (mainLabel) return `${quantity}${mainLabel}`;
+  if (groupLabel) return `${quantity}${groupLabel}`;
+  return '';
+}
+
+export function getReceiptItemModifiers(item: ReceiptOrderItem | any): string[] {
+  const candidates = [
+    item?.modifiers,
+    item?.selectedModifiers,
+    item?.modifyItems,
+    item?.modify_items,
+    item?.modifications,
+    item?.selections
+  ];
+
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+
+    if (typeof candidate === 'string') {
+      const parsed = candidate
+        .split(',')
+        .map((v) => v.trim())
+        .filter(Boolean);
+      if (parsed.length > 0) return parsed;
+      continue;
+    }
+
+    if (Array.isArray(candidate)) {
+      const parsed = candidate
+        .map((entry) => extractModifierLabel(entry))
+        .filter(Boolean);
+      if (parsed.length > 0) return parsed;
+      continue;
+    }
+  }
+
+  return [];
+}
+
 export function generateReceiptHtml(args: {
   restaurant: ReceiptRestaurant | null;
   order: ReceiptOrder;
@@ -124,13 +195,7 @@ export function generateReceiptHtml(args: {
           const unit = typeof it.unit_price === 'number' ? it.unit_price : typeof it.price === 'number' ? it.price : 0;
           const lineTotal = unit * qty;
           const modifiers = (() => {
-            const raw = (it as any)?.modifiers;
-            if (!raw) return '';
-            const list = Array.isArray(raw)
-              ? raw
-              : typeof raw === 'string'
-                ? raw.split(',').map((v) => v.trim()).filter(Boolean)
-                : [];
+            const list = getReceiptItemModifiers(it);
             if (!list.length) return '';
             return `<div class="receipt-item-modifiers">${list.map((m) => `• ${escapeHtml(String(m))}`).join('<br/>')}</div>`;
           })();
@@ -301,4 +366,3 @@ export function generateStandaloneReceiptHtml(args: {
 <body>${receiptBody}</body>
 </html>`;
 }
-
