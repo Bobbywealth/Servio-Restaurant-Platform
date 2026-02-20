@@ -3830,6 +3830,7 @@ const SortableItemTableRow = memo(function SortableItemTableRow({
   onMoveUp: () => void;
   onMoveDown: () => void;
 }) {
+  const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: String(item.id)
   });
@@ -3883,7 +3884,25 @@ const SortableItemTableRow = memo(function SortableItemTableRow({
           <div className="min-w-0 flex-1">
             <div className="font-semibold text-gray-900 dark:text-white truncate text-base sm:text-base">{item.name}</div>
             {item.description ? (
-              <div className="text-xs text-gray-500 dark:text-gray-400 truncate max-w-[150px] sm:max-w-none">{item.description}</div>
+              <div className="relative mt-0.5">
+                <button
+                  type="button"
+                  className="text-left text-xs text-gray-500 dark:text-gray-400 truncate max-w-[180px] sm:max-w-[320px]"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsDescriptionExpanded((prev) => !prev);
+                  }}
+                  aria-label={isDescriptionExpanded ? 'Hide full description' : 'Show full description'}
+                  title={isDescriptionExpanded ? 'Hide full description' : 'Show full description'}
+                >
+                  {item.description}
+                </button>
+                {isDescriptionExpanded ? (
+                  <div className="absolute left-0 top-full z-30 mt-1 w-72 max-w-[70vw] rounded-lg border border-gray-200 bg-white p-2 text-xs text-gray-600 shadow-xl dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 whitespace-normal break-words">
+                    {item.description}
+                  </div>
+                ) : null}
+              </div>
             ) : null}
             {/* Mobile price display */}
             <div className="sm:hidden text-xs font-semibold text-gray-700 dark:text-gray-300 mt-0.5">
