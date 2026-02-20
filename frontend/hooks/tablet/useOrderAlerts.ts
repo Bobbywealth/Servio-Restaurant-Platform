@@ -66,6 +66,14 @@ function playAlarmTone() {
   window.setTimeout(() => beep(), 600);
 }
 
+function stopAlarmTone() {
+  if (!notificationAudio) return;
+  try {
+    notificationAudio.pause();
+    notificationAudio.currentTime = 0;
+  } catch {}
+}
+
 export function useOrderAlerts(receivedOrdersCount: number) {
   const [soundEnabled, setSoundEnabled] = useState(true);
   const alarmIntervalRef = useRef<number | null>(null);
@@ -94,18 +102,27 @@ export function useOrderAlerts(receivedOrdersCount: number) {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
+
     if (receivedOrdersCount > 0 && soundEnabled) {
       if (alarmIntervalRef.current === null) {
         playAlarmTone();
         alarmIntervalRef.current = window.setInterval(playAlarmTone, 2500);
       }
-      return;
+    } else {
+      if (alarmIntervalRef.current !== null) {
+        window.clearInterval(alarmIntervalRef.current);
+        alarmIntervalRef.current = null;
+      }
+      stopAlarmTone();
     }
 
-    if (alarmIntervalRef.current !== null) {
-      window.clearInterval(alarmIntervalRef.current);
-      alarmIntervalRef.current = null;
-    }
+    return () => {
+      if (alarmIntervalRef.current !== null) {
+        window.clearInterval(alarmIntervalRef.current);
+        alarmIntervalRef.current = null;
+      }
+      stopAlarmTone();
+    };
   }, [receivedOrdersCount, soundEnabled]);
 
   const toggleSound = () => {
