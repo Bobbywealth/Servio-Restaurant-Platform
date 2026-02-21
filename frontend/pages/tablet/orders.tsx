@@ -223,6 +223,19 @@ function getPrepTimeColorClass(level: 'normal' | 'warning' | 'critical'): string
   }
 }
 
+function statusBadgeClassesForStatus(status: string): string {
+  switch (status) {
+    case 'received':
+      return 'bg-[var(--tablet-danger)] text-white';
+    case 'preparing':
+      return 'bg-[var(--tablet-warning)] text-[var(--tablet-text)]';
+    case 'ready':
+      return 'bg-[var(--tablet-success)] text-white';
+    default:
+      return 'bg-[var(--tablet-surface-alt)] text-[var(--tablet-text)]';
+  }
+}
+
 // Search/filter utilities
 function matchesSearchQuery(order: Order, query: string): boolean {
   if (!query.trim()) return true;
