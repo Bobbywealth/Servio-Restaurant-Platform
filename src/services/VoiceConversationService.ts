@@ -42,7 +42,7 @@ export interface VoiceConversationWithMessages extends VoiceConversation {
 export class VoiceConversationService {
   private static instance: VoiceConversationService;
   private _db: any = null;
-  private cleanupInterval: NodeJS.Timeout | null = null;
+  private cleanupInterval: ReturnType<typeof setInterval> | null = null;
 
   // Configuration
   private readonly DEFAULT_RETENTION_DAYS = 30;

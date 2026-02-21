@@ -46,11 +46,10 @@ router.post('/delete', validateBulkDelete, asyncHandler(async (req: Request, res
     });
   }
 
-  // Delete item images from storage
-  const itemsWithImages = await db.all(`
-    SELECT images FROM menu_items WHERE id IN (${itemIds.map(() => '?').join(',')})
-  `, itemIds);
-
+  // TODO: Delete item images from storage
+  // const itemsWithImages = await db.all(`
+  //   SELECT images FROM menu_items WHERE id IN (${itemIds.map(() => '?').join(',')})
+  // `, itemIds);
   // TODO: Delete images from storage service
 
   // Delete items

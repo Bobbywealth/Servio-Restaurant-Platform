@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { DatabaseService } from '../services/DatabaseService';
-import { asyncHandler, UnauthorizedError, BadRequestError, NotFoundError } from '../middleware/errorHandler';
+import { asyncHandler, UnauthorizedError, BadRequestError } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
 import { ensureUploadsDir, getUploadsPath } from '../utils/uploads';
 import multer from 'multer';

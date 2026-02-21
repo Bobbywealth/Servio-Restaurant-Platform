@@ -4,8 +4,8 @@
  */
 
 import { Router, Request, Response } from 'express'
-import { v4 as uuidv4 } from 'uuid'
-import { AppError, InternalServerError } from '../lib/errors'
+// import { v4 as uuidv4 } from 'uuid'
+// import { AppError, InternalServerError } from '../lib/errors'
 import { EmailService } from '../services/EmailService'
 
 const router = Router()
@@ -88,17 +88,10 @@ function checkApi(): {
   status: 'healthy' | 'unhealthy'
   message?: string
 } {
-  try {
-    // Check if API is responding
-    // This could be a simple health check endpoint or a mock check
-    return {
-      status: 'healthy'
-    }
-  } catch (error) {
-    return {
-      status: 'unhealthy',
-      message: error instanceof Error ? error.message : 'Unknown error'
-    }
+  // Check if API is responding
+  // This could be a simple health check endpoint or a mock check
+  return {
+    status: 'healthy'
   }
 }
 
@@ -232,8 +225,6 @@ function formatBytes(bytes: number): string {
  * Health check endpoint for uptime monitoring
  */
 router.get('/', async (req: Request, res: Response) => {
-  const requestId = req.headers['x-request-id'] as string || uuidv4()
-
   try {
     // Run all health checks
     const [dbCheck, apiCheck, integrationsCheck, diskCheck] = await Promise.all([

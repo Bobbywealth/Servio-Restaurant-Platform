@@ -274,7 +274,7 @@ export async function validateImage(buffer: Buffer): Promise<{
     }
     
     return { valid: true, metadata };
-  } catch (error) {
+  } catch {
     return { valid: false, error: 'Failed to process image' };
   }
 }

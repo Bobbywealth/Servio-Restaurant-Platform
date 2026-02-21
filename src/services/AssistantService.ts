@@ -121,14 +121,12 @@ export class AssistantService {
     if (!conversationContexts.has(sessionId)) {
       // Try to find existing conversation in database
       let conversationId: string | undefined;
-      let existingConversation = false;
 
       try {
         const restaurantId = await this.resolveRestaurantId(userId);
         const existing = await voiceConversationService.getConversationBySessionId(sessionId, restaurantId);
         if (existing) {
           conversationId = existing.id;
-          existingConversation = true;
           logger.info('[assistant] Found existing conversation in database', { sessionId, conversationId });
         }
       } catch (error) {
@@ -648,7 +646,7 @@ export class AssistantService {
       const plainText = text.length > 2000 ? text.slice(0, 2000) : text;
 
       // Wrap with SSML for natural prosody (free optimization)
-      const ssmlInput = this.wrapWithSSML(plainText, sentiment);
+      // const ssmlInput = this.wrapWithSSML(plainText, sentiment); // Reserved for future SSML support
       const input = plainText; // OpenAI doesn't fully support SSML yet, but we keep the structure for future
 
       // Get voice parameters based on sentiment (free optimization)

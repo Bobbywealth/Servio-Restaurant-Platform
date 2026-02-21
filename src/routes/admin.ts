@@ -2240,7 +2240,7 @@ router.post('/orders/bulk/cancel-stale', async (req, res) => {
       ORDER BY created_at DESC
       LIMIT 1
       `,
-      [`${ADMIN_INTERVENTION_ACTION_PREFIX}bulk_cancel_stale`, `%"idempotencyKey":"${idempotencyKey.replace(/"/g, '\\\"')}"%`]
+      [`${ADMIN_INTERVENTION_ACTION_PREFIX}bulk_cancel_stale`, `%"idempotencyKey":"${idempotencyKey.replace(/"/g, '\\\"')}"%`] // eslint-disable-line no-useless-escape
     );
     if (existing) {
       return res.json({ success: true, idempotentReplay: true, cancelledOrderIds: [] });

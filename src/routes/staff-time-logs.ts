@@ -1,7 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { asyncHandler } from '../middleware/errorHandler';
 import { DatabaseService } from '../services/DatabaseService';
-import { logger } from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
 import { eventBus } from '../events/bus';
 
@@ -41,7 +40,7 @@ router.get('/staff/time-logs/:id', asyncHandler(async (req: Request, res: Respon
  */
 router.put('/staff/time-logs/:id', asyncHandler(async (req: Request, res: Response) => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const { user_id, clock_in_time, clock_out_time, break_minutes, notes } = req.body;
+  const { clock_in_time, clock_out_time, break_minutes, notes } = req.body;
   const restaurantId = (req as any).restaurantId;
   const requestingUserId = (req as any).userId;
 
@@ -136,7 +135,7 @@ router.put('/staff/time-logs/:id', asyncHandler(async (req: Request, res: Respon
  * Create a manual time entry
  */
 router.post('/staff/time-logs', asyncHandler(async (req: Request, res: Response) => {
-  const { user_id, clock_in_time, break_minutes, notes, position } = req.body;
+  const { user_id, clock_in_time, break_minutes, position } = req.body;
   const restaurantId = (req as any).restaurantId;
   const requestingUserId = (req as any).userId;
 

@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { DatabaseService } from '../services/DatabaseService';
-import { asyncHandler, BadRequestError, NotFoundError, ForbiddenError } from '../middleware/errorHandler';
+import { asyncHandler } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
 import type { AuthUser } from '../types/auth';
@@ -552,7 +552,7 @@ router.post('/users/invite', asyncHandler(async (req: Request, res: Response) =>
     });
   }
 
-  const { email, role, permissions, restaurant_ids } = req.body;
+  const { email, role, permissions } = req.body;
 
   if (!email || !role) {
     return res.status(400).json({

@@ -662,8 +662,6 @@ router.get('/availability/:userId', asyncHandler(async (req: Request, res: Respo
 router.put('/availability/:userId', asyncHandler(async (req: Request, res: Response) => {
   const { userId } = req.params;
   const data: AvailabilityData = req.body;
-  const restaurantId = (req as any).user?.restaurantId;
-  const currentUserId = (req as any).user?.id;
 
   const db = DatabaseService.getInstance().getDatabase();
 
@@ -744,7 +742,6 @@ router.post('/templates', asyncHandler(async (req: Request, res: Response) => {
   const data: ShiftTemplateData = req.body;
   const user = (req as any).user;
   const restaurantId = user?.restaurantId;
-  const userId = user?.id;
   const userRole = user?.role;
 
   // Permission check - only managers, owners, admins can create templates

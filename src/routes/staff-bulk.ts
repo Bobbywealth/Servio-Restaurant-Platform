@@ -1,7 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { DatabaseService } from '../services/DatabaseService';
 import { asyncHandler } from '../middleware/errorHandler';
-import { logger } from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
 import { eventBus } from '../events/bus';
 

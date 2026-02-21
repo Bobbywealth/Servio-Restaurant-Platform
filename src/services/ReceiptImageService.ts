@@ -217,7 +217,7 @@ If something is unreadable or uncertain, note it in the confidence score.`
     });
 
     return resultData;
-  } catch (error: any) {
+  } catch {
     logger.error('Failed to parse Vision API response', { content: content?.substring?.(0, 500) || 'N/A' });
     throw new Error('Failed to parse receipt analysis result');
   }
@@ -346,7 +346,7 @@ Return ONLY valid JSON with this structure:
         analyzedAt: new Date().toISOString(),
         confidence: Math.max(0, Math.min(1, Number(parsed.confidence) || 0.6))
       };
-    } catch (parseError) {
+    } catch {
       logger.error('Failed to parse AI response', { content: content.substring(0, 500) });
       throw new Error('Failed to parse receipt analysis result');
     }
@@ -360,7 +360,7 @@ Return ONLY valid JSON with this structure:
     const items: ReceiptAnalysisItem[] = [];
     
     // Simple regex patterns for common receipt formats
-    const pricePattern = /[\$£€]?\s*(\d+[.,]\d{2})/;
+    const pricePattern = /[$£€]?\s*(\d+[.,]\d{2})/;
     
     for (const line of lines) {
       const priceMatch = line.match(pricePattern);
@@ -389,7 +389,7 @@ Return ONLY valid JSON with this structure:
   async saveUploadedImage(
     imageBuffer: Buffer,
     originalName: string,
-    restaurantId: string
+    _restaurantId: string
   ): Promise<{ path: string; url: string }> {
     const uploadDir = await ensureUploadsDir('receipts');
     const ext = path.extname(originalName).toLowerCase() || '.jpg';

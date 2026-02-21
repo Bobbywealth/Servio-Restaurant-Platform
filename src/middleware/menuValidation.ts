@@ -15,14 +15,6 @@ interface ValidationError {
 }
 
 /**
- * Validation result type
- */
-interface ValidationResult {
-  isValid: boolean;
-  errors: ValidationError[];
-}
-
-/**
  * Validate a string field
  */
 const validateString = (

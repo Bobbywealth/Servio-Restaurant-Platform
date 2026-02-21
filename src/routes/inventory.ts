@@ -4,8 +4,7 @@ import { asyncHandler } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
 import multer from 'multer';
-import { receiptImageService, ReceiptAnalysisResult, InventoryItemFromReceipt } from '../services/ReceiptImageService';
-import path from 'path';
+import { receiptImageService } from '../services/ReceiptImageService';
 
 // Configure multer for memory storage
 const upload = multer({
@@ -548,7 +547,6 @@ router.post('/create-from-receipt', asyncHandler(async (req: Request, res: Respo
       );
 
       let itemId: string;
-      let wasUpdated = false;
 
       if (existingItem) {
         // Update existing item quantity
@@ -576,7 +574,6 @@ router.post('/create-from-receipt', asyncHandler(async (req: Request, res: Respo
         });
 
         itemId = existingItem.id;
-        wasUpdated = true;
       } else {
         // Create new item
         itemId = uuidv4();
