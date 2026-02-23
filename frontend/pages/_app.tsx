@@ -11,7 +11,7 @@ import { ErrorBoundary } from '../components/ErrorBoundary'
 import { Inter } from 'next/font/google'
 import { usePushSubscription } from '../lib/hooks'
 import { safeLocalStorage } from '../lib/utils'
-import { refreshAccessToken, syncTokenToServiceWorker } from '../lib/api'
+import { registerTokenStorageSync, syncTokenToServiceWorker } from '../lib/serviceWorkerAuth'
 
 // LOAD INTER FONT VIA NEXT.JS FONT OPTIMIZATION
 const inter = Inter({
@@ -47,9 +47,47 @@ export default function App({ Component, pageProps }: AppProps) {
       // Only refresh if we have a refresh token
       if (!refreshToken) return
 
-      const refreshed = await refreshAccessToken()
-      if (refreshed) {
-        console.log('[keep-alive] Session refreshed successfully')
+      // Don't refresh if token is valid for at least 15 minutes
+      // More aggressive threshold to ensure token never expires during use
+      if (accessToken) {
+        try {
+          const tokenData = JSON.parse(atob(accessToken.split('.')[1]))
+          const exp = tokenData.exp * 1000
+          const fifteenMinutes = 15 * 60 * 1000
+          if (Date.now() < exp - fifteenMinutes) {
+            return // Token still valid for at least 15 minutes
+          }
+        } catch {
+          // Invalid token, continue with refresh
+        }
+      }
+
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL ||
+        process.env.NEXT_PUBLIC_BACKEND_URL ||
+        'http://localhost:3002'
+
+      const response = await fetch(`${baseUrl}/api/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken }),
+        credentials: 'include'
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        const newAccessToken = data?.data?.accessToken
+        if (newAccessToken) {
+          safeLocalStorage.setItem('servio_access_token', newAccessToken)
+          syncTokenToServiceWorker(newAccessToken)
+          console.log('[keep-alive] Session refreshed successfully')
+        }
+      } else if (response.status === 401) {
+        // Refresh token is invalid/expired - clear auth
+        console.warn('[keep-alive] Refresh token expired, clearing session')
+        safeLocalStorage.removeItem('servio_access_token')
+        safeLocalStorage.removeItem('servio_refresh_token')
+        safeLocalStorage.removeItem('servio_user')
+        syncTokenToServiceWorker(null)
       }
     } catch (error) {
       // Silent fail - token refresh will happen on next API call if needed
@@ -121,10 +159,10 @@ export default function App({ Component, pageProps }: AppProps) {
       window.location.reload()
     }
 
-    const syncCurrentAuthToken = () => {
-      const token = safeLocalStorage.getItem('servio_access_token')
+    const removeStorageSyncListener = registerTokenStorageSync((token) => {
+      // Cross-tab fallback only. Same-tab writes call syncTokenToServiceWorker directly.
       syncTokenToServiceWorker(token)
-    }
+    })
 
     const registerServiceWorker = () => {
       navigator.serviceWorker
@@ -132,19 +170,8 @@ export default function App({ Component, pageProps }: AppProps) {
         .then((registration) => {
           registration.update()
 
-          // Send auth token when SW is ready
-          syncCurrentAuthToken()
-
-          // Listen for token changes and update SW
-          window.addEventListener('storage', (e) => {
-            if (e.key === 'servio_access_token') {
-              if (e.newValue) {
-                syncCurrentAuthToken()
-              } else {
-                syncTokenToServiceWorker(null)
-              }
-            }
-          })
+          // Initial auth token sync when SW is ready
+          syncTokenToServiceWorker(safeLocalStorage.getItem('servio_access_token'))
 
           if (registration.waiting) {
             registration.waiting.postMessage({ type: 'SKIP_WAITING' })
@@ -166,14 +193,18 @@ export default function App({ Component, pageProps }: AppProps) {
     }
 
     navigator.serviceWorker.addEventListener('controllerchange', handleControllerChange)
+    const handleWindowLoad = () => registerServiceWorker()
+
     if (document.readyState === 'complete') {
       registerServiceWorker()
     } else {
-      window.addEventListener('load', registerServiceWorker, { once: true })
+      window.addEventListener('load', handleWindowLoad, { once: true })
     }
 
     return () => {
       navigator.serviceWorker.removeEventListener('controllerchange', handleControllerChange)
+      window.removeEventListener('load', handleWindowLoad)
+      removeStorageSyncListener()
     }
   }, [isStaffRoute])
 
