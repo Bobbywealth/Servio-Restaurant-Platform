@@ -59,6 +59,28 @@ export class ForbiddenError extends Error {
   }
 }
 
+export class TooManyRequestsError extends Error {
+  statusCode = 429;
+  isOperational = true;
+  retryAfter?: Date;
+
+  constructor(message: string = 'Too many requests', retryAfter?: Date) {
+    super(message);
+    this.name = 'TooManyRequestsError';
+    this.retryAfter = retryAfter;
+  }
+}
+
+export class ConflictError extends Error {
+  statusCode = 409;
+  isOperational = true;
+
+  constructor(message: string = 'Conflict') {
+    super(message);
+    this.name = 'ConflictError';
+  }
+}
+
 export const errorHandler = (
   error: AppError,
   req: Request,
@@ -128,6 +150,12 @@ export const errorHandler = (
   // Add request ID if available
   if (req.headers['x-request-id']) {
     errorResponse.requestId = req.headers['x-request-id'];
+  }
+
+  // Add Retry-After header for rate limit errors
+  if (error.name === 'TooManyRequestsError' && (error as any).retryAfter) {
+    res.setHeader('Retry-After', Math.ceil(((error as any).retryAfter.getTime() - Date.now()) / 1000));
+    errorResponse.error.retryAfter = (error as any).retryAfter.toISOString();
   }
 
   // Ensure CORS headers are present even on errors (so browsers don't mask real errors as CORS failures).

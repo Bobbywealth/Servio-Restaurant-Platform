@@ -135,6 +135,7 @@ async function initializeServer() {
     const { default: companyRoutes } = await import('./routes/company');
     const { default: bookingsRoutes } = await import('./routes/bookings');
     const { default: publicRoutes } = await import('./routes/public');
+    const { default: apiKeysRoutes } = await import('./routes/apiKeys');
 
     // API Routes
     app.use('/api/auth', authRoutes);
@@ -150,18 +151,23 @@ async function initializeServer() {
     
     // Protected routes
     app.use('/api/assistant', requireAuth, assistantRoutes);
-    // Orders routes: /public/* is public, others require auth
+
+    // Import combined auth middleware for API key support
+    const { requireAuthOrApiKey } = await import('./middleware/apiKeyAuth');
+
+    // Orders routes: /public/* is public, others require auth (JWT or API key)
     app.use('/api/orders', (req, res, next) => {
       if (req.path.startsWith('/public')) return next();
-      return requireAuth(req, res, next);
+      return requireAuthOrApiKey({ requiredScopes: ['read:orders'] })(req, res, next);
     }, ordersRoutes);
 
-    app.use('/api/inventory', requireAuth, inventoryRoutes);
+    // Inventory routes: support both JWT and API key auth
+    app.use('/api/inventory', requireAuthOrApiKey({ requiredScopes: ['read:inventory'] }), inventoryRoutes);
     
-    // Menu routes: /public/* is public, others require auth
+    // Menu routes: /public/* is public, others require auth (JWT or API key)
     app.use('/api/menu', (req, res, next) => {
       if (req.path.startsWith('/public')) return next();
-      return requireAuth(req, res, next);
+      return requireAuthOrApiKey({ requiredScopes: ['read:menu'] })(req, res, next);
     }, menuRoutes);
 
     app.use('/api/tasks', requireAuth, tasksRoutes);
@@ -217,6 +223,9 @@ async function initializeServer() {
     }, pushRoutes);
     app.use('/api/delivery-platforms', requireAuth, deliveryPlatformsRoutes);
     app.use('/api/delivery-platforms-sessions', requireAuth, deliveryPlatformsSessionsRoutes);
+
+    // API Key management routes
+    app.use('/api/api-keys', requireAuth, apiKeysRoutes);
 
     // Company and platform admin routes
     app.use('/api/company', requireAuth, companyRoutes);
