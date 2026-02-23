@@ -39,6 +39,7 @@ const DEFAULT_PLATFORM_SETTINGS: PlatformSettings = {
 
 const ACTIVE_ORDER_STATUSES = ['pending', 'accepted', 'received', 'preparing', 'ready'] as const;
 const ACTIVE_ORDER_STATUS_SQL_LIST = ACTIVE_ORDER_STATUSES.map((status) => `'${status}'`).join(', ');
+const EXCLUDE_DEMO_RESTAURANTS_SQL = "COALESCE(r.slug, '') <> 'demo-restaurant' AND r.id <> 'demo-restaurant-1'";
 
 /**
  * API contract: GET /api/admin/demo-bookings
@@ -2864,21 +2865,22 @@ router.get('/platform-stats', async (req, res) => {
     // Get platform-wide statistics
     const stats = await db.all(`
       SELECT 
-        (SELECT COUNT(*) FROM restaurants WHERE is_active = true) as total_restaurants,
-        (SELECT COUNT(*) FROM restaurants WHERE is_active = true AND updated_at > NOW() - INTERVAL '7 days') as active_restaurants_7d,
-        (SELECT COUNT(*) FROM orders) as total_orders,
-        (SELECT COUNT(*) FROM orders WHERE created_at > NOW() - INTERVAL '30 days') as orders_30d,
-        (SELECT COALESCE(SUM(total_amount), 0) FROM orders WHERE created_at >= CURRENT_DATE) as revenue_today,
-        (SELECT COALESCE(SUM(total_amount), 0) FROM orders WHERE created_at >= NOW() - INTERVAL '7 days') as revenue_week,
-        (SELECT COALESCE(SUM(total_amount), 0) FROM orders WHERE created_at >= NOW() - INTERVAL '30 days') as revenue_month,
-        (SELECT COUNT(*) FROM orders WHERE status IN (${ACTIVE_ORDER_STATUS_SQL_LIST})) as active_orders_now,
+        (SELECT COUNT(*) FROM restaurants r WHERE r.is_active = true AND ${EXCLUDE_DEMO_RESTAURANTS_SQL}) as total_restaurants,
+        (SELECT COUNT(*) FROM restaurants r WHERE r.is_active = true AND ${EXCLUDE_DEMO_RESTAURANTS_SQL} AND r.updated_at > NOW() - INTERVAL '7 days') as active_restaurants_7d,
+        (SELECT COUNT(*) FROM orders o JOIN restaurants r ON r.id = o.restaurant_id WHERE ${EXCLUDE_DEMO_RESTAURANTS_SQL}) as total_orders,
+        (SELECT COUNT(*) FROM orders o JOIN restaurants r ON r.id = o.restaurant_id WHERE ${EXCLUDE_DEMO_RESTAURANTS_SQL} AND o.created_at > NOW() - INTERVAL '30 days') as orders_30d,
+        (SELECT COALESCE(SUM(o.total_amount), 0) FROM orders o JOIN restaurants r ON r.id = o.restaurant_id WHERE ${EXCLUDE_DEMO_RESTAURANTS_SQL} AND o.created_at >= CURRENT_DATE) as revenue_today,
+        (SELECT COALESCE(SUM(o.total_amount), 0) FROM orders o JOIN restaurants r ON r.id = o.restaurant_id WHERE ${EXCLUDE_DEMO_RESTAURANTS_SQL} AND o.created_at >= NOW() - INTERVAL '7 days') as revenue_week,
+        (SELECT COALESCE(SUM(o.total_amount), 0) FROM orders o JOIN restaurants r ON r.id = o.restaurant_id WHERE ${EXCLUDE_DEMO_RESTAURANTS_SQL} AND o.created_at >= NOW() - INTERVAL '30 days') as revenue_month,
+        (SELECT COUNT(*) FROM orders o JOIN restaurants r ON r.id = o.restaurant_id WHERE ${EXCLUDE_DEMO_RESTAURANTS_SQL} AND o.status IN (${ACTIVE_ORDER_STATUS_SQL_LIST})) as active_orders_now,
         (SELECT COUNT(DISTINCT te.user_id)
           FROM time_entries te
+          JOIN restaurants r ON r.id = te.restaurant_id
           JOIN users u ON u.id = te.user_id AND u.is_active = true
-          WHERE te.clock_out_time IS NULL) as staff_on_duty,
-        (SELECT COUNT(*) FROM time_entries WHERE created_at > NOW() - INTERVAL '30 days') as timeclock_entries_30d,
-        (SELECT COUNT(*) FROM inventory_transactions WHERE created_at > NOW() - INTERVAL '30 days') as inventory_transactions_30d,
-        (SELECT COUNT(*) FROM audit_logs WHERE created_at > NOW() - INTERVAL '24 hours') as audit_events_24h
+          WHERE ${EXCLUDE_DEMO_RESTAURANTS_SQL} AND te.clock_out_time IS NULL) as staff_on_duty,
+        (SELECT COUNT(*) FROM time_entries te JOIN restaurants r ON r.id = te.restaurant_id WHERE ${EXCLUDE_DEMO_RESTAURANTS_SQL} AND te.created_at > NOW() - INTERVAL '30 days') as timeclock_entries_30d,
+        (SELECT COUNT(*) FROM inventory_transactions it JOIN restaurants r ON r.id = it.restaurant_id WHERE ${EXCLUDE_DEMO_RESTAURANTS_SQL} AND it.created_at > NOW() - INTERVAL '30 days') as inventory_transactions_30d,
+        (SELECT COUNT(*) FROM audit_logs al JOIN restaurants r ON r.id = al.restaurant_id WHERE ${EXCLUDE_DEMO_RESTAURANTS_SQL} AND al.created_at > NOW() - INTERVAL '24 hours') as audit_events_24h
     `);
 
     // Get recent activity
@@ -2889,7 +2891,7 @@ router.get('/platform-stats', async (req, res) => {
         COUNT(o.id) as orders_today
       FROM restaurants r
       LEFT JOIN orders o ON r.id = o.restaurant_id AND o.created_at::date = CURRENT_DATE
-      WHERE r.is_active = true
+      WHERE r.is_active = true AND ${EXCLUDE_DEMO_RESTAURANTS_SQL}
       GROUP BY r.id, r.name
       ORDER BY orders_today DESC
       LIMIT 10
@@ -2929,6 +2931,7 @@ router.get('/recent-activity', async (req, res) => {
           r.name AS restaurant
         FROM orders o
         JOIN restaurants r ON r.id = o.restaurant_id
+        WHERE ${EXCLUDE_DEMO_RESTAURANTS_SQL}
 
         UNION ALL
 
@@ -2940,6 +2943,7 @@ router.get('/recent-activity', async (req, res) => {
           r.name AS restaurant
         FROM time_entries te
         JOIN restaurants r ON r.id = te.restaurant_id
+        WHERE ${EXCLUDE_DEMO_RESTAURANTS_SQL}
 
         UNION ALL
 
@@ -2951,6 +2955,7 @@ router.get('/recent-activity', async (req, res) => {
           r.name AS restaurant
         FROM inventory_transactions it
         JOIN restaurants r ON r.id = it.restaurant_id
+        WHERE ${EXCLUDE_DEMO_RESTAURANTS_SQL}
 
         UNION ALL
 
@@ -2962,6 +2967,7 @@ router.get('/recent-activity', async (req, res) => {
           r.name AS restaurant
         FROM audit_logs al
         JOIN restaurants r ON r.id = al.restaurant_id
+        WHERE ${EXCLUDE_DEMO_RESTAURANTS_SQL}
       ) combined
       ORDER BY timestamp DESC
       LIMIT ?
@@ -2995,7 +3001,7 @@ router.get('/analytics', async (req, res) => {
       LEFT JOIN orders o
        ON r.id = o.restaurant_id
        AND o.created_at >= NOW() - INTERVAL '${windowDays} days'
-      WHERE r.is_active = true
+      WHERE r.is_active = true AND ${EXCLUDE_DEMO_RESTAURANTS_SQL}
       GROUP BY r.id, r.name
       ORDER BY revenue DESC
       LIMIT 10
@@ -3003,21 +3009,25 @@ router.get('/analytics', async (req, res) => {
 
     const ordersByChannel = await db.all(`
       SELECT
-        channel,
+        o.channel as channel,
         COUNT(*) AS count
-      FROM orders
-      WHERE created_at >= NOW() - INTERVAL '${windowDays} days'
-      GROUP BY channel
+      FROM orders o
+      JOIN restaurants r ON r.id = o.restaurant_id
+      WHERE ${EXCLUDE_DEMO_RESTAURANTS_SQL}
+        AND o.created_at >= NOW() - INTERVAL '${windowDays} days'
+      GROUP BY o.channel
       ORDER BY count DESC
       LIMIT 10
     `);
 
     const hourlyDistribution = await db.all(`
       SELECT
-        CAST(EXTRACT(HOUR FROM created_at) AS INTEGER) AS hour,
+        CAST(EXTRACT(HOUR FROM o.created_at) AS INTEGER) AS hour,
         COUNT(*) AS orders
-      FROM orders
-      WHERE created_at >= NOW() - INTERVAL '${windowDays} days'
+      FROM orders o
+      JOIN restaurants r ON r.id = o.restaurant_id
+      WHERE ${EXCLUDE_DEMO_RESTAURANTS_SQL}
+        AND o.created_at >= NOW() - INTERVAL '${windowDays} days'
       GROUP BY hour
       ORDER BY hour ASC
     `);
@@ -3047,7 +3057,7 @@ router.get('/restaurants', async (req, res) => {
     
     const offset = (Number(page) - 1) * Number(limit);
     
-    let whereClause = '1=1';
+    let whereClause = `${EXCLUDE_DEMO_RESTAURANTS_SQL}`;
     const params: any[] = [];
     
     if (search) {
