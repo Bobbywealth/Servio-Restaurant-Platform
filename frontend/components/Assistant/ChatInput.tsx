@@ -93,6 +93,8 @@ export default function ChatInput({
       <motion.button
         onClick={handleSend}
         disabled={disabled || !message.trim()}
+        aria-label="Send command"
+        title="Send command"
         className={`
           flex items-center justify-center w-12 h-12 rounded-lg font-medium
           transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-300
