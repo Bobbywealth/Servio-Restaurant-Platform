@@ -4078,21 +4078,73 @@ router.get('/restaurants/:id/audit-logs', async (req, res) => {
 });
 
 
-router.get('/users', async (_req, res) => {
+router.get('/users', async (req, res) => {
   try {
     const db = await DatabaseService.getInstance().getDatabase();
+    const categoryParam = typeof req.query.category === 'string' ? req.query.category : 'all';
+    const restaurantIdParam = typeof req.query.restaurant_id === 'string' ? req.query.restaurant_id : undefined;
+
+    const categoryFilter = categoryParam === 'platform' || categoryParam === 'restaurant' ? categoryParam : 'all';
+    const whereClauses: string[] = [];
+    const queryParams: any[] = [];
+
+    if (categoryFilter === 'platform') {
+      whereClauses.push(`(u.role = 'platform-admin' OR u.restaurant_id = 'platform-admin-org')`);
+    } else if (categoryFilter === 'restaurant') {
+      whereClauses.push(`NOT (u.role = 'platform-admin' OR u.restaurant_id = 'platform-admin-org')`);
+    }
+
+    if (restaurantIdParam) {
+      whereClauses.push('u.restaurant_id = ?');
+      queryParams.push(restaurantIdParam);
+    }
+
+    const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
     const users = await db.all(
-      `SELECT id, name, email, role, COALESCE(permissions, '[]') as permissions, is_active, created_at as invited_at
-       FROM users
-       ORDER BY created_at DESC
-       LIMIT 500`
+      `SELECT
+        u.id,
+        u.name,
+        u.email,
+        u.role,
+        COALESCE(u.permissions, '[]') as permissions,
+        u.is_active,
+        u.created_at as invited_at,
+        u.restaurant_id,
+        r.name as restaurant_name,
+        CASE
+          WHEN u.role = 'platform-admin' OR u.restaurant_id = 'platform-admin-org' THEN 'platform'
+          ELSE 'restaurant'
+        END as category
+      FROM users u
+      LEFT JOIN restaurants r ON r.id = u.restaurant_id
+      ${whereSql}
+      ORDER BY u.created_at DESC
+      LIMIT 500`,
+      queryParams
     );
+
+    const summaryRow = await db.get(`
+      SELECT
+        COUNT(*) as total,
+        SUM(CASE WHEN role = 'platform-admin' OR restaurant_id = 'platform-admin-org' THEN 1 ELSE 0 END) as platform_admins,
+        SUM(CASE WHEN role = 'owner' THEN 1 ELSE 0 END) as restaurant_owners,
+        SUM(CASE WHEN role = 'manager' AND NOT (restaurant_id = 'platform-admin-org') THEN 1 ELSE 0 END) as restaurant_managers,
+        SUM(CASE WHEN role = 'staff' THEN 1 ELSE 0 END) as staff_members
+      FROM users
+    `);
 
     res.json({
       users: users.map((user: any) => ({
         ...user,
         permissions: typeof user.permissions === 'string' ? JSON.parse(user.permissions) : user.permissions
-      }))
+      })),
+      summary: {
+        total: Number(summaryRow?.total || 0),
+        platformAdmins: Number(summaryRow?.platform_admins || 0),
+        restaurantOwners: Number(summaryRow?.restaurant_owners || 0),
+        restaurantManagers: Number(summaryRow?.restaurant_managers || 0),
+        staffMembers: Number(summaryRow?.staff_members || 0)
+      }
     });
   } catch (error) {
     logger.error('Failed to load admin users:', error);
