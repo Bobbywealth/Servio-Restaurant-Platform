@@ -24,6 +24,7 @@ import { validateEnvironment, failFastIfInvalid, getCorsOrigins } from './utils/
 import { UPLOADS_DIR, checkUploadsHealth } from './utils/uploads';
 import { SocketService } from './services/SocketService';
 import { realtimeService } from './services/RealtimeService';
+import type { ApiKeyScope } from './types/apiKey';
 
 const FRONTEND_ORIGIN = 'https://servio.solutions';
 
@@ -198,19 +199,30 @@ async function initializeServer() {
     // Import combined auth middleware for API key support
     const { requireAuthOrApiKey } = await import('./middleware/apiKeyAuth');
 
+    const authWithScopedApiKey = (readScope: ApiKeyScope, writeScope?: ApiKeyScope) => {
+      return (req: express.Request, res: express.Response, next: express.NextFunction) => {
+        const isReadMethod = req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS';
+        const requiredScopes = (!writeScope || isReadMethod)
+          ? [readScope]
+          : [writeScope];
+
+        return requireAuthOrApiKey({ requiredScopes })(req, res, next);
+      };
+    };
+
     // Orders routes: /public/* is public, others require auth (JWT or API key)
     app.use('/api/orders', (req, res, next) => {
       if (req.path.startsWith('/public')) return next();
-      return requireAuthOrApiKey({ requiredScopes: ['read:orders'] })(req, res, next);
+      return authWithScopedApiKey('read:orders', 'write:orders')(req, res, next);
     }, ordersRoutes);
 
     // Inventory routes: support both JWT and API key auth
-    app.use('/api/inventory', requireAuthOrApiKey({ requiredScopes: ['read:inventory'] }), inventoryRoutes);
+    app.use('/api/inventory', authWithScopedApiKey('read:inventory', 'write:inventory'), inventoryRoutes);
     
     // Menu routes: /public/* is public, others require auth (JWT or API key)
     app.use('/api/menu', (req, res, next) => {
       if (req.path.startsWith('/public')) return next();
-      return requireAuthOrApiKey({ requiredScopes: ['read:menu'] })(req, res, next);
+      return authWithScopedApiKey('read:menu', 'write:menu')(req, res, next);
     }, menuRoutes);
 
     app.use('/api/tasks', requireAuth, tasksRoutes);
@@ -285,7 +297,7 @@ async function initializeServer() {
 
     // Base staff route: supports both JWT and API key auth.
     // Registered AFTER sub-routes so specific paths take priority.
-    app.use('/api/staff', requireAuthOrApiKey({ requiredScopes: ['read:staff'] }), staffRoutes);
+    app.use('/api/staff', authWithScopedApiKey('read:staff', 'write:staff'), staffRoutes);
 
     // Modifiers routes - MUST be last since it uses /api catch-all
     app.use('/api', requireAuth, modifiersRoutes);
