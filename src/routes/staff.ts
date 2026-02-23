@@ -1,9 +1,12 @@
 import { Router, Request, Response } from 'express';
 import { DatabaseService } from '../services/DatabaseService';
 import { asyncHandler } from '../middleware/errorHandler';
-import { getEffectiveRestaurantId } from '../middleware/apiKeyAuth';
+import { getEffectiveRestaurantId, requireApiKeyScopeByHttpMethod } from '../middleware/apiKeyAuth';
 
 const router = Router();
+
+const requireStaffScopeByMethod = requireApiKeyScopeByHttpMethod('staff');
+router.use(requireStaffScopeByMethod);
 
 /**
  * GET /api/staff
