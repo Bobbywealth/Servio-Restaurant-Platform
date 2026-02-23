@@ -46,10 +46,32 @@ export interface ApiKeyAuthOptions {
  * Supports: Authorization header (Bearer), X-API-Key header
  */
 function extractApiKey(req: Request): string | null {
-  // Check Authorization header (Bearer token style)
+  const normalizeApiKeyCandidate = (value: string): string => {
+    const trimmed = value.trim();
+
+    // Tolerate accidental wrapping quotes from copied values.
+    if (
+      (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+      (trimmed.startsWith("'") && trimmed.endsWith("'"))
+    ) {
+      return trimmed.slice(1, -1).trim();
+    }
+
+    return trimmed;
+  };
+
+  // Check Authorization header (Bearer token style - case-insensitive)
   const authHeader = req.headers.authorization;
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    const token = authHeader.slice('Bearer '.length).trim();
+  if (typeof authHeader === 'string') {
+    const bearerMatch = authHeader.match(/^Bearer\s+(.+)$/i);
+    const token = bearerMatch
+      ? normalizeApiKeyCandidate(bearerMatch[1])
+      : normalizeApiKeyCandidate(authHeader);
+
+    if (!token) {
+      return null;
+    }
+
     // Standard API key prefix used by Servio
     if (token.startsWith('sk_')) {
       return token;
@@ -67,7 +89,7 @@ function extractApiKey(req: Request): string | null {
   // Check X-API-Key header
   const apiKeyHeader = req.headers['x-api-key'];
   if (typeof apiKeyHeader === 'string') {
-    const trimmed = apiKeyHeader.trim();
+    const trimmed = normalizeApiKeyCandidate(apiKeyHeader);
     if (trimmed.length > 0) {
       return trimmed;
     }
