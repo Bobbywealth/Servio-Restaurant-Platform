@@ -334,9 +334,10 @@ router.get('/stats/summary', asyncHandler(async (req: Request, res: Response) =>
   const todayStartStr = todayStart.toISOString();
   const todayEndStr = todayEnd.toISOString();
 
-  // Include all orders (including completed and in-progress) for revenue
-  // Revenue = all orders that are not cancelled
-  const allOrdersCondition = "restaurant_id = ? AND created_at >= ? AND created_at < ? AND status NOT IN ('cancelled', 'refunded')";
+  // Revenue = all orders that are not cancelled/refunded
+  const revenueCondition = "restaurant_id = ? AND created_at >= ? AND created_at < ? AND status NOT IN ('cancelled', 'refunded')";
+  // Today orders should include all statuses to match dashboard order volume
+  const todayOrdersCondition = 'restaurant_id = ? AND created_at >= ? AND created_at < ?';
   const completedCondition = "restaurant_id = ? AND created_at >= ? AND created_at < ? AND status = 'completed'";
   
   const [
@@ -356,11 +357,11 @@ router.get('/stats/summary', asyncHandler(async (req: Request, res: Response) =>
     // Completed today
     db.get(`SELECT COUNT(*) as count FROM orders WHERE ${completedCondition}`, [restaurantId, todayStartStr, todayEndStr]),
     // Revenue from all non-cancelled orders today
-    db.get(`SELECT COALESCE(SUM(total_amount), 0) as sum FROM orders WHERE ${allOrdersCondition}`, [restaurantId, todayStartStr, todayEndStr]),
+    db.get(`SELECT COALESCE(SUM(total_amount), 0) as sum FROM orders WHERE ${revenueCondition}`, [restaurantId, todayStartStr, todayEndStr]),
     // Average order value for completed orders today
     db.get(`SELECT AVG(total_amount) as avg FROM orders WHERE ${completedCondition}`, [restaurantId, todayStartStr, todayEndStr]),
     // Total orders today (all statuses)
-    db.get(`SELECT COUNT(*) as count FROM orders WHERE ${allOrdersCondition}`, [restaurantId, todayStartStr, todayEndStr]),
+    db.get(`SELECT COUNT(*) as count FROM orders WHERE ${todayOrdersCondition}`, [restaurantId, todayStartStr, todayEndStr]),
     // Orders grouped by status
     db.all('SELECT status, COUNT(*) as count FROM orders WHERE restaurant_id = ? GROUP BY status', [restaurantId]),
     // Orders grouped by channel
