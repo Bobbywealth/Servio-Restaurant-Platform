@@ -39,6 +39,18 @@ let redirectInFlight = false
 // Cache for token expiry to avoid parsing JWT on every request
 let cachedTokenExpiry: { token: string; expiresAt: number } | null = null
 
+function parseTokenExpiry(token: string): number | null {
+  try {
+    const parts = token.split('.')
+    if (parts.length !== 3) return null
+    const payload = JSON.parse(atob(parts[1]))
+    if (!payload.exp) return null
+    return payload.exp * 1000
+  } catch {
+    return null
+  }
+}
+
 // Check if token is about to expire (within 10 minutes)
 // Increased threshold for more reliable proactive refresh
 function isTokenExpiringSoon(token: string): boolean {
@@ -50,13 +62,8 @@ function isTokenExpiringSoon(token: string): boolean {
       return cachedTokenExpiry.expiresAt - now < tenMinutes
     }
 
-    const parts = token.split('.')
-    if (parts.length !== 3) return true
-
-    const payload = JSON.parse(atob(parts[1]))
-    if (!payload.exp) return false
-
-    const expiresAt = payload.exp * 1000
+    const expiresAt = parseTokenExpiry(token)
+    if (!expiresAt) return false
 
     // Cache the parsed expiry
     cachedTokenExpiry = { token, expiresAt }
@@ -354,4 +361,23 @@ export function syncTokenToServiceWorker(token: string | null): void {
 // Clear cached token expiry when token changes
 export function clearTokenCache(): void {
   cachedTokenExpiry = null
+}
+
+export function getTokenExpiry(token: string): number | null {
+  return parseTokenExpiry(token)
+}
+
+export const __apiTestUtils = {
+  setApiAdapter(adapter: any) {
+    api.defaults.adapter = adapter
+  },
+  setRefreshAdapter(adapter: any) {
+    refreshClient.defaults.adapter = adapter
+  },
+  resetState() {
+    refreshInFlight = null
+    lastRefreshTime = 0
+    lastSyncedServiceWorkerToken = null
+    cachedTokenExpiry = null
+  }
 }
