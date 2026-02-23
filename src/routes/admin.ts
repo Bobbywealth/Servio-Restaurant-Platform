@@ -4850,11 +4850,12 @@ router.post('/pricing-structures', async (req, res) => {
 router.patch('/pricing-structures/:id', async (req, res) => {
   try {
     const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-    const { name, description, price_monthly, price_yearly, is_featured, is_active, features, display_order } = req.body || {};
+    const { name, slug, description, price_monthly, price_yearly, is_featured, is_active, features, display_order } = req.body || {};
     const db = await DatabaseService.getInstance().getDatabase();
     await db.run(
       `UPDATE pricing_structures
        SET name = COALESCE(?, name),
+           slug = COALESCE(?, slug),
            description = COALESCE(?, description),
            price_monthly = COALESCE(?, price_monthly),
            price_yearly = COALESCE(?, price_yearly),
@@ -4866,6 +4867,7 @@ router.patch('/pricing-structures/:id', async (req, res) => {
        WHERE id = ?`,
       [
         name,
+        slug,
         description,
         price_monthly === undefined ? null : Number(price_monthly),
         price_yearly === undefined ? null : Number(price_yearly),
