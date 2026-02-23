@@ -4,6 +4,7 @@ import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { SmsService } from './SmsService';
 import { SocketService } from './SocketService';
+import { validateItemSelections } from './modifierValidation';
 
 import { eventBus } from '../events/bus';
 import { logger } from '../utils/logger';
@@ -107,68 +108,129 @@ export class VoiceOrderingService {
   }
 
   /**
-   * Validate that all required modifiers have been provided for an item.
-   * Returns { valid: true, priceDelta: number } if valid, or { valid: false, missingModifiers: [...] } if invalid.
+   * Validate item modifiers using the canonical menu validation rules.
    */
   public async validateItemModifiers(
     itemId: string,
     restaurantId: string,
-    providedModifiers: Record<string, any> | null | undefined
-  ): Promise<{ valid: boolean; priceDelta: number; missingModifiers: Array<{ groupId: string; groupName: string; required: boolean }> }> {
+    providedModifiers: Record<string, any> | Array<any> | null | undefined
+  ): Promise<{
+    valid: boolean;
+    priceDelta: number;
+    missingModifiers: Array<{ groupId: string; groupName: string; required: boolean }>;
+    validationErrors: Array<{ groupId?: string; groupName?: string; code: string; reason?: string; message: string }>;
+  }> {
     const groups = await this.getModifierGroupsForItem(itemId, restaurantId);
 
     if (!groups || groups.length === 0) {
-      return { valid: true, priceDelta: 0, missingModifiers: [] };
+      return { valid: true, priceDelta: 0, missingModifiers: [], validationErrors: [] };
     }
 
-    const modifiers = providedModifiers || {};
-    const missingModifiers: Array<{ groupId: string; groupName: string; required: boolean }> = [];
-    let priceDelta = 0;
+    const selections = groups.map((group: any) => {
+      const groupSelection = this.extractVoiceGroupSelection(group, providedModifiers);
+      return {
+        groupId: group.id,
+        options: groupSelection
+      };
+    });
 
-    for (const group of groups) {
-      let selection: any;
+    const validation = await validateItemSelections(itemId, selections);
+    const validationErrors = (validation.errors || []).map((error: any) => ({
+      code: error.code,
+      groupId: error.groupId,
+      groupName: error.groupName,
+      reason: error.reason,
+      message: this.getVoiceModifierErrorMessage(error)
+    }));
 
-      // Handle both array format (from Vapi AI) and object format
-      if (Array.isArray(modifiers)) {
-        // Vapi format: [{id: "...", optionIds: ["..."]}, ...]
-        // OR legacy: [{group_id: "...", option_id: "..."}, ...]
-        const found = modifiers.find((m: any) => m.id === group.id || m.group_id === group.id);
-        // Support both single optionId and array of optionIds for multi-select modifiers like sides
-        selection = found?.optionId || found?.option_id || found?.optionIds;
-      } else {
-        // Object format: {"<group-id>": "<option-id>"}
-        selection = modifiers[group.id];
-      }
-
-      const hasSelection = selection !== undefined && selection !== null && selection !== '' &&
-        !(Array.isArray(selection) && selection.length === 0);
-
-      if (group.required && !hasSelection) {
-        missingModifiers.push({
-          groupId: group.id,
-          groupName: group.name,
-          required: true
-        });
-      }
-
-      // Calculate price delta from selected options
-      if (hasSelection) {
-        const selectedIds = Array.isArray(selection) ? selection : [selection];
-        for (const selectedId of selectedIds) {
-          const option = group.options.find((opt: any) => opt.id === selectedId || opt.name.toLowerCase() === String(selectedId).toLowerCase());
-          if (option && option.priceDelta) {
-            priceDelta += option.priceDelta;
-          }
-        }
-      }
-    }
+    const missingModifiers = validationErrors
+      .filter((error) => error.code === 'MODIFIER_REQUIRED')
+      .map((error) => ({
+        groupId: error.groupId || '',
+        groupName: error.groupName || 'Modifier',
+        required: true
+      }))
+      .filter((entry, index, arr) => entry.groupId && arr.findIndex((v) => v.groupId === entry.groupId) === index);
 
     return {
-      valid: missingModifiers.length === 0,
-      priceDelta,
-      missingModifiers
+      valid: validation.valid,
+      priceDelta: validation.valid ? Number(validation.priceDeltaTotal || 0) : 0,
+      missingModifiers,
+      validationErrors
     };
   }
+
+  private extractVoiceGroupSelection(group: any, providedModifiers: Record<string, any> | Array<any> | null | undefined): Array<{ optionId: string; quantity?: number }> {
+    const rawSelection = this.getVoiceSelectionForGroup(group, providedModifiers);
+    const optionLookup = new Map<string, any>();
+
+    group.options.forEach((option: any) => {
+      optionLookup.set(String(option.id), option);
+      optionLookup.set(option.name.toLowerCase(), option);
+    });
+
+    const normalizedEntries = Array.isArray(rawSelection)
+      ? rawSelection
+      : rawSelection === undefined || rawSelection === null || rawSelection === ''
+        ? []
+        : [rawSelection];
+
+    return normalizedEntries.map((entry: any) => {
+      if (entry && typeof entry === 'object' && !Array.isArray(entry)) {
+        const optionKey = entry.optionId || entry.option_id || entry.id || entry.name || entry.optionName;
+        const matchedOption = optionLookup.get(String(optionKey)) || optionLookup.get(String(optionKey || '').toLowerCase());
+        return {
+          optionId: matchedOption?.id || String(optionKey || ''),
+          quantity: entry.quantity ?? entry.qty
+        };
+      }
+
+      const matchedOption = optionLookup.get(String(entry)) || optionLookup.get(String(entry).toLowerCase());
+      return { optionId: matchedOption?.id || String(entry) };
+    }).filter((entry: any) => entry.optionId);
+  }
+
+  private getVoiceSelectionForGroup(group: any, providedModifiers: Record<string, any> | Array<any> | null | undefined): any {
+    if (!providedModifiers) return undefined;
+
+    if (Array.isArray(providedModifiers)) {
+      const found = providedModifiers.find((m: any) => m?.id === group.id || m?.groupId === group.id || m?.group_id === group.id);
+      if (!found) return undefined;
+      return found.optionIds || found.option_ids || found.options || found.optionId || found.option_id;
+    }
+
+    return providedModifiers[group.id] ?? providedModifiers[group.name] ?? providedModifiers[group.name?.toLowerCase?.()];
+  }
+
+  private getVoiceModifierErrorMessage(error: { code: string; groupName?: string; reason?: string; message?: string }): string {
+    const groupLabel = error.groupName || 'modifier group';
+
+    switch (error.reason) {
+      case 'option_not_in_group':
+        return `${groupLabel}: selected option is not part of this modifier group.`;
+      case 'option_inactive':
+        return `${groupLabel}: selected option is inactive.`;
+      case 'option_sold_out':
+        return `${groupLabel}: selected option is sold out.`;
+      case 'quantity_lt_1':
+        return `${groupLabel}: quantity must be at least 1.`;
+      case 'required_single':
+        return `${groupLabel}: exactly one option is required.`;
+      case 'too_many_single':
+        return `${groupLabel}: only one option can be selected.`;
+      case 'required_min':
+      case 'required_min_qty':
+      case 'too_few':
+      case 'too_few_qty':
+        return `${groupLabel}: not enough selections were provided.`;
+      case 'too_many':
+      case 'too_many_qty':
+        return `${groupLabel}: too many selections were provided.`;
+      default:
+        return error.message || `${groupLabel}: invalid modifier selection.`;
+    }
+  }
+
 
   /**
    * Get modifier groups for an item formatted for Vapi AI to ask questions.
@@ -812,14 +874,14 @@ export class VoiceOrderingService {
       // Add modifier price delta to item price
       itemPrice += modifierValidation.priceDelta;
 
-      // Log and track missing required modifiers
-      if (!modifierValidation.valid && modifierValidation.missingModifiers.length > 0) {
-        const missingNames = modifierValidation.missingModifiers.map(m => m.groupName).join(', ');
-        console.log(`⚠️ [validateQuote] ${menuItem.name} missing required modifiers: ${missingNames}`);
+      if (!modifierValidation.valid) {
+        if (modifierValidation.missingModifiers.length > 0) {
+          const missingNames = modifierValidation.missingModifiers.map(m => m.groupName).join(', ');
+          console.log(`⚠️ [validateQuote] ${menuItem.name} missing required modifiers: ${missingNames}`);
+        }
 
-        // Add errors for missing required modifiers (blocking)
-        for (const missing of modifierValidation.missingModifiers) {
-          errors.push(`${menuItem.name}: Missing required modifier "${missing.groupName}". Please ask customer for their ${missing.groupName.toLowerCase()} choice.`);
+        for (const validationError of modifierValidation.validationErrors) {
+          errors.push(`${menuItem.name}: ${validationError.message}`);
         }
       }
 
@@ -847,7 +909,8 @@ export class VoiceOrderingService {
         itemName: menuItem.name,
         price: itemPrice,
         qty: quantity,
-        missingModifiers: modifierValidation.missingModifiers
+        missingModifiers: modifierValidation.missingModifiers,
+        modifierValidationErrors: modifierValidation.validationErrors
       };
     }));
 
