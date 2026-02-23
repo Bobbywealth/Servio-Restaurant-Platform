@@ -10,8 +10,21 @@ CREATE INDEX IF NOT EXISTS idx_restaurants_vapi_phone_number_id
   WHERE vapi_phone_number_id IS NOT NULL;
 
 -- One-time backfill from legacy settings JSON path.
+CREATE OR REPLACE FUNCTION safe_parse_jsonb(input_text TEXT)
+RETURNS JSONB
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  RETURN input_text::jsonb;
+EXCEPTION WHEN others THEN
+  RETURN NULL;
+END;
+$$;
+
 UPDATE restaurants
-SET vapi_phone_number_id = NULLIF(TRIM(settings->'vapi'->>'phoneNumberId'), '')
+SET vapi_phone_number_id = NULLIF(TRIM(safe_parse_jsonb(settings::text)->'vapi'->>'phoneNumberId'), '')
 WHERE vapi_phone_number_id IS NULL
   AND settings IS NOT NULL
-  AND settings->'vapi'->>'phoneNumberId' IS NOT NULL;
+  AND safe_parse_jsonb(settings::text)->'vapi'->>'phoneNumberId' IS NOT NULL;
+
+DROP FUNCTION IF EXISTS safe_parse_jsonb(TEXT);
