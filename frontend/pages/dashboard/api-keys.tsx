@@ -632,7 +632,7 @@ export default function ApiKeysPage() {
                 </p>
                 <div className="mt-4 flex gap-4">
                   <a
-                    href="/api/docs"
+                    href="/dashboard/api-docs"
                     className="text-indigo-600 hover:text-indigo-700 font-medium text-sm"
                   >
                     View API Docs →
