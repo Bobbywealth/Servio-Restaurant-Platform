@@ -252,7 +252,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     
     // AI & COMMUNICATION SECTION
     {
-      name: 'Assistant',
+      name: 'Servio Assistant',
       href: '/dashboard/assistant',
       icon: Mic,
       description: 'Voice & text assistant',
@@ -331,7 +331,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     { name: 'Orders', href: '/dashboard/orders', icon: ClipboardList, roles: ['manager', 'owner'] },
     { name: 'Tasks', href: '/dashboard/tasks', icon: CheckCircle, roles: ['staff', 'manager', 'owner'] },
     { name: 'Menu', href: '/dashboard/menu-management', icon: UtensilsCrossed, roles: ['manager', 'owner'] },
-    { name: 'Assistant', href: '/dashboard/assistant', icon: Mic, roles: ['staff', 'manager', 'owner'] },
+    { name: 'Servio', href: '/dashboard/assistant', icon: Mic, roles: ['staff', 'manager', 'owner'] },
     { name: 'More', href: '#', icon: Menu, isMenuButton: true, roles: ['staff', 'manager', 'owner'] }
   ];
 

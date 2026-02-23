@@ -112,7 +112,7 @@ export default function MicrophoneButton({
         textColor: 'text-white',
         iconColor: 'text-white',
         shadowColor: 'shadow-blue-300',
-        label: toggleMode ? 'Click to start recording' : 'Hold to talk or click to toggle'
+        label: toggleMode ? 'Click to start or stop recording' : 'Hold to talk or click to toggle'
       }
     }
   }
@@ -143,6 +143,8 @@ export default function MicrophoneButton({
         onTouchCancel={toggleMode ? undefined : handleTouchEnd}
         onKeyDown={toggleMode ? undefined : handleKeyDown}
         onKeyUp={toggleMode ? undefined : handleKeyUp}
+        aria-label={isRecording ? 'Click to stop recording' : 'Click to start recording'}
+        title={isRecording ? 'Click to stop recording' : 'Click to start recording'}
         disabled={disabled}
         whileHover={{ scale: disabled ? 1 : 1.05 }}
         whileTap={{ scale: disabled ? 1 : 0.95 }}

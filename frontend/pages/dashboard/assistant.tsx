@@ -36,6 +36,17 @@ interface AssistantState {
   loadingHistory: boolean
 }
 
+const QUICK_COMMANDS = [
+  { label: 'Check orders', command: 'check current orders', icon: '🧾' },
+  { label: "What's 86'd?", command: "what items are 86'd", icon: '🚫' },
+  { label: 'Inventory', command: 'show inventory levels', icon: '📦' },
+  { label: 'Tasks', command: 'show pending tasks', icon: '✅' },
+  { label: 'Summarize sales', command: "summarize today's sales", icon: '💵' },
+  { label: 'Low stock alerts', command: 'show low stock alerts', icon: '⚠️' },
+  { label: 'Prep priorities', command: 'show prep priorities for this shift', icon: '👨‍🍳' },
+  { label: 'Menu availability', command: 'show menu item availability', icon: '🍽️' }
+]
+
 export default function AssistantPage() {
   const { user } = useUser()
   const [machineState, dispatchMachine] = useReducer(assistantStateReducer, initialAssistantMachineState)
@@ -60,6 +71,7 @@ export default function AssistantPage() {
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null)
   const audioChunksRef = useRef<Blob[]>([])
   const [talkIntensity, setTalkIntensity] = useState(0)
+  const hasConversationMessages = state.messages.length > 0
 
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const audioContextRef = useRef<AudioContext | null>(null)
@@ -967,9 +979,12 @@ export default function AssistantPage() {
     try {
       const response = await api.get('/api/voice-conversations');
       const { conversations } = response.data?.data || { conversations: [] };
+      const filteredConversations = conversations.filter((conv: AssistantState['conversations'][number]) =>
+        (conv.messageCount || 0) > 0 || conv.status !== 'abandoned'
+      )
       setState(prev => ({
         ...prev,
-        conversations,
+        conversations: filteredConversations,
         loadingHistory: false
       }));
     } catch (error) {
@@ -1020,7 +1035,7 @@ export default function AssistantPage() {
     <>
       <Head>
         <title>Servio Assistant - AI Staff Helper</title>
-        <meta name="description" content="Talk to Servio AI Assistant for restaurant operations" />
+        <meta name="description" content="Use Servio Assistant for restaurant operations with voice and text commands" />
       </Head>
 
       <DashboardLayout>
@@ -1030,13 +1045,13 @@ export default function AssistantPage() {
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-3 md:gap-4">
               <div>
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="text-sm font-semibold text-surface-500 dark:text-surface-400 uppercase tracking-widest">AI Assistant</span>
+                  <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-300 uppercase tracking-widest">Voice + Text Mode</span>
                 </div>
                 <h1 className="text-xl md:text-3xl font-black text-surface-900 dark:text-white tracking-tight">
-                  Talk to Servio
+                  Servio Assistant
                 </h1>
                 <p className="mt-1 text-sm text-surface-600 dark:text-surface-400 max-w-md">
-                  Manage orders, inventory, and tasks with natural voice commands.
+                  Manage orders, inventory, and tasks with natural voice and text commands.
                 </p>
               </div>
               
@@ -1093,16 +1108,21 @@ export default function AssistantPage() {
           <div className="flex-1 grid grid-cols-1 md:grid-cols-5 gap-4 min-h-0 overflow-hidden">
             {/* Conversation History Panel */}
             {state.showHistory && (
-              <div className="md:col-span-1 bg-white/80 dark:bg-surface-800/80 backdrop-blur-xl rounded-2xl shadow-xl border border-white/50 dark:border-surface-700/50 flex flex-col min-h-0 max-h-64 md:max-h-none">
+              <div className="md:col-span-1 md:order-2 bg-white/80 dark:bg-surface-800/80 backdrop-blur-xl rounded-2xl shadow-xl border border-white/50 dark:border-surface-700/50 flex flex-col min-h-0 max-h-64 md:max-h-none">
                 <div className="p-4 border-b border-surface-200/50 dark:border-surface-700/50">
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="font-bold text-surface-900 dark:text-white">Conversation History</h3>
                     <button
-                      onClick={() => setState(prev => ({ ...prev, selectedConversation: null, messages: [] }))}
+                      onClick={() => {
+                        const shouldClear = window.confirm('Start a new conversation and clear the current transcript view?')
+                        if (shouldClear) {
+                          setState(prev => ({ ...prev, selectedConversation: null, messages: [] }))
+                        }
+                      }}
                       className="text-xs text-surface-500 hover:text-surface-700 dark:text-surface-400 dark:hover:text-surface-200"
-                      title="Clear current view"
+                      title="Start a new session"
                     >
-                      Clear
+                      New Session
                     </button>
                   </div>
                   <p className="text-xs text-surface-500 dark:text-surface-400">
@@ -1183,7 +1203,7 @@ export default function AssistantPage() {
             )}
 
             {/* Main Content - Adjust grid columns based on history visibility */}
-            <div className={`${state.showHistory ? 'md:col-span-4' : 'md:col-span-5'} grid grid-cols-1 lg:grid-cols-4 gap-3 md:gap-4 min-h-0 overflow-hidden`}>
+            <div className={`${state.showHistory ? 'md:col-span-4' : 'md:col-span-5'} md:order-1 grid grid-cols-1 lg:grid-cols-4 gap-3 md:gap-4 min-h-0 overflow-hidden`}>
             {/* Left Panel - Controls */}
             <div className="lg:col-span-1 grid grid-cols-1 sm:grid-cols-2 lg:flex lg:flex-col gap-3 min-h-0 overflow-hidden">
               {/* Avatar Card */}
@@ -1210,27 +1230,30 @@ export default function AssistantPage() {
                     disabled={!mediaRecorder}
                     toggleMode={state.micToggleMode}
                   />
+                  <p className="mt-2 text-[11px] text-center text-surface-500 dark:text-surface-400">
+                    Shortcut: <kbd className="px-1.5 py-0.5 rounded bg-surface-200 dark:bg-surface-700">Space</kbd> to hold and record.
+                  </p>
                 </div>
               </div>
 
               {/* Always Listening Card */}
-              <div className="relative bg-gradient-to-br from-violet-500/10 to-fuchsia-500/10 dark:from-violet-900/30 dark:to-fuchsia-900/30 backdrop-blur-xl rounded-3xl p-4 md:p-5 shadow-xl border border-violet-200/50 dark:border-violet-800/50 overflow-hidden">
-                <div className="absolute -bottom-10 -left-10 w-32 h-32 rounded-full bg-violet-500/20 blur-2xl" />
+              <div className="relative bg-emerald-500/10 dark:bg-emerald-900/20 backdrop-blur-xl rounded-3xl p-4 md:p-5 shadow-xl border border-emerald-200/60 dark:border-emerald-700/50 overflow-hidden">
+                <div className="absolute -bottom-10 -left-10 w-32 h-32 rounded-full bg-emerald-500/20 blur-2xl" />
                 
                 <div className="relative">
                   <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-sm font-bold text-violet-900 dark:text-violet-100">
+                    <h3 className="text-sm font-bold text-emerald-900 dark:text-emerald-100">
                       Hands-Free Mode
                     </h3>
                     <div className={`w-3 h-3 rounded-full ${
-                      state.alwaysListening ? 'bg-violet-500 animate-pulse shadow-lg shadow-violet-500/50' : 'bg-surface-300 dark:bg-surface-600'
+                      state.alwaysListening ? 'bg-emerald-500 animate-pulse shadow-lg shadow-emerald-500/50' : 'bg-surface-300 dark:bg-surface-600'
                     }`} />
                   </div>
                   
-                  <p className="text-xs text-violet-700 dark:text-violet-300 mb-4">
+                  <p className="text-xs text-emerald-800 dark:text-emerald-300 mb-4">
                     {state.alwaysListening 
-                      ? 'Say "Servio" to activate voice commands' 
-                      : 'Enable to use voice commands hands-free'
+                      ? 'Wake-word detection is active. Say "Servio" to begin, then speak within 30 seconds.' 
+                      : 'Enable wake-word detection to keep listening for "Servio" without clicking the mic.'
                     }
                   </p>
 
@@ -1273,14 +1296,14 @@ export default function AssistantPage() {
                     disabled={state.isProcessing || !mediaRecorder}
                     className={`w-full py-3 text-sm font-bold rounded-xl transition-all ${
                       state.alwaysListening
-                        ? 'bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 text-white shadow-lg shadow-rose-500/30'
-                        : 'bg-gradient-to-r from-violet-500 to-fuchsia-600 hover:from-violet-600 hover:to-fuchsia-700 text-white shadow-lg shadow-violet-500/30'
+                        ? 'bg-rose-600 hover:bg-rose-700 text-white shadow-lg shadow-rose-500/30'
+                        : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-500/30'
                     } disabled:opacity-50 disabled:cursor-not-allowed`}
                   >
                     {state.alwaysListening ? 'Disable' : 'Enable'}
                   </button>
                   {!mediaRecorder && (
-                    <p className="mt-2 text-[11px] text-violet-700/80 dark:text-violet-200/80">
+                    <p className="mt-2 text-[11px] text-emerald-800/90 dark:text-emerald-200/80">
                       Microphone access is required to enable hands-free mode.
                     </p>
                   )}
@@ -1305,7 +1328,7 @@ export default function AssistantPage() {
                     Conversation
                   </h2>
                   <span className="text-sm text-surface-500 dark:text-surface-400">
-                    {state.messages.length} messages
+                    {hasConversationMessages ? `${state.messages.length} messages` : 'New session'}
                   </span>
                 </div>
 
@@ -1390,34 +1413,17 @@ export default function AssistantPage() {
                 <div className="mt-4 pt-4 border-t border-surface-200/50 dark:border-surface-700/50">
                   <p className="text-xs font-semibold text-surface-500 dark:text-surface-400 uppercase tracking-wider mb-3">Quick Commands</p>
                   <div className="flex gap-2 overflow-x-auto sm:flex-wrap">
-                    <button 
-                      onClick={() => handleQuickCommand('check current orders')} 
-                      disabled={state.isProcessing || state.isRecording} 
-                      className="px-4 py-2 text-sm font-medium bg-surface-100 dark:bg-surface-700 text-surface-700 dark:text-surface-300 rounded-xl hover:bg-surface-200 dark:hover:bg-surface-600 transition-colors disabled:opacity-50"
-                    >
-                      Check orders
-                    </button>
-                    <button 
-                      onClick={() => handleQuickCommand("what items are 86'd")} 
-                      disabled={state.isProcessing || state.isRecording} 
-                      className="px-4 py-2 text-sm font-medium bg-surface-100 dark:bg-surface-700 text-surface-700 dark:text-surface-300 rounded-xl hover:bg-surface-200 dark:hover:bg-surface-600 transition-colors disabled:opacity-50"
-                    >
-                      What's 86'd?
-                    </button>
-                    <button 
-                      onClick={() => handleQuickCommand('show inventory levels')} 
-                      disabled={state.isProcessing || state.isRecording} 
-                      className="px-4 py-2 text-sm font-medium bg-surface-100 dark:bg-surface-700 text-surface-700 dark:text-surface-300 rounded-xl hover:bg-surface-200 dark:hover:bg-surface-600 transition-colors disabled:opacity-50"
-                    >
-                      Inventory
-                    </button>
-                    <button 
-                      onClick={() => handleQuickCommand('show pending tasks')} 
-                      disabled={state.isProcessing || state.isRecording} 
-                      className="px-4 py-2 text-sm font-medium bg-surface-100 dark:bg-surface-700 text-surface-700 dark:text-surface-300 rounded-xl hover:bg-surface-200 dark:hover:bg-surface-600 transition-colors disabled:opacity-50"
-                    >
-                      Tasks
-                    </button>
+                    {QUICK_COMMANDS.map((quickCommand) => (
+                      <button
+                        key={quickCommand.label}
+                        onClick={() => handleQuickCommand(quickCommand.command)}
+                        disabled={state.isProcessing || state.isRecording}
+                        className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium bg-surface-100 dark:bg-surface-700 text-surface-700 dark:text-surface-300 rounded-xl hover:bg-surface-200 dark:hover:bg-surface-600 transition-colors disabled:opacity-50"
+                      >
+                        <span aria-hidden>{quickCommand.icon}</span>
+                        <span>{quickCommand.label}</span>
+                      </button>
+                    ))}
                   </div>
                 </div>
               </div>
