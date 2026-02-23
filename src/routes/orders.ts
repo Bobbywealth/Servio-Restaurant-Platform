@@ -18,6 +18,22 @@ const getRequestId = (req: Request) => {
   return headerId || uuidv4();
 };
 
+const getStripeSecretKey = (): string | null => {
+  const stripeSecretKey = process.env.STRIPE_SECRET_KEY?.trim();
+  return stripeSecretKey || null;
+};
+
+const buildPublicBaseUrl = (req: Request): string => {
+  const envBaseUrl = process.env.FRONTEND_URL?.trim();
+  if (envBaseUrl) {
+    return envBaseUrl.replace(/\/$/, '');
+  }
+
+  const host = req.get('host');
+  const protocol = req.protocol;
+  return `${protocol}://${host}`;
+};
+
 
 const parseJson = <T>(value: unknown, fallback: T): T => {
   if (value == null) return fallback;
@@ -526,7 +542,7 @@ router.get('/analytics', asyncHandler(async (req: Request, res: Response) => {
  * Create a new order via public site
  */
 router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) => {
-  const { slug } = req.params;
+  const slug = Array.isArray(req.params.slug) ? req.params.slug[0] : req.params.slug;
   const {
     items,
     customerName,
@@ -598,6 +614,16 @@ router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) =>
     }
   }
 
+  const normalizedPaymentMethod = paymentMethod === 'online' ? 'online' : 'pickup';
+  const stripeSecretKey = getStripeSecretKey();
+
+  if (normalizedPaymentMethod === 'online' && !stripeSecretKey) {
+    return res.status(503).json({
+      success: false,
+      error: { message: 'Online payments are temporarily unavailable' }
+    });
+  }
+
   const orderId = uuidv4();
   // Calculate total and validate items (simplified for v1 fast build)
   let totalAmount = 0;
@@ -615,11 +641,12 @@ router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) =>
       INSERT INTO orders (
         id, restaurant_id, channel, status, total_amount, payment_status,
         items, customer_name, customer_phone, customer_email, order_type, special_instructions, marketing_consent, created_at, updated_at
-      ) VALUES (?, ?, 'website', 'received', ?, 'unpaid', ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      ) VALUES (?, ?, 'website', 'received', ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     `, [
       orderId,
       restaurantId,
       totalAmount,
+      normalizedPaymentMethod === 'online' ? 'pending' : 'unpaid',
       JSON.stringify(parsedItems),
       customerName || null,
       customerPhone || null,
@@ -669,6 +696,72 @@ router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) =>
     return res.status(500).json({ success: false, error: { message: 'Failed to create order' } });
   }
 
+  let checkoutUrl: string | null = null;
+  if (normalizedPaymentMethod === 'online' && stripeSecretKey) {
+    try {
+      const baseUrl = buildPublicBaseUrl(req);
+      const currency = (process.env.STRIPE_CURRENCY || 'usd').toLowerCase();
+      const params = new URLSearchParams();
+
+      params.append('mode', 'payment');
+      params.append('success_url', `${baseUrl}/${slug}/order-success?orderId=${orderId}&session_id={CHECKOUT_SESSION_ID}`);
+      params.append('cancel_url', `${baseUrl}/${slug}/menu?checkout=cancelled`);
+
+      if (normalizedCustomerEmail) {
+        params.append('customer_email', normalizedCustomerEmail);
+      }
+
+      params.append('metadata[orderId]', orderId);
+      params.append('metadata[restaurantId]', String(restaurantId));
+      params.append('metadata[restaurantSlug]', slug);
+
+      parsedItems.forEach((item: any, index: number) => {
+        params.append(`line_items[${index}][quantity]`, String(Number(item.quantity)));
+        params.append(`line_items[${index}][price_data][currency]`, currency);
+        params.append(`line_items[${index}][price_data][unit_amount]`, String(Math.round(Number(item.price) * 100)));
+        params.append(`line_items[${index}][price_data][product_data][name]`, String(item.name || 'Menu item'));
+      });
+
+      const sessionResponse = await fetch('https://api.stripe.com/v1/checkout/sessions', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${stripeSecretKey}`,
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: params.toString()
+      });
+
+      if (!sessionResponse.ok) {
+        const responseText = await sessionResponse.text();
+        throw new Error(`Stripe session failed (${sessionResponse.status}): ${responseText}`);
+      }
+
+      const sessionPayload = await sessionResponse.json() as { url?: string };
+      checkoutUrl = sessionPayload.url || null;
+
+      if (!checkoutUrl) {
+        throw new Error('Stripe session did not include a checkout URL');
+      }
+    } catch (error) {
+      logger.error(
+        `[orders.public] stripe_error ${JSON.stringify({
+          requestId,
+          slug,
+          restaurantId,
+          orderId,
+          message: error instanceof Error ? error.message : String(error)
+        })}`
+      );
+
+      await db.run('UPDATE orders SET payment_status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', ['failed', orderId]);
+
+      return res.status(502).json({
+        success: false,
+        error: { message: 'Unable to start secure payment session' }
+      });
+    }
+  }
+
   try {
     // Notify dashboard via Socket.IO
     const io = req.app.get('socketio');
@@ -703,7 +796,12 @@ router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) =>
 
   return res.status(201).json({
     success: true,
-    data: { orderId, status: 'received' }
+    data: {
+      orderId,
+      status: 'received',
+      paymentMethod: normalizedPaymentMethod,
+      checkoutUrl
+    }
   });
 }));
 

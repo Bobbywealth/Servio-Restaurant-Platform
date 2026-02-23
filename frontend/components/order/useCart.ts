@@ -162,6 +162,14 @@ export function useCart(restaurantSlug: string | undefined) {
         paymentMethod,
         marketingConsent
       });
+      const checkoutUrl = resp?.data?.data?.checkoutUrl as string | undefined;
+      const selectedPaymentMethod = resp?.data?.data?.paymentMethod as 'pickup' | 'online' | undefined;
+
+      if (selectedPaymentMethod === 'online' && checkoutUrl) {
+        window.location.assign(checkoutUrl);
+        return;
+      }
+
       setOrderComplete(resp.data.data.orderId);
       setOrderStatus(resp.data.data.status || null);
       setCart([]);
@@ -169,8 +177,9 @@ export function useCart(restaurantSlug: string | undefined) {
       setCheckoutStep('cart');
       setCustomerInfo({ name: '', phone: '', email: '', orderType: 'pickup', specialInstructions: '' });
       setMarketingConsent(false);
-    } catch {
-      toast.error('Failed to place order');
+    } catch (error: any) {
+      const errorMessage = error?.response?.data?.error?.message;
+      toast.error(typeof errorMessage === 'string' ? errorMessage : 'Failed to place order');
     } finally {
       setIsSubmitting(false);
     }

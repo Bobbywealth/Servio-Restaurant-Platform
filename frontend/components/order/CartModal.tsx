@@ -2,7 +2,7 @@ import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft, ArrowRight, Plus, Minus, Loader2, CheckCircle2,
-  CreditCard, Wallet, AlertTriangle, User, Phone, Mail
+  CreditCard, Wallet, User, Phone, Mail
 } from 'lucide-react';
 import type { CartItem, CustomerInfo, CheckoutStep } from './types';
 
@@ -335,7 +335,7 @@ function CustomerDetailsStep({
             </>
           ) : (
             <>
-              Place Order - Pay at Pickup
+              {paymentMethod === 'online' ? 'Place Order & Pay Securely' : 'Place Order'} - Pay at Pickup
               <CheckCircle2 className="w-5 h-5" />
             </>
           )}
@@ -407,16 +407,16 @@ function PaymentStep({
       </div>
 
       {paymentMethod === 'online' && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6">
+        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 mb-6">
           <div className="flex items-start gap-3">
-            <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-            <div className="text-sm text-amber-800">
-              <strong>Coming Soon:</strong> Online payment integration is being set up.
-              For now, please select "Pay at Pickup".
+            <CreditCard className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
+            <div className="text-sm text-emerald-800">
+              Card payments are processed securely by Stripe. You will be redirected to complete payment after placing the order.
             </div>
           </div>
         </div>
       )}
+
 
       <div className="border-t pt-4 mb-4">
         <div className="flex justify-between items-center">
@@ -431,7 +431,7 @@ function PaymentStep({
 
       <div style={{ paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}>
         <button
-          disabled={isSubmitting || paymentMethod === 'online'}
+          disabled={isSubmitting}
           onClick={onPlaceOrder}
           className="w-full bg-green-600 hover:bg-green-700 text-white py-4 rounded-xl text-base sm:text-lg font-bold flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] transition-transform"
         >
@@ -440,7 +440,7 @@ function PaymentStep({
           ) : (
             <>
               <CheckCircle2 className="w-5 h-5" />
-              Place Order
+              {paymentMethod === 'online' ? 'Place Order & Pay Securely' : 'Place Order'}
             </>
           )}
         </button>
