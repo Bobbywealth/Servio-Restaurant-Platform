@@ -183,6 +183,9 @@ router.post('/', requireAuth, asyncHandler(async (req: Request, res: Response) =
       }
     }
     finalRestaurantId = targetRestaurantId;
+  } else if (!companyId && user.restaurantId) {
+    // If no company and no target specified, use user's restaurant
+    finalRestaurantId = user.restaurantId;
   }
 
   const createRequest: CreateApiKeyRequest = {
