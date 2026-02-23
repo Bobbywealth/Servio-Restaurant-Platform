@@ -11,6 +11,7 @@ import { ErrorBoundary } from '../components/ErrorBoundary'
 import { Inter } from 'next/font/google'
 import { usePushSubscription } from '../lib/hooks'
 import { safeLocalStorage } from '../lib/utils'
+import { refreshAccessToken, syncTokenToServiceWorker } from '../lib/api'
 
 // LOAD INTER FONT VIA NEXT.JS FONT OPTIMIZATION
 const inter = Inter({
@@ -42,50 +43,13 @@ export default function App({ Component, pageProps }: AppProps) {
 
     try {
       const refreshToken = safeLocalStorage.getItem('servio_refresh_token')
-      const accessToken = safeLocalStorage.getItem('servio_access_token')
 
       // Only refresh if we have a refresh token
       if (!refreshToken) return
 
-      // Don't refresh if token is valid for at least 15 minutes
-      // More aggressive threshold to ensure token never expires during use
-      if (accessToken) {
-        try {
-          const tokenData = JSON.parse(atob(accessToken.split('.')[1]))
-          const exp = tokenData.exp * 1000
-          const fifteenMinutes = 15 * 60 * 1000
-          if (Date.now() < exp - fifteenMinutes) {
-            return // Token still valid for at least 15 minutes
-          }
-        } catch {
-          // Invalid token, continue with refresh
-        }
-      }
-
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL ||
-        process.env.NEXT_PUBLIC_BACKEND_URL ||
-        'http://localhost:3002'
-
-      const response = await fetch(`${baseUrl}/api/auth/refresh`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refreshToken }),
-        credentials: 'include'
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        const newAccessToken = data?.data?.accessToken
-        if (newAccessToken) {
-          safeLocalStorage.setItem('servio_access_token', newAccessToken)
-          console.log('[keep-alive] Session refreshed successfully')
-        }
-      } else if (response.status === 401) {
-        // Refresh token is invalid/expired - clear auth
-        console.warn('[keep-alive] Refresh token expired, clearing session')
-        safeLocalStorage.removeItem('servio_access_token')
-        safeLocalStorage.removeItem('servio_refresh_token')
-        safeLocalStorage.removeItem('servio_user')
+      const refreshed = await refreshAccessToken()
+      if (refreshed) {
+        console.log('[keep-alive] Session refreshed successfully')
       }
     } catch (error) {
       // Silent fail - token refresh will happen on next API call if needed
@@ -157,24 +121,9 @@ export default function App({ Component, pageProps }: AppProps) {
       window.location.reload()
     }
 
-    const sendAuthTokenToSW = () => {
+    const syncCurrentAuthToken = () => {
       const token = safeLocalStorage.getItem('servio_access_token')
-      if (token && navigator.serviceWorker.controller) {
-        navigator.serviceWorker.controller.postMessage({
-          type: 'SET_AUTH_TOKEN',
-          payload: { token }
-        })
-        console.log('📤 Sent auth token to service worker')
-      }
-    }
-
-    const clearAuthTokenInSW = () => {
-      if (navigator.serviceWorker.controller) {
-        navigator.serviceWorker.controller.postMessage({
-          type: 'CLEAR_AUTH_TOKEN'
-        })
-        console.log('📤 Cleared auth token in service worker')
-      }
+      syncTokenToServiceWorker(token)
     }
 
     const registerServiceWorker = () => {
@@ -184,15 +133,15 @@ export default function App({ Component, pageProps }: AppProps) {
           registration.update()
 
           // Send auth token when SW is ready
-          sendAuthTokenToSW()
+          syncCurrentAuthToken()
 
           // Listen for token changes and update SW
           window.addEventListener('storage', (e) => {
             if (e.key === 'servio_access_token') {
               if (e.newValue) {
-                sendAuthTokenToSW()
+                syncCurrentAuthToken()
               } else {
-                clearAuthTokenInSW()
+                syncTokenToServiceWorker(null)
               }
             }
           })
