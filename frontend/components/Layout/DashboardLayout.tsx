@@ -229,6 +229,15 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       roles: ['manager', 'owner'],
       section: 'operations'
     },
+    {
+      name: 'Hours & Info',
+      href: '/dashboard/restaurant-profile',
+      icon: Store,
+      description: 'Hours, contact, and profile',
+      color: 'text-cyan-500',
+      roles: ['manager', 'owner'],
+      section: 'operations'
+    },
     
     // TEAM SECTION
     {

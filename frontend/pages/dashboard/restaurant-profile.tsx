@@ -88,6 +88,19 @@ interface RestaurantLink {
   created_at: string;
 }
 
+
+const WEEK_DAYS = [
+  { key: 'monday', label: 'Monday' },
+  { key: 'tuesday', label: 'Tuesday' },
+  { key: 'wednesday', label: 'Wednesday' },
+  { key: 'thursday', label: 'Thursday' },
+  { key: 'friday', label: 'Friday' },
+  { key: 'saturday', label: 'Saturday' },
+  { key: 'sunday', label: 'Sunday' }
+] as const;
+
+type WeekDayKey = (typeof WEEK_DAYS)[number]['key'];
+
 const ColorPicker = ({ label, value, onChange }: {
   label: string;
   value: string;
@@ -398,6 +411,30 @@ export default function RestaurantProfile() {
     deliveryFee: 0,
     minimumOrder: 0
   });
+
+
+  const getDayHours = (day: WeekDayKey) => {
+    const dayHours = profileData.operatingHours?.[day] || {};
+    return {
+      open: dayHours.open || '09:00',
+      close: dayHours.close || '17:00',
+      closed: Boolean(dayHours.closed)
+    };
+  };
+
+  const updateDayHours = (day: WeekDayKey, field: 'open' | 'close' | 'closed', value: string | boolean) => {
+    const existingDayHours = getDayHours(day);
+    setProfileData((previous) => ({
+      ...previous,
+      operatingHours: {
+        ...previous.operatingHours,
+        [day]: {
+          ...existingDayHours,
+          [field]: value
+        }
+      }
+    }));
+  };
 
   // Theme form state
   const [themeData, setThemeData] = useState({
@@ -784,6 +821,54 @@ export default function RestaurantProfile() {
                       className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
                       placeholder="+1 (555) 123-4567"
                     />
+                  </div>
+                </div>
+
+
+                <div className="mt-8">
+                  <div className="flex items-center space-x-2 mb-4">
+                    <Clock className="h-4 w-4 text-primary-500" />
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Hours of Operation</h3>
+                  </div>
+
+                  <div className="space-y-3">
+                    {WEEK_DAYS.map((day) => {
+                      const dayHours = getDayHours(day.key);
+                      return (
+                        <div
+                          key={day.key}
+                          className="grid grid-cols-1 sm:grid-cols-4 gap-3 items-center rounded-lg border border-gray-200 dark:border-gray-700 p-3"
+                        >
+                          <p className="font-medium text-gray-800 dark:text-gray-200">{day.label}</p>
+
+                          <label className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300">
+                            <input
+                              type="checkbox"
+                              checked={dayHours.closed}
+                              onChange={(e) => updateDayHours(day.key, 'closed', e.target.checked)}
+                              className="rounded border-gray-300 text-primary-500 focus:ring-primary-500"
+                            />
+                            <span>Closed</span>
+                          </label>
+
+                          <input
+                            type="time"
+                            value={dayHours.open}
+                            onChange={(e) => updateDayHours(day.key, 'open', e.target.value)}
+                            disabled={dayHours.closed}
+                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 disabled:opacity-50"
+                          />
+
+                          <input
+                            type="time"
+                            value={dayHours.close}
+                            onChange={(e) => updateDayHours(day.key, 'close', e.target.value)}
+                            disabled={dayHours.closed}
+                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 disabled:opacity-50"
+                          />
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
 
