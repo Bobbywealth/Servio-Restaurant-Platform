@@ -1178,7 +1178,7 @@ Use the available tools to perform actions. Always be helpful and professional.`
     const categories = await this.db.all(
       `SELECT 
         c.id, c.name, c.description, c.sort_order,
-        (SELECT COUNT(*) FROM menu_items WHERE category_id = c.id AND (is_available = 1 OR ?) as item_count,
+        (SELECT COUNT(*) FROM menu_items WHERE category_id = c.id AND (is_available = 1 OR ?)) as item_count,
         (SELECT COUNT(*) FROM menu_items WHERE category_id = c.id AND is_available = 0) as unavailable_count
       FROM menu_categories c
       WHERE c.restaurant_id = ? AND c.is_active = TRUE
