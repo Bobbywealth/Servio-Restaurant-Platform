@@ -165,6 +165,11 @@ router.put('/:id/vapi', asyncHandler(async (req: Request, res: Response) => {
     phoneNumber: body.phoneNumber ?? existingVapi.phoneNumber ?? ''
   };
 
+  const normalizedPhoneNumberId =
+    typeof nextVapi.phoneNumberId === 'string' && nextVapi.phoneNumberId.trim().length > 0
+      ? nextVapi.phoneNumberId.trim()
+      : null;
+
   const trimmedApiKey = typeof body.apiKey === 'string' ? body.apiKey.trim() : '';
   if (trimmedApiKey) {
     nextVapi.apiKey = trimmedApiKey;
@@ -189,8 +194,8 @@ router.put('/:id/vapi', asyncHandler(async (req: Request, res: Response) => {
   settings.vapi = nextVapi;
 
   await db.run(
-    'UPDATE restaurants SET settings = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-    [JSON.stringify(settings), restaurantId]
+    'UPDATE restaurants SET settings = ?, vapi_phone_number_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+    [JSON.stringify(settings), normalizedPhoneNumberId, restaurantId]
   );
 
   await DatabaseService.getInstance().logAudit(
