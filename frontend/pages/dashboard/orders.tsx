@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import Head from 'next/head'
 import DashboardLayout from '../../components/Layout/DashboardLayout'
 import { useUser } from '../../contexts/UserContext'
@@ -300,7 +300,7 @@ export default function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([])
   const [filteredOrders, setFilteredOrders] = useState<Order[]>([])
   const [summary, setSummary] = useState<OrdersSummary | null>(null)
-  const [statusFilter, setStatusFilter] = useState<OrderStatus | 'all'>('all')
+  const [statusFilter, setStatusFilter] = useState<OrderStatus | 'active' | 'all'>('all')
   const [channelFilter, setChannelFilter] = useState<string>('all')
   const [searchQuery, setSearchQuery] = useState('')
   const [isLoading, setIsLoading] = useState(true)
@@ -308,6 +308,8 @@ export default function OrdersPage() {
   const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null)
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
   const [showAnalytics, setShowAnalytics] = useState(false)
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<Date | null>(null)
+  const [secondsUntilRefresh, setSecondsUntilRefresh] = useState(30)
 
   const canUpdateOrders = hasPermission('orders', 'update')
 
@@ -348,7 +350,11 @@ export default function OrdersPage() {
 
     // Apply status filter
     if (statusFilter !== 'all') {
-      result = result.filter(o => o.status === statusFilter)
+      if (statusFilter === 'active') {
+        result = result.filter(o => ['received', 'preparing', 'ready'].includes(o.status))
+      } else {
+        result = result.filter(o => o.status === statusFilter)
+      }
     }
 
     // Apply channel filter
@@ -371,14 +377,14 @@ export default function OrdersPage() {
     setFilteredOrders(result)
   }, [orders, statusFilter, channelFilter, searchQuery])
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setIsLoading(true)
     setError(null)
     try {
       const [ordersRes, summaryRes] = await Promise.all([
         api.get('/api/orders', {
           params: {
-            status: statusFilter === 'all' ? undefined : statusFilter,
+            status: statusFilter === 'all' || statusFilter === 'active' ? undefined : statusFilter,
             channel: channelFilter === 'all' ? undefined : channelFilter,
             limit: 100,
             offset: 0
@@ -390,17 +396,35 @@ export default function OrdersPage() {
       const nextOrders: Order[] = ordersRes.data?.data?.orders || []
       setOrders(nextOrders)
       setSummary(summaryRes.data?.data || null)
+      setLastRefreshedAt(new Date())
+      setSecondsUntilRefresh(30)
     } catch (e: any) {
       setError(e?.response?.data?.error?.message || e?.message || 'Failed to load orders')
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [statusFilter, channelFilter])
 
   useEffect(() => {
     if (!hasPermission('orders', 'read')) return
     fetchData()
-  }, [statusFilter, channelFilter])
+  }, [statusFilter, channelFilter, hasPermission, fetchData])
+
+  useEffect(() => {
+    if (!hasPermission('orders', 'read')) return
+
+    const interval = setInterval(() => {
+      setSecondsUntilRefresh((prev) => {
+        if (prev <= 1) {
+          fetchData()
+          return 30
+        }
+        return prev - 1
+      })
+    }, 1000)
+
+    return () => clearInterval(interval)
+  }, [hasPermission, fetchData])
 
   useEffect(() => {
     if (!socket) return
@@ -417,7 +441,7 @@ export default function OrdersPage() {
     return () => {
       socket.off('notifications.new', handleNewNotification)
     }
-  }, [socket, hasPermission])
+  }, [socket, fetchData])
 
   const updateOrderStatus = async (orderId: string, status: OrderStatus) => {
     if (!canUpdateOrders) return
@@ -460,14 +484,14 @@ export default function OrdersPage() {
                 <ClipboardList className="w-6 h-6 mr-2 text-primary-600 dark:text-primary-400" />
                 Orders
               </h1>
-              <p className="mt-2 text-sm sm:text-base text-surface-600 dark:text-surface-400">
+              <p className="mt-1 text-sm text-surface-500 dark:text-surface-400">
                 Track incoming orders and update kitchen progress.
               </p>
             </div>
 
             <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
               <button
-                className="btn-primary inline-flex items-center justify-center min-h-[44px]"
+                className="btn-secondary inline-flex items-center justify-center min-h-[44px]"
                 onClick={createTestOrder}
                 disabled={isLoading}
               >
@@ -480,7 +504,7 @@ export default function OrdersPage() {
                 className="btn-secondary inline-flex items-center justify-center min-h-[44px]"
                 onClick={fetchData}
                 disabled={isLoading}
-                title="Refresh"
+                title={lastRefreshedAt ? `Last refreshed ${lastRefreshedAt.toLocaleTimeString()}` : 'Refresh'}
               >
                 <RefreshCw className={`w-4 h-4 sm:mr-2 ${isLoading ? 'animate-spin' : ''}`} />
                 <span className="hidden sm:inline">Refresh</span>
@@ -491,10 +515,15 @@ export default function OrdersPage() {
                 onClick={() => setShowAnalytics(!showAnalytics)}
               >
                 <BarChart3 className="w-4 h-4 mr-2" />
-                <span className="hidden sm:inline">{showAnalytics ? 'Hide' : 'Show'} Analytics</span>
+                <span className="hidden sm:inline">{showAnalytics ? 'Hide' : 'View'} Analytics</span>
                 <span className="sm:hidden">{showAnalytics ? 'Stats' : 'Analytics'}</span>
               </button>
             </div>
+          </div>
+
+          <div className="text-xs text-surface-500 dark:text-surface-400">
+            {lastRefreshedAt ? `Last refreshed ${lastRefreshedAt.toLocaleTimeString()}` : 'Loading orders...'}
+            {!isLoading && <span className="ml-2">• Auto-refresh in {secondsUntilRefresh}s</span>}
           </div>
 
           {/* Analytics Section */}
@@ -528,18 +557,18 @@ export default function OrdersPage() {
             </div>
           ) : summary && (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="card">
+              <button className="card text-left hover:shadow-md transition-shadow" onClick={() => setStatusFilter('active')}>
                 <p className="text-sm text-surface-600 dark:text-surface-400">Active Orders</p>
                 <p className="mt-1 text-3xl font-bold text-surface-900 dark:text-surface-100">{summary.activeOrders}</p>
-              </div>
-              <div className="card">
+              </button>
+              <button className="card text-left hover:shadow-md transition-shadow" onClick={() => setStatusFilter('all')}>
                 <p className="text-sm text-surface-600 dark:text-surface-400">Total Orders</p>
                 <p className="mt-1 text-3xl font-bold text-surface-900 dark:text-surface-100">{summary.totalOrders}</p>
-              </div>
-              <div className="card">
+              </button>
+              <button className="card text-left hover:shadow-md transition-shadow" onClick={() => setStatusFilter('completed')}>
                 <p className="text-sm text-surface-600 dark:text-surface-400">Completed Today</p>
                 <p className="mt-1 text-3xl font-bold text-surface-900 dark:text-surface-100">{summary.completedToday}</p>
-              </div>
+              </button>
               <div className="card">
                 <p className="text-sm text-surface-600 dark:text-surface-400">Avg Ticket</p>
                 <p className="mt-1 text-3xl font-bold text-surface-900 dark:text-surface-100">
@@ -564,10 +593,20 @@ export default function OrdersPage() {
                     <input
                       type="text"
                       placeholder="Order ID, customer, phone, item..."
-                      className="input-field w-full pl-10 min-h-[44px]"
+                      className="input-field w-full pl-10 pr-10 min-h-[44px]"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                     />
+                    {searchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setSearchQuery('')}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-surface-500 hover:text-surface-700"
+                        aria-label="Clear search"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                 </label>
               </div>
@@ -582,6 +621,7 @@ export default function OrdersPage() {
                     onChange={(e) => setStatusFilter(e.target.value as any)}
                   >
                     <option value="all">All</option>
+                    <option value="active">Active</option>
                     <option value="received">Received</option>
                     <option value="preparing">Preparing</option>
                     <option value="ready">Ready</option>
@@ -618,7 +658,7 @@ export default function OrdersPage() {
               <thead>
                 <tr className="border-b border-surface-200 dark:border-surface-700">
                   <th className="text-left py-3 px-2 font-semibold text-surface-600 dark:text-surface-400">Order</th>
-                  <th className="text-left py-3 px-2 font-semibold text-surface-600 dark:text-surface-400">Timer</th>
+                  <th className="text-left py-3 px-2 font-semibold text-surface-600 dark:text-surface-400">Age</th>
                   <th className="text-left py-3 px-2 font-semibold text-surface-600 dark:text-surface-400">Customer</th>
                   <th className="text-left py-3 px-2 font-semibold text-surface-600 dark:text-surface-400">Channel</th>
                   <th className="text-left py-3 px-2 font-semibold text-surface-600 dark:text-surface-400">Items</th>
@@ -690,7 +730,7 @@ export default function OrdersPage() {
                             <select
                               className="input-field inline-block w-32 text-sm"
                               value={o.status}
-                              disabled={updatingOrderId === o.id}
+                              disabled={updatingOrderId === o.id || o.status === 'completed' || o.status === 'cancelled'}
                               onChange={(e) => updateOrderStatus(o.id, e.target.value as OrderStatus)}
                             >
                               <option value="received">Received</option>
@@ -826,7 +866,7 @@ export default function OrdersPage() {
           {!isLoading && filteredOrders.length > 0 && (
             <div className="text-sm text-surface-500 dark:text-surface-400 text-center">
               Showing {filteredOrders.length} order{filteredOrders.length !== 1 ? 's' : ''}
-              {searchQuery && <> matching "<span className="font-medium">{searchQuery}</span>"</>}
+              {searchQuery && <> matching &quot;<span className="font-medium">{searchQuery}</span>&quot;</>}
             </div>
           )}
         </div>

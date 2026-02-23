@@ -357,8 +357,8 @@ router.get('/stats/summary', asyncHandler(async (req: Request, res: Response) =>
     db.get(`SELECT COUNT(*) as count FROM orders WHERE ${completedCondition}`, [restaurantId, todayStartStr, todayEndStr]),
     // Revenue from all non-cancelled orders today
     db.get(`SELECT COALESCE(SUM(total_amount), 0) as sum FROM orders WHERE ${allOrdersCondition}`, [restaurantId, todayStartStr, todayEndStr]),
-    // Average order value for completed orders today
-    db.get(`SELECT AVG(total_amount) as avg FROM orders WHERE ${completedCondition}`, [restaurantId, todayStartStr, todayEndStr]),
+    // Average order value for all non-cancelled orders today
+    db.get(`SELECT AVG(total_amount) as avg FROM orders WHERE ${allOrdersCondition}`, [restaurantId, todayStartStr, todayEndStr]),
     // Total orders today (all statuses)
     db.get(`SELECT COUNT(*) as count FROM orders WHERE ${allOrdersCondition}`, [restaurantId, todayStartStr, todayEndStr]),
     // Orders grouped by status
