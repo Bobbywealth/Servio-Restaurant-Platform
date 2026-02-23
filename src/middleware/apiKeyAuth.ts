@@ -50,16 +50,27 @@ function extractApiKey(req: Request): string | null {
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith('Bearer ')) {
     const token = authHeader.slice('Bearer '.length).trim();
-    // Check if it looks like an API key (starts with sk_)
+    // Standard API key prefix used by Servio
     if (token.startsWith('sk_')) {
+      return token;
+    }
+
+    // Non-JWT bearer tokens should still be treated as API key candidates.
+    // This avoids falling through to JWT verification and returning "Invalid token"
+    // when callers provide a valid key format from integrations.
+    const jwtSegments = token.split('.');
+    if (jwtSegments.length !== 3) {
       return token;
     }
   }
 
   // Check X-API-Key header
   const apiKeyHeader = req.headers['x-api-key'];
-  if (typeof apiKeyHeader === 'string' && apiKeyHeader.startsWith('sk_')) {
-    return apiKeyHeader;
+  if (typeof apiKeyHeader === 'string') {
+    const trimmed = apiKeyHeader.trim();
+    if (trimmed.length > 0) {
+      return trimmed;
+    }
   }
 
   return null;

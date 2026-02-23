@@ -3,6 +3,7 @@ import { Router, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import { DatabaseService } from '../services/DatabaseService';
 import { asyncHandler, BadRequestError } from '../middleware/errorHandler';
+import { getEffectiveRestaurantId } from '../middleware/apiKeyAuth';
 import { logger } from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
 import { eventBus } from '../events/bus';
@@ -62,7 +63,7 @@ const hydrateOrderItemsFromRows = async (db: any, orderId: string): Promise<any[
 router.get('/', asyncHandler(async (req: Request, res: Response) => {
   const { status, channel, limit = 50, offset = 0 } = req.query;
   const db = DatabaseService.getInstance().getDatabase();
-  const restaurantId = req.user?.restaurantId;
+  const restaurantId = getEffectiveRestaurantId(req) || (typeof req.query.restaurantId === 'string' ? req.query.restaurantId : null);
   const requestId = getRequestId(req);
 
   const authHeader = req.headers.authorization;
