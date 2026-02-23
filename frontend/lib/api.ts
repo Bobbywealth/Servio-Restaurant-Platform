@@ -37,6 +37,18 @@ const MIN_REFRESH_INTERVAL = 30_000 // Don't refresh more than once per 30 secon
 // Cache for token expiry to avoid parsing JWT on every request
 let cachedTokenExpiry: { token: string; expiresAt: number } | null = null
 
+function parseTokenExpiry(token: string): number | null {
+  try {
+    const parts = token.split('.')
+    if (parts.length !== 3) return null
+    const payload = JSON.parse(atob(parts[1]))
+    if (!payload.exp) return null
+    return payload.exp * 1000
+  } catch {
+    return null
+  }
+}
+
 // Check if token is about to expire (within 10 minutes)
 // Increased threshold for more reliable proactive refresh
 function isTokenExpiringSoon(token: string): boolean {
@@ -48,13 +60,8 @@ function isTokenExpiringSoon(token: string): boolean {
       return cachedTokenExpiry.expiresAt - now < tenMinutes
     }
 
-    const parts = token.split('.')
-    if (parts.length !== 3) return true
-
-    const payload = JSON.parse(atob(parts[1]))
-    if (!payload.exp) return false
-
-    const expiresAt = payload.exp * 1000
+    const expiresAt = parseTokenExpiry(token)
+    if (!expiresAt) return false
 
     // Cache the parsed expiry
     cachedTokenExpiry = { token, expiresAt }
@@ -180,6 +187,18 @@ function getLoginUrl(): string {
   return '/login'
 }
 
+function logoutAndRedirectToLoginOnce(): void {
+  SLS.removeItem('servio_access_token')
+  SLS.removeItem('servio_refresh_token')
+  SLS.removeItem('servio_user')
+  syncTokenToServiceWorker(null)
+
+  if (!redirectInFlight) {
+    redirectInFlight = true
+    window.location.href = getLoginUrl()
+  }
+}
+
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
@@ -201,15 +220,11 @@ api.interceptors.response.use(
 
       if (!refreshToken) {
         // No refresh token available - must logout
-        SLS.removeItem('servio_access_token')
-        SLS.removeItem('servio_refresh_token')
-        SLS.removeItem('servio_user')
-        window.location.href = getLoginUrl()
+        logoutAndRedirectToLoginOnce()
         return Promise.reject(error)
       }
 
       if (!refreshInFlight) {
-        let refreshSuccess = false
         refreshInFlight = refreshClient
           .post('/api/auth/refresh', { refreshToken })
           .then((resp) => {
@@ -220,7 +235,6 @@ api.interceptors.response.use(
             // Sync new token to service worker for PWA support
             syncTokenToServiceWorker(newAccessToken)
             cachedTokenExpiry = null
-            refreshSuccess = true
             if (process.env.NODE_ENV !== 'production') {
               console.info('[api] refreshed access token')
             }
@@ -236,25 +250,22 @@ api.interceptors.response.use(
           .finally(() => {
             refreshInFlight = null
           })
-
-        const newToken = await refreshInFlight
-
-        if (newToken) {
-          // Refresh succeeded - retry the original request with new token
-          originalConfig.headers = originalConfig.headers ?? {}
-          originalConfig.headers.Authorization = `Bearer ${newToken}`
-          return api.request(originalConfig)
-        }
-
-        // Refresh failed - logout
-        SLS.removeItem('servio_access_token')
-        SLS.removeItem('servio_refresh_token')
-        SLS.removeItem('servio_user')
-        if (process.env.NODE_ENV !== 'production') {
-          console.warn('[api] refresh failed, redirecting to login')
-        }
-        window.location.href = getLoginUrl()
       }
+
+      const newToken = await refreshInFlight
+
+      if (newToken) {
+        // Refresh succeeded - retry the original request with new token
+        originalConfig.headers = originalConfig.headers ?? {}
+        originalConfig.headers.Authorization = `Bearer ${newToken}`
+        return api.request(originalConfig)
+      }
+
+      // Refresh failed - logout
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn('[api] refresh failed, redirecting to login')
+      }
+      logoutAndRedirectToLoginOnce()
 
       return Promise.reject(error)
     }
@@ -323,4 +334,23 @@ function isOnline(): boolean {
 // Clear cached token expiry when token changes
 export function clearTokenCache(): void {
   cachedTokenExpiry = null
+}
+
+export function getTokenExpiry(token: string): number | null {
+  return parseTokenExpiry(token)
+}
+
+export const __apiTestUtils = {
+  setApiAdapter(adapter: any) {
+    api.defaults.adapter = adapter
+  },
+  setRefreshAdapter(adapter: any) {
+    refreshClient.defaults.adapter = adapter
+  },
+  resetState() {
+    refreshInFlight = null
+    lastRefreshTime = 0
+    lastSyncedServiceWorkerToken = null
+    cachedTokenExpiry = null
+  }
 }

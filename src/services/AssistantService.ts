@@ -34,6 +34,18 @@ interface StreamChunk {
   processingTime?: number;
 }
 
+class RestaurantContextMissingError extends Error {
+  public readonly code = 'RESTAURANT_CONTEXT_MISSING';
+
+  constructor(userId: string, reason: 'USER_NOT_FOUND' | 'RESTAURANT_ID_MISSING') {
+    const reasonMessage = reason === 'USER_NOT_FOUND'
+      ? 'User account was not found'
+      : 'User account is not linked to a restaurant';
+    super(`${reasonMessage} (userId=${userId})`);
+    this.name = 'RestaurantContextMissingError';
+  }
+}
+
 // Free emotion detection types
 type Sentiment = 'neutral' | 'urgent' | 'frustrated' | 'happy';
 
@@ -62,6 +74,14 @@ export class AssistantService {
   private openai: OpenAI;
   private miniMax: MiniMaxService;
   private _db: any = null;
+
+  private static readonly RESTAURANT_CONTEXT_REPAIR_MESSAGE = 'I can\'t access your restaurant context right now. Please re-authenticate or select a restaurant, then try again.';
+
+  private isRestaurantContextMissingError(error: unknown): error is RestaurantContextMissingError {
+    return error instanceof RestaurantContextMissingError || (
+      error instanceof Error && (error as any).code === 'RESTAURANT_CONTEXT_MISSING'
+    );
+  }
 
   // Free keyword-based emotion detection
   private detectSentiment(text: string): Sentiment {
@@ -384,6 +404,20 @@ export class AssistantService {
 
     } catch (error) {
       logger.error('Failed to process text:', error);
+
+      if (this.isRestaurantContextMissingError(error)) {
+        return {
+          response: AssistantService.RESTAURANT_CONTEXT_REPAIR_MESSAGE,
+          actions: [{
+            type: 'restaurant_context',
+            status: 'error',
+            description: 'Restaurant context is missing',
+            error: (error as Error).message
+          }],
+          processingTime: Date.now() - startTime
+        };
+      }
+
       return {
         response: "I'm having trouble understanding your request. Could you try rephrasing it?",
         actions: [{
@@ -590,6 +624,15 @@ export class AssistantService {
 
     } catch (error) {
       logger.error('Failed to process text stream:', error);
+
+      if (this.isRestaurantContextMissingError(error)) {
+        yield {
+          type: 'error',
+          error: AssistantService.RESTAURANT_CONTEXT_REPAIR_MESSAGE
+        };
+        return;
+      }
+
       yield {
         type: 'error',
         error: error instanceof Error ? error.message : 'Unknown error'
@@ -599,7 +642,16 @@ export class AssistantService {
 
   private async resolveRestaurantId(userId: string): Promise<string> {
     const user = await this.db.get('SELECT restaurant_id FROM users WHERE id = ?', [userId]);
-    const restaurantId = user?.restaurant_id || 'demo-restaurant-1';
+
+    if (!user) {
+      throw new RestaurantContextMissingError(userId, 'USER_NOT_FOUND');
+    }
+
+    if (!user.restaurant_id) {
+      throw new RestaurantContextMissingError(userId, 'RESTAURANT_ID_MISSING');
+    }
+
+    const restaurantId = user.restaurant_id;
     logger.info('[assistant] resolved restaurantId', {
       userId,
       restaurantId,
@@ -1022,6 +1074,16 @@ Use the available tools to perform actions. Always be helpful and professional.`
       }
     } catch (error) {
       logger.error(`Tool execution failed for ${name}:`, error);
+
+      if (this.isRestaurantContextMissingError(error)) {
+        return {
+          type: name,
+          status: 'error',
+          description: 'Restaurant context is missing. Please re-authenticate/select restaurant.',
+          error: AssistantService.RESTAURANT_CONTEXT_REPAIR_MESSAGE
+        };
+      }
+
       return {
         type: name,
         status: 'error',

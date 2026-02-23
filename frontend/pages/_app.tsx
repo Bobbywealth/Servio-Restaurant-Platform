@@ -43,7 +43,6 @@ export default function App({ Component, pageProps }: AppProps) {
 
     try {
       const refreshToken = safeLocalStorage.getItem('servio_refresh_token')
-      const accessToken = safeLocalStorage.getItem('servio_access_token')
 
       // Only refresh if we have a refresh token
       if (!refreshToken) return
