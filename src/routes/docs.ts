@@ -23,9 +23,22 @@ The Servio Restaurant Platform API provides comprehensive endpoints for managing
 - Voice assistant integration
 
 ## Authentication
-Most endpoints require authentication via JWT Bearer token or API Key.
+Authentication requirements vary by route group.
 - JWT: Include \`Authorization: Bearer <token>\` header
-- API Key: Include \`X-API-Key: <key>\` header
+- API Key: Include \`X-API-Key: <key>\` header (or \`Authorization: Bearer <api-key>\`)
+
+### API key-compatible route groups
+- \`/api/orders/**\` (except \`/public/**\`, which is public)
+- \`/api/menu/**\` (except \`/public/**\`, which is public)
+- \`/api/inventory/**\`
+- \`/api/staff/**\` (base staff routes)
+
+### JWT-only route groups
+- \`/api/admin/**\`
+- \`/api/company/**\`
+- \`/api/integrations/**\`
+- \`/api/api-keys/**\` (API key lifecycle management)
+- Other internal and privileged endpoints unless explicitly documented as API key-compatible
 
 ## Rate Limiting
 - Authenticated endpoints: 1000 requests/minute
