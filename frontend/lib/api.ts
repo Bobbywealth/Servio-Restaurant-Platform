@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { safeLocalStorage as SLS } from './utils'
+import { syncTokenToServiceWorker } from './serviceWorkerAuth'
 
 const BACKEND_URL =
   process.env.NEXT_PUBLIC_API_URL ||
@@ -33,8 +34,6 @@ const refreshClient = axios.create({
 let refreshInFlight: Promise<string | null> | null = null
 let lastRefreshTime = 0
 const MIN_REFRESH_INTERVAL = 30_000 // Don't refresh more than once per 30 seconds
-let lastSyncedServiceWorkerToken: string | null = null
-
 // Cache for token expiry to avoid parsing JWT on every request
 let cachedTokenExpiry: { token: string; expiresAt: number } | null = null
 
@@ -319,31 +318,6 @@ const safeLocalStorage = {
 function isOnline(): boolean {
   if (typeof navigator === 'undefined') return true
   return navigator.onLine !== undefined ? navigator.onLine : true
-}
-
-// Sync auth token to service worker for offline/PWA support
-export function syncTokenToServiceWorker(token: string | null): void {
-  if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
-  if (token === lastSyncedServiceWorkerToken) return
-
-  navigator.serviceWorker.ready.then((registration) => {
-    if (registration.active) {
-      if (token) {
-        registration.active.postMessage({
-          type: 'SET_AUTH_TOKEN',
-          payload: { token }
-        })
-      } else {
-        registration.active.postMessage({
-          type: 'CLEAR_AUTH_TOKEN'
-        })
-      }
-
-      lastSyncedServiceWorkerToken = token
-    }
-  }).catch(() => {
-    // Service worker not available
-  })
 }
 
 // Clear cached token expiry when token changes

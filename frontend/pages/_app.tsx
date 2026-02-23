@@ -11,6 +11,7 @@ import { ErrorBoundary } from '../components/ErrorBoundary'
 import { Inter } from 'next/font/google'
 import { usePushSubscription } from '../lib/hooks'
 import { safeLocalStorage } from '../lib/utils'
+import { registerTokenStorageSync, syncTokenToServiceWorker } from '../lib/serviceWorkerAuth'
 
 // LOAD INTER FONT VIA NEXT.JS FONT OPTIMIZATION
 const inter = Inter({
@@ -78,6 +79,7 @@ export default function App({ Component, pageProps }: AppProps) {
         const newAccessToken = data?.data?.accessToken
         if (newAccessToken) {
           safeLocalStorage.setItem('servio_access_token', newAccessToken)
+          syncTokenToServiceWorker(newAccessToken)
           console.log('[keep-alive] Session refreshed successfully')
         }
       } else if (response.status === 401) {
@@ -86,6 +88,7 @@ export default function App({ Component, pageProps }: AppProps) {
         safeLocalStorage.removeItem('servio_access_token')
         safeLocalStorage.removeItem('servio_refresh_token')
         safeLocalStorage.removeItem('servio_user')
+        syncTokenToServiceWorker(null)
       }
     } catch (error) {
       // Silent fail - token refresh will happen on next API call if needed
@@ -157,25 +160,10 @@ export default function App({ Component, pageProps }: AppProps) {
       window.location.reload()
     }
 
-    const sendAuthTokenToSW = () => {
-      const token = safeLocalStorage.getItem('servio_access_token')
-      if (token && navigator.serviceWorker.controller) {
-        navigator.serviceWorker.controller.postMessage({
-          type: 'SET_AUTH_TOKEN',
-          payload: { token }
-        })
-        console.log('📤 Sent auth token to service worker')
-      }
-    }
-
-    const clearAuthTokenInSW = () => {
-      if (navigator.serviceWorker.controller) {
-        navigator.serviceWorker.controller.postMessage({
-          type: 'CLEAR_AUTH_TOKEN'
-        })
-        console.log('📤 Cleared auth token in service worker')
-      }
-    }
+    const removeStorageSyncListener = registerTokenStorageSync((token) => {
+      // Cross-tab fallback only. Same-tab writes call syncTokenToServiceWorker directly.
+      syncTokenToServiceWorker(token)
+    })
 
     const registerServiceWorker = () => {
       navigator.serviceWorker
@@ -183,19 +171,8 @@ export default function App({ Component, pageProps }: AppProps) {
         .then((registration) => {
           registration.update()
 
-          // Send auth token when SW is ready
-          sendAuthTokenToSW()
-
-          // Listen for token changes and update SW
-          window.addEventListener('storage', (e) => {
-            if (e.key === 'servio_access_token') {
-              if (e.newValue) {
-                sendAuthTokenToSW()
-              } else {
-                clearAuthTokenInSW()
-              }
-            }
-          })
+          // Initial auth token sync when SW is ready
+          syncTokenToServiceWorker(safeLocalStorage.getItem('servio_access_token'))
 
           if (registration.waiting) {
             registration.waiting.postMessage({ type: 'SKIP_WAITING' })
@@ -217,14 +194,18 @@ export default function App({ Component, pageProps }: AppProps) {
     }
 
     navigator.serviceWorker.addEventListener('controllerchange', handleControllerChange)
+    const handleWindowLoad = () => registerServiceWorker()
+
     if (document.readyState === 'complete') {
       registerServiceWorker()
     } else {
-      window.addEventListener('load', registerServiceWorker, { once: true })
+      window.addEventListener('load', handleWindowLoad, { once: true })
     }
 
     return () => {
       navigator.serviceWorker.removeEventListener('controllerchange', handleControllerChange)
+      window.removeEventListener('load', handleWindowLoad)
+      removeStorageSyncListener()
     }
   }, [isStaffRoute])
 
