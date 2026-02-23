@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { DatabaseService } from '../services/DatabaseService';
 import { asyncHandler, UnauthorizedError, BadRequestError } from '../middleware/errorHandler';
+import { getEffectiveRestaurantId } from '../middleware/apiKeyAuth';
 import { logger } from '../utils/logger';
 import { ensureUploadsDir, getUploadsPath } from '../utils/uploads';
 import multer from 'multer';
@@ -589,8 +590,8 @@ router.get('/public/:slug', asyncHandler(async (req: Request, res: Response) => 
  */
 router.get('/categories/all', asyncHandler(async (req: Request, res: Response) => {
   const db = DatabaseService.getInstance().getDatabase();
-  const restaurantId = req.user?.restaurantId;
-  
+  const restaurantId = getEffectiveRestaurantId(req);
+
   const categories = await db.all(`
     SELECT
         id,
@@ -2171,7 +2172,7 @@ router.get('/unavailable', asyncHandler(async (req: Request, res: Response) => {
  */
 router.get('/categories', asyncHandler(async (req: Request, res: Response) => {
   const db = DatabaseService.getInstance().getDatabase();
-  const restaurantId = req.user?.restaurantId;
+  const restaurantId = getEffectiveRestaurantId(req);
 
   const categories = await db.all(`
     SELECT
