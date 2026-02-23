@@ -136,6 +136,27 @@ export default function AdminDemoBookingsPage() {
   const selectedYmd = selectedDate ? toYmd(selectedDate) : ''
   const selectedBookings = selectedYmd ? bookingsByDay.get(selectedYmd) || [] : []
 
+  const summary = useMemo(() => {
+    const today = toYmd(new Date())
+    let unassigned = 0
+    let needsFollowUp = 0
+    let dueToday = 0
+
+    for (const booking of bookings) {
+      if (!booking.owner_user_id) unassigned += 1
+      if (booking.status !== 'converted' && booking.status !== 'lost') needsFollowUp += 1
+      if (booking.follow_up_at && toYmd(new Date(booking.follow_up_at)) === today) dueToday += 1
+    }
+
+    return {
+      total: bookings.length,
+      forSelectedDay: selectedBookings.length,
+      unassigned,
+      needsFollowUp,
+      dueToday
+    }
+  }, [bookings, selectedBookings.length])
+
   const hydrateDrafts = (nextBookings: AdminBooking[]) => {
     setDraftById((prev) => {
       const next = { ...prev }
@@ -286,6 +307,21 @@ export default function AdminDemoBookingsPage() {
           </select>
         </div>
 
+        <div className="mb-6 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3">
+          {[
+            { label: 'Month total demos', value: summary.total, tone: 'text-gray-900 dark:text-white' },
+            { label: 'Selected day demos', value: summary.forSelectedDay, tone: 'text-gray-900 dark:text-white' },
+            { label: 'Unassigned owners', value: summary.unassigned, tone: 'text-amber-700 dark:text-amber-300' },
+            { label: 'Open follow-up', value: summary.needsFollowUp, tone: 'text-blue-700 dark:text-blue-300' },
+            { label: 'Follow-up due today', value: summary.dueToday, tone: 'text-red-700 dark:text-red-300' }
+          ].map((card) => (
+            <div key={card.label} className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3">
+              <div className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">{card.label}</div>
+              <div className={`mt-1 text-2xl font-semibold ${card.tone}`}>{card.value}</div>
+            </div>
+          ))}
+        </div>
+
         {error && <div className="mb-6 p-4 rounded-xl border border-red-200 dark:border-red-900/30 bg-red-50 dark:bg-red-900/10 text-red-700 dark:text-red-200">{error}</div>}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -325,7 +361,19 @@ export default function AdminDemoBookingsPage() {
                   return (
                     <div key={b.id} className="rounded-xl border border-gray-200 dark:border-gray-700 p-3 space-y-2">
                       <div className="font-semibold text-gray-900 dark:text-white">{b.booking_time} — {b.name}</div>
-                      <div className="text-sm text-gray-600 dark:text-gray-300">{b.email}</div>
+                      <div className="text-sm text-gray-600 dark:text-gray-300 break-all">{b.email}</div>
+                      <div className="grid grid-cols-1 gap-1 text-xs text-gray-500 dark:text-gray-400">
+                        {b.phone ? <div><span className="font-medium">Phone:</span> {b.phone}</div> : null}
+                        {b.restaurant_name ? <div><span className="font-medium">Restaurant:</span> {b.restaurant_name}</div> : null}
+                        <div><span className="font-medium">Timezone:</span> {b.timezone}</div>
+                        <div><span className="font-medium">Created:</span> {new Date(b.created_at).toLocaleString()}</div>
+                      </div>
+                      {(b.notes || b.internal_notes) && (
+                        <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 p-2 text-xs text-gray-600 dark:text-gray-300 space-y-1">
+                          {b.notes ? <div><span className="font-medium">Customer notes:</span> {b.notes}</div> : null}
+                          {b.internal_notes ? <div><span className="font-medium">Internal context:</span> {b.internal_notes}</div> : null}
+                        </div>
+                      )}
                       <div className="grid grid-cols-1 gap-2">
                         <select value={draft?.owner_user_id || ''} onChange={(e) => updateDraft(b.id, 'owner_user_id', e.target.value)} className="px-2 py-1 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm">
                           <option value="">Unassigned owner</option>
