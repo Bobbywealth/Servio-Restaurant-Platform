@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { DatabaseService } from '../services/DatabaseService';
 import { asyncHandler } from '../middleware/errorHandler';
+import { getEffectiveRestaurantId } from '../middleware/apiKeyAuth';
 import { logger } from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
 import multer from 'multer';
@@ -23,6 +24,32 @@ const upload = multer({
 });
 
 const router = Router();
+
+/**
+ * GET /api/inventory
+ * List all inventory items for the restaurant
+ */
+router.get('/', asyncHandler(async (req: Request, res: Response) => {
+  const db = DatabaseService.getInstance().getDatabase();
+  const restaurantId = getEffectiveRestaurantId(req);
+
+  if (!restaurantId) {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'Restaurant ID is required' }
+    });
+  }
+
+  const items = await db.all(
+    'SELECT * FROM inventory_items WHERE restaurant_id = ? ORDER BY name',
+    [restaurantId]
+  );
+
+  res.json({
+    success: true,
+    data: items
+  });
+}));
 
 /**
  * POST /api/inventory

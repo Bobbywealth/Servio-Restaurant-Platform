@@ -144,6 +144,7 @@ async function initializeServer() {
     const { default: pushRoutes } = await import('./routes/push');
     const { default: deliveryPlatformsRoutes } = await import('./routes/delivery-platforms');
     const { default: deliveryPlatformsSessionsRoutes } = await import('./routes/delivery-platforms-sessions');
+    const { default: staffRoutes } = await import('./routes/staff');
     const { default: staffClockRoutes } = await import('./routes/staff-clock');
     const { default: staffSchedulingRoutes } = await import('./routes/staff-scheduling');
     const { default: staffAnalyticsRoutes } = await import('./routes/staff-analytics');
@@ -258,6 +259,10 @@ async function initializeServer() {
 
     // Staff clock-in PWA routes (public - PIN authenticated)
     app.use('/api/staff/clock', staffClockRoutes);
+
+    // Base staff route: supports both JWT and API key auth.
+    // Registered AFTER sub-routes so specific paths take priority.
+    app.use('/api/staff', requireAuthOrApiKey({ requiredScopes: ['read:staff'] }), staffRoutes);
 
     // Modifiers routes - MUST be last since it uses /api catch-all
     app.use('/api', requireAuth, modifiersRoutes);
