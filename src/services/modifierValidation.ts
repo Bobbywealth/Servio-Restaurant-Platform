@@ -50,7 +50,8 @@ export async function validateItemSelections(
     `
     SELECT img.*, mg.name as group_name, mg.selection_type, mg.min_selections, mg.max_selections, mg.is_required,
            mg.is_active as group_active, mg.deleted_at as group_deleted,
-           mo.id as option_id, mo.name as option_name, mo.price_delta, mo.is_active as option_active, mo.deleted_at as option_deleted
+           mo.id as option_id, mo.name as option_name, mo.price_delta, mo.is_active as option_active,
+           mo.is_sold_out as option_sold_out, mo.deleted_at as option_deleted
     FROM item_modifier_groups img
     INNER JOIN modifier_groups mg ON mg.id = img.group_id
     INNER JOIN modifier_options mo ON mo.group_id = mg.id
@@ -79,7 +80,13 @@ export async function validateItemSelections(
       displayOrder: number;
       options: Record<
         string,
-        { id: string; name: string; priceDelta: number; isActive: boolean }
+        {
+          id: string;
+          name: string;
+          priceDelta: number;
+          isActive: boolean;
+          isSoldOut: boolean;
+        }
       >;
     }
   > = {};
@@ -108,6 +115,7 @@ export async function validateItemSelections(
       name: r.option_name,
       priceDelta: Number(r.price_delta || 0),
       isActive: Boolean(r.option_active),
+      isSoldOut: Boolean(r.option_sold_out),
     };
   }
 
@@ -129,13 +137,33 @@ export async function validateItemSelections(
     for (const optSel of opts) {
       const opt = g.options[optSel.optionId];
       const qty = normalizeInt(optSel.quantity, 1) || 1;
-      if (!opt || !opt.isActive) {
+      if (!opt) {
         errors.push({
           code: 'MODIFIER_INVALID_OPTION',
           message: `Invalid option`,
           groupId: g.id,
           groupName: g.name,
-          reason: 'option_inactive_or_missing',
+          reason: 'option_not_in_group',
+        });
+        continue;
+      }
+      if (!opt.isActive) {
+        errors.push({
+          code: 'MODIFIER_INVALID_OPTION',
+          message: `Option is inactive`,
+          groupId: g.id,
+          groupName: g.name,
+          reason: 'option_inactive',
+        });
+        continue;
+      }
+      if (opt.isSoldOut) {
+        errors.push({
+          code: 'MODIFIER_INVALID_OPTION',
+          message: `Option is sold out`,
+          groupId: g.id,
+          groupName: g.name,
+          reason: 'option_sold_out',
         });
         continue;
       }
