@@ -76,7 +76,9 @@ describe('Admin orders integration', () => {
         created_at: '2026-01-01T11:00:00.000Z'
       }
     ]);
-    mockDb.get.mockResolvedValue({ total: 2 });
+    mockDb.get
+      .mockResolvedValueOnce({ settings: '{}' })
+      .mockResolvedValueOnce({ total: 2 });
 
     const app = await createApp();
     const response = await httpRequest(app, '/api/admin/orders?page=1&limit=2', {
@@ -93,6 +95,26 @@ describe('Admin orders integration', () => {
 
     const [query] = mockDb.all.mock.calls[0];
     expect(query).toContain('LEFT JOIN restaurants r ON r.id = o.restaurant_id');
+    expect(query).toContain("COALESCE(o.channel, '') != ?");
+    expect(query).toContain("COALESCE(r.slug, '') != ?");
+  });
+
+  it('allows including mock orders when includeMockData=true', async () => {
+    mockDb.all.mockResolvedValue([]);
+    mockDb.get
+      .mockResolvedValueOnce({ settings: '{}' })
+      .mockResolvedValueOnce({ total: 0 });
+
+    const app = await createApp();
+    const response = await httpRequest(app, '/api/admin/orders?includeMockData=true', {
+      headers: { 'x-test-role': 'platform-admin' }
+    });
+
+    expect(response.status).toBe(200);
+
+    const [query] = mockDb.all.mock.calls[0];
+    expect(query).not.toContain("COALESCE(o.channel, '') != ?");
+    expect(query).not.toContain("COALESCE(r.slug, '') != ?");
   });
 
   it('uses bounded time window predicates for finite windows', async () => {
