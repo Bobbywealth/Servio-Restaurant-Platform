@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { DatabaseService } from '../services/DatabaseService';
 import { asyncHandler, UnauthorizedError, BadRequestError } from '../middleware/errorHandler';
-import { getEffectiveRestaurantId } from '../middleware/apiKeyAuth';
+import { getEffectiveRestaurantId, requireApiKeyScopeByHttpMethod } from '../middleware/apiKeyAuth';
 import { logger } from '../utils/logger';
 import { ensureUploadsDir, getUploadsPath } from '../utils/uploads';
 import multer from 'multer';
@@ -13,6 +13,9 @@ import OpenAI from 'openai';
 import mammoth from 'mammoth';
 
 const router = Router();
+
+const requireMenuScopeByMethod = requireApiKeyScopeByHttpMethod('menu');
+router.use(requireMenuScopeByMethod);
 
 // Configure multer for image uploads
 const storage = multer.memoryStorage();

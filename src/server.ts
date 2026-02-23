@@ -201,16 +201,16 @@ async function initializeServer() {
     // Orders routes: /public/* is public, others require auth (JWT or API key)
     app.use('/api/orders', (req, res, next) => {
       if (req.path.startsWith('/public')) return next();
-      return requireAuthOrApiKey({ requiredScopes: ['read:orders'] })(req, res, next);
+      return requireAuthOrApiKey()(req, res, next);
     }, ordersRoutes);
 
     // Inventory routes: support both JWT and API key auth
-    app.use('/api/inventory', requireAuthOrApiKey({ requiredScopes: ['read:inventory'] }), inventoryRoutes);
+    app.use('/api/inventory', requireAuthOrApiKey(), inventoryRoutes);
     
     // Menu routes: /public/* is public, others require auth (JWT or API key)
     app.use('/api/menu', (req, res, next) => {
       if (req.path.startsWith('/public')) return next();
-      return requireAuthOrApiKey({ requiredScopes: ['read:menu'] })(req, res, next);
+      return requireAuthOrApiKey()(req, res, next);
     }, menuRoutes);
 
     app.use('/api/tasks', requireAuth, tasksRoutes);
@@ -285,7 +285,7 @@ async function initializeServer() {
 
     // Base staff route: supports both JWT and API key auth.
     // Registered AFTER sub-routes so specific paths take priority.
-    app.use('/api/staff', requireAuthOrApiKey({ requiredScopes: ['read:staff'] }), staffRoutes);
+    app.use('/api/staff', requireAuthOrApiKey(), staffRoutes);
 
     // Modifiers routes - MUST be last since it uses /api catch-all
     app.use('/api', requireAuth, modifiersRoutes);

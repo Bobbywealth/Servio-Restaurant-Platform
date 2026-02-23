@@ -3,7 +3,7 @@ import { Router, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import { DatabaseService } from '../services/DatabaseService';
 import { asyncHandler, BadRequestError } from '../middleware/errorHandler';
-import { getEffectiveRestaurantId } from '../middleware/apiKeyAuth';
+import { getEffectiveRestaurantId, requireApiKeyScopeByHttpMethod } from '../middleware/apiKeyAuth';
 import { logger } from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
 import { eventBus } from '../events/bus';
@@ -49,6 +49,15 @@ const parseJson = <T>(value: unknown, fallback: T): T => {
 };
 
 const hasOrderItems = (items: unknown): boolean => Array.isArray(items) && items.length > 0;
+
+
+const requireOrdersScopeByMethod = requireApiKeyScopeByHttpMethod('orders');
+router.use((req, res, next) => {
+  if (req.path.startsWith('/public')) {
+    return next();
+  }
+  return requireOrdersScopeByMethod(req, res, next);
+});
 
 const hydrateOrderItemsFromRows = async (db: any, orderId: string): Promise<any[]> => {
   const rows = await db.all(

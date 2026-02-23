@@ -4,6 +4,11 @@ import { UnauthorizedError, ForbiddenError, TooManyRequestsError } from './error
 import { ApiKey, ApiKeyScope } from '../types/apiKey';
 import { logger } from '../utils/logger';
 
+type ScopedApiResource = 'orders' | 'menu' | 'inventory' | 'staff';
+
+const READ_METHODS = new Set(['GET', 'HEAD']);
+const WRITE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+
 // Extend Express Request type for API key
 declare global {
   namespace Express {
@@ -238,10 +243,56 @@ export function requireApiKeyScopes(scopes: ApiKeyScope[]) {
     const hasAllScopes = scopes.every(scope => apiKey.scopes.includes(scope));
 
     if (!hasAllScopes) {
-      return next(new ForbiddenError(`Missing required scopes: ${scopes.join(', ')}`));
+      const missingScopes = scopes.filter(scope => !apiKey.scopes.includes(scope));
+      return next(new ForbiddenError(
+        `Missing scope(s): ${missingScopes.join(', ')}. Required scope(s): ${scopes.join(', ')}`
+      ));
     }
 
     return next();
+  };
+}
+
+function getScopeForHttpMethod(resource: ScopedApiResource, method: string): ApiKeyScope | null {
+  const normalizedMethod = method.toUpperCase();
+
+  if (READ_METHODS.has(normalizedMethod)) {
+    return `read:${resource}` as ApiKeyScope;
+  }
+
+  if (WRITE_METHODS.has(normalizedMethod)) {
+    return `write:${resource}` as ApiKeyScope;
+  }
+
+  return null;
+}
+
+/**
+ * Middleware to require per-method API key scope for a resource.
+ * GET/HEAD require read scope, POST/PUT/PATCH/DELETE require write scope.
+ */
+export function requireApiKeyScopeByHttpMethod(resource: ScopedApiResource) {
+  return (req: Request, _res: Response, next: NextFunction) => {
+    if (!req.apiKey) {
+      return next();
+    }
+
+    if (req.apiKey.scopes.includes('admin:full')) {
+      return next();
+    }
+
+    const requiredScope = getScopeForHttpMethod(resource, req.method);
+    if (!requiredScope) {
+      return next();
+    }
+
+    if (req.apiKey.scopes.includes(requiredScope)) {
+      return next();
+    }
+
+    return next(new ForbiddenError(
+      `Missing scope: ${requiredScope}. Required scope for ${req.method.toUpperCase()} ${req.originalUrl || req.url}: ${requiredScope}`
+    ));
   };
 }
 
@@ -301,6 +352,7 @@ export default {
   requireApiKey,
   optionalApiKey,
   requireApiKeyScopes,
+  requireApiKeyScopeByHttpMethod,
   isApiKeyAuth,
   getEffectiveRestaurantId,
   getEffectiveCompanyId,

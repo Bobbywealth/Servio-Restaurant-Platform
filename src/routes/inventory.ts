@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { DatabaseService } from '../services/DatabaseService';
 import { asyncHandler } from '../middleware/errorHandler';
-import { getEffectiveRestaurantId } from '../middleware/apiKeyAuth';
+import { getEffectiveRestaurantId, requireApiKeyScopeByHttpMethod } from '../middleware/apiKeyAuth';
 import { logger } from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
 import multer from 'multer';
@@ -24,6 +24,9 @@ const upload = multer({
 });
 
 const router = Router();
+
+const requireInventoryScopeByMethod = requireApiKeyScopeByHttpMethod('inventory');
+router.use(requireInventoryScopeByMethod);
 
 /**
  * GET /api/inventory
