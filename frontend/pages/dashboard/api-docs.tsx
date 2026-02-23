@@ -1,13 +1,17 @@
 import { useEffect } from 'react';
-import { useRouter } from 'next/router';
 import Head from 'next/head';
 
 export default function ApiDocsRedirect() {
-  const router = useRouter();
-
   useEffect(() => {
-    // Redirect to the backend API docs
-    window.location.href = '/api/docs';
+    const backendBaseUrl =
+      process.env.NEXT_PUBLIC_API_URL ||
+      process.env.NEXT_PUBLIC_BACKEND_URL ||
+      'http://localhost:3002';
+    const normalizedBackendUrl = backendBaseUrl.replace(/\/$/, '');
+
+    // Redirect directly to backend Swagger UI so this route never collides
+    // with Next.js /pages/api routes.
+    window.location.href = `${normalizedBackendUrl}/api/docs`;
   }, []);
 
   return (
