@@ -1803,6 +1803,7 @@ router.get('/orders', async (req, res) => {
     const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
     const timeWindow = resolveOrderTimeWindow(req.query.timeWindow);
     const slaBreach = parseBooleanQuery(req.query.slaBreached);
+    const includeMockData = parseBooleanQuery(req.query.includeMockData) === true;
     const slaMinutes = resolveLimit(req.query.slaMinutes, 15, 180);
 
     const whereParts: string[] = [];
@@ -1825,6 +1826,14 @@ router.get('/orders', async (req, res) => {
     if (restaurantId) {
       whereParts.push('o.restaurant_id = ?');
       params.push(restaurantId);
+    }
+
+    if (!includeMockData) {
+      whereParts.push(`(
+        COALESCE(o.channel, '') != ?
+        AND COALESCE(r.slug, '') != ?
+      )`);
+      params.push('test', 'demo-restaurant');
     }
 
     if (search) {
