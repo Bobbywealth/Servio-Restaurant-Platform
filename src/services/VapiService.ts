@@ -38,6 +38,9 @@ export interface VapiResponse {
 }
 
 export class VapiService {
+  private static readonly PHONE_LOOKUP_CACHE_TTL_MS = Number(process.env.VAPI_PHONE_LOOKUP_CACHE_TTL_MS || 60_000);
+  private static readonly phoneLookupCache = new Map<string, { restaurantId: string; expiresAt: number }>();
+
   private assistantService: AssistantService;
 
   constructor() {
@@ -305,28 +308,59 @@ export class VapiService {
       }
     }
 
-    // 4) look up phoneNumberId in restaurant settings (db)
+    // 4) look up phoneNumberId in direct indexed column (db)
     if (phoneNumberId) {
+      const phoneLookupKey = String(phoneNumberId);
+      const now = Date.now();
+      const cached = VapiService.phoneLookupCache.get(phoneLookupKey);
+      if (cached && cached.expiresAt > now) {
+        logger.info('[vapi] phone_number_lookup_cache_hit', {
+          callId: message?.call?.id,
+          phoneNumberId: phoneLookupKey
+        });
+        return {
+          restaurantId: cached.restaurantId,
+          restaurantSlug: null,
+          source: 'cache.vapi_phone_number_id'
+        };
+      }
+
+      if (cached) {
+        VapiService.phoneLookupCache.delete(phoneLookupKey);
+      }
+
+      logger.info('[vapi] phone_number_lookup_cache_miss', {
+        callId: message?.call?.id,
+        phoneNumberId: phoneLookupKey
+      });
+
       try {
+        const start = Date.now();
         const db = DatabaseService.getInstance().getDatabase();
-        const rows = await db.all('SELECT id, settings FROM restaurants');
-        for (const row of rows || []) {
-          const rawSettings = row?.settings;
-          if (!rawSettings) continue;
-          let parsed: any = null;
-          if (typeof rawSettings === 'object') {
-            parsed = rawSettings;
-          } else if (typeof rawSettings === 'string') {
-            try {
-              parsed = JSON.parse(rawSettings);
-            } catch {
-              parsed = null;
-            }
-          }
-          const storedPhoneNumberId = parsed?.vapi?.phoneNumberId;
-          if (storedPhoneNumberId && String(storedPhoneNumberId) === String(phoneNumberId)) {
-            return { restaurantId: String(row.id), restaurantSlug: null, source: 'db.vapi.phoneNumberId' };
-          }
+        const matchedRestaurant = await db.get<{ id: string }>(
+          'SELECT id FROM restaurants WHERE vapi_phone_number_id = ? LIMIT 1',
+          [phoneLookupKey]
+        );
+        const elapsedMs = Date.now() - start;
+
+        logger.info('[vapi] phone_number_lookup_db_latency', {
+          callId: message?.call?.id,
+          phoneNumberId: phoneLookupKey,
+          elapsedMs,
+          found: Boolean(matchedRestaurant?.id)
+        });
+
+        if (matchedRestaurant?.id) {
+          VapiService.phoneLookupCache.set(phoneLookupKey, {
+            restaurantId: String(matchedRestaurant.id),
+            expiresAt: now + VapiService.PHONE_LOOKUP_CACHE_TTL_MS
+          });
+
+          return {
+            restaurantId: String(matchedRestaurant.id),
+            restaurantSlug: null,
+            source: 'db.vapi_phone_number_id'
+          };
         }
       } catch (error) {
         logger.warn('[vapi] phoneNumberId lookup failed', {
