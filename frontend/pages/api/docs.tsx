@@ -312,7 +312,7 @@ const WEBHOOK_EVENTS = [
 
 export default function ApiDocsPage() {
   const router = useRouter();
-  const { user, loading } = useUser();
+  const { user, isLoading: loading } = useUser();
   const [activeSection, setActiveSection] = useState<string>('authentication');
   const [expandedEndpoint, setExpandedEndpoint] = useState<string | null>(null);
   const [apiKey, setApiKey] = useState('');
