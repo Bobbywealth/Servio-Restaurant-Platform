@@ -10,6 +10,10 @@ import compression from 'compression';
 import { createServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 
+// Middleware
+import { requestId } from './middleware/requestId';
+import { apiVersioning } from './middleware/apiVersioning';
+
 // Services
 import { DatabaseService } from './services/DatabaseService';
 import { logger } from './utils/logger';
@@ -19,6 +23,7 @@ import { initializeNotifications } from './notifications/initNotifications';
 import { validateEnvironment, failFastIfInvalid, getCorsOrigins } from './utils/validateEnv';
 import { UPLOADS_DIR, checkUploadsHealth } from './utils/uploads';
 import { SocketService } from './services/SocketService';
+import { realtimeService } from './services/RealtimeService';
 
 const FRONTEND_ORIGIN = 'https://servio.solutions';
 
@@ -33,6 +38,9 @@ if (process.env.NODE_ENV === 'production') {
 
 const app = express();
 const server = createServer(app);
+
+// Request ID tracking for distributed tracing
+app.use(requestId);
 
 // Health check endpoint - MUST be before any middleware that might fail
 // This handles Render health checks and prevents 502s during startup
@@ -156,16 +164,31 @@ async function initializeServer() {
     const { default: bookingsRoutes } = await import('./routes/bookings');
     const { default: publicRoutes } = await import('./routes/public');
     const { default: apiKeysRoutes } = await import('./routes/apiKeys');
+    const { default: docsRoutes } = await import('./routes/docs');
+    const { default: bulkRoutes } = await import('./routes/bulk');
+    const { default: v2Routes } = await import('./routes/v2');
 
     // API Routes
     app.use('/api/auth', authRoutes);
     app.use('/api/bookings', bookingsRoutes);
     app.use('/api/public', publicRoutes);
+    
+    // API Documentation (Swagger UI)
+    app.use('/api/docs', docsRoutes);
+    
+    // Bulk Operations
+    app.use('/api/bulk', requireAuth, bulkRoutes);
+    
+    // V2 API Routes with enhanced pagination and filtering
+    app.use('/api/v2', requireAuth, v2Routes);
 
     // Vapi and Voice routes MUST be before the catch-all /api route (no auth)
     app.use('/api/vapi', vapiRoutes);
     app.use('/api/voice', voiceRoutes);
     app.use('/api/voice-hub', voiceHubRoutes);
+    
+    // API Versioning middleware for /api routes
+    app.use('/api', apiVersioning);
     app.use('/api/voice-conversations', requireAuth, voiceConversationsRoutes);
     app.use('/api/conversations', requireAuth, conversationsRoutes);
     
@@ -533,6 +556,9 @@ io.on('connection', (socket) => {
 });
 
 SocketService.setIO(io);
+
+// Initialize the enhanced Realtime Service for real-time subscriptions
+realtimeService.initialize(io);
 
 // Make io available to routes
 app.set('socketio', io);
