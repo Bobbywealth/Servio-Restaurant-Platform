@@ -6,6 +6,8 @@ const nextConfig = {
   // AGGRESSIVE IMAGE OPTIMIZATION
   images: {
     unoptimized: false, // Enable optimization for production
+    // Approved remote image hosts are intentionally strict (backend upload origin + local dev only)
+    // to reduce SSRF/XSS risk from arbitrary third-party image and SVG sources.
     remotePatterns: [
       {
         protocol: 'http',
@@ -13,14 +15,14 @@ const nextConfig = {
       },
       {
         protocol: 'https',
-        hostname: '**',
+        hostname: 'servio-backend-zexb.onrender.com',
       },
     ],
     formats: ['image/avif', 'image/webp'], // AVIF first for better compression
     minimumCacheTTL: 31536000, // 1 year cache
     deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048, 3840],
     imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
-    dangerouslyAllowSVG: true,
+    dangerouslyAllowSVG: false,
     contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
   },
 
