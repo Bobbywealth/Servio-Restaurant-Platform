@@ -40,6 +40,25 @@ app.get('/health', (_req, res) => {
   res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// Lightweight API docs endpoint (public)
+// Keeps health checks and browser probes from hitting authenticated /api middleware.
+app.get('/api/docs', (_req, res) => {
+  res.status(200).json({
+    name: 'Servio Restaurant Platform API',
+    version: process.env.npm_package_version || '1.1.0',
+    health: '/health',
+    basePath: '/api',
+    auth: 'Most /api routes require Authorization: Bearer <token>.',
+    publicRoutes: [
+      '/health',
+      '/api/auth/login',
+      '/api/auth/register',
+      '/api/push/vapid-key',
+      '/api/staff/clock/pin-login'
+    ]
+  });
+});
+
 // Get CORS origins from environment (FRONTEND_URL + ALLOWED_ORIGINS)
 // In production, FRONTEND_URL should be set to your actual frontend URL
 // In development, it defaults to localhost:3000
