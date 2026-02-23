@@ -338,11 +338,8 @@ router.get('/public/:slug', asyncHandler(async (req: Request, res: Response) => 
   const items = await db.all(`
     SELECT mi.*, mc.name as category_name, mc.sort_order as category_sort_order
     FROM menu_items mi
-    INNER JOIN menu_categories mc ON mi.category_id = mc.id
+    LEFT JOIN menu_categories mc ON mi.category_id = mc.id
     WHERE mi.restaurant_id = ?
-      AND LOWER(COALESCE(CAST(mi.is_available AS TEXT), '1')) IN ('1', 'true', 't')
-      AND LOWER(COALESCE(CAST(mc.is_active AS TEXT), '1')) IN ('1', 'true', 't')
-      AND LOWER(COALESCE(CAST(mc.is_hidden AS TEXT), '0')) IN ('0', 'false', 'f')
     ORDER BY mc.sort_order ASC, mi.sort_order ASC, mi.name ASC
   `, [restaurant.id]);
 

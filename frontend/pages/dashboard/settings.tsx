@@ -25,7 +25,9 @@ import {
   Printer,
   CreditCard,
   Wallet,
-  DollarSign
+  DollarSign,
+  Key,
+  ExternalLink
 } from 'lucide-react'
 
 const DashboardLayout = dynamic(() => import('../../components/Layout/DashboardLayout'), {
@@ -272,7 +274,8 @@ export default function SettingsPage() {
     { id: 'notifications', name: 'Notifications', icon: Bell },
     { id: 'security', name: 'Security', icon: Shield },
     { id: 'display', name: 'Display', icon: Palette },
-    { id: 'integrations', name: 'Integrations', icon: Wifi }
+    { id: 'integrations', name: 'Integrations', icon: Wifi },
+    { id: 'apikeys', name: 'API Keys', icon: Key }
   ]
 
   const handleSettingChange = (key: string, value: any) => {
@@ -1268,6 +1271,73 @@ export default function SettingsPage() {
                 <option value="paypal">PayPal</option>
                 <option value="clover">Clover</option>
               </select>
+            </div>
+          </div>
+        )
+
+      case 'apikeys':
+        return (
+          <div className="space-y-6">
+            <div className="bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 rounded-xl p-6 border border-indigo-200 dark:border-indigo-800">
+              <div className="flex items-start justify-between">
+                <div className="flex items-start gap-4">
+                  <div className="p-3 bg-indigo-100 dark:bg-indigo-800 rounded-lg">
+                    <Key className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-indigo-900 dark:text-indigo-100">API Keys</h4>
+                    <p className="text-sm text-indigo-700 dark:text-indigo-300 mt-1">
+                      Manage API keys for programmatic access to your restaurant data.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white dark:bg-surface-800 rounded-xl border border-surface-200 dark:border-surface-700 p-6">
+              <h5 className="font-medium text-surface-900 dark:text-surface-100 mb-4">Quick Actions</h5>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <a
+                  href="/dashboard/api-keys"
+                  className="flex items-center gap-3 p-4 rounded-lg border border-surface-200 dark:border-surface-700 hover:border-indigo-300 dark:hover:border-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors group"
+                >
+                  <div className="p-2 bg-indigo-100 dark:bg-indigo-800 rounded-lg group-hover:bg-indigo-200 dark:group-hover:bg-indigo-700 transition-colors">
+                    <Key className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                  </div>
+                  <div className="flex-1">
+                    <h6 className="font-medium text-surface-900 dark:text-surface-100">Manage API Keys</h6>
+                    <p className="text-sm text-surface-500 dark:text-surface-400">Create, edit, and revoke API keys</p>
+                  </div>
+                  <ExternalLink className="w-4 h-4 text-surface-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400" />
+                </a>
+
+                <a
+                  href="/dashboard/api-docs"
+                  className="flex items-center gap-3 p-4 rounded-lg border border-surface-200 dark:border-surface-700 hover:border-indigo-300 dark:hover:border-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors group"
+                >
+                  <div className="p-2 bg-purple-100 dark:bg-purple-800 rounded-lg group-hover:bg-purple-200 dark:group-hover:bg-purple-700 transition-colors">
+                    <Globe className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                  </div>
+                  <div className="flex-1">
+                    <h6 className="font-medium text-surface-900 dark:text-surface-100">API Documentation</h6>
+                    <p className="text-sm text-surface-500 dark:text-surface-400">View API reference and guides</p>
+                  </div>
+                  <ExternalLink className="w-4 h-4 text-surface-400 group-hover:text-purple-600 dark:group-hover:text-purple-400" />
+                </a>
+              </div>
+            </div>
+
+            <div className="bg-yellow-50 dark:bg-yellow-900/20 rounded-lg p-4 border border-yellow-200 dark:border-yellow-800">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-yellow-600 dark:text-yellow-400 mt-0.5" />
+                <div>
+                  <h6 className="font-medium text-yellow-800 dark:text-yellow-200">Security Notice</h6>
+                  <p className="text-sm text-yellow-700 dark:text-yellow-300 mt-1">
+                    Keep your API keys secure. Never share them publicly or commit them to version control.
+                    Rotate keys periodically for better security.
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
         )

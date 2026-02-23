@@ -172,8 +172,9 @@ export function useMenu(restaurantSlug: string | undefined) {
   const categories = useMemo(() => {
     const seen = new Map<string, number>();
     for (const item of items) {
-      if (!seen.has(item.category_name)) {
-        seen.set(item.category_name, item.category_sort_order ?? 0);
+      const categoryName = item.category_name || 'Uncategorized';
+      if (!seen.has(categoryName)) {
+        seen.set(categoryName, item.category_sort_order ?? 0);
       }
     }
     return Array.from(seen.entries())
@@ -202,7 +203,7 @@ export function useMenu(restaurantSlug: string | undefined) {
   const itemsByCategory = useMemo(() => {
     const result: Record<string, MenuItem[]> = {};
     categories.forEach(cat => {
-      result[cat] = filteredItems.filter(i => i.category_name === cat);
+      result[cat] = filteredItems.filter(i => (i.category_name || 'Uncategorized') === cat);
     });
     return result;
   }, [categories, filteredItems]);
