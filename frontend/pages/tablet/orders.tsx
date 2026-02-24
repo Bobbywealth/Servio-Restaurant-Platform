@@ -347,7 +347,6 @@ export default function TabletOrdersPage() {
   const lastRefreshAt = useRef<number>(0);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [pendingActions, setPendingActions] = useState<Set<string>>(() => new Set());
-  const [cachedAt, setCachedAt] = useState<string | null>(null);
   const [isOnline, setIsOnline] = useState<boolean>(true);
   const [socketConnected, setSocketConnected] = useState<boolean>(false);
   const [showUpdateBanner, setShowUpdateBanner] = useState(false);
@@ -439,7 +438,6 @@ export default function TabletOrdersPage() {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed?.orders)) {
         setOrders(parsed.orders);
-        setCachedAt(parsed.cachedAt || null);
         setLoading(false);
       }
     } catch {
@@ -1391,12 +1389,12 @@ export default function TabletOrdersPage() {
     setAutoPrintPendingId(newest.id);
   }, [autoPrintEnabled, filtered, loading, autoPrintPendingId]);
 
-  const connectionLabel = isOnline ? (socketConnected ? 'Online' : 'Reconnecting') : 'Offline';
-  const connectionClasses = isOnline
+  const connectionText = isOnline ? (socketConnected ? 'Online' : 'Reconnecting') : 'Offline';
+  const connectionDotClasses = isOnline
     ? socketConnected
-      ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40'
-      : 'bg-amber-500/20 text-amber-400 border-amber-500/40'
-    : 'bg-red-500/20 text-red-400 border-red-500/40';
+      ? 'bg-emerald-400'
+      : 'bg-amber-400'
+    : 'bg-red-400';
 
   if (authLoading || !user) {
     return (
@@ -1427,9 +1425,8 @@ export default function TabletOrdersPage() {
             {/* Header with search and filters */}
             <div className="flex flex-col gap-4">
               <OrdersHeader
-                connectionClasses={connectionClasses}
-                connectionLabel={connectionLabel}
-                cachedAt={cachedAt}
+                connectionDotClasses={connectionDotClasses}
+                connectionText={connectionText}
                 soundEnabled={soundEnabled}
                 toggleSound={toggleSound}
                 isFullscreen={isFullscreen}
