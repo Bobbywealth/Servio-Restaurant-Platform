@@ -39,6 +39,43 @@ export interface RateLimitInfo {
 class ApiKeyServiceClass {
   private rateLimitCache: Map<string, { count: number; resetAt: Date }> = new Map();
 
+  private parseApiKey(row: any): ApiKey {
+    return {
+      ...row,
+      companyId: row.companyId ?? row.company_id ?? undefined,
+      restaurantId: row.restaurantId ?? row.restaurant_id ?? undefined,
+      keyPrefix: row.keyPrefix ?? row.key_prefix,
+      keyHash: row.keyHash ?? row.key_hash,
+      rateLimit: row.rateLimit ?? row.rate_limit ?? 1000,
+      isActive: row.isActive ?? row.is_active,
+      expiresAt: row.expiresAt
+        ? new Date(row.expiresAt)
+        : (row.expires_at ? new Date(row.expires_at) : undefined),
+      lastUsedAt: row.lastUsedAt
+        ? new Date(row.lastUsedAt)
+        : (row.last_used_at ? new Date(row.last_used_at) : undefined),
+      createdBy: row.createdBy ?? row.created_by ?? undefined,
+      createdAt: new Date(row.createdAt ?? row.created_at),
+      updatedAt: new Date(row.updatedAt ?? row.updated_at),
+      scopes: typeof row.scopes === 'string' ? JSON.parse(row.scopes) : row.scopes,
+    };
+  }
+
+  private parseWebhook(row: any): ApiKeyWebhook {
+    return {
+      ...row,
+      apiKeyId: row.apiKeyId ?? row.api_key_id,
+      isActive: row.isActive ?? row.is_active,
+      failureCount: row.failureCount ?? row.failure_count ?? 0,
+      events: typeof row.events === 'string' ? JSON.parse(row.events) : row.events,
+      lastTriggeredAt: row.lastTriggeredAt
+        ? new Date(row.lastTriggeredAt)
+        : (row.last_triggered_at ? new Date(row.last_triggered_at) : undefined),
+      createdAt: new Date(row.createdAt ?? row.created_at),
+      updatedAt: new Date(row.updatedAt ?? row.updated_at),
+    };
+  }
+
   /**
    * Generate a new API key with secure random bytes
    */
@@ -135,14 +172,7 @@ class ApiKeyServiceClass {
       }
 
       // Parse scopes from JSONB
-      const apiKey: ApiKey = {
-        ...row,
-        scopes: typeof row.scopes === 'string' ? JSON.parse(row.scopes) : row.scopes,
-        createdAt: new Date(row.createdAt),
-        updatedAt: new Date(row.updatedAt),
-        expiresAt: row.expiresAt ? new Date(row.expiresAt) : undefined,
-        lastUsedAt: row.lastUsedAt ? new Date(row.lastUsedAt) : undefined,
-      };
+      const apiKey = this.parseApiKey(row);
 
       // Check expiration
       if (apiKey.expiresAt && new Date() > apiKey.expiresAt) {
@@ -356,14 +386,7 @@ class ApiKeyServiceClass {
 
     if (!row) return null;
 
-    return {
-      ...row,
-      scopes: typeof row.scopes === 'string' ? JSON.parse(row.scopes) : row.scopes,
-      createdAt: new Date(row.createdAt),
-      updatedAt: new Date(row.updatedAt),
-      expiresAt: row.expiresAt ? new Date(row.expiresAt) : undefined,
-      lastUsedAt: row.lastUsedAt ? new Date(row.lastUsedAt) : undefined,
-    };
+    return this.parseApiKey(row);
   }
 
   /**
@@ -399,14 +422,7 @@ class ApiKeyServiceClass {
       params
     );
 
-    return rows.map(row => ({
-      ...row,
-      scopes: typeof row.scopes === 'string' ? JSON.parse(row.scopes) : row.scopes,
-      createdAt: new Date(row.createdAt),
-      updatedAt: new Date(row.updatedAt),
-      expiresAt: row.expiresAt ? new Date(row.expiresAt) : undefined,
-      lastUsedAt: row.lastUsedAt ? new Date(row.lastUsedAt) : undefined,
-    }));
+    return rows.map(row => this.parseApiKey(row));
   }
 
   /**
@@ -512,7 +528,11 @@ class ApiKeyServiceClass {
 
     return rows.map(row => ({
       ...row,
-      createdAt: new Date(row.createdAt),
+      apiKeyId: (row as any).apiKeyId ?? (row as any).api_key_id,
+      statusCode: row.statusCode ?? (row as any).status_code,
+      responseTimeMs: row.responseTimeMs ?? (row as any).response_time_ms,
+      ipAddress: row.ipAddress ?? (row as any).ip_address,
+      createdAt: new Date((row as any).createdAt ?? (row as any).created_at),
     }));
   }
 
@@ -597,9 +617,17 @@ class ApiKeyServiceClass {
       recentUsage,
       dailyStats: dailyStats.map(stat => ({
         ...stat,
-        date: new Date(stat.date),
-        createdAt: new Date(stat.createdAt),
-        updatedAt: new Date(stat.updatedAt),
+        apiKeyId: (stat as any).apiKeyId ?? (stat as any).api_key_id,
+        totalRequests: stat.totalRequests ?? (stat as any).total_requests,
+        successfulRequests: stat.successfulRequests ?? (stat as any).successful_requests,
+        failedRequests: stat.failedRequests ?? (stat as any).failed_requests,
+        avgResponseTimeMs: stat.avgResponseTimeMs ?? (stat as any).avg_response_time_ms,
+        totalBytesSent: stat.totalBytesSent ?? (stat as any).total_bytes_sent,
+        totalBytesReceived: stat.totalBytesReceived ?? (stat as any).total_bytes_received,
+        uniqueIps: stat.uniqueIps ?? (stat as any).unique_ips,
+        date: new Date((stat as any).date),
+        createdAt: new Date((stat as any).createdAt ?? (stat as any).created_at),
+        updatedAt: new Date((stat as any).updatedAt ?? (stat as any).updated_at),
       })),
     };
   }
@@ -652,13 +680,7 @@ class ApiKeyServiceClass {
       [apiKeyId]
     );
 
-    return rows.map(row => ({
-      ...row,
-      events: typeof row.events === 'string' ? JSON.parse(row.events) : row.events,
-      createdAt: new Date(row.createdAt),
-      updatedAt: new Date(row.updatedAt),
-      lastTriggeredAt: row.lastTriggeredAt ? new Date(row.lastTriggeredAt) : undefined,
-    }));
+    return rows.map(row => this.parseWebhook(row));
   }
 
   /**
@@ -717,13 +739,7 @@ class ApiKeyServiceClass {
 
     if (!row) return null;
 
-    return {
-      ...row,
-      events: typeof row.events === 'string' ? JSON.parse(row.events) : row.events,
-      createdAt: new Date(row.createdAt),
-      updatedAt: new Date(row.updatedAt),
-      lastTriggeredAt: row.lastTriggeredAt ? new Date(row.lastTriggeredAt) : undefined,
-    };
+    return this.parseWebhook(row);
   }
 
   /**
