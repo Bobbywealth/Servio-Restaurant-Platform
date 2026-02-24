@@ -1275,7 +1275,7 @@ export default function TabletOrdersPage() {
     });
   }, [queueSections, statusFilter]);
 
-  const renderOrderCard = useCallback((o: Order, laneIndex: number) => {
+  const renderOrderCard = (o: Order, laneIndex: number) => {
     const status = normalizeStatus(o.status);
     const isNew = status === 'received';
     const isPreparing = status === 'preparing';
@@ -1483,7 +1483,7 @@ export default function TabletOrdersPage() {
                     event.stopPropagation();
                     setStatus(o.id, 'completed');
                   }}
-                  className="flex-1 min-h-[44px] rounded-lg px-3 py-2 text-sm font-semibold text-[var(--tablet-accent-contrast)] bg-[var(--tablet-accent)] transition active:brightness-95 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:saturate-50"
+                  className="flex-1 min-h-[44px] rounded-lg px-3 py-2 text-sm font-semibold text-[var(--tablet-success-action-contrast)] bg-[var(--tablet-success-action)] transition active:bg-[var(--tablet-success-action-active)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tablet-success-action)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--tablet-card)] disabled:opacity-50 disabled:cursor-not-allowed disabled:saturate-50 disabled:active:scale-100"
                 >
                   Complete
                 </button>
@@ -1494,7 +1494,7 @@ export default function TabletOrdersPage() {
                     event.stopPropagation();
                     setStatus(o.id, 'picked_up');
                   }}
-                  className="flex-1 min-h-[44px] rounded-lg px-3 py-2 text-sm font-semibold border border-[var(--tablet-border-strong)] text-[var(--tablet-text)] transition active:bg-[var(--tablet-surface-alt)] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex-1 min-h-[44px] rounded-lg px-3 py-2 text-sm font-semibold border border-[var(--tablet-border-strong)] text-[var(--tablet-text)] transition active:bg-[color-mix(in_srgb,var(--tablet-surface-alt)_65%,var(--tablet-border-strong)_35%)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tablet-border-strong)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--tablet-card)] disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100"
                 >
                   Picked Up
                 </button>

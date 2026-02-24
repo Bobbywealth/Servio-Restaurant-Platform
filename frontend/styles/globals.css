@@ -365,6 +365,9 @@ html {
     --tablet-accent: #b79d6a;
     --tablet-accent-contrast: #1a1a1a;
     --tablet-success: #537663;
+    --tablet-success-action: #2f9e5d;
+    --tablet-success-action-active: #27814c;
+    --tablet-success-action-contrast: #ffffff;
     --tablet-warning: #a97e2f;
     --tablet-danger: #b7594e;
     --tablet-info: #5d6f91;
@@ -385,6 +388,9 @@ html {
     --tablet-accent: #a4884d;
     --tablet-accent-contrast: #111827;
     --tablet-success: #3f7f46;
+    --tablet-success-action: #1d8a42;
+    --tablet-success-action-active: #166f34;
+    --tablet-success-action-contrast: #ffffff;
     --tablet-warning: #bd7a2d;
     --tablet-danger: #c45050;
     --tablet-info: #516aa1;
@@ -999,6 +1005,9 @@ html {
   --tablet-accent: #b79d6a;
   --tablet-accent-contrast: #1a1a1a;
   --tablet-success: #537663;
+  --tablet-success-action: #2f9e5d;
+  --tablet-success-action-active: #27814c;
+  --tablet-success-action-contrast: #ffffff;
   --tablet-warning: #a97e2f;
   --tablet-danger: #b7594e;
   --tablet-info: #5d6f91;
