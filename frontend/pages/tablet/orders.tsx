@@ -346,7 +346,6 @@ export default function TabletOrdersPage() {
   const [receiptHtml, setReceiptHtml] = useState<string | null>(null);
   const lastRefreshAt = useRef<number>(0);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
-  const [showPrintPrompt, setShowPrintPrompt] = useState<string | null>(null);
   const [pendingActions, setPendingActions] = useState<Set<string>>(() => new Set());
   const [cachedAt, setCachedAt] = useState<string | null>(null);
   const [isOnline, setIsOnline] = useState<boolean>(true);
@@ -994,13 +993,8 @@ export default function TabletOrdersPage() {
         socket.emit('order:status_changed', { orderId: order.id, status: 'preparing', timestamp: new Date() });
       }
       
-      // Handle printing based on auto-print setting
       if (autoPrintEnabled) {
-        // Auto-print is ON - print automatically
         await printOrder(order.id, { markAsPrinted: true });
-      } else {
-        // Auto-print is OFF - ask if they want to print
-        setShowPrintPrompt(order.id);
       }
     } catch (e) {
       enqueueAction({
@@ -1214,19 +1208,6 @@ export default function TabletOrdersPage() {
   }, [filteredOrders]);
 
   const filtered = filteredOrders;
-  const queueSections = useMemo<Array<{ key: 'received' | 'preparing' | 'ready'; label: string; orders: Order[] }>>(() => {
-    const sections: Array<{ key: 'received' | 'preparing' | 'ready'; label: string; orders: Order[] }> = [
-      { key: 'received', label: 'New', orders: receivedOrders },
-      { key: 'preparing', label: 'In Progress', orders: preparingOrders },
-      { key: 'ready', label: 'Ready', orders: readyOrders }
-    ];
-
-    if (statusFilter === 'all') {
-      return sections;
-    }
-
-    return sections.filter((section) => section.key === statusFilter);
-  }, [receivedOrders, preparingOrders, readyOrders, statusFilter]);
 
   const renderOrderCard = useCallback((o: Order, laneIndex: number) => {
     const status = normalizeStatus(o.status);
@@ -1687,58 +1668,26 @@ export default function TabletOrdersPage() {
               </div>
             )}
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-5 tablet-orders-responsive">
-              {queueSections.map((section) => {
-                const emptyStateByLane = {
-                  received: 'No new orders',
-                  preparing: 'No orders in progress',
-                  ready: 'No orders ready'
-                } as const;
+            <section className="bg-[var(--tablet-surface)] rounded-2xl shadow-sm border border-[var(--tablet-border)] flex flex-col min-h-[50vh] md:min-h-[60vh] lg:min-h-[70vh] overflow-hidden">
+              <div className="px-4 py-3.5 border-b border-[var(--tablet-border)] flex items-center justify-between">
+                <h3 className="text-sm font-bold uppercase tracking-wider text-[var(--tablet-text)]">All Orders</h3>
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-[var(--tablet-surface-alt)] text-[var(--tablet-text)]">
+                  {filtered.length}
+                </span>
+              </div>
 
-                const columnAccentClass = {
-                  received: 'text-[var(--tablet-danger)]',
-                  preparing: 'text-[var(--tablet-warning)]',
-                  ready: 'text-[var(--tablet-success)]',
-                } as const;
-
-                const columnBadgeClass = {
-                  received: 'bg-[var(--tablet-danger)]/15 text-[var(--tablet-danger)]',
-                  preparing: 'bg-[var(--tablet-warning)]/15 text-[var(--tablet-warning)]',
-                  ready: 'bg-[var(--tablet-success)]/18 text-[var(--tablet-success)]',
-                } as const;
-
-                const columnBorderClass = {
-                  received: 'border-b-2 border-b-[var(--tablet-danger)]/35',
-                  preparing: 'border-b-2 border-b-[var(--tablet-warning)]/35',
-                  ready: 'border-b-2 border-b-[var(--tablet-success)]/35',
-                } as const;
-
-                return (
-                  <section key={section.key} className="bg-[var(--tablet-surface)] rounded-2xl shadow-sm border border-[var(--tablet-border)] flex flex-col min-h-[50vh] md:min-h-[60vh] lg:min-h-[70vh] overflow-hidden">
-                    <div className={clsx('px-4 py-3.5 border-b border-[var(--tablet-border)] flex items-center justify-between', columnBorderClass[section.key])}>
-                      <h3 className={clsx('text-sm font-bold uppercase tracking-wider', columnAccentClass[section.key])}>
-                        {section.label}
-                      </h3>
-                      <span className={clsx('px-2.5 py-0.5 rounded-full text-xs font-bold', columnBadgeClass[section.key])}>
-                        {section.orders.length}
-                      </span>
-                    </div>
-
-                    <div className="flex-1 overflow-y-auto p-3 scrollbar-thin">
-                      {section.orders.length === 0 ? (
-                        <div className="text-xs text-[var(--tablet-muted)] uppercase tracking-wide py-6 text-center border border-dashed border-[var(--tablet-border)] rounded-xl mt-1">
-                          {emptyStateByLane[section.key]}
-                        </div>
-                      ) : (
-                        <div className="space-y-2.5">
-                          {section.orders.map((o, index) => renderOrderCard(o, index))}
-                        </div>
-                      )}
-                    </div>
-                  </section>
-                );
-              })}
-            </div>
+              <div className="flex-1 overflow-y-auto p-3 scrollbar-thin">
+                {filtered.length === 0 ? (
+                  <div className="text-xs text-[var(--tablet-muted)] uppercase tracking-wide py-6 text-center border border-dashed border-[var(--tablet-border)] rounded-xl mt-1">
+                    No orders match your filters
+                  </div>
+                ) : (
+                  <div className="space-y-2.5">
+                    {filtered.map((o, index) => renderOrderCard(o, index))}
+                  </div>
+                )}
+              </div>
+            </section>
           </div>
         </main>
       </div>
@@ -1769,38 +1718,6 @@ export default function TabletOrdersPage() {
         formatMoney={formatMoney}
       />
 
-
-
-      {/* Print Prompt Modal (when auto-print is OFF) */}
-      {showPrintPrompt && (
-        <div className="no-print fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="bg-[var(--tablet-surface)] rounded-3xl shadow-[0_12px_30px_rgba(0,0,0,0.5)] p-6 sm:p-8 w-full max-w-md border border-[var(--tablet-border)]">
-            <div className="text-center mb-6">
-              <Printer className="h-14 w-14 mx-auto text-[var(--tablet-muted)] mb-4" />
-              <h3 className="text-2xl font-semibold mb-2">Print Receipt?</h3>
-              <p className="text-sm text-[var(--tablet-muted)]">Order has been accepted. Would you like to print it?</p>
-            </div>
-            <div className="flex gap-4">
-              <button
-                className="flex-1 px-6 py-4 rounded-2xl border-2 border-[var(--tablet-border-strong)] text-sm font-semibold uppercase transition hover:brightness-110"
-                onClick={() => setShowPrintPrompt(null)}
-              >
-                No
-              </button>
-              <button
-                className="flex-1 px-6 py-4 rounded-2xl bg-[var(--tablet-accent)] text-[var(--tablet-accent-contrast)] text-sm font-semibold uppercase transition hover:brightness-110"
-                onClick={() => {
-                  const orderId = showPrintPrompt;
-                  setShowPrintPrompt(null);
-                  printOrder(orderId, { markAsPrinted: true });
-                }}
-              >
-                Yes, Print
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
 
       <style jsx global>{`
