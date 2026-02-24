@@ -1368,7 +1368,7 @@ export default function TabletOrdersPage() {
         )} />
 
         <div className="pl-4 pr-4 pt-3.5 pb-3.5">
-          {/* Top row: time ago + prep time badge */}
+          {/* Top row: time ago + order metadata */}
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2 min-w-0">
               <span className={clsx('text-xs font-semibold truncate', urgencyTextClass)}>
@@ -1383,20 +1383,32 @@ export default function TabletOrdersPage() {
                 </span>
               )}
             </div>
-            <div className="flex items-center gap-2">
-              {isLatest && (
-                <span className="text-xs font-semibold text-[var(--tablet-accent)] hidden sm:inline">Latest</span>
-              )}
-              {isPreparing && prepTimeData && (
-                <span className={clsx(
-                  'text-xs font-bold px-2 py-0.5 rounded-md inline-flex items-center gap-1',
-                  prepTimeColorClass,
-                  prepWarningLevel === 'critical' && 'prep-time-critical'
-                )}>
-                  {prepTimeData.isOverdue && <AlertTriangle className="h-3 w-3" aria-hidden="true" />}
-                  {prepTimeData.text}
+            <div className="flex flex-col items-end gap-1 pl-2">
+              <div className="flex items-center gap-1.5">
+                <span className="text-base font-bold text-[var(--tablet-text)] tabular-nums">
+                  {formatMoney(o.total_amount)}
                 </span>
-              )}
+                {hasPendingAction && (
+                  <span className="text-[10px] text-[var(--tablet-accent)] font-semibold px-1.5 py-0.5 rounded bg-[color-mix(in_srgb,var(--tablet-accent)_14%,transparent)]">
+                    ↻
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                {isLatest && (
+                  <span className="text-xs font-semibold text-[var(--tablet-accent)] hidden sm:inline">Latest</span>
+                )}
+                {isPreparing && prepTimeData && (
+                  <span className={clsx(
+                    'text-xs font-bold px-2 py-0.5 rounded-md inline-flex items-center gap-1',
+                    prepTimeColorClass,
+                    prepWarningLevel === 'critical' && 'prep-time-critical'
+                  )}>
+                    {prepTimeData.isOverdue && <AlertTriangle className="h-3 w-3" aria-hidden="true" />}
+                    {prepTimeData.text}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
 
@@ -1437,16 +1449,6 @@ export default function TabletOrdersPage() {
               />
             </div>
           )}
-
-          {/* Bottom row: total + sync indicator */}
-          <div className="flex items-center justify-between">
-            <span className="text-base font-bold text-[var(--tablet-text)] tabular-nums">
-              {formatMoney(o.total_amount)}
-            </span>
-            {hasPendingAction && (
-              <span className="text-xs text-[var(--tablet-accent)] font-semibold">↻ Syncing</span>
-            )}
-          </div>
 
           <div className="mt-3 pt-3 border-t border-[var(--tablet-border)] flex items-center gap-2">
             {status === 'received' && (
