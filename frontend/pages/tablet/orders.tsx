@@ -147,6 +147,15 @@ function normalizeStatus(s: string | null | undefined) {
   return lower;
 }
 
+function statusLabel(status: string) {
+  if (status === 'received') return 'New';
+  if (status === 'preparing') return 'In progress';
+  if (status === 'ready') return 'Ready';
+  if (status === 'completed') return 'Completed';
+  if (status === 'cancelled') return 'Cancelled';
+  return status || 'Received';
+}
+
 function isArchivedOrder(order: Order, now: number | null): boolean {
   if (!Number.isFinite(STALE_ORDER_THRESHOLD_MINUTES) || STALE_ORDER_THRESHOLD_MINUTES <= 0) return false;
   const { elapsedMinutes } = formatTimeAgo(order.created_at, now);
@@ -445,18 +454,6 @@ export default function TabletOrdersPage() {
       }
     }
     
-  }, []);
-
-  // Fullscreen toggle effect
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    
-    const handleFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
-    };
-    
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
-    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
 
   useEffect(() => {
