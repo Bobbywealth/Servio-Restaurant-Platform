@@ -1,8 +1,9 @@
 import Head from 'next/head';
 import { useEffect, useMemo, useState, useRef } from 'react';
 import { useRouter } from 'next/router';
-import { ArrowLeft, Bluetooth, CheckCircle2, Printer, XCircle, Loader2 } from 'lucide-react';
+import { ArrowLeft, Bluetooth, CheckCircle2, Printer, XCircle, Loader2, Moon, Sun } from 'lucide-react';
 import { TabletSidebar } from '../../components/tablet/TabletSidebar';
+import { useTheme } from '../../contexts/ThemeContext';
 import { safeLocalStorage } from '../../lib/utils';
 
 type PrintMode = 'bluetooth' | 'system' | 'bridge' | 'rawbt';
@@ -16,6 +17,7 @@ interface SavedPrinter {
 
 export default function TabletSettings() {
   const router = useRouter();
+  const { actualTheme, toggleTheme } = useTheme();
   const [autoPrintEnabled, setAutoPrintEnabled] = useState(false);
   const [printMode, setPrintMode] = useState<PrintMode>('system');
   const [paperWidth, setPaperWidth] = useState<'80mm' | '58mm'>('80mm');
@@ -185,6 +187,25 @@ export default function TabletSettings() {
                 <ArrowLeft className="h-5 w-5" />
               </button>
             </div>
+
+            <section className="bg-[var(--tablet-surface)] border border-[var(--tablet-border)] rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.3)] p-6">
+              <h2 className="text-lg font-black mb-4">Appearance</h2>
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <div className="font-bold">Theme</div>
+                  <div className="text-sm text-[var(--tablet-muted)]">Switch between light and dark tablet modes.</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={toggleTheme}
+                  className="min-h-[44px] inline-flex items-center gap-2 rounded-full border border-[var(--tablet-border)] bg-[var(--tablet-surface-alt)] px-4 py-2 text-sm font-semibold text-[var(--tablet-text)] transition hover:brightness-110"
+                  aria-label={`Switch to ${actualTheme === 'dark' ? 'light' : 'dark'} mode`}
+                >
+                  {actualTheme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                  {actualTheme === 'dark' ? 'Light mode' : 'Dark mode'}
+                </button>
+              </div>
+            </section>
 
             <section className="bg-[var(--tablet-surface)] border border-[var(--tablet-border)] rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.3)] p-6">
               <h2 className="text-lg font-black mb-4">Auto-Print</h2>
