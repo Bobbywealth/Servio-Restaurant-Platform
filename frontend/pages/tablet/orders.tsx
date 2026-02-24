@@ -1306,11 +1306,19 @@ export default function TabletOrdersPage() {
 
   const filtered = filteredOrders;
 
+  const visibleSections = useMemo(() => {
+    if (statusFilter === 'all') {
+      return queueSections;
+    }
+
+    return queueSections.filter((section) => section.key === statusFilter);
+  }, [queueSections, statusFilter]);
+
   const laneLayout = useMemo(() => {
     const showAllLanes = statusFilter === 'all';
 
     if (!showAllLanes) {
-      return queueSections.map((section) => ({
+      return visibleSections.map((section) => ({
         key: section.key,
         isCollapsed: false,
         style: undefined,
@@ -1332,7 +1340,7 @@ export default function TabletOrdersPage() {
         },
       };
     });
-  }, [queueSections, statusFilter]);
+  }, [queueSections, statusFilter, visibleSections]);
 
   const renderOrderCard = useCallback((o: Order, laneIndex: number, options?: { isArchived?: boolean }) => {
     const isArchived = Boolean(options?.isArchived);
@@ -1662,30 +1670,6 @@ export default function TabletOrdersPage() {
                 activeCount={activeOrders.length}
               />
 
-              <div className="flex flex-wrap gap-2 items-center">
-                {actionQueue.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={retryQueueNow}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--tablet-warning)]/15 border border-[var(--tablet-warning)]/30 text-xs font-semibold text-[var(--tablet-warning)] touch-manipulation"
-                  >
-                    ↻ {actionQueue.length} Pending Sync
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => setShowArchivedOrders((prev) => !prev)}
-                  className={clsx(
-                    'flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold touch-manipulation',
-                    showArchivedOrders
-                      ? 'bg-[var(--tablet-surface-alt)] border-[var(--tablet-border-strong)] text-[var(--tablet-text)]'
-                      : 'bg-transparent border-[var(--tablet-border)] text-[var(--tablet-muted)]'
-                  )}
-                >
-                  Archived ({archivedOrders.length})
-                </button>
-              </div>
-
               {/* Search and Filter Bar */}
               <OrderFiltersBar>
                 {/* Search Input */}
@@ -1756,6 +1740,29 @@ export default function TabletOrdersPage() {
                   <option value="oldest">Oldest First</option>
                   <option value="prep-time">Prep Time</option>
                 </select>
+
+                {actionQueue.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={retryQueueNow}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--tablet-warning)]/15 border border-[var(--tablet-warning)]/30 text-xs font-semibold text-[var(--tablet-warning)] touch-manipulation"
+                  >
+                    ↻ {actionQueue.length} Pending Sync
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => setShowArchivedOrders((prev) => !prev)}
+                  className={clsx(
+                    'flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold touch-manipulation',
+                    showArchivedOrders
+                      ? 'bg-[var(--tablet-surface-alt)] border-[var(--tablet-border-strong)] text-[var(--tablet-text)]'
+                      : 'bg-transparent border-[var(--tablet-border)] text-[var(--tablet-muted)]'
+                  )}
+                >
+                  Archived ({archivedOrders.length})
+                </button>
               </OrderFiltersBar>
 
               {/* Quick Filter Chips */}
@@ -1794,12 +1801,6 @@ export default function TabletOrdersPage() {
                 ].map((chip) => {
                   const isActive = statusFilter === chip.key;
                   const isZeroCount = chip.count === 0;
-                  const hideWhenEmpty = statusFilter === 'all' && isZeroCount;
-
-                  if (hideWhenEmpty) {
-                    return null;
-                  }
-
                   return (
                     <button
                       key={chip.key}
@@ -1925,7 +1926,7 @@ export default function TabletOrdersPage() {
                   : 'lg:grid-cols-1'
               )}
             >
-              {queueSections.map((section) => {
+              {visibleSections.map((section) => {
                 const lane = laneLayout.find((item) => item.key === section.key);
                 const isCollapsedRail = statusFilter === 'all' && lane?.isCollapsed;
                 const emptyStateByLane = {
@@ -1977,7 +1978,7 @@ export default function TabletOrdersPage() {
                           : `${section.label} lane`
                       }
                     >
-                      <h3 className={clsx('text-sm font-bold uppercase tracking-wider', columnAccentClass[section.key], isCollapsedRail && 'xl:[writing-mode:vertical-rl] xl:text-xs xl:tracking-normal')}>
+                      <h3 className={clsx('text-sm font-bold uppercase tracking-wider', columnAccentClass[section.key], isCollapsedRail && 'xl:text-xs')}>
                         {section.label}
                       </h3>
                       <span className={clsx('px-2.5 py-0.5 rounded-full text-xs font-bold', columnBadgeClass[section.key])}>

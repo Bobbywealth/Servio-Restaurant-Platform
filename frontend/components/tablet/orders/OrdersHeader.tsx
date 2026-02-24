@@ -72,8 +72,8 @@ export function OrdersHeader(props: Props) {
           {timeStr}
         </div>
 
-        {/* Overflow actions for tablet widths */}
-        <details className="relative xl:hidden">
+        {/* Overflow actions */}
+        <details className="relative">
           <summary className="list-none cursor-pointer bg-[var(--tablet-surface-alt)] border border-[var(--tablet-border)] hover:brightness-110 p-2 rounded-xl transition touch-manipulation">
             <MoreVertical className="h-4 w-4" />
           </summary>
@@ -97,30 +97,6 @@ export function OrdersHeader(props: Props) {
           </div>
         </details>
 
-        {/* Expanded actions for wider desktop widths */}
-        <div className="hidden xl:flex items-center gap-2">
-          <button
-            type="button"
-            onClick={toggleSound}
-            className={clsx(
-              'p-2 rounded-xl transition touch-manipulation',
-              soundEnabled
-                ? 'bg-[var(--tablet-success)]/20 text-[var(--tablet-success)] border border-[var(--tablet-success)]/30'
-                : 'bg-[var(--tablet-surface-alt)] text-[var(--tablet-muted)] border border-[var(--tablet-border)]'
-            )}
-            aria-label={soundEnabled ? 'Mute sounds' : 'Enable sounds'}
-          >
-            {soundEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
-          </button>
-          <button
-            type="button"
-            onClick={refresh}
-            className="bg-[var(--tablet-surface-alt)] border border-[var(--tablet-border)] hover:brightness-110 p-2 rounded-xl transition touch-manipulation"
-            aria-label="Refresh"
-          >
-            <RefreshCcw className={clsx('h-4 w-4', loading && 'animate-spin')} />
-          </button>
-        </div>
       </div>
     </div>
   );
