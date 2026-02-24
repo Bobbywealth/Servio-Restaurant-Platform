@@ -1,5 +1,5 @@
 import Head from 'next/head';
-import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback, KeyboardEvent } from 'react';
 import { useRouter } from 'next/router';
 import clsx from 'clsx';
 import {
@@ -400,11 +400,46 @@ export default function TabletOrdersPage() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   // Search and filter state
   const [searchQuery, setSearchQuery] = useState('');
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<OrderFilter['status']>('all');
   const [channelFilter, setChannelFilter] = useState('all');
   const [sortBy, setSortBy] = useState<OrderFilter['sortBy']>('newest');
   const [showFilters, setShowFilters] = useState(false);
   const [orderDetailsOrder, setOrderDetailsOrder] = useState<Order | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleSearchToggle = useCallback(() => {
+    setIsSearchOpen(true);
+  }, []);
+
+  const handleSearchClear = useCallback(() => {
+    setSearchQuery('');
+    setIsSearchOpen(false);
+  }, []);
+
+  const handleSearchBlur = useCallback(() => {
+    if (!searchQuery.trim()) {
+      setIsSearchOpen(false);
+    }
+  }, [searchQuery]);
+
+  const handleSearchKeyDown = useCallback((event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      setSearchQuery('');
+      setIsSearchOpen(false);
+      searchInputRef.current?.blur();
+      return;
+    }
+
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      if (!searchQuery.trim()) {
+        setIsSearchOpen(false);
+      }
+      searchInputRef.current?.blur();
+    }
+  }, [searchQuery]);
 
   // Get unique channels for filter dropdown
   const channels = useMemo(() => {
@@ -1619,21 +1654,40 @@ export default function TabletOrdersPage() {
               {/* Search and Filter Bar */}
               <OrderFiltersBar>
                 {/* Search Input */}
-                <div className="relative flex-1">
-                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-[var(--tablet-muted)]" />
-                  <input
-                    type="text"
-                    placeholder="Search orders..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-11 pr-10 py-3.5 rounded-xl border border-[var(--tablet-border)] bg-[var(--tablet-surface)] text-[var(--tablet-text)] placeholder-[var(--tablet-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--tablet-accent)] focus:border-transparent transition-all text-base"
-                  />
-                  {searchQuery && (
+                <div className="relative">
+                  {isSearchOpen || searchQuery ? (
+                    <div className="relative min-w-[220px] sm:min-w-[260px]">
+                      <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-[var(--tablet-muted)]" />
+                      <input
+                        ref={searchInputRef}
+                        type="text"
+                        placeholder="Search orders..."
+                        value={searchQuery}
+                        autoFocus
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        onBlur={handleSearchBlur}
+                        onKeyDown={handleSearchKeyDown}
+                        className="w-full pl-11 pr-10 py-3.5 rounded-xl border border-[var(--tablet-border)] bg-[var(--tablet-surface)] text-[var(--tablet-text)] placeholder-[var(--tablet-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--tablet-accent)] focus:border-transparent transition-all text-base"
+                      />
+                      {searchQuery && (
+                        <button
+                          type="button"
+                          aria-label="Clear search"
+                          onClick={handleSearchClear}
+                          className="absolute right-3.5 top-1/2 -translate-y-1/2 p-1.5 rounded-full hover:bg-[var(--tablet-border)] transition touch-manipulation"
+                        >
+                          <X className="h-4 w-4 text-[var(--tablet-muted)]" />
+                        </button>
+                      )}
+                    </div>
+                  ) : (
                     <button
-                      onClick={() => setSearchQuery('')}
-                      className="absolute right-3.5 top-1/2 -translate-y-1/2 p-1.5 rounded-full hover:bg-[var(--tablet-border)] transition touch-manipulation"
+                      type="button"
+                      aria-label="Open search"
+                      onClick={handleSearchToggle}
+                      className="flex items-center justify-center rounded-xl border border-[var(--tablet-border)] bg-[var(--tablet-surface)] p-3.5 text-[var(--tablet-text)] transition-all hover:bg-[var(--tablet-surface-alt)] focus:outline-none focus:ring-2 focus:ring-[var(--tablet-accent)]"
                     >
-                      <X className="h-4 w-4 text-[var(--tablet-muted)]" />
+                      <Search className="h-5 w-5" />
                     </button>
                   )}
                 </div>
@@ -1758,6 +1812,7 @@ export default function TabletOrdersPage() {
                         setStatusFilter('all');
                         setChannelFilter('all');
                         setSearchQuery('');
+                        setIsSearchOpen(false);
                         setSortBy('newest');
                       }}
                       className="px-4 py-2 rounded-lg border border-[var(--tablet-border)] text-[var(--tablet-muted)] hover:text-[var(--tablet-text)] hover:bg-[var(--tablet-surface-alt)] transition"
@@ -1775,7 +1830,7 @@ export default function TabletOrdersPage() {
                   {searchQuery && (
                     <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-[var(--tablet-info)]/25 text-[var(--tablet-text)] border border-[var(--tablet-border)]">
                       Search: "{searchQuery}"
-                      <button onClick={() => setSearchQuery('')} className="ml-1">
+                      <button onClick={handleSearchClear} className="ml-1">
                         <X className="h-3 w-3" />
                       </button>
                     </span>
