@@ -1571,7 +1571,7 @@ export default function TabletOrdersPage() {
     if (!hasInitializedPrintedRef.current) {
       if (!loading) {
         const initial = new Set<string>();
-        for (const o of filtered) initial.add(o.id);
+        for (const o of filteredOrders) initial.add(o.id);
         setPrintedOrders(initial);
         printedOrdersRef.current = initial;
         hasInitializedPrintedRef.current = true;
@@ -1581,7 +1581,7 @@ export default function TabletOrdersPage() {
 
     if (!autoPrintEnabled) return;
 
-    const toAutoPrint = filtered.filter(
+    const toAutoPrint = filteredOrders.filter(
       (o) => normalizeStatus(o.status) === 'received' && !printedOrdersRef.current.has(o.id)
     );
 
@@ -1591,7 +1591,7 @@ export default function TabletOrdersPage() {
     if (autoPrintPendingId || lastAutoPromptedId.current === newest.id) return;
     lastAutoPromptedId.current = newest.id;
     setAutoPrintPendingId(newest.id);
-  }, [autoPrintEnabled, filtered, loading, autoPrintPendingId]);
+  }, [autoPrintEnabled, filteredOrders, loading, autoPrintPendingId]);
 
   const connectionText = isOnline ? (socketConnected ? 'Online' : 'Reconnecting') : 'Offline';
   const connectionDotClasses = isOnline
