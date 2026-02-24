@@ -1011,23 +1011,15 @@ export default function TabletOrdersPage() {
     }
   }
 
-  async function acceptOrder(order: Order) {
+  function openAcceptModal(order: Order) {
+    setPrepModalOrder(order);
+    setPrepMinutes(order.prep_minutes && order.prep_minutes > 0 ? order.prep_minutes : 15);
+  }
+
+  async function acceptOrder(order: Order, minutes: number) {
     setBusyId(order.id);
     try {
-      // Set status to preparing
-      if (!navigator.onLine) {
-        enqueueAction({
-          id: `${order.id}-${Date.now()}`,
-          orderId: order.id,
-          type: 'status',
-          payload: { status: 'preparing' },
-          queuedAt: Date.now()
-        });
-      } else {
-        await apiPost(`/api/orders/${encodeURIComponent(order.id)}/status`, { status: 'preparing' });
-      }
-      setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, status: 'preparing' } : o)));
-      setSelectedOrder((prev) => (prev?.id === order.id ? { ...prev, status: 'preparing' } : prev));
+      await setPrepTime(order.id, minutes);
       if (socket) {
         socket.emit('order:status_changed', { orderId: order.id, status: 'preparing', timestamp: new Date() });
       }
@@ -1039,8 +1031,8 @@ export default function TabletOrdersPage() {
       enqueueAction({
         id: `${order.id}-${Date.now()}`,
         orderId: order.id,
-        type: 'status',
-        payload: { status: 'preparing' },
+        type: 'prep-time',
+        payload: { prepMinutes: minutes },
         queuedAt: Date.now()
       });
     } finally {
@@ -1100,7 +1092,10 @@ export default function TabletOrdersPage() {
         pickupTime = resp?.data?.pickupTime;
       }
       setOrders((prev) =>
-        prev.map((o) => (o.id === orderId ? { ...o, status: 'preparing', pickup_time: pickupTime } : o))
+        prev.map((o) => (o.id === orderId ? { ...o, status: 'preparing', pickup_time: pickupTime, prep_minutes: minutes } : o))
+      );
+      setSelectedOrder((prev) =>
+        prev?.id === orderId ? { ...prev, status: 'preparing', pickup_time: pickupTime, prep_minutes: minutes } : prev
       );
       if (socket) {
         socket.emit('order:status_changed', { orderId, status: 'preparing', timestamp: new Date() });
@@ -1261,6 +1256,13 @@ export default function TabletOrdersPage() {
   }, [preparingOrders, readyOrders, receivedOrders, statusFilter]);
 
   const filtered = filteredOrders;
+
+
+  const queueSections = useMemo(() => ([
+    { key: 'received' as const, label: 'New', orders: receivedOrders },
+    { key: 'preparing' as const, label: 'In Progress', orders: preparingOrders },
+    { key: 'ready' as const, label: 'Ready', orders: readyOrders }
+  ]), [receivedOrders, preparingOrders, readyOrders]);
 
   const laneLayout = useMemo(() => {
     const showAllLanes = statusFilter === 'all';
@@ -1454,7 +1456,7 @@ export default function TabletOrdersPage() {
                   disabled={isActionBusy}
                   onClick={(event) => {
                     event.stopPropagation();
-                    acceptOrder(o);
+                    openAcceptModal(o);
                   }}
                   className="flex-1 min-h-[44px] rounded-lg px-3 py-2 text-sm font-semibold text-[var(--tablet-accent-contrast)] bg-[var(--tablet-accent)] transition active:brightness-95 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:saturate-50"
                 >
@@ -1519,6 +1521,7 @@ export default function TabletOrdersPage() {
       </div>
     );
   };
+
   const { soundEnabled, toggleSound } = useOrderAlerts(receivedOrders.length);
 
   const orderSyncIssues = useMemo(() => {
@@ -1919,7 +1922,7 @@ export default function TabletOrdersPage() {
         order={orderDetailsOrder}
         onClose={() => setOrderDetailsOrder(null)}
         onConfirmOrder={(order) => {
-          acceptOrder(order);
+          openAcceptModal(order);
           setOrderDetailsOrder(null);
         }}
         onDeclineOrder={(order) => {
@@ -1939,6 +1942,54 @@ export default function TabletOrdersPage() {
         printingOrderId={printingOrderId}
         formatMoney={formatMoney}
       />
+
+      {prepModalOrder && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-sm rounded-2xl border border-[var(--tablet-border)] bg-[var(--tablet-surface)] p-5 shadow-lg">
+            <h3 className="text-lg font-semibold text-[var(--tablet-text)]">Accept order #{shortId(prepModalOrder.id)}</h3>
+            <p className="mt-2 text-sm text-[var(--tablet-muted)]">Set prep time before moving this order to In Progress.</p>
+
+            <label className="mt-4 block text-sm font-medium text-[var(--tablet-text)]" htmlFor="prep-minutes-input">
+              Preparation time (minutes)
+            </label>
+            <input
+              id="prep-minutes-input"
+              type="number"
+              min={1}
+              max={180}
+              value={prepMinutes}
+              onChange={(event) => {
+                const next = Number(event.target.value);
+                setPrepMinutes(Number.isFinite(next) ? next : 15);
+              }}
+              className="mt-2 w-full rounded-xl border border-[var(--tablet-border)] bg-[var(--tablet-card)] px-3 py-2 text-[var(--tablet-text)] focus:outline-none focus:ring-2 focus:ring-[var(--tablet-accent)]"
+            />
+
+            <div className="mt-5 flex items-center gap-2">
+              <button
+                type="button"
+                className="flex-1 rounded-lg border border-[var(--tablet-border)] px-3 py-2 font-semibold"
+                onClick={() => setPrepModalOrder(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="flex-1 rounded-lg bg-[var(--tablet-accent)] px-3 py-2 font-semibold text-[var(--tablet-accent-contrast)] disabled:opacity-50"
+                onClick={() => {
+                  if (!prepModalOrder) return;
+                  const boundedMinutes = Math.min(180, Math.max(1, Number(prepMinutes) || 15));
+                  void acceptOrder(prepModalOrder, boundedMinutes);
+                  setPrepModalOrder(null);
+                }}
+                disabled={busyId === prepModalOrder.id}
+              >
+                Accept & Start
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
 
 
