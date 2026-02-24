@@ -1417,7 +1417,7 @@ export default function TabletOrdersPage() {
           }
         }}
         className={clsx(
-          'w-full text-left rounded-xl border shadow-sm transition transform hover:brightness-105 hover:scale-[1.01] touch-manipulation overflow-hidden relative animate-slide-in-right',
+          'w-[340px] min-w-[340px] text-left rounded-xl border shadow-sm transition transform hover:brightness-105 hover:scale-[1.01] touch-manipulation overflow-hidden relative',
           isArchived && 'opacity-65 saturate-75',
           isSelected
             ? 'border-[var(--tablet-info)] shadow-[0_0_0_1px_var(--tablet-info)] bg-[color-mix(in_srgb,var(--tablet-info)_8%,var(--tablet-card))]'
@@ -1938,8 +1938,8 @@ export default function TabletOrdersPage() {
             )}
 
             {statusFilter === 'all' ? (
-              <div className="grid grid-cols-1 gap-4 sm:gap-5">
-                <section className="bg-[var(--tablet-surface)] rounded-2xl shadow-sm border border-[var(--tablet-border)] flex flex-col overflow-hidden">
+              <div className="flex flex-row gap-4 overflow-x-auto pb-4 scrollbar-thin">
+                <section className="bg-[var(--tablet-surface)] rounded-2xl shadow-sm border border-[var(--tablet-border)] flex flex-col min-w-[380px] w-[380px] shrink-0 overflow-hidden">
                   <div className="px-4 py-3.5 border-b border-[var(--tablet-border)] flex items-center justify-between">
                     <h3 className="text-sm font-bold uppercase tracking-wider text-[var(--tablet-text)]">
                       All Orders
@@ -1948,13 +1948,13 @@ export default function TabletOrdersPage() {
                       {activeQueueOrders.length}
                     </span>
                   </div>
-                  <div className="flex-1 overflow-y-auto p-3 scrollbar-thin">
+                  <div className="flex-1 overflow-x-auto overflow-y-hidden p-3 scrollbar-thin">
                     {activeQueueOrders.length === 0 ? (
                       <div className="text-xs text-[var(--tablet-muted)] uppercase tracking-wide py-6 text-center border border-dashed border-[var(--tablet-border)] rounded-xl mt-1">
                         No active orders
                       </div>
                     ) : (
-                      <div className="space-y-2.5">
+                      <div className="flex flex-row gap-3">
                         {activeQueueOrders.map((o, index) => renderOrderCard(o, index))}
                       </div>
                     )}
@@ -1962,7 +1962,7 @@ export default function TabletOrdersPage() {
                 </section>
               </div>
             ) : (
-              <div className="grid grid-cols-1 gap-4 sm:gap-5">
+              <div className="flex flex-row gap-4 overflow-x-auto pb-4 scrollbar-thin">
                 {visibleSections.map((section) => {
                   const columnAccentClass = {
                     received: 'text-[var(--tablet-danger)]',
@@ -1991,7 +1991,7 @@ export default function TabletOrdersPage() {
                   return (
                     <section
                       key={section.key}
-                      className="bg-[var(--tablet-surface)] rounded-2xl shadow-sm border border-[var(--tablet-border)] flex flex-col overflow-hidden"
+                      className="bg-[var(--tablet-surface)] rounded-2xl shadow-sm border border-[var(--tablet-border)] flex flex-col min-w-[380px] w-[380px] shrink-0 overflow-hidden"
                     >
                       <div
                         className={clsx(
@@ -2006,13 +2006,13 @@ export default function TabletOrdersPage() {
                           {section.orders.length}
                         </span>
                       </div>
-                      <div className="flex-1 overflow-y-auto p-3 scrollbar-thin">
+                      <div className="flex-1 overflow-x-auto overflow-y-hidden p-3 scrollbar-thin">
                         {section.orders.length === 0 ? (
                           <div className="text-xs text-[var(--tablet-muted)] uppercase tracking-wide py-6 text-center border border-dashed border-[var(--tablet-border)] rounded-xl mt-1">
                             {emptyStateByLane[section.key]}
                           </div>
                         ) : (
-                          <div className="space-y-2.5">
+                          <div className="flex flex-row gap-3">
                             {section.orders.map((o, index) => renderOrderCard(o, index))}
                           </div>
                         )}
