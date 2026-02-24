@@ -1375,12 +1375,13 @@ export default function TabletOrdersPage() {
           }
         }}
         className={clsx(
-          'w-full text-left rounded-xl border shadow-sm transition transform hover:brightness-105 hover:scale-[1.01] touch-manipulation overflow-hidden relative',
+          'w-full text-left rounded-xl border shadow-sm transition transform hover:brightness-105 hover:scale-[1.01] touch-manipulation overflow-hidden relative animate-slide-in-right',
           isArchived && 'opacity-65 saturate-75',
           isSelected
             ? 'border-[var(--tablet-info)] shadow-[0_0_0_1px_var(--tablet-info)] bg-[color-mix(in_srgb,var(--tablet-info)_8%,var(--tablet-card))]'
             : 'border-[var(--tablet-border)] bg-[var(--tablet-card)]',
         )}
+        style={{ animationDelay: `${laneIndex * 50}ms` }}
       >
         {/* Status colored left border strip */}
         <div className={clsx(
