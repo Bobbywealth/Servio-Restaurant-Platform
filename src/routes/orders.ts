@@ -1082,7 +1082,7 @@ router.get('/history', asyncHandler(async (req: Request, res: Response) => {
 
   const formattedOrders = orders.map((order: any) => ({
     ...order,
-    items: JSON.parse(order.items || '[]')
+    items: parseJson(order.items, [])
   }));
 
   res.json({
