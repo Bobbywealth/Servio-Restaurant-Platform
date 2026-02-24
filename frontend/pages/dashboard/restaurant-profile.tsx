@@ -626,7 +626,21 @@ export default function RestaurantProfile() {
   const handleSaveProfile = async () => {
     setSaving(true);
     try {
-      const response = await api.put('/api/restaurant/profile', profileData);
+      // Convert operatingHours object format to array format for backend
+      const hoursToSave: Record<string, any> = {};
+      for (const day of WEEK_DAYS) {
+        const dayHours = profileData.operatingHours?.[day.key];
+        if (dayHours && !dayHours.closed) {
+          hoursToSave[day.key] = [dayHours.open || '10:00', dayHours.close || '20:30'];
+        } else if (dayHours?.closed) {
+          hoursToSave[day.key] = { closed: true };
+        }
+      }
+      const dataToSave = {
+        ...profileData,
+        operatingHours: hoursToSave
+      };
+      const response = await api.put('/api/restaurant/profile', dataToSave);
       const data = response.data;
       if (data.success) {
         toast.success('Profile updated successfully');
