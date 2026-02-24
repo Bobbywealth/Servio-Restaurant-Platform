@@ -183,6 +183,12 @@ function normalizeStatus(s: string | null | undefined) {
   return lower;
 }
 
+function isArchivedOrder(order: Order, now: number | null): boolean {
+  if (!Number.isFinite(STALE_ORDER_THRESHOLD_MINUTES) || STALE_ORDER_THRESHOLD_MINUTES <= 0) return false;
+  const { elapsedMinutes } = formatTimeAgo(order.created_at, now);
+  return typeof elapsedMinutes === 'number' && elapsedMinutes >= STALE_ORDER_THRESHOLD_MINUTES;
+}
+
 function normalizeOrderItems(items: unknown): OrderItem[] {
   if (!Array.isArray(items)) return [];
 
@@ -404,6 +410,7 @@ export default function TabletOrdersPage() {
   const [channelFilter, setChannelFilter] = useState('all');
   const [sortBy, setSortBy] = useState<OrderFilter['sortBy']>('newest');
   const [showFilters, setShowFilters] = useState(false);
+  const [showArchivedOrders, setShowArchivedOrders] = useState(false);
   const [orderDetailsOrder, setOrderDetailsOrder] = useState<Order | null>(null);
 
   // Get unique channels for filter dropdown
@@ -1234,17 +1241,38 @@ export default function TabletOrdersPage() {
     }
   }, [filteredOrders, selectedOrder]);
 
+  const { activeQueueOrders, archivedOrders } = useMemo(() => {
+    const activeQueue: Order[] = [];
+    const archived: Order[] = [];
+
+    filteredOrders.forEach((order) => {
+      if (isArchivedOrder(order, now)) {
+        archived.push(order);
+        return;
+      }
+      activeQueue.push(order);
+    });
+
+    return { activeQueueOrders: activeQueue, archivedOrders: archived };
+  }, [filteredOrders, now]);
+
   const receivedOrders = useMemo(() => {
-    return filteredOrders.filter((o) => normalizeStatus(o.status) === 'received');
-  }, [filteredOrders]);
+    return activeQueueOrders.filter((o) => normalizeStatus(o.status) === 'received');
+  }, [activeQueueOrders]);
 
   const preparingOrders = useMemo(() => {
-    return filteredOrders.filter((o) => normalizeStatus(o.status) === 'preparing');
-  }, [filteredOrders]);
+    return activeQueueOrders.filter((o) => normalizeStatus(o.status) === 'preparing');
+  }, [activeQueueOrders]);
 
   const readyOrders = useMemo(() => {
-    return filteredOrders.filter((o) => normalizeStatus(o.status) === 'ready');
-  }, [filteredOrders]);
+    return activeQueueOrders.filter((o) => normalizeStatus(o.status) === 'ready');
+  }, [activeQueueOrders]);
+
+  const queueSections = useMemo(() => ([
+    { key: 'received' as const, label: 'New', orders: receivedOrders },
+    { key: 'preparing' as const, label: 'In Progress', orders: preparingOrders },
+    { key: 'ready' as const, label: 'Ready', orders: readyOrders },
+  ]), [receivedOrders, preparingOrders, readyOrders]);
 
   const filtered = filteredOrders;
 
@@ -1275,34 +1303,31 @@ export default function TabletOrdersPage() {
     });
   }, [queueSections, statusFilter]);
 
-  const renderOrderCard = useCallback((o: Order, laneIndex: number) => {
+  const renderOrderCard = useCallback((o: Order, laneIndex: number, options?: { isArchived?: boolean }) => {
+    const isArchived = Boolean(options?.isArchived);
     const status = normalizeStatus(o.status);
     const isNew = status === 'received';
     const isPreparing = status === 'preparing';
     const isReady = status === 'ready';
     const timeAgo = formatTimeAgo(o.created_at, now);
-    const urgencyLevel = getOrderUrgencyLevel(timeAgo.elapsedMinutes);
+    const urgencyLevel = isArchived ? 'normal' : getOrderUrgencyLevel(timeAgo.elapsedMinutes);
     const urgencyTextClass = getOrderUrgencyClass(urgencyLevel);
     const urgencyBadgeClass = getOrderUrgencyBadgeClass(urgencyLevel);
-    const isStaleOrder = Number.isFinite(STALE_ORDER_THRESHOLD_MINUTES)
-      && STALE_ORDER_THRESHOLD_MINUTES > 0
-      && typeof timeAgo.elapsedMinutes === 'number'
-      && timeAgo.elapsedMinutes >= STALE_ORDER_THRESHOLD_MINUTES;
     const itemCount = (o.items || []).reduce((sum, it) => sum + (it.quantity || 1), 0);
     const hasPendingAction = pendingActions.has(o.id);
-    const isActionBusy = busyId === o.id || hasPendingAction;
+    const isActionBusy = busyId === o.id || hasPendingAction || isArchived;
     const isLatest = laneIndex === 0;
     const isSelected = selectedOrder?.id === o.id;
 
     const prepTimeData = isPreparing
       ? formatPrepTimeRemaining(o.prep_minutes || 15, o.created_at, now)
       : null;
-    const prepWarningLevel = prepTimeData
+    const prepWarningLevel = prepTimeData && !isArchived
       ? getPrepTimeWarningLevel(prepTimeData.percentRemaining)
       : 'normal';
     const prepTimeColorClass = getPrepTimeColorClass(prepWarningLevel);
     const isOverdue = prepTimeData?.isOverdue;
-    const cardStatusBadgeClasses = isPreparing && (prepWarningLevel === 'critical' || prepWarningLevel === 'warning')
+    const cardStatusBadgeClasses = isPreparing && !isArchived && (prepWarningLevel === 'critical' || prepWarningLevel === 'warning')
       ? prepWarningLevel === 'critical'
         ? 'bg-[var(--tablet-danger)] text-white'
         : 'bg-[var(--tablet-warning)] text-[var(--tablet-text)]'
@@ -1336,7 +1361,7 @@ export default function TabletOrdersPage() {
         }}
         className={clsx(
           'w-full text-left rounded-xl border shadow-sm transition transform hover:brightness-105 hover:scale-[1.01] touch-manipulation overflow-hidden relative',
-          isStaleOrder && 'opacity-70',
+          isArchived && 'opacity-65 saturate-75',
           isSelected
             ? 'border-[var(--tablet-info)] shadow-[0_0_0_1px_var(--tablet-info)] bg-[color-mix(in_srgb,var(--tablet-info)_8%,var(--tablet-card))]'
             : 'border-[var(--tablet-border)] bg-[var(--tablet-card)]',
@@ -1361,7 +1386,7 @@ export default function TabletOrdersPage() {
               <span className={clsx('text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide', urgencyBadgeClass)}>
                 {urgencyLevel}
               </span>
-              {isStaleOrder && (
+              {isArchived && (
                 <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-[var(--tablet-surface-alt)] text-[var(--tablet-muted)] uppercase tracking-wide">
                   Archived
                 </span>
@@ -1412,7 +1437,7 @@ export default function TabletOrdersPage() {
               <div
                 className={clsx(
                   'h-full rounded-full prep-time-progress-bar transition-all duration-1000',
-                  prepTimeData.isOverdue ? 'bg-[var(--tablet-danger)] opacity-70' :
+                  (prepTimeData.isOverdue && !isArchived) ? 'bg-[var(--tablet-danger)] opacity-70' :
                   prepWarningLevel === 'critical' ? 'bg-[var(--tablet-danger)]' :
                   prepWarningLevel === 'warning' ? 'bg-[var(--tablet-warning)]' :
                   'bg-[var(--tablet-success)]'
@@ -1504,7 +1529,7 @@ export default function TabletOrdersPage() {
         </div>
       </div>
     );
-  };
+  }, [busyId, now, pendingActions, selectedOrder]);
   const { soundEnabled, toggleSound } = useOrderAlerts(receivedOrders.length);
 
   const orderSyncIssues = useMemo(() => {
@@ -1614,6 +1639,18 @@ export default function TabletOrdersPage() {
                     ↻ {actionQueue.length} Pending Sync
                   </button>
                 )}
+                <button
+                  type="button"
+                  onClick={() => setShowArchivedOrders((prev) => !prev)}
+                  className={clsx(
+                    'flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold touch-manipulation',
+                    showArchivedOrders
+                      ? 'bg-[var(--tablet-surface-alt)] border-[var(--tablet-border-strong)] text-[var(--tablet-text)]'
+                      : 'bg-transparent border-[var(--tablet-border)] text-[var(--tablet-muted)]'
+                  )}
+                >
+                  Archived ({archivedOrders.length})
+                </button>
               </div>
 
               {/* Search and Filter Bar */}
@@ -1896,6 +1933,26 @@ export default function TabletOrdersPage() {
                 );
               })}
             </div>
+
+            {showArchivedOrders && (
+              <section className="bg-[var(--tablet-surface)] rounded-2xl border border-[var(--tablet-border)] p-3 sm:p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-[var(--tablet-muted)]">Archive</h3>
+                  <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-[var(--tablet-surface-alt)] text-[var(--tablet-muted)]">
+                    {archivedOrders.length}
+                  </span>
+                </div>
+                {archivedOrders.length === 0 ? (
+                  <div className="text-xs text-[var(--tablet-muted)] uppercase tracking-wide py-6 text-center border border-dashed border-[var(--tablet-border)] rounded-xl mt-1">
+                    No archived orders for current filters
+                  </div>
+                ) : (
+                  <div className="space-y-2.5">
+                    {archivedOrders.map((o, index) => renderOrderCard(o, index, { isArchived: true }))}
+                  </div>
+                )}
+              </section>
+            )}
           </div>
         </main>
       </div>
