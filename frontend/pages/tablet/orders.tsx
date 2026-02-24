@@ -1246,6 +1246,14 @@ export default function TabletOrdersPage() {
     return filteredOrders.filter((o) => normalizeStatus(o.status) === 'ready');
   }, [filteredOrders]);
 
+  const queueSections = useMemo(() => {
+    return [
+      { key: 'received' as const, label: 'New orders', orders: receivedOrders },
+      { key: 'preparing' as const, label: 'In progress', orders: preparingOrders },
+      { key: 'ready' as const, label: 'Ready', orders: readyOrders },
+    ];
+  }, [receivedOrders, preparingOrders, readyOrders]);
+
   const filtered = filteredOrders;
 
   const laneLayout = useMemo(() => {
@@ -1275,7 +1283,7 @@ export default function TabletOrdersPage() {
     });
   }, [queueSections, statusFilter]);
 
-  const renderOrderCard = useCallback((o: Order, laneIndex: number) => {
+  const renderOrderCard = (o: Order, laneIndex: number) => {
     const status = normalizeStatus(o.status);
     const isNew = status === 'received';
     const isPreparing = status === 'preparing';
