@@ -12,6 +12,7 @@ type Props = {
   now: number | null;
   refresh: () => void;
   loading: boolean;
+  activeCount: number;
 };
 
 export function OrdersHeader(props: Props) {
@@ -25,7 +26,8 @@ export function OrdersHeader(props: Props) {
     onFullscreenToggle,
     now,
     refresh,
-    loading
+    loading,
+    activeCount
   } = props;
 
   const timeStr = now
@@ -37,7 +39,12 @@ export function OrdersHeader(props: Props) {
       {/* Left: Title */}
       <div className="min-w-0">
         <div className="text-[0.65rem] uppercase tracking-[0.2em] text-[var(--tablet-muted)] leading-tight">Order Management</div>
-        <div className="text-xl md:text-2xl font-bold leading-tight truncate">Live Orders</div>
+        <div className="flex items-center gap-2">
+          <div className="text-xl md:text-2xl font-bold leading-tight truncate">Live Orders</div>
+          <div className="inline-flex items-center px-2 py-0.5 rounded-md bg-[var(--tablet-accent)] text-[var(--tablet-accent-contrast)] text-[0.65rem] font-bold uppercase tracking-wide">
+            {activeCount} Active
+          </div>
+        </div>
       </div>
 
       {/* Right: Controls */}
