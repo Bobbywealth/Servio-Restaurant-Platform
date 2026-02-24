@@ -441,9 +441,17 @@ export default function RestaurantProfile() {
 
   const getDayHours = (day: WeekDayKey) => {
     const dayHours = profileData.operatingHours?.[day] || {};
+    // Handle both array [open, close] and object {open, close} formats
+    let open = dayHours.open;
+    let close = dayHours.close;
+    // If backend returns array format like ["10:00", "20:30"]
+    if (Array.isArray(dayHours)) {
+      open = dayHours[0];
+      close = dayHours[1];
+    }
     return {
-      open: dayHours.open || '09:00',
-      close: dayHours.close || '17:00',
+      open: open || '09:00',
+      close: close || '17:00',
       closed: Boolean(dayHours.closed)
     };
   };
