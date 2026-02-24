@@ -279,6 +279,21 @@ router.post('/:id/status', asyncHandler(async (req: Request, res: Response) => {
 
   logger.info(`Order ${id} status updated from ${order.status} to ${status}`);
 
+  // Broadcast status change via Socket.IO
+  try {
+    const io = req.app.get('socketio');
+    if (io) {
+      io.to(`restaurant-${req.user?.restaurantId}`).emit('order:status_changed', {
+        orderId: id,
+        previousStatus: order.status,
+        status,
+        timestamp: new Date()
+      });
+    }
+  } catch (socketError) {
+    logger.warn('Failed to broadcast order status change via socket', { orderId: id, error: socketError });
+  }
+
   res.json({
     success: true,
     data: {
