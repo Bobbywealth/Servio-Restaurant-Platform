@@ -12,6 +12,21 @@ function restaurantWide(): Recipient[] {
   return [{ kind: 'restaurant' }];
 }
 
+function withTargetPath(metadata: Record<string, any>, targetPath: string): Record<string, any> {
+  return {
+    ...metadata,
+    targetPath
+  };
+}
+
+function buildTargetPath(basePath: string, key: string, value: unknown): string {
+  if (typeof value !== 'string' || value.length === 0) {
+    return basePath;
+  }
+
+  return `${basePath}?${key}=${encodeURIComponent(value)}`;
+}
+
 export function buildNotificationDraft(event: DomainEvent): NotificationDraft[] {
   const { type, payload } = event;
 
@@ -21,7 +36,10 @@ export function buildNotificationDraft(event: DomainEvent): NotificationDraft[] 
         severity: 'info',
         title: 'Staff Clock In',
         message: `${payload.staffName ?? 'Staff member'} clocked in.`,
-        metadata: { staffId: payload.staffId, timeEntryId: payload.timeEntryId, position: payload.position },
+        metadata: withTargetPath(
+          { staffId: payload.staffId, timeEntryId: payload.timeEntryId, position: payload.position },
+          '/dashboard/timeclock'
+        ),
         recipients: [{ kind: 'role', role: 'owner' }, { kind: 'role', role: 'manager' }]
       }];
 
@@ -30,7 +48,10 @@ export function buildNotificationDraft(event: DomainEvent): NotificationDraft[] 
         severity: 'info',
         title: 'Staff Clock Out',
         message: `${payload.staffName ?? 'Staff member'} clocked out.`,
-        metadata: { staffId: payload.staffId, timeEntryId: payload.timeEntryId, totalHours: payload.totalHours },
+        metadata: withTargetPath(
+          { staffId: payload.staffId, timeEntryId: payload.timeEntryId, totalHours: payload.totalHours },
+          '/dashboard/timeclock'
+        ),
         recipients: [{ kind: 'role', role: 'owner' }, { kind: 'role', role: 'manager' }]
       }];
 
@@ -39,7 +60,10 @@ export function buildNotificationDraft(event: DomainEvent): NotificationDraft[] 
         severity: 'info',
         title: 'Break Started',
         message: `${payload.staffName ?? 'Staff member'} started a break.`,
-        metadata: { staffId: payload.staffId, timeEntryId: payload.timeEntryId },
+        metadata: withTargetPath(
+          { staffId: payload.staffId, timeEntryId: payload.timeEntryId },
+          '/dashboard/timeclock'
+        ),
         recipients: [{ kind: 'role', role: 'owner' }, { kind: 'role', role: 'manager' }]
       }];
 
@@ -48,7 +72,10 @@ export function buildNotificationDraft(event: DomainEvent): NotificationDraft[] 
         severity: 'info',
         title: 'Break Ended',
         message: `${payload.staffName ?? 'Staff member'} ended a break.`,
-        metadata: { staffId: payload.staffId, timeEntryId: payload.timeEntryId, durationMinutes: payload.durationMinutes },
+        metadata: withTargetPath(
+          { staffId: payload.staffId, timeEntryId: payload.timeEntryId, durationMinutes: payload.durationMinutes },
+          '/dashboard/timeclock'
+        ),
         recipients: [{ kind: 'role', role: 'owner' }, { kind: 'role', role: 'manager' }]
       }];
 
@@ -57,7 +84,7 @@ export function buildNotificationDraft(event: DomainEvent): NotificationDraft[] 
         severity: 'warning',
         title: 'Open Shift Detected',
         message: payload.message || 'An open shift needs coverage.',
-        metadata: payload,
+        metadata: withTargetPath(payload, '/dashboard/timeclock'),
         recipients: [{ kind: 'role', role: 'owner' }, { kind: 'role', role: 'manager' }]
       }];
 
@@ -66,7 +93,13 @@ export function buildNotificationDraft(event: DomainEvent): NotificationDraft[] 
         severity: 'info',
         title: 'New Web Order',
         message: `New order placed${payload.customerName ? ` by ${payload.customerName}` : ''}.`,
-        metadata: { orderId: payload.orderId, source: payload.channel || 'web' },
+        metadata: withTargetPath(
+          {
+            orderId: payload.orderId,
+            source: payload.channel || 'web'
+          },
+          buildTargetPath('/dashboard/orders', 'orderId', payload.orderId)
+        ),
         recipients: restaurantWide()
       }];
 
@@ -75,7 +108,13 @@ export function buildNotificationDraft(event: DomainEvent): NotificationDraft[] 
         severity: 'info',
         title: 'New Phone Order',
         message: `New phone order placed${payload.customerName ? ` by ${payload.customerName}` : ''}.`,
-        metadata: { orderId: payload.orderId, source: 'vapi' },
+        metadata: withTargetPath(
+          {
+            orderId: payload.orderId,
+            source: 'vapi'
+          },
+          buildTargetPath('/dashboard/orders', 'orderId', payload.orderId)
+        ),
         recipients: restaurantWide()
       }];
 
@@ -84,7 +123,14 @@ export function buildNotificationDraft(event: DomainEvent): NotificationDraft[] 
         severity: 'info',
         title: 'Order Status Updated',
         message: `Order ${payload.orderId} updated to ${payload.newStatus}.`,
-        metadata: { orderId: payload.orderId, previousStatus: payload.previousStatus, newStatus: payload.newStatus },
+        metadata: withTargetPath(
+          {
+            orderId: payload.orderId,
+            previousStatus: payload.previousStatus,
+            newStatus: payload.newStatus
+          },
+          buildTargetPath('/dashboard/orders', 'orderId', payload.orderId)
+        ),
         recipients: restaurantWide()
       }];
 
@@ -95,7 +141,14 @@ export function buildNotificationDraft(event: DomainEvent): NotificationDraft[] 
         message: payload.supplierName
           ? `Receipt uploaded for ${payload.supplierName}.`
           : 'Receipt uploaded.',
-        metadata: { receiptId: payload.receiptId, supplierName: payload.supplierName, totalAmount: payload.totalAmount },
+        metadata: withTargetPath(
+          {
+            receiptId: payload.receiptId,
+            supplierName: payload.supplierName,
+            totalAmount: payload.totalAmount
+          },
+          buildTargetPath('/dashboard/inventory/receipts', 'receiptId', payload.receiptId)
+        ),
         recipients: [{ kind: 'role', role: 'owner' }, { kind: 'role', role: 'manager' }]
       }];
 
@@ -104,7 +157,10 @@ export function buildNotificationDraft(event: DomainEvent): NotificationDraft[] 
         severity: 'info',
         title: 'Receipt Applied',
         message: `Receipt ${payload.receiptId} applied to inventory.`,
-        metadata: { receiptId: payload.receiptId, appliedItemsCount: payload.appliedItemsCount },
+        metadata: withTargetPath(
+          { receiptId: payload.receiptId, appliedItemsCount: payload.appliedItemsCount },
+          buildTargetPath('/dashboard/inventory/receipts', 'receiptId', payload.receiptId)
+        ),
         recipients: [{ kind: 'role', role: 'owner' }, { kind: 'role', role: 'manager' }]
       }];
 
@@ -113,7 +169,7 @@ export function buildNotificationDraft(event: DomainEvent): NotificationDraft[] 
         severity: 'warning',
         title: 'Low Stock',
         message: `${payload.itemName ?? 'Inventory item'} is low on stock.`,
-        metadata: payload,
+        metadata: withTargetPath(payload, '/dashboard/inventory'),
         recipients: [{ kind: 'role', role: 'owner' }, { kind: 'role', role: 'manager' }]
       }];
 
@@ -125,7 +181,10 @@ export function buildNotificationDraft(event: DomainEvent): NotificationDraft[] 
         severity: 'info',
         title: 'Task Created',
         message: payload.title ? `Task created: ${payload.title}.` : 'New task created.',
-        metadata: { taskId: payload.taskId, title: payload.title, assignedTo: payload.assignedTo },
+        metadata: withTargetPath(
+          { taskId: payload.taskId, title: payload.title, assignedTo: payload.assignedTo },
+          buildTargetPath('/dashboard/tasks', 'taskId', payload.taskId)
+        ),
         recipients
       }];
     }
@@ -135,7 +194,10 @@ export function buildNotificationDraft(event: DomainEvent): NotificationDraft[] 
         severity: 'info',
         title: 'Task Completed',
         message: payload.title ? `Task completed: ${payload.title}.` : 'Task completed.',
-        metadata: { taskId: payload.taskId, title: payload.title },
+        metadata: withTargetPath(
+          { taskId: payload.taskId, title: payload.title },
+          buildTargetPath('/dashboard/tasks', 'taskId', payload.taskId)
+        ),
         recipients: [{ kind: 'role', role: 'manager' }, { kind: 'role', role: 'owner' }]
       }];
 
@@ -144,7 +206,7 @@ export function buildNotificationDraft(event: DomainEvent): NotificationDraft[] 
         severity: 'critical',
         title: 'System Error',
         message: payload.message || 'An error occurred.',
-        metadata: payload,
+        metadata: withTargetPath(payload, '/dashboard'),
         recipients: [{ kind: 'role', role: 'owner' }]
       }];
 
@@ -153,7 +215,7 @@ export function buildNotificationDraft(event: DomainEvent): NotificationDraft[] 
         severity: 'warning',
         title: 'System Warning',
         message: payload.message || 'A warning was reported.',
-        metadata: payload,
+        metadata: withTargetPath(payload, '/dashboard'),
         recipients: [{ kind: 'role', role: 'owner' }]
       }];
 

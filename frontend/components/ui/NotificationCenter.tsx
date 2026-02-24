@@ -22,6 +22,7 @@ import { useSocket } from '../../lib/socket'
 import { formatRelativeTime } from '../../lib/utils'
 import axios from 'axios'
 import dynamic from 'next/dynamic'
+import { useRouter } from 'next/router'
 
 // Lazy load the settings modal
 const NotificationSettings = dynamic(
@@ -50,6 +51,7 @@ interface NotificationCenterProps {
 }
 
 export default function NotificationCenter({ className = '' }: NotificationCenterProps) {
+  const router = useRouter()
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [isOpen, setIsOpen] = useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
@@ -151,6 +153,48 @@ export default function NotificationCenter({ className = '' }: NotificationCente
       console.error('Failed to remove notification:', error)
     }
   }, [])
+
+  const getNotificationDestination = useCallback((notification: Notification): string | null => {
+    const payload = notification.data && typeof notification.data === 'object' ? notification.data : {}
+    const directPath = payload.targetPath || payload.path || payload.url || payload.href
+
+    if (typeof directPath === 'string' && directPath.trim().startsWith('/')) {
+      return directPath.trim()
+    }
+
+    const eventType = typeof notification.type === 'string' ? notification.type : ''
+
+    if (eventType.startsWith('order.')) {
+      const orderId = payload.orderId || payload.id
+      return orderId ? `/dashboard/orders?orderId=${encodeURIComponent(orderId)}` : '/dashboard/orders'
+    }
+
+    if (eventType.startsWith('receipt.')) {
+      const receiptId = payload.receiptId
+      return receiptId
+        ? `/dashboard/inventory/receipts?receiptId=${encodeURIComponent(receiptId)}`
+        : '/dashboard/inventory/receipts'
+    }
+
+    if (eventType.startsWith('inventory.')) return '/dashboard/inventory'
+    if (eventType.startsWith('task.')) return '/dashboard/tasks'
+    if (eventType.startsWith('staff.')) return '/dashboard/timeclock'
+    if (eventType.startsWith('system.')) return '/dashboard'
+
+    return null
+  }, [])
+
+  const handleNotificationClick = useCallback(async (notification: Notification) => {
+    if (!notification.read) {
+      await markAsRead(notification.id)
+    }
+
+    const destination = getNotificationDestination(notification)
+    if (!destination) return
+
+    setIsOpen(false)
+    router.push(destination)
+  }, [getNotificationDestination, markAsRead, router])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -429,7 +473,7 @@ export default function NotificationCenter({ className = '' }: NotificationCente
                               relative p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors cursor-pointer
                               ${!notification.read ? 'bg-primary-50/50 dark:bg-primary-900/10' : ''}
                             `}
-                            onClick={() => !notification.read && markAsRead(notification.id)}
+                            onClick={() => handleNotificationClick(notification)}
                           >
                             {/* Unread indicator dot */}
                             {!notification.read && (
