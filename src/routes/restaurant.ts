@@ -1009,6 +1009,7 @@ router.get('/staff', asyncHandler(async (req: Request, res: Response) => {
       id,
       name,
       email,
+      phone,
       role,
       pin,
       is_active,
@@ -1040,7 +1041,7 @@ router.post('/staff', asyncHandler(async (req: Request, res: Response) => {
     });
   }
 
-  const { name, email, role = 'staff' } = req.body;
+  const { name, email, phone, role = 'staff' } = req.body;
 
   if (!name) {
     return res.status(400).json({
@@ -1077,6 +1078,7 @@ router.post('/staff', asyncHandler(async (req: Request, res: Response) => {
       restaurant_id,
       name,
       email,
+      phone,
       pin,
       role,
       permissions,
@@ -1087,6 +1089,7 @@ router.post('/staff', asyncHandler(async (req: Request, res: Response) => {
     restaurantId,
     name,
     email || null,
+    phone || null,
     pin,
     role
   ]);
@@ -1097,7 +1100,7 @@ router.post('/staff', asyncHandler(async (req: Request, res: Response) => {
     'create_staff',
     'user',
     userId,
-    { name, email, role, pin }
+    { name, email, phone, role, pin }
   );
 
   logger.info(`Staff member created: ${name} with PIN ${pin}`);
@@ -1108,6 +1111,7 @@ router.post('/staff', asyncHandler(async (req: Request, res: Response) => {
       id: userId,
       name,
       email,
+      phone,
       pin, // Return PIN only on creation
       role,
       is_active: true
@@ -1131,7 +1135,7 @@ router.put('/staff/:id', asyncHandler(async (req: Request, res: Response) => {
     });
   }
 
-  const { name, email, role, is_active, pin } = req.body;
+  const { name, email, phone, role, is_active, pin } = req.body;
 
   // Check if staff exists and belongs to restaurant
   const existingStaff = await db.get(
@@ -1156,6 +1160,10 @@ router.put('/staff/:id', asyncHandler(async (req: Request, res: Response) => {
   if (email !== undefined) {
     updateFields.push('email = ?');
     updateValues.push(email);
+  }
+  if (phone !== undefined) {
+    updateFields.push('phone = ?');
+    updateValues.push(phone);
   }
   if (role !== undefined) {
     updateFields.push('role = ?');
@@ -1187,11 +1195,11 @@ router.put('/staff/:id', asyncHandler(async (req: Request, res: Response) => {
     'update_staff',
     'user',
     id,
-    { name, email, role, is_active, pin }
+    { name, email, phone, role, is_active, pin }
   );
 
   const updatedStaff = await db.get(`
-    SELECT id, name, email, role, pin, is_active, created_at, updated_at
+    SELECT id, name, email, phone, role, pin, is_active, created_at, updated_at
     FROM users WHERE id = ?
   `, [id]);
 

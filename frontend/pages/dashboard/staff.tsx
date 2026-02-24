@@ -49,6 +49,7 @@ interface StaffUser {
   id: string
   name: string
   email?: string | null
+  phone?: string | null
   role: 'staff' | 'manager' | 'owner' | 'admin' | 'platform-admin'
   pin?: string | null
   is_active: boolean
@@ -110,6 +111,7 @@ interface AddStaffModalProps {
 function AddStaffModal({ isOpen, onClose, onSuccess }: AddStaffModalProps) {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
+  const [phone, setPhone] = useState('')
   const [role, setRole] = useState<'staff' | 'manager'>('staff')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -125,6 +127,7 @@ function AddStaffModal({ isOpen, onClose, onSuccess }: AddStaffModalProps) {
       const response = await api.post('/api/restaurant/staff', {
         name,
         email: email || undefined,
+        phone: phone || undefined,
         role
       })
 
@@ -257,6 +260,19 @@ function AddStaffModal({ isOpen, onClose, onSuccess }: AddStaffModalProps) {
 
                 <div>
                   <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-2">
+                    Phone Number
+                  </label>
+                  <input
+                    type="tel"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="(555) 123-4567"
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-surface-600 bg-white dark:bg-surface-700 text-surface-900 dark:text-surface-100 focus:ring-2 focus:ring-orange-500/30 focus:border-orange-500 transition-all outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-2">
                     Role
                   </label>
                   <select
@@ -331,6 +347,7 @@ interface EditStaffModalProps {
 function EditStaffModal({ isOpen, staffMember, onClose, onSuccess }: EditStaffModalProps) {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
+  const [phone, setPhone] = useState('')
   const [role, setRole] = useState<'staff' | 'manager'>('staff')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -341,6 +358,7 @@ function EditStaffModal({ isOpen, staffMember, onClose, onSuccess }: EditStaffMo
     if (staffMember) {
       setName(staffMember.name || '')
       setEmail(staffMember.email || '')
+      setPhone(staffMember.phone || '')
       setRole(staffMember.role as 'staff' | 'manager' || 'staff')
       setError(null)
     }
@@ -357,6 +375,7 @@ function EditStaffModal({ isOpen, staffMember, onClose, onSuccess }: EditStaffMo
       const response = await api.put(`/api/restaurant/staff/${staffMember.id}`, {
         name,
         email: email || undefined,
+        phone: phone || undefined,
         role
       })
 
@@ -462,6 +481,19 @@ function EditStaffModal({ isOpen, staffMember, onClose, onSuccess }: EditStaffMo
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="john@restaurant.com"
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-surface-600 bg-white dark:bg-surface-700 text-surface-900 dark:text-surface-100 focus:ring-2 focus:ring-orange-500/30 focus:border-orange-500 transition-all outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-2">
+                  Phone Number
+                </label>
+                <input
+                  type="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="(555) 123-4567"
                   className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-surface-600 bg-white dark:bg-surface-700 text-surface-900 dark:text-surface-100 focus:ring-2 focus:ring-orange-500/30 focus:border-orange-500 transition-all outline-none"
                 />
               </div>
