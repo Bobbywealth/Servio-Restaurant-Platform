@@ -1188,11 +1188,34 @@ export default function TabletOrdersPage() {
       printTestReceipt();
     };
 
+    // Handle new orders from website/public ordering
+    const handleNewOrder = async (data: { orderId: string; totalAmount?: number }) => {
+      console.log('[tablet] New order received via socket:', data);
+      try {
+        // Fetch the full order details
+        const response = await api.get<{ success: boolean; data?: Order }>(`/api/orders/${encodeURIComponent(data.orderId)}`);
+        if (response?.data?.success && response?.data?.data) {
+          const newOrder = { ...response.data.data, items: normalizeOrderItems(response.data.data.items) };
+          setOrders(prev => {
+            // Don't add if already exists
+            if (prev.some(o => o.id === newOrder.id)) return prev;
+            return [newOrder, ...prev];
+          });
+        }
+      } catch (err) {
+        console.error('[tablet] Failed to fetch new order:', err);
+        // Fallback: just refresh all orders
+        refresh();
+      }
+    };
+
     socket.on('notifications.new', handleNewNotification);
     socket.on('printer.test', handlePrinterTest);
+    socket.on('new-order', handleNewOrder);
     return () => {
       socket.off('notifications.new', handleNewNotification);
       socket.off('printer.test', handlePrinterTest);
+      socket.off('new-order', handleNewOrder);
     };
   }, [socket]);
 
