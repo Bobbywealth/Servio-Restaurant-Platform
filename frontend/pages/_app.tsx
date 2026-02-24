@@ -47,6 +47,8 @@ export default function App({ Component, pageProps }: AppProps) {
       // Only refresh if we have a refresh token
       if (!refreshToken) return
 
+      const accessToken = safeLocalStorage.getItem('servio_access_token')
+
       // Don't refresh if token is valid for at least 15 minutes
       // More aggressive threshold to ensure token never expires during use
       if (accessToken) {
