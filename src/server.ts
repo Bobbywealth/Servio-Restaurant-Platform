@@ -49,9 +49,9 @@ app.get('/health', (_req, res) => {
   res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Lightweight API docs endpoint (public)
+// Lightweight API docs health endpoint (public)
 // Keeps health checks and browser probes from hitting authenticated /api middleware.
-app.get('/api/docs', (_req, res) => {
+app.get('/api/docs/health', (_req, res) => {
   res.status(200).json({
     name: 'Servio Restaurant Platform API',
     version: process.env.npm_package_version || '1.1.0',
