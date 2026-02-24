@@ -17,6 +17,7 @@ import {
   Save,
   AlertCircle,
   Check,
+  CheckCircle,
   LogOut,
   UserCog,
   Mail,
@@ -543,16 +544,33 @@ export default function SettingsPage() {
             </div>
 
             {paymentSettings.onlinePaymentsEnabled && (
+              <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-lg p-4">
+                <div className="flex items-start">
+                  <CheckCircle className="w-5 h-5 text-emerald-600 dark:text-emerald-400 mr-3 mt-0.5" />
+                  <div>
+                    <h3 className="text-sm font-medium text-emerald-900 dark:text-emerald-300">
+                      Online Payments Enabled
+                    </h3>
+                    <p className="text-xs text-emerald-700 dark:text-emerald-400 mt-1">
+                      Your customers can now pay with credit/debit cards during checkout. 
+                      Payments are processed securely via Stripe.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {!paymentSettings.onlinePaymentsEnabled && (
               <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
                 <div className="flex items-start">
                   <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 mr-3 mt-0.5" />
                   <div>
                     <h3 className="text-sm font-medium text-amber-900 dark:text-amber-300">
-                      Stripe Integration Required
+                      Enable Online Payments
                     </h3>
                     <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">
-                      To accept online payments, you'll need to connect your Stripe account. 
-                      This feature is coming soon. For now, customers will see "Pay at Pickup" as the only option.
+                      Turn on online payments to accept credit/debit cards during checkout.
+                      This requires Stripe to be configured on the server.
                     </p>
                   </div>
                 </div>

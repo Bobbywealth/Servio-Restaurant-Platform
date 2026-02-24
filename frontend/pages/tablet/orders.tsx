@@ -1209,13 +1209,32 @@ export default function TabletOrdersPage() {
       }
     };
 
+    // Handle order status changes from other clients
+    const handleOrderStatusChanged = (data: { orderId: string; previousStatus?: string; status: string; timestamp?: Date }) => {
+      console.log('[tablet] Order status changed via socket:', data);
+      setOrders(prev => prev.map(o => {
+        if (o.id === data.orderId) {
+          return { ...o, status: data.status };
+        }
+        return o;
+      }));
+      setSelectedOrder(prev => {
+        if (prev?.id === data.orderId) {
+          return { ...prev, status: data.status };
+        }
+        return prev;
+      });
+    };
+
     socket.on('notifications.new', handleNewNotification);
     socket.on('printer.test', handlePrinterTest);
     socket.on('new-order', handleNewOrder);
+    socket.on('order:status_changed', handleOrderStatusChanged);
     return () => {
       socket.off('notifications.new', handleNewNotification);
       socket.off('printer.test', handlePrinterTest);
       socket.off('new-order', handleNewOrder);
+      socket.off('order:status_changed', handleOrderStatusChanged);
     };
   }, [socket]);
 
