@@ -76,6 +76,7 @@ export default function TabletInfoPage() {
   const [profileSettings, setProfileSettings] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [hasLoadedProfile, setHasLoadedProfile] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -107,6 +108,7 @@ export default function TabletInfoPage() {
           }))
         : [];
       setHolidaySchedule(normalizedHolidays);
+      setHasLoadedProfile(true);
     } catch (err: any) {
       setError(err?.message || 'Failed to load restaurant info.');
     } finally {
@@ -146,6 +148,11 @@ export default function TabletInfoPage() {
   };
 
   const saveProfile = async () => {
+    if (!hasLoadedProfile) {
+      setError('Unable to save until restaurant info is loaded. Please retry loading this page.');
+      return;
+    }
+
     try {
       setSaving(true);
       setError(null);
@@ -197,7 +204,7 @@ export default function TabletInfoPage() {
               <button
                 onClick={saveProfile}
                 className="rounded-xl bg-[var(--tablet-accent)] px-4 py-2 text-sm font-semibold text-[var(--tablet-accent-contrast)] hover:opacity-90"
-                disabled={saving || loading}
+                disabled={saving || loading || !hasLoadedProfile}
               >
                 {saving ? 'Saving…' : 'Save changes'}
               </button>
@@ -206,8 +213,16 @@ export default function TabletInfoPage() {
             {(error || success) && (
               <div className="mt-4 space-y-2">
                 {error && (
-                  <div className="rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
-                    {error}
+                  <div className="flex flex-col gap-3 rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-200 sm:flex-row sm:items-center sm:justify-between">
+                    <span>{error}</span>
+                    <button
+                      type="button"
+                      onClick={fetchProfile}
+                      disabled={loading}
+                      className="self-start rounded-lg border border-rose-300/40 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-rose-100 hover:bg-rose-400/10 disabled:cursor-not-allowed disabled:opacity-70"
+                    >
+                      {loading ? 'Retrying…' : 'Retry'}
+                    </button>
                   </div>
                 )}
                 {success && (
