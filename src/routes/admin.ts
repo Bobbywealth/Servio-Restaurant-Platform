@@ -4922,6 +4922,17 @@ router.patch('/pricing-structures/:id', async (req, res) => {
   try {
     const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const { name, slug, description, price_monthly, price_yearly, is_featured, is_active, features, display_order } = req.body || {};
+
+    const parsedMonthlyPrice = price_monthly === undefined ? null : Number(price_monthly);
+    if (price_monthly !== undefined && !Number.isFinite(parsedMonthlyPrice)) {
+      return res.status(400).json({ error: 'price_monthly must be a valid number' });
+    }
+
+    const parsedYearlyPrice = price_yearly === undefined ? null : Number(price_yearly);
+    if (price_yearly !== undefined && !Number.isFinite(parsedYearlyPrice)) {
+      return res.status(400).json({ error: 'price_yearly must be a valid number' });
+    }
+
     const db = await DatabaseService.getInstance().getDatabase();
     await db.run(
       `UPDATE pricing_structures
@@ -4940,8 +4951,8 @@ router.patch('/pricing-structures/:id', async (req, res) => {
         name,
         slug,
         description,
-        price_monthly === undefined ? null : Number(price_monthly),
-        price_yearly === undefined ? null : Number(price_yearly),
+        parsedMonthlyPrice,
+        parsedYearlyPrice,
         is_featured === undefined ? null : Boolean(is_featured),
         is_active === undefined ? null : Boolean(is_active),
         features === undefined ? null : JSON.stringify(Array.isArray(features) ? features : []),
