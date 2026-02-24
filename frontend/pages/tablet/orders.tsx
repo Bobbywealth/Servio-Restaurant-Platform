@@ -1111,21 +1111,16 @@ export default function TabletOrdersPage() {
     return activeQueueOrders.filter((o) => normalizeStatus(o.status) === 'ready');
   }, [activeQueueOrders]);
 
-  const queueSections = useMemo(() => ([
-    { key: 'received' as const, label: 'New', orders: receivedOrders },
-    { key: 'preparing' as const, label: 'In Progress', orders: preparingOrders },
-    { key: 'ready' as const, label: 'Ready', orders: readyOrders },
-  ]), [receivedOrders, preparingOrders, readyOrders]);
+  // Single unified list - all orders in one card
+  const allOrdersList = useMemo(() => {
+    return [...activeQueueOrders].sort((a, b) => {
+      const ta = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const tb = b.created_at ? new Date(b.created_at).getTime() : 0;
+      return tb - ta;
+    });
+  }, [activeQueueOrders]);
 
   const filtered = filteredOrders;
-
-  const visibleSections = useMemo(() => {
-    if (statusFilter === 'all') {
-      return queueSections;
-    }
-
-    return queueSections.filter((section) => section.key === statusFilter);
-  }, [queueSections, statusFilter]);
 
 
   const renderOrderCard = useCallback((o: Order, laneIndex: number, options?: { isArchived?: boolean }) => {
@@ -1330,10 +1325,7 @@ export default function TabletOrdersPage() {
               </button>
 
               {[
-                { key: 'all', label: 'All', count: activeOrders.length },
-                { key: 'received', label: 'Needs action', count: receivedOrders.length },
-                { key: 'preparing', label: 'In progress', count: preparingOrders.length },
-                { key: 'ready', label: 'Ready', count: readyOrders.length },
+                { key: 'all', label: 'All Orders', count: activeOrders.length },
               ].map((chip) => (
                 <button
                   key={chip.key}
@@ -1355,23 +1347,15 @@ export default function TabletOrdersPage() {
               </button>
             </div>
 
-            <div className="grid gap-4 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
-              {visibleSections.map((section) => (
-                <section key={section.key} className="rounded-2xl bg-[var(--tablet-bg)] border border-[var(--tablet-border)] p-2.5">
-                  <div className="mb-2 flex items-center justify-between px-1">
-                    <h3 className="text-[var(--tablet-text)] text-sm font-bold uppercase tracking-wide">{section.label}</h3>
-                    <span className="rounded-full bg-[var(--tablet-surface-alt)] px-2 py-0.5 text-xs text-[var(--tablet-text)]">{section.orders.length}</span>
-                  </div>
-
-                  {section.orders.length === 0 ? (
-                    <div className="rounded-xl border border-dashed border-[var(--tablet-border)] py-10 text-center text-xs uppercase tracking-wide text-[var(--tablet-muted)]">No orders</div>
-                  ) : (
-                    <div className="space-y-3">
-                      {section.orders.map((o, index) => renderOrderCard(o, index))}
-                    </div>
-                  )}
-                </section>
-              ))}
+            {/* Single unified order list */}
+            <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {allOrdersList.length === 0 ? (
+                <div className="col-span-full rounded-xl border border-dashed border-[var(--tablet-border)] py-16 text-center text-sm uppercase tracking-wide text-[var(--tablet-muted)]">
+                  No active orders
+                </div>
+              ) : (
+                allOrdersList.map((o, index) => renderOrderCard(o, index))
+              )}
             </div>
           </div>
         </main>
