@@ -1304,22 +1304,7 @@ export default function TabletOrdersPage() {
     { key: 'ready' as const, label: 'Ready', orders: readyOrders },
   ]), [receivedOrders, preparingOrders, readyOrders]);
 
-  const queueSections = useMemo(() => {
-    const allSections = [
-      { key: 'received', label: 'New Orders', orders: receivedOrders },
-      { key: 'preparing', label: 'In Progress', orders: preparingOrders },
-      { key: 'ready', label: 'Ready', orders: readyOrders },
-    ] as const;
-
-    if (statusFilter === 'all') {
-      return allSections;
-    }
-
-    return allSections.filter((section) => section.key === statusFilter);
-  }, [preparingOrders, readyOrders, receivedOrders, statusFilter]);
-
   const filtered = filteredOrders;
-
 
   const queueSections = useMemo(() => ([
     { key: 'received' as const, label: 'New', orders: receivedOrders },
