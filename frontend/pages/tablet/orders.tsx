@@ -1462,25 +1462,10 @@ export default function TabletOrdersPage() {
                 now={now}
                 refresh={refresh}
                 loading={loading}
+                activeCount={activeOrders.length}
               />
 
-              {/* Quick Stats Bar */}
               <div className="flex flex-wrap gap-2 items-center">
-                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--tablet-accent)] text-[var(--tablet-accent-contrast)] text-xs font-bold">
-                  {activeOrders.length} Active
-                </div>
-                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--tablet-danger)]/12 border border-[var(--tablet-danger)]/25 text-xs font-semibold text-[var(--tablet-text)]">
-                  <span className="h-2 w-2 rounded-full bg-[var(--tablet-danger)] inline-block" />
-                  {receivedOrders.length} New
-                </div>
-                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--tablet-warning)]/12 border border-[var(--tablet-warning)]/25 text-xs font-semibold text-[var(--tablet-text)]">
-                  <span className="h-2 w-2 rounded-full bg-[var(--tablet-warning)] inline-block" />
-                  {activeOrders.filter(o => normalizeStatus(o.status) === 'preparing').length} In Progress
-                </div>
-                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--tablet-success)]/12 border border-[var(--tablet-success)]/25 text-xs font-semibold text-[var(--tablet-text)]">
-                  <span className="h-2 w-2 rounded-full bg-[var(--tablet-success)] inline-block" />
-                  {activeOrders.filter(o => normalizeStatus(o.status) === 'ready').length} Ready
-                </div>
                 {actionQueue.length > 0 && (
                   <button
                     type="button"
@@ -1598,18 +1583,20 @@ export default function TabletOrdersPage() {
                 <div className="flex flex-wrap gap-4 p-4 rounded-xl bg-[var(--tablet-surface)] border border-[var(--tablet-border)] animate-fade-in">
                   <div className="flex-1 min-w-[200px]">
                     <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--tablet-muted)] mb-2">
-                      Status
+                      Status (from quick filters)
                     </label>
                     <select
                       value={statusFilter}
-                      onChange={(e) => setStatusFilter(e.target.value as OrderFilter['status'])}
-                      className="w-full px-3 py-2 rounded-lg border border-[var(--tablet-border)] bg-[var(--tablet-bg)] text-[var(--tablet-text)] focus:outline-none focus:ring-2 focus:ring-[var(--tablet-accent)]"
+                      disabled
+                      aria-readonly="true"
+                      className="w-full px-3 py-2 rounded-lg border border-[var(--tablet-border)] bg-[var(--tablet-surface-alt)] text-[var(--tablet-muted)] cursor-not-allowed"
                     >
                       <option value="all">All Statuses</option>
                       <option value="received">New Orders</option>
                       <option value="preparing">In Progress</option>
                       <option value="ready">Ready</option>
                     </select>
+                    <p className="mt-1 text-[0.65rem] text-[var(--tablet-muted)]">Use the status chips above to change this filter.</p>
                   </div>
                   <div className="flex-1 min-w-[200px]">
                     <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--tablet-muted)] mb-2">
