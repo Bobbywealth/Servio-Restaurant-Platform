@@ -101,6 +101,32 @@ const WEEK_DAYS = [
 
 type WeekDayKey = (typeof WEEK_DAYS)[number]['key'];
 
+interface DayHours {
+  open?: string;
+  close?: string;
+  closed?: boolean;
+}
+
+interface ProfileFormData {
+  name: string;
+  slug: string;
+  description: string;
+  cuisineType: string;
+  priceRange: string;
+  phone: string;
+  email: string;
+  website: string;
+  address: Record<string, unknown>;
+  socialLinks: Record<string, unknown>;
+  operatingHours: Partial<Record<WeekDayKey, DayHours>>;
+  onlineOrderingEnabled: boolean;
+  deliveryEnabled: boolean;
+  pickupEnabled: boolean;
+  deliveryRadius: number;
+  deliveryFee: number;
+  minimumOrder: number;
+}
+
 const ColorPicker = ({ label, value, onChange }: {
   label: string;
   value: string;
@@ -392,7 +418,7 @@ export default function RestaurantProfile() {
   }, [router]);
 
   // Profile form state
-  const [profileData, setProfileData] = useState({
+  const [profileData, setProfileData] = useState<ProfileFormData>({
     name: '',
     slug: '',
     description: '',
