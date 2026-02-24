@@ -335,7 +335,7 @@ function CustomerDetailsStep({
             </>
           ) : (
             <>
-              {paymentMethod === 'online' ? 'Place Order & Pay Securely' : 'Place Order'} - Pay at Pickup
+              Place Order - Pay at Pickup
               <CheckCircle2 className="w-5 h-5" />
             </>
           )}

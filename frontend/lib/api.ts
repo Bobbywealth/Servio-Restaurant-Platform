@@ -1,6 +1,7 @@
 import axios from 'axios'
 import { safeLocalStorage as SLS } from './utils'
 import { syncTokenToServiceWorker } from './serviceWorkerAuth'
+export { syncTokenToServiceWorker }
 
 const BACKEND_URL =
   process.env.NEXT_PUBLIC_API_URL ||
@@ -32,10 +33,12 @@ const refreshClient = axios.create({
 })
 
 let refreshInFlight: Promise<string | null> | null = null
+let redirectInFlight = false
 let lastRefreshTime = 0
 const MIN_REFRESH_INTERVAL = 30_000 // Don't refresh more than once per 30 seconds
 // Cache for token expiry to avoid parsing JWT on every request
 let cachedTokenExpiry: { token: string; expiresAt: number } | null = null
+let lastSyncedServiceWorkerToken: string | null = null
 
 function parseTokenExpiry(token: string): number | null {
   try {
