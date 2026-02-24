@@ -126,13 +126,53 @@ function formatMoney(v: number | null | undefined) {
 }
 
 function formatTimeAgo(iso: string | null | undefined, now: number | null) {
-  if (now === null || !iso) return '—';
+  if (now === null || !iso) return { text: '—', elapsedMinutes: null };
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '—';
+  if (Number.isNaN(d.getTime())) return { text: '—', elapsedMinutes: null };
   const diffMs = now - d.getTime();
-  const mins = Math.round(diffMs / 60000);
-  if (mins < 1) return 'NEW';
-  return `${mins}m`;
+  const mins = Math.max(0, Math.floor(diffMs / 60000));
+
+  if (mins < 1) {
+    return { text: 'Just now', elapsedMinutes: mins };
+  }
+
+  if (mins < 60) {
+    return { text: `${mins}m`, elapsedMinutes: mins };
+  }
+
+  const hours = Math.floor(mins / 60);
+  const remainingMinutes = mins % 60;
+  return { text: `${hours}h ${remainingMinutes}m`, elapsedMinutes: mins };
+}
+
+type UrgencyLevel = 'normal' | 'warning' | 'critical';
+
+function getOrderUrgencyLevel(elapsedMinutes: number | null): UrgencyLevel {
+  if (elapsedMinutes === null || elapsedMinutes < 10) return 'normal';
+  if (elapsedMinutes <= 20) return 'warning';
+  return 'critical';
+}
+
+function getOrderUrgencyClass(level: UrgencyLevel): string {
+  switch (level) {
+    case 'critical':
+      return 'text-[var(--tablet-danger)]';
+    case 'warning':
+      return 'text-[var(--tablet-warning)]';
+    default:
+      return 'text-[var(--tablet-muted)]';
+  }
+}
+
+function getOrderUrgencyBadgeClass(level: UrgencyLevel): string {
+  switch (level) {
+    case 'critical':
+      return 'bg-[color-mix(in_srgb,var(--tablet-danger)_18%,transparent)] text-[var(--tablet-danger)]';
+    case 'warning':
+      return 'bg-[color-mix(in_srgb,var(--tablet-warning)_18%,transparent)] text-[var(--tablet-warning)]';
+    default:
+      return 'bg-[var(--tablet-surface-alt)] text-[var(--tablet-muted)]';
+  }
 }
 
 function normalizeStatus(s: string | null | undefined) {
@@ -235,6 +275,8 @@ function statusBadgeClassesForStatus(status: string): string {
       return 'bg-[var(--tablet-surface-alt)] text-[var(--tablet-text)]';
   }
 }
+
+const STALE_ORDER_THRESHOLD_MINUTES = Number(process.env.NEXT_PUBLIC_TABLET_STALE_ORDER_MINUTES ?? 120);
 
 // Search/filter utilities
 function matchesSearchQuery(order: Order, query: string): boolean {
@@ -1233,7 +1275,14 @@ export default function TabletOrdersPage() {
     const isNew = status === 'received';
     const isPreparing = status === 'preparing';
     const isReady = status === 'ready';
-    const timeStr = formatTimeAgo(o.created_at, now);
+    const timeAgo = formatTimeAgo(o.created_at, now);
+    const urgencyLevel = getOrderUrgencyLevel(timeAgo.elapsedMinutes);
+    const urgencyTextClass = getOrderUrgencyClass(urgencyLevel);
+    const urgencyBadgeClass = getOrderUrgencyBadgeClass(urgencyLevel);
+    const isStaleOrder = Number.isFinite(STALE_ORDER_THRESHOLD_MINUTES)
+      && STALE_ORDER_THRESHOLD_MINUTES > 0
+      && typeof timeAgo.elapsedMinutes === 'number'
+      && timeAgo.elapsedMinutes >= STALE_ORDER_THRESHOLD_MINUTES;
     const itemCount = (o.items || []).reduce((sum, it) => sum + (it.quantity || 1), 0);
     const hasPendingAction = pendingActions.has(o.id);
     const isLatest = laneIndex === 0;
@@ -1274,6 +1323,7 @@ export default function TabletOrdersPage() {
         onClickCapture={openOrderDetails}
         className={clsx(
           'w-full text-left rounded-xl border shadow-sm transition transform hover:brightness-105 hover:scale-[1.01] touch-manipulation overflow-hidden relative',
+          isStaleOrder && 'opacity-70',
           isSelected
             ? 'border-[var(--tablet-info)] shadow-[0_0_0_1px_var(--tablet-info)] bg-[color-mix(in_srgb,var(--tablet-info)_8%,var(--tablet-card))]'
             : 'border-[var(--tablet-border)] bg-[var(--tablet-card)]',
@@ -1291,12 +1341,19 @@ export default function TabletOrdersPage() {
         <div className="pl-4 pr-4 pt-3.5 pb-3.5">
           {/* Top row: time ago + prep time badge */}
           <div className="flex items-center justify-between mb-2">
-            <span className={clsx(
-              'text-xs font-semibold',
-              timeStr === 'NEW' ? 'text-[var(--tablet-danger)]' : 'text-[var(--tablet-muted)]'
-            )}>
-              {timeStr === 'NEW' ? '● NEW' : `${timeStr} ago`}
-            </span>
+            <div className="flex items-center gap-2 min-w-0">
+              <span className={clsx('text-xs font-semibold truncate', urgencyTextClass)}>
+                {timeAgo.text}
+              </span>
+              <span className={clsx('text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide', urgencyBadgeClass)}>
+                {urgencyLevel}
+              </span>
+              {isStaleOrder && (
+                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-[var(--tablet-surface-alt)] text-[var(--tablet-muted)] uppercase tracking-wide">
+                  Archived
+                </span>
+              )}
+            </div>
             <div className="flex items-center gap-2">
               {isLatest && (
                 <span className="text-xs font-semibold text-[var(--tablet-accent)] hidden sm:inline">Latest</span>
