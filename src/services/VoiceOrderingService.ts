@@ -107,6 +107,109 @@ export class VoiceOrderingService {
     return Object.values(groups);
   }
 
+  private async getItemSizes(itemId: string): Promise<Array<{
+    id: string;
+    sizeName: string;
+    price: number;
+    isPreselected: boolean;
+    displayOrder: number;
+  }>> {
+    const db = DatabaseService.getInstance().getDatabase();
+    const rows = await db.all(
+      `
+      SELECT id, size_name, price, is_preselected, display_order
+      FROM item_sizes
+      WHERE item_id = ?
+      ORDER BY display_order ASC, size_name ASC
+      `,
+      [itemId]
+    );
+
+    return (rows || []).map((row: any) => ({
+      id: String(row.id),
+      sizeName: String(row.size_name || ''),
+      price: Number(row.price || 0),
+      isPreselected: Boolean(row.is_preselected),
+      displayOrder: Number(row.display_order || 0)
+    }));
+  }
+
+  private resolveLegacySizeSelection(
+    itemSizes: Array<{ id: string; sizeName: string; price: number; isPreselected: boolean }> | undefined,
+    itemInput: any
+  ) {
+    const sizes = itemSizes || [];
+    if (!sizes.length) return null;
+
+    const sizeLookup = new Map<string, { id: string; sizeName: string; price: number; isPreselected: boolean }>();
+    sizes.forEach((size) => {
+      sizeLookup.set(String(size.id), size);
+      sizeLookup.set(size.sizeName.toLowerCase(), size);
+    });
+
+    const asString = (value: unknown): string | null => {
+      if (typeof value === 'string') {
+        const trimmed = value.trim();
+        return trimmed ? trimmed : null;
+      }
+      if (value && typeof value === 'number') {
+        return String(value);
+      }
+      return null;
+    };
+
+    const tryResolve = (candidate: unknown) => {
+      const text = asString(candidate);
+      if (!text) return null;
+      return sizeLookup.get(text) || sizeLookup.get(text.toLowerCase()) || null;
+    };
+
+    const directCandidates = [
+      itemInput?.size,
+      itemInput?.sizeName,
+      itemInput?.size_name,
+      itemInput?.selectedSize,
+      itemInput?.selected_size,
+      itemInput?.optionId,
+      itemInput?.option_id
+    ];
+
+    for (const candidate of directCandidates) {
+      const resolved = tryResolve(candidate);
+      if (resolved) return resolved;
+    }
+
+    const modifiers = itemInput?.modifiers;
+    if (Array.isArray(modifiers)) {
+      for (const mod of modifiers) {
+        const resolved =
+          tryResolve(mod?.optionId) ||
+          tryResolve(mod?.option_id) ||
+          tryResolve(mod?.optionName) ||
+          tryResolve(mod?.option_name) ||
+          tryResolve(mod?.value) ||
+          tryResolve(mod?.name);
+        if (resolved) return resolved;
+      }
+    } else if (modifiers && typeof modifiers === 'object') {
+      for (const [key, value] of Object.entries(modifiers)) {
+        if (String(key).toLowerCase().includes('size')) {
+          const resolved = Array.isArray(value)
+            ? value.map((entry) => tryResolve(entry)).find(Boolean)
+            : tryResolve(value);
+          if (resolved) return resolved;
+        }
+
+        const resolvedFromKey = tryResolve(key) || (Array.isArray(value)
+          ? value.map((entry) => tryResolve(entry)).find(Boolean)
+          : tryResolve(value));
+        if (resolvedFromKey) return resolvedFromKey;
+      }
+    }
+
+    return sizes.find((size) => size.isPreselected) || sizes[0] || null;
+  }
+
   /**
    * Validate item modifiers using the canonical menu validation rules.
    */
@@ -242,10 +345,15 @@ export class VoiceOrderingService {
    */
   public async getItemModifiersForVapi(itemId: string, restaurantId: string): Promise<any[]> {
     const groups = await this.getModifierGroupsForItem(itemId, restaurantId);
+    const itemSizes = await this.getItemSizes(itemId);
 
-    if (!groups || groups.length === 0) {
+    if ((!groups || groups.length === 0) && itemSizes.length === 0) {
       return [];
     }
+
+    const hasSizeGroup = (groups || []).some((group: any) =>
+      String(group.name || '').toLowerCase().includes('size')
+    );
 
     const questionsToAsk: any[] = [];
     const autoAppliedDefaults: any[] = [];
@@ -327,6 +435,29 @@ export class VoiceOrderingService {
         }))
       });
     });
+
+    if (!hasSizeGroup && itemSizes.length > 0) {
+      const sizeOptions = itemSizes.map((size) => ({
+        id: size.id,
+        name: size.sizeName,
+        priceDelta: Number(size.price || 0),
+        isSoldOut: false,
+        isDefault: size.isPreselected
+      }));
+
+      const optionNames = itemSizes.map((size) => `${size.sizeName} ($${Number(size.price || 0).toFixed(2)})`);
+      questionsToAsk.unshift({
+        groupId: '__legacy_item_sizes__',
+        groupName: 'Size',
+        question: `What size would you like? Options are: ${optionNames.join(', ')}.`,
+        required: true,
+        selectionType: 'single',
+        minSelections: 1,
+        maxSelections: 1,
+        displayOrder: 1,
+        options: sizeOptions
+      });
+    }
 
     // Return questions to ask, plus info about auto-applied defaults
     // The AI should include autoAppliedDefaults in the order without asking
@@ -623,10 +754,23 @@ export class VoiceOrderingService {
       );
       if (!row) return null;
 
+      const sizes = await this.getItemSizes(row.id);
+      const preselectedSize = sizes.find((size) => size.isPreselected);
+      const minSizePrice = sizes
+        .map((size) => Number(size.price))
+        .filter((price) => Number.isFinite(price) && price >= 0)
+        .sort((a, b) => a - b)[0];
+      const resolvedBasePrice = preselectedSize
+        ? Number(preselectedSize.price)
+        : Number.isFinite(minSizePrice)
+          ? Number(minSizePrice)
+          : Number(row.price || 0);
+
       return {
         id: row.id,
         name: row.name,
-        basePrice: Number(row.price || 0),
+        basePrice: resolvedBasePrice,
+        sizes,
         modifierGroups: await this.getModifierGroupsForItem(row.id, resolvedRestaurantId),
         tags: [],
         category: row.category || 'Menu'
@@ -873,6 +1017,15 @@ export class VoiceOrderingService {
 
       // Add modifier price delta to item price
       itemPrice += modifierValidation.priceDelta;
+
+      // Legacy item_sizes absolute-price fallback (if size isn't configured as a modifier group)
+      const itemSizes = await this.getItemSizes(menuItem.id);
+      if (itemSizes.length > 0) {
+        const selectedSize = this.resolveLegacySizeSelection(itemSizes, inputItem);
+        if (selectedSize) {
+          itemPrice = Number(selectedSize.price || 0) + modifierValidation.priceDelta;
+        }
+      }
 
       if (!modifierValidation.valid) {
         if (modifierValidation.missingModifiers.length > 0) {
