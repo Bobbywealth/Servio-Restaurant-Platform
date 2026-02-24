@@ -1306,12 +1306,6 @@ export default function TabletOrdersPage() {
 
   const filtered = filteredOrders;
 
-  const queueSections = useMemo(() => ([
-    { key: 'received' as const, label: 'New', orders: receivedOrders },
-    { key: 'preparing' as const, label: 'In Progress', orders: preparingOrders },
-    { key: 'ready' as const, label: 'Ready', orders: readyOrders }
-  ]), [receivedOrders, preparingOrders, readyOrders]);
-
   const laneLayout = useMemo(() => {
     const showAllLanes = statusFilter === 'all';
 
