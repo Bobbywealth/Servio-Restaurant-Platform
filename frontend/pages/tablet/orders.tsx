@@ -1566,7 +1566,7 @@ export default function TabletOrdersPage() {
   }
 
   return (
-    <div className="tablet-theme min-h-screen bg-[var(--tablet-bg)] text-[var(--tablet-text)] font-sans">
+    <div className="tablet-theme tablet-orders-theme min-h-screen bg-[var(--tablet-bg)] text-[var(--tablet-text)] font-sans">
       <Head>
         <title>Orders • Servio</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0" />
@@ -1932,6 +1932,16 @@ export default function TabletOrdersPage() {
         body {
           overscroll-behavior-y: contain;
           -webkit-tap-highlight-color: transparent;
+        }
+        .tablet-orders-theme {
+          --tablet-accent: #3b82f6;
+          --tablet-accent-contrast: #ffffff;
+          --tablet-warning: #f97316;
+        }
+        .light .tablet-orders-theme {
+          --tablet-accent: #2563eb;
+          --tablet-accent-contrast: #ffffff;
+          --tablet-warning: #ea580c;
         }
         /* Mobile-first responsive adjustments */
         @media (max-width: 639px) {
