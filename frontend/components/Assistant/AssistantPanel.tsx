@@ -30,9 +30,10 @@ interface AssistantState {
 type AssistantPanelProps = {
   showHeader?: boolean
   className?: string
+  defaultMinimized?: boolean
 }
 
-export default function AssistantPanel({ showHeader = true, className }: AssistantPanelProps) {
+export default function AssistantPanel({ showHeader = true, className, defaultMinimized = false }: AssistantPanelProps) {
   const { user, hasPermission } = useUser()
   const [state, setState] = useState<AssistantState>({
     isRecording: false,
@@ -46,7 +47,7 @@ export default function AssistantPanel({ showHeader = true, className }: Assista
     micToggleMode: true, // Default to toggle mode for easier testing
     alwaysListening: false, // Continuous listening mode
     inConversationWindow: false, // Active conversation window
-    isMinimized: false, // Start maximized
+    isMinimized: defaultMinimized, // Configurable initial view mode
     audioSpeed: 1.0, // Normal speed
     audioVolume: 1.0, // Full volume
     isMuted: false // Not muted

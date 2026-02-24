@@ -126,13 +126,53 @@ function formatMoney(v: number | null | undefined) {
 }
 
 function formatTimeAgo(iso: string | null | undefined, now: number | null) {
-  if (now === null || !iso) return '—';
+  if (now === null || !iso) return { text: '—', elapsedMinutes: null };
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '—';
+  if (Number.isNaN(d.getTime())) return { text: '—', elapsedMinutes: null };
   const diffMs = now - d.getTime();
-  const mins = Math.round(diffMs / 60000);
-  if (mins < 1) return 'NEW';
-  return `${mins}m`;
+  const mins = Math.max(0, Math.floor(diffMs / 60000));
+
+  if (mins < 1) {
+    return { text: 'Just now', elapsedMinutes: mins };
+  }
+
+  if (mins < 60) {
+    return { text: `${mins}m`, elapsedMinutes: mins };
+  }
+
+  const hours = Math.floor(mins / 60);
+  const remainingMinutes = mins % 60;
+  return { text: `${hours}h ${remainingMinutes}m`, elapsedMinutes: mins };
+}
+
+type UrgencyLevel = 'normal' | 'warning' | 'critical';
+
+function getOrderUrgencyLevel(elapsedMinutes: number | null): UrgencyLevel {
+  if (elapsedMinutes === null || elapsedMinutes < 10) return 'normal';
+  if (elapsedMinutes <= 20) return 'warning';
+  return 'critical';
+}
+
+function getOrderUrgencyClass(level: UrgencyLevel): string {
+  switch (level) {
+    case 'critical':
+      return 'text-[var(--tablet-danger)]';
+    case 'warning':
+      return 'text-[var(--tablet-warning)]';
+    default:
+      return 'text-[var(--tablet-muted)]';
+  }
+}
+
+function getOrderUrgencyBadgeClass(level: UrgencyLevel): string {
+  switch (level) {
+    case 'critical':
+      return 'bg-[color-mix(in_srgb,var(--tablet-danger)_18%,transparent)] text-[var(--tablet-danger)]';
+    case 'warning':
+      return 'bg-[color-mix(in_srgb,var(--tablet-warning)_18%,transparent)] text-[var(--tablet-warning)]';
+    default:
+      return 'bg-[var(--tablet-surface-alt)] text-[var(--tablet-muted)]';
+  }
 }
 
 function normalizeStatus(s: string | null | undefined) {
@@ -235,6 +275,8 @@ function statusBadgeClassesForStatus(status: string): string {
       return 'bg-[var(--tablet-surface-alt)] text-[var(--tablet-text)]';
   }
 }
+
+const STALE_ORDER_THRESHOLD_MINUTES = Number(process.env.NEXT_PUBLIC_TABLET_STALE_ORDER_MINUTES ?? 120);
 
 // Search/filter utilities
 function matchesSearchQuery(order: Order, query: string): boolean {
@@ -346,9 +388,7 @@ export default function TabletOrdersPage() {
   const [receiptHtml, setReceiptHtml] = useState<string | null>(null);
   const lastRefreshAt = useRef<number>(0);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
-  const [showPrintPrompt, setShowPrintPrompt] = useState<string | null>(null);
   const [pendingActions, setPendingActions] = useState<Set<string>>(() => new Set());
-  const [cachedAt, setCachedAt] = useState<string | null>(null);
   const [isOnline, setIsOnline] = useState<boolean>(true);
   const [socketConnected, setSocketConnected] = useState<boolean>(false);
   const [showUpdateBanner, setShowUpdateBanner] = useState(false);
@@ -440,7 +480,6 @@ export default function TabletOrdersPage() {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed?.orders)) {
         setOrders(parsed.orders);
-        setCachedAt(parsed.cachedAt || null);
         setLoading(false);
       }
     } catch {
@@ -994,13 +1033,8 @@ export default function TabletOrdersPage() {
         socket.emit('order:status_changed', { orderId: order.id, status: 'preparing', timestamp: new Date() });
       }
       
-      // Handle printing based on auto-print setting
       if (autoPrintEnabled) {
-        // Auto-print is ON - print automatically
         await printOrder(order.id, { markAsPrinted: true });
-      } else {
-        // Auto-print is OFF - ask if they want to print
-        setShowPrintPrompt(order.id);
       }
     } catch (e) {
       enqueueAction({
@@ -1214,19 +1248,6 @@ export default function TabletOrdersPage() {
   }, [filteredOrders]);
 
   const filtered = filteredOrders;
-  const queueSections = useMemo<Array<{ key: 'received' | 'preparing' | 'ready'; label: string; orders: Order[] }>>(() => {
-    const sections: Array<{ key: 'received' | 'preparing' | 'ready'; label: string; orders: Order[] }> = [
-      { key: 'received', label: 'New', orders: receivedOrders },
-      { key: 'preparing', label: 'In Progress', orders: preparingOrders },
-      { key: 'ready', label: 'Ready', orders: readyOrders }
-    ];
-
-    if (statusFilter === 'all') {
-      return sections;
-    }
-
-    return sections.filter((section) => section.key === statusFilter);
-  }, [receivedOrders, preparingOrders, readyOrders, statusFilter]);
 
   const laneLayout = useMemo(() => {
     const showAllLanes = statusFilter === 'all';
@@ -1260,9 +1281,17 @@ export default function TabletOrdersPage() {
     const isNew = status === 'received';
     const isPreparing = status === 'preparing';
     const isReady = status === 'ready';
-    const timeStr = formatTimeAgo(o.created_at, now);
+    const timeAgo = formatTimeAgo(o.created_at, now);
+    const urgencyLevel = getOrderUrgencyLevel(timeAgo.elapsedMinutes);
+    const urgencyTextClass = getOrderUrgencyClass(urgencyLevel);
+    const urgencyBadgeClass = getOrderUrgencyBadgeClass(urgencyLevel);
+    const isStaleOrder = Number.isFinite(STALE_ORDER_THRESHOLD_MINUTES)
+      && STALE_ORDER_THRESHOLD_MINUTES > 0
+      && typeof timeAgo.elapsedMinutes === 'number'
+      && timeAgo.elapsedMinutes >= STALE_ORDER_THRESHOLD_MINUTES;
     const itemCount = (o.items || []).reduce((sum, it) => sum + (it.quantity || 1), 0);
     const hasPendingAction = pendingActions.has(o.id);
+    const isActionBusy = busyId === o.id || hasPendingAction;
     const isLatest = laneIndex === 0;
     const isSelected = selectedOrder?.id === o.id;
 
@@ -1295,12 +1324,20 @@ export default function TabletOrdersPage() {
     };
 
     return (
-      <button
+      <div
         key={o.id}
-        type="button"
-        onClickCapture={openOrderDetails}
+        onClick={openOrderDetails}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            openOrderDetails();
+          }
+        }}
         className={clsx(
           'w-full text-left rounded-xl border shadow-sm transition transform hover:brightness-105 hover:scale-[1.01] touch-manipulation overflow-hidden relative',
+          isStaleOrder && 'opacity-70',
           isSelected
             ? 'border-[var(--tablet-info)] shadow-[0_0_0_1px_var(--tablet-info)] bg-[color-mix(in_srgb,var(--tablet-info)_8%,var(--tablet-card))]'
             : 'border-[var(--tablet-border)] bg-[var(--tablet-card)]',
@@ -1318,12 +1355,19 @@ export default function TabletOrdersPage() {
         <div className="pl-4 pr-4 pt-3.5 pb-3.5">
           {/* Top row: time ago + prep time badge */}
           <div className="flex items-center justify-between mb-2">
-            <span className={clsx(
-              'text-xs font-semibold',
-              timeStr === 'NEW' ? 'text-[var(--tablet-danger)]' : 'text-[var(--tablet-muted)]'
-            )}>
-              {timeStr === 'NEW' ? '● NEW' : `${timeStr} ago`}
-            </span>
+            <div className="flex items-center gap-2 min-w-0">
+              <span className={clsx('text-xs font-semibold truncate', urgencyTextClass)}>
+                {timeAgo.text}
+              </span>
+              <span className={clsx('text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide', urgencyBadgeClass)}>
+                {urgencyLevel}
+              </span>
+              {isStaleOrder && (
+                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-[var(--tablet-surface-alt)] text-[var(--tablet-muted)] uppercase tracking-wide">
+                  Archived
+                </span>
+              )}
+            </div>
             <div className="flex items-center gap-2">
               {isLatest && (
                 <span className="text-xs font-semibold text-[var(--tablet-accent)] hidden sm:inline">Latest</span>
@@ -1388,10 +1432,80 @@ export default function TabletOrdersPage() {
               <span className="text-xs text-[var(--tablet-accent)] font-semibold">↻ Syncing</span>
             )}
           </div>
+
+          <div className="mt-3 pt-3 border-t border-[var(--tablet-border)] flex items-center gap-2">
+            {status === 'received' && (
+              <>
+                <button
+                  type="button"
+                  disabled={isActionBusy}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    acceptOrder(o);
+                  }}
+                  className="flex-1 min-h-[44px] rounded-lg px-3 py-2 text-sm font-semibold text-[var(--tablet-accent-contrast)] bg-[var(--tablet-accent)] transition active:brightness-95 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:saturate-50"
+                >
+                  Accept
+                </button>
+                <button
+                  type="button"
+                  disabled={isActionBusy}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    declineOrder(o);
+                  }}
+                  className="flex-1 min-h-[44px] rounded-lg px-3 py-2 text-sm font-semibold border border-[var(--tablet-danger)] text-[var(--tablet-danger)] transition active:bg-[var(--tablet-danger)]/10 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Reject
+                </button>
+              </>
+            )}
+
+            {status === 'preparing' && (
+              <button
+                type="button"
+                disabled={isActionBusy}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setStatus(o.id, 'ready');
+                }}
+                className="w-full min-h-[44px] rounded-lg px-3 py-2 text-sm font-semibold text-[var(--tablet-accent-contrast)] bg-[var(--tablet-success)] transition active:brightness-95 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:saturate-50"
+              >
+                Mark Ready
+              </button>
+            )}
+
+            {status === 'ready' && (
+              <>
+                <button
+                  type="button"
+                  disabled={isActionBusy}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setStatus(o.id, 'completed');
+                  }}
+                  className="flex-1 min-h-[44px] rounded-lg px-3 py-2 text-sm font-semibold text-[var(--tablet-accent-contrast)] bg-[var(--tablet-accent)] transition active:brightness-95 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:saturate-50"
+                >
+                  Complete
+                </button>
+                <button
+                  type="button"
+                  disabled={isActionBusy}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setStatus(o.id, 'picked_up');
+                  }}
+                  className="flex-1 min-h-[44px] rounded-lg px-3 py-2 text-sm font-semibold border border-[var(--tablet-border-strong)] text-[var(--tablet-text)] transition active:bg-[var(--tablet-surface-alt)] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Picked Up
+                </button>
+              </>
+            )}
+          </div>
         </div>
-      </button>
+      </div>
     );
-  }, [now, pendingActions, selectedOrder?.id]);
+  };
   const { soundEnabled, toggleSound } = useOrderAlerts(receivedOrders.length);
 
   const orderSyncIssues = useMemo(() => {
@@ -1437,12 +1551,12 @@ export default function TabletOrdersPage() {
     setAutoPrintPendingId(newest.id);
   }, [autoPrintEnabled, filtered, loading, autoPrintPendingId]);
 
-  const connectionLabel = isOnline ? (socketConnected ? 'Online' : 'Reconnecting') : 'Offline';
-  const connectionClasses = isOnline
+  const connectionText = isOnline ? (socketConnected ? 'Online' : 'Reconnecting') : 'Offline';
+  const connectionDotClasses = isOnline
     ? socketConnected
-      ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40'
-      : 'bg-amber-500/20 text-amber-400 border-amber-500/40'
-    : 'bg-red-500/20 text-red-400 border-red-500/40';
+      ? 'bg-emerald-400'
+      : 'bg-amber-400'
+    : 'bg-red-400';
 
   if (authLoading || !user) {
     return (
@@ -1473,9 +1587,8 @@ export default function TabletOrdersPage() {
             {/* Header with search and filters */}
             <div className="flex flex-col gap-4">
               <OrdersHeader
-                connectionClasses={connectionClasses}
-                connectionLabel={connectionLabel}
-                cachedAt={cachedAt}
+                connectionDotClasses={connectionDotClasses}
+                connectionText={connectionText}
                 soundEnabled={soundEnabled}
                 toggleSound={toggleSound}
                 isFullscreen={isFullscreen}
@@ -1489,25 +1602,10 @@ export default function TabletOrdersPage() {
                 now={now}
                 refresh={refresh}
                 loading={loading}
+                activeCount={activeOrders.length}
               />
 
-              {/* Quick Stats Bar */}
               <div className="flex flex-wrap gap-2 items-center">
-                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--tablet-accent)] text-[var(--tablet-accent-contrast)] text-xs font-bold">
-                  {activeOrders.length} Active
-                </div>
-                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--tablet-danger)]/12 border border-[var(--tablet-danger)]/25 text-xs font-semibold text-[var(--tablet-text)]">
-                  <span className="h-2 w-2 rounded-full bg-[var(--tablet-danger)] inline-block" />
-                  {receivedOrders.length} New
-                </div>
-                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--tablet-warning)]/12 border border-[var(--tablet-warning)]/25 text-xs font-semibold text-[var(--tablet-text)]">
-                  <span className="h-2 w-2 rounded-full bg-[var(--tablet-warning)] inline-block" />
-                  {activeOrders.filter(o => normalizeStatus(o.status) === 'preparing').length} In Progress
-                </div>
-                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--tablet-success)]/12 border border-[var(--tablet-success)]/25 text-xs font-semibold text-[var(--tablet-text)]">
-                  <span className="h-2 w-2 rounded-full bg-[var(--tablet-success)] inline-block" />
-                  {activeOrders.filter(o => normalizeStatus(o.status) === 'ready').length} Ready
-                </div>
                 {actionQueue.length > 0 && (
                   <button
                     type="button"
@@ -1625,18 +1723,20 @@ export default function TabletOrdersPage() {
                 <div className="flex flex-wrap gap-4 p-4 rounded-xl bg-[var(--tablet-surface)] border border-[var(--tablet-border)] animate-fade-in">
                   <div className="flex-1 min-w-[200px]">
                     <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--tablet-muted)] mb-2">
-                      Status
+                      Status (from quick filters)
                     </label>
                     <select
                       value={statusFilter}
-                      onChange={(e) => setStatusFilter(e.target.value as OrderFilter['status'])}
-                      className="w-full px-3 py-2 rounded-lg border border-[var(--tablet-border)] bg-[var(--tablet-bg)] text-[var(--tablet-text)] focus:outline-none focus:ring-2 focus:ring-[var(--tablet-accent)]"
+                      disabled
+                      aria-readonly="true"
+                      className="w-full px-3 py-2 rounded-lg border border-[var(--tablet-border)] bg-[var(--tablet-surface-alt)] text-[var(--tablet-muted)] cursor-not-allowed"
                     >
                       <option value="all">All Statuses</option>
                       <option value="received">New Orders</option>
                       <option value="preparing">In Progress</option>
                       <option value="ready">Ready</option>
                     </select>
+                    <p className="mt-1 text-[0.65rem] text-[var(--tablet-muted)]">Use the status chips above to change this filter.</p>
                   </div>
                   <div className="flex-1 min-w-[200px]">
                     <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--tablet-muted)] mb-2">
@@ -1827,38 +1927,6 @@ export default function TabletOrdersPage() {
         formatMoney={formatMoney}
       />
 
-
-
-      {/* Print Prompt Modal (when auto-print is OFF) */}
-      {showPrintPrompt && (
-        <div className="no-print fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="bg-[var(--tablet-surface)] rounded-3xl shadow-[0_12px_30px_rgba(0,0,0,0.5)] p-6 sm:p-8 w-full max-w-md border border-[var(--tablet-border)]">
-            <div className="text-center mb-6">
-              <Printer className="h-14 w-14 mx-auto text-[var(--tablet-muted)] mb-4" />
-              <h3 className="text-2xl font-semibold mb-2">Print Receipt?</h3>
-              <p className="text-sm text-[var(--tablet-muted)]">Order has been accepted. Would you like to print it?</p>
-            </div>
-            <div className="flex gap-4">
-              <button
-                className="flex-1 px-6 py-4 rounded-2xl border-2 border-[var(--tablet-border-strong)] text-sm font-semibold uppercase transition hover:brightness-110"
-                onClick={() => setShowPrintPrompt(null)}
-              >
-                No
-              </button>
-              <button
-                className="flex-1 px-6 py-4 rounded-2xl bg-[var(--tablet-accent)] text-[var(--tablet-accent-contrast)] text-sm font-semibold uppercase transition hover:brightness-110"
-                onClick={() => {
-                  const orderId = showPrintPrompt;
-                  setShowPrintPrompt(null);
-                  printOrder(orderId, { markAsPrinted: true });
-                }}
-              >
-                Yes, Print
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
 
       <style jsx global>{`
