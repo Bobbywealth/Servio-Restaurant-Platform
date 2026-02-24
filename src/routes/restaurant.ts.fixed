@@ -10,21 +10,6 @@ import fs from 'fs/promises';
 import QRCode from 'qrcode';
 import multer from 'multer';
 
-// Extend Express Request type to include apiKeyAuth flag
-declare global {
-  namespace Express {
-    interface Request {
-      apiKeyAuth?: boolean;
-    }
-  }
-}
-
-// Helper to get user ID for audit logs - returns null for API key auth
-function getAuditUserId(req: Request): string | null {
-  if (req.apiKeyAuth) return null;
-  return req.user?.id || 'system';
-}
-
 const router = Router();
 
 // Configure multer for image uploads
