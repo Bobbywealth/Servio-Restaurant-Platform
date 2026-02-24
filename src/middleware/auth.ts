@@ -4,6 +4,7 @@ import { DatabaseService } from '../services/DatabaseService';
 import { UnauthorizedError, ForbiddenError } from './errorHandler';
 import type { AccessTokenPayload, AuthUser } from '../types/auth';
 import { logger } from '../utils/logger';
+import { ApiKeyService } from '../services/ApiKeyService';
 
 const getJwtSecret = () => {
   const secret = process.env.JWT_SECRET;
@@ -46,6 +47,44 @@ export async function requireAuth(req: Request, _res: Response, next: NextFuncti
     }
 
     const token = header.slice('Bearer '.length).trim();
+
+    // Detect API keys before attempting JWT verification.
+    // API keys use the sk_ prefix or are non-JWT bearer tokens (not 3 dot-separated segments).
+    const isApiKey = token.startsWith('sk_');
+    const jwtSegments = token.split('.');
+    const looksLikeJwt = jwtSegments.length === 3;
+
+    if (isApiKey || !looksLikeJwt) {
+      // Validate as API key
+      const validation = await ApiKeyService.validateApiKey(token);
+      if (validation.valid && validation.apiKey) {
+        const apiKey = validation.apiKey;
+
+        // Populate req.apiKey for API-key-aware route handlers
+        req.apiKey = apiKey;
+        req.apiKeyAuth = true;
+
+        // Build a synthetic AuthUser so existing route handlers that read req.user
+        // (e.g. req.user.restaurantId) continue to work seamlessly.
+        const syntheticUser: AuthUser = {
+          id: `apikey:${apiKey.id}`,
+          restaurantId: apiKey.restaurantId || '',
+          name: `API Key: ${apiKey.name}`,
+          email: null,
+          role: apiKey.scopes.includes('admin:full') ? 'owner' : 'staff',
+          permissions: apiKey.scopes.includes('admin:full') ? ['*'] : apiKey.scopes,
+        };
+        req.user = syntheticUser;
+
+        logger.info(`[auth] API key authenticated: ${apiKey.keyPrefix}`, {
+          apiKeyId: apiKey.id,
+          restaurantId: apiKey.restaurantId,
+        });
+        return next();
+      }
+      throw new UnauthorizedError(validation.error || 'Invalid API key');
+    }
+
     let decoded: AccessTokenPayload;
     try {
       decoded = jwt.verify(token, getJwtSecret()) as AccessTokenPayload;
