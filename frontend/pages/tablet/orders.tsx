@@ -1313,14 +1313,15 @@ export default function TabletOrdersPage() {
     return queueSections.map((section) => {
       const orderCount = section.orders.length;
       const isCollapsed = orderCount === 0;
-      const laneWeight = isCollapsed ? 0.45 : 1 + Math.min(orderCount, 6) * 0.2;
+      const laneWeight = isCollapsed ? 0.55 : 1 + Math.min(orderCount, 6) * 0.2;
 
       return {
         key: section.key,
         isCollapsed,
         style: {
           flexGrow: laneWeight,
-          flexBasis: isCollapsed ? '4.5rem' : '20rem',
+          flexBasis: isCollapsed ? 'clamp(10rem, 22vw, 12rem)' : 'clamp(16rem, 34vw, 24rem)',
+          minWidth: isCollapsed ? '10rem' : '16rem',
         },
       };
     });
@@ -1904,7 +1905,9 @@ export default function TabletOrdersPage() {
             <div
               className={clsx(
                 'grid grid-cols-1 gap-4 sm:gap-5 tablet-orders-responsive',
-                statusFilter === 'all' ? 'lg:flex lg:items-stretch' : 'lg:grid-cols-1'
+                statusFilter === 'all'
+                  ? 'md:flex md:items-stretch md:overflow-x-auto md:pb-2'
+                  : 'lg:grid-cols-1'
               )}
             >
               {queueSections.map((section) => {
@@ -1940,8 +1943,8 @@ export default function TabletOrdersPage() {
                     style={lane?.style}
                     className={clsx(
                       'bg-[var(--tablet-surface)] rounded-2xl shadow-sm border border-[var(--tablet-border)] flex flex-col min-h-[50vh] md:min-h-[60vh] lg:min-h-[70vh] overflow-hidden',
-                      statusFilter === 'all' && 'lg:min-w-0',
-                      isCollapsedRail && 'lg:min-w-[4.5rem]'
+                      statusFilter === 'all' && 'md:shrink-0',
+                      isCollapsedRail && 'xl:min-w-[10rem]'
                     )}
                   >
                     <button
@@ -1950,7 +1953,7 @@ export default function TabletOrdersPage() {
                       className={clsx(
                         'px-4 py-3.5 border-b border-[var(--tablet-border)] flex items-center justify-between text-left',
                         columnBorderClass[section.key],
-                        isCollapsedRail && 'lg:px-2 lg:py-4 lg:flex-col lg:justify-center lg:gap-2 lg:h-full lg:border-b-0',
+                        isCollapsedRail && 'xl:px-2 xl:py-4 xl:flex-col xl:justify-center xl:gap-2 xl:h-full xl:border-b-0',
                         isCollapsedRail && 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tablet-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--tablet-surface)]'
                       )}
                       aria-label={
@@ -1959,7 +1962,7 @@ export default function TabletOrdersPage() {
                           : `${section.label} lane`
                       }
                     >
-                      <h3 className={clsx('text-sm font-bold uppercase tracking-wider', columnAccentClass[section.key], isCollapsedRail && 'lg:[writing-mode:vertical-rl] lg:text-xs lg:tracking-normal')}>
+                      <h3 className={clsx('text-sm font-bold uppercase tracking-wider', columnAccentClass[section.key], isCollapsedRail && 'xl:[writing-mode:vertical-rl] xl:text-xs xl:tracking-normal')}>
                         {section.label}
                       </h3>
                       <span className={clsx('px-2.5 py-0.5 rounded-full text-xs font-bold', columnBadgeClass[section.key])}>
