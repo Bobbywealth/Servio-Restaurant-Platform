@@ -1,5 +1,5 @@
 import Head from 'next/head';
-import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback, KeyboardEvent } from 'react';
 import { useRouter } from 'next/router';
 import clsx from 'clsx';
 import {
@@ -406,12 +406,47 @@ export default function TabletOrdersPage() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   // Search and filter state
   const [searchQuery, setSearchQuery] = useState('');
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<OrderFilter['status']>('all');
   const [channelFilter, setChannelFilter] = useState('all');
   const [sortBy, setSortBy] = useState<OrderFilter['sortBy']>('newest');
   const [showFilters, setShowFilters] = useState(false);
   const [showArchivedOrders, setShowArchivedOrders] = useState(false);
   const [orderDetailsOrder, setOrderDetailsOrder] = useState<Order | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleSearchToggle = useCallback(() => {
+    setIsSearchOpen(true);
+  }, []);
+
+  const handleSearchClear = useCallback(() => {
+    setSearchQuery('');
+    setIsSearchOpen(false);
+  }, []);
+
+  const handleSearchBlur = useCallback(() => {
+    if (!searchQuery.trim()) {
+      setIsSearchOpen(false);
+    }
+  }, [searchQuery]);
+
+  const handleSearchKeyDown = useCallback((event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      setSearchQuery('');
+      setIsSearchOpen(false);
+      searchInputRef.current?.blur();
+      return;
+    }
+
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      if (!searchQuery.trim()) {
+        setIsSearchOpen(false);
+      }
+      searchInputRef.current?.blur();
+    }
+  }, [searchQuery]);
 
   // Get unique channels for filter dropdown
   const channels = useMemo(() => {
@@ -1018,23 +1053,15 @@ export default function TabletOrdersPage() {
     }
   }
 
-  async function acceptOrder(order: Order) {
+  function openAcceptModal(order: Order) {
+    setPrepModalOrder(order);
+    setPrepMinutes(order.prep_minutes && order.prep_minutes > 0 ? order.prep_minutes : 15);
+  }
+
+  async function acceptOrder(order: Order, minutes: number) {
     setBusyId(order.id);
     try {
-      // Set status to preparing
-      if (!navigator.onLine) {
-        enqueueAction({
-          id: `${order.id}-${Date.now()}`,
-          orderId: order.id,
-          type: 'status',
-          payload: { status: 'preparing' },
-          queuedAt: Date.now()
-        });
-      } else {
-        await apiPost(`/api/orders/${encodeURIComponent(order.id)}/status`, { status: 'preparing' });
-      }
-      setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, status: 'preparing' } : o)));
-      setSelectedOrder((prev) => (prev?.id === order.id ? { ...prev, status: 'preparing' } : prev));
+      await setPrepTime(order.id, minutes);
       if (socket) {
         socket.emit('order:status_changed', { orderId: order.id, status: 'preparing', timestamp: new Date() });
       }
@@ -1046,8 +1073,8 @@ export default function TabletOrdersPage() {
       enqueueAction({
         id: `${order.id}-${Date.now()}`,
         orderId: order.id,
-        type: 'status',
-        payload: { status: 'preparing' },
+        type: 'prep-time',
+        payload: { prepMinutes: minutes },
         queuedAt: Date.now()
       });
     } finally {
@@ -1107,7 +1134,10 @@ export default function TabletOrdersPage() {
         pickupTime = resp?.data?.pickupTime;
       }
       setOrders((prev) =>
-        prev.map((o) => (o.id === orderId ? { ...o, status: 'preparing', pickup_time: pickupTime } : o))
+        prev.map((o) => (o.id === orderId ? { ...o, status: 'preparing', pickup_time: pickupTime, prep_minutes: minutes } : o))
+      );
+      setSelectedOrder((prev) =>
+        prev?.id === orderId ? { ...prev, status: 'preparing', pickup_time: pickupTime, prep_minutes: minutes } : prev
       );
       if (socket) {
         socket.emit('order:status_changed', { orderId, status: 'preparing', timestamp: new Date() });
@@ -1274,7 +1304,28 @@ export default function TabletOrdersPage() {
     { key: 'ready' as const, label: 'Ready', orders: readyOrders },
   ]), [receivedOrders, preparingOrders, readyOrders]);
 
+  const queueSections = useMemo(() => {
+    const allSections = [
+      { key: 'received', label: 'New Orders', orders: receivedOrders },
+      { key: 'preparing', label: 'In Progress', orders: preparingOrders },
+      { key: 'ready', label: 'Ready', orders: readyOrders },
+    ] as const;
+
+    if (statusFilter === 'all') {
+      return allSections;
+    }
+
+    return allSections.filter((section) => section.key === statusFilter);
+  }, [preparingOrders, readyOrders, receivedOrders, statusFilter]);
+
   const filtered = filteredOrders;
+
+
+  const queueSections = useMemo(() => ([
+    { key: 'received' as const, label: 'New', orders: receivedOrders },
+    { key: 'preparing' as const, label: 'In Progress', orders: preparingOrders },
+    { key: 'ready' as const, label: 'Ready', orders: readyOrders }
+  ]), [receivedOrders, preparingOrders, readyOrders]);
 
   const laneLayout = useMemo(() => {
     const showAllLanes = statusFilter === 'all';
@@ -1377,7 +1428,7 @@ export default function TabletOrdersPage() {
         )} />
 
         <div className="pl-4 pr-4 pt-3.5 pb-3.5">
-          {/* Top row: time ago + prep time badge */}
+          {/* Top row: time ago + order metadata */}
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2 min-w-0">
               <span className={clsx('text-xs font-semibold truncate', urgencyTextClass)}>
@@ -1392,20 +1443,32 @@ export default function TabletOrdersPage() {
                 </span>
               )}
             </div>
-            <div className="flex items-center gap-2">
-              {isLatest && (
-                <span className="text-xs font-semibold text-[var(--tablet-accent)] hidden sm:inline">Latest</span>
-              )}
-              {isPreparing && prepTimeData && (
-                <span className={clsx(
-                  'text-xs font-bold px-2 py-0.5 rounded-md inline-flex items-center gap-1',
-                  prepTimeColorClass,
-                  prepWarningLevel === 'critical' && 'prep-time-critical'
-                )}>
-                  {prepTimeData.isOverdue && <AlertTriangle className="h-3 w-3" aria-hidden="true" />}
-                  {prepTimeData.text}
+            <div className="flex flex-col items-end gap-1 pl-2">
+              <div className="flex items-center gap-1.5">
+                <span className="text-base font-bold text-[var(--tablet-text)] tabular-nums">
+                  {formatMoney(o.total_amount)}
                 </span>
-              )}
+                {hasPendingAction && (
+                  <span className="text-[10px] text-[var(--tablet-accent)] font-semibold px-1.5 py-0.5 rounded bg-[color-mix(in_srgb,var(--tablet-accent)_14%,transparent)]">
+                    ↻
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                {isLatest && (
+                  <span className="text-xs font-semibold text-[var(--tablet-accent)] hidden sm:inline">Latest</span>
+                )}
+                {isPreparing && prepTimeData && (
+                  <span className={clsx(
+                    'text-xs font-bold px-2 py-0.5 rounded-md inline-flex items-center gap-1',
+                    prepTimeColorClass,
+                    prepWarningLevel === 'critical' && 'prep-time-critical'
+                  )}>
+                    {prepTimeData.isOverdue && <AlertTriangle className="h-3 w-3" aria-hidden="true" />}
+                    {prepTimeData.text}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
 
@@ -1447,16 +1510,6 @@ export default function TabletOrdersPage() {
             </div>
           )}
 
-          {/* Bottom row: total + sync indicator */}
-          <div className="flex items-center justify-between">
-            <span className="text-base font-bold text-[var(--tablet-text)] tabular-nums">
-              {formatMoney(o.total_amount)}
-            </span>
-            {hasPendingAction && (
-              <span className="text-xs text-[var(--tablet-accent)] font-semibold">↻ Syncing</span>
-            )}
-          </div>
-
           <div className="mt-3 pt-3 border-t border-[var(--tablet-border)] flex items-center gap-2">
             {status === 'received' && (
               <>
@@ -1465,7 +1518,7 @@ export default function TabletOrdersPage() {
                   disabled={isActionBusy}
                   onClick={(event) => {
                     event.stopPropagation();
-                    acceptOrder(o);
+                    openAcceptModal(o);
                   }}
                   className="flex-1 min-h-[44px] rounded-lg px-3 py-2 text-sm font-semibold text-[var(--tablet-accent-contrast)] bg-[var(--tablet-accent)] transition active:brightness-95 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:saturate-50"
                 >
@@ -1508,7 +1561,7 @@ export default function TabletOrdersPage() {
                     event.stopPropagation();
                     setStatus(o.id, 'completed');
                   }}
-                  className="flex-1 min-h-[44px] rounded-lg px-3 py-2 text-sm font-semibold text-[var(--tablet-accent-contrast)] bg-[var(--tablet-accent)] transition active:brightness-95 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:saturate-50"
+                  className="flex-1 min-h-[44px] rounded-lg px-3 py-2 text-sm font-semibold text-[var(--tablet-success-action-contrast)] bg-[var(--tablet-success-action)] transition active:bg-[var(--tablet-success-action-active)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tablet-success-action)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--tablet-card)] disabled:opacity-50 disabled:cursor-not-allowed disabled:saturate-50 disabled:active:scale-100"
                 >
                   Complete
                 </button>
@@ -1519,7 +1572,7 @@ export default function TabletOrdersPage() {
                     event.stopPropagation();
                     setStatus(o.id, 'picked_up');
                   }}
-                  className="flex-1 min-h-[44px] rounded-lg px-3 py-2 text-sm font-semibold border border-[var(--tablet-border-strong)] text-[var(--tablet-text)] transition active:bg-[var(--tablet-surface-alt)] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex-1 min-h-[44px] rounded-lg px-3 py-2 text-sm font-semibold border border-[var(--tablet-border-strong)] text-[var(--tablet-text)] transition active:bg-[color-mix(in_srgb,var(--tablet-surface-alt)_65%,var(--tablet-border-strong)_35%)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tablet-border-strong)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--tablet-card)] disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100"
                 >
                   Picked Up
                 </button>
@@ -1656,21 +1709,40 @@ export default function TabletOrdersPage() {
               {/* Search and Filter Bar */}
               <OrderFiltersBar>
                 {/* Search Input */}
-                <div className="relative flex-1">
-                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-[var(--tablet-muted)]" />
-                  <input
-                    type="text"
-                    placeholder="Search orders..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-11 pr-10 py-3.5 rounded-xl border border-[var(--tablet-border)] bg-[var(--tablet-surface)] text-[var(--tablet-text)] placeholder-[var(--tablet-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--tablet-accent)] focus:border-transparent transition-all text-base"
-                  />
-                  {searchQuery && (
+                <div className="relative">
+                  {isSearchOpen || searchQuery ? (
+                    <div className="relative min-w-[220px] sm:min-w-[260px]">
+                      <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-[var(--tablet-muted)]" />
+                      <input
+                        ref={searchInputRef}
+                        type="text"
+                        placeholder="Search orders..."
+                        value={searchQuery}
+                        autoFocus
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        onBlur={handleSearchBlur}
+                        onKeyDown={handleSearchKeyDown}
+                        className="w-full pl-11 pr-10 py-3.5 rounded-xl border border-[var(--tablet-border)] bg-[var(--tablet-surface)] text-[var(--tablet-text)] placeholder-[var(--tablet-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--tablet-accent)] focus:border-transparent transition-all text-base"
+                      />
+                      {searchQuery && (
+                        <button
+                          type="button"
+                          aria-label="Clear search"
+                          onClick={handleSearchClear}
+                          className="absolute right-3.5 top-1/2 -translate-y-1/2 p-1.5 rounded-full hover:bg-[var(--tablet-border)] transition touch-manipulation"
+                        >
+                          <X className="h-4 w-4 text-[var(--tablet-muted)]" />
+                        </button>
+                      )}
+                    </div>
+                  ) : (
                     <button
-                      onClick={() => setSearchQuery('')}
-                      className="absolute right-3.5 top-1/2 -translate-y-1/2 p-1.5 rounded-full hover:bg-[var(--tablet-border)] transition touch-manipulation"
+                      type="button"
+                      aria-label="Open search"
+                      onClick={handleSearchToggle}
+                      className="flex items-center justify-center rounded-xl border border-[var(--tablet-border)] bg-[var(--tablet-surface)] p-3.5 text-[var(--tablet-text)] transition-all hover:bg-[var(--tablet-surface-alt)] focus:outline-none focus:ring-2 focus:ring-[var(--tablet-accent)]"
                     >
-                      <X className="h-4 w-4 text-[var(--tablet-muted)]" />
+                      <Search className="h-5 w-5" />
                     </button>
                   )}
                 </div>
@@ -1719,39 +1791,53 @@ export default function TabletOrdersPage() {
                 >
                   All ({activeOrders.length})
                 </button>
-                <button
-                  onClick={() => setStatusFilter('received')}
-                  className={clsx(
-                    'px-3 py-1.5 rounded-lg text-xs font-semibold transition touch-manipulation',
-                    statusFilter === 'received'
-                      ? 'bg-[var(--tablet-danger)] text-white'
-                      : 'bg-[var(--tablet-surface)] border border-[var(--tablet-border)] text-[var(--tablet-text)] hover:bg-[var(--tablet-surface-alt)]'
-                  )}
-                >
-                  New ({receivedOrders.length})
-                </button>
-                <button
-                  onClick={() => setStatusFilter('preparing')}
-                  className={clsx(
-                    'px-3 py-1.5 rounded-lg text-xs font-semibold transition touch-manipulation',
-                    statusFilter === 'preparing'
-                      ? 'bg-[var(--tablet-warning)] text-[var(--tablet-accent-contrast)]'
-                      : 'bg-[var(--tablet-surface)] border border-[var(--tablet-border)] text-[var(--tablet-text)] hover:bg-[var(--tablet-surface-alt)]'
-                  )}
-                >
-                  In Progress ({preparingOrders.length})
-                </button>
-                <button
-                  onClick={() => setStatusFilter('ready')}
-                  className={clsx(
-                    'px-3 py-1.5 rounded-lg text-xs font-semibold transition touch-manipulation',
-                    statusFilter === 'ready'
-                      ? 'bg-[var(--tablet-success)] text-white'
-                      : 'bg-[var(--tablet-surface)] border border-[var(--tablet-border)] text-[var(--tablet-text)] hover:bg-[var(--tablet-surface-alt)]'
-                  )}
-                >
-                  Ready ({readyOrders.length})
-                </button>
+
+                {[
+                  {
+                    key: 'received',
+                    label: 'New',
+                    count: receivedOrders.length,
+                    activeClass: 'bg-[var(--tablet-danger)] text-white'
+                  },
+                  {
+                    key: 'preparing',
+                    label: 'In Progress',
+                    count: preparingOrders.length,
+                    activeClass: 'bg-[var(--tablet-warning)] text-[var(--tablet-accent-contrast)]'
+                  },
+                  {
+                    key: 'ready',
+                    label: 'Ready',
+                    count: readyOrders.length,
+                    activeClass: 'bg-[var(--tablet-success)] text-white'
+                  }
+                ].map((chip) => {
+                  const isActive = statusFilter === chip.key;
+                  const isZeroCount = chip.count === 0;
+                  const hideWhenEmpty = statusFilter === 'all' && isZeroCount;
+
+                  if (hideWhenEmpty) {
+                    return null;
+                  }
+
+                  return (
+                    <button
+                      key={chip.key}
+                      onClick={() => setStatusFilter(chip.key as OrderFilter['status'])}
+                      disabled={!isActive && isZeroCount}
+                      className={clsx(
+                        'px-3 py-1.5 rounded-lg text-xs font-semibold transition touch-manipulation',
+                        isActive
+                          ? chip.activeClass
+                          : isZeroCount
+                            ? 'bg-[var(--tablet-surface-alt)] border border-[var(--tablet-border)] text-[var(--tablet-muted)] opacity-55 cursor-not-allowed'
+                            : 'bg-[var(--tablet-surface)] border border-[var(--tablet-border)] text-[var(--tablet-text)] hover:bg-[var(--tablet-surface-alt)]'
+                      )}
+                    >
+                      {chip.label} ({chip.count})
+                    </button>
+                  );
+                })}
               </div>
 
               {/* Expanded Filters Panel */}
@@ -1795,6 +1881,7 @@ export default function TabletOrdersPage() {
                         setStatusFilter('all');
                         setChannelFilter('all');
                         setSearchQuery('');
+                        setIsSearchOpen(false);
                         setSortBy('newest');
                       }}
                       className="px-4 py-2 rounded-lg border border-[var(--tablet-border)] text-[var(--tablet-muted)] hover:text-[var(--tablet-text)] hover:bg-[var(--tablet-surface-alt)] transition"
@@ -1812,7 +1899,7 @@ export default function TabletOrdersPage() {
                   {searchQuery && (
                     <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-[var(--tablet-info)]/25 text-[var(--tablet-text)] border border-[var(--tablet-border)]">
                       Search: "{searchQuery}"
-                      <button onClick={() => setSearchQuery('')} className="ml-1">
+                      <button onClick={handleSearchClear} className="ml-1">
                         <X className="h-3 w-3" />
                       </button>
                     </span>
@@ -1962,7 +2049,7 @@ export default function TabletOrdersPage() {
         order={orderDetailsOrder}
         onClose={() => setOrderDetailsOrder(null)}
         onConfirmOrder={(order) => {
-          acceptOrder(order);
+          openAcceptModal(order);
           setOrderDetailsOrder(null);
         }}
         onDeclineOrder={(order) => {
@@ -1982,6 +2069,54 @@ export default function TabletOrdersPage() {
         printingOrderId={printingOrderId}
         formatMoney={formatMoney}
       />
+
+      {prepModalOrder && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-sm rounded-2xl border border-[var(--tablet-border)] bg-[var(--tablet-surface)] p-5 shadow-lg">
+            <h3 className="text-lg font-semibold text-[var(--tablet-text)]">Accept order #{shortId(prepModalOrder.id)}</h3>
+            <p className="mt-2 text-sm text-[var(--tablet-muted)]">Set prep time before moving this order to In Progress.</p>
+
+            <label className="mt-4 block text-sm font-medium text-[var(--tablet-text)]" htmlFor="prep-minutes-input">
+              Preparation time (minutes)
+            </label>
+            <input
+              id="prep-minutes-input"
+              type="number"
+              min={1}
+              max={180}
+              value={prepMinutes}
+              onChange={(event) => {
+                const next = Number(event.target.value);
+                setPrepMinutes(Number.isFinite(next) ? next : 15);
+              }}
+              className="mt-2 w-full rounded-xl border border-[var(--tablet-border)] bg-[var(--tablet-card)] px-3 py-2 text-[var(--tablet-text)] focus:outline-none focus:ring-2 focus:ring-[var(--tablet-accent)]"
+            />
+
+            <div className="mt-5 flex items-center gap-2">
+              <button
+                type="button"
+                className="flex-1 rounded-lg border border-[var(--tablet-border)] px-3 py-2 font-semibold"
+                onClick={() => setPrepModalOrder(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="flex-1 rounded-lg bg-[var(--tablet-accent)] px-3 py-2 font-semibold text-[var(--tablet-accent-contrast)] disabled:opacity-50"
+                onClick={() => {
+                  if (!prepModalOrder) return;
+                  const boundedMinutes = Math.min(180, Math.max(1, Number(prepMinutes) || 15));
+                  void acceptOrder(prepModalOrder, boundedMinutes);
+                  setPrepModalOrder(null);
+                }}
+                disabled={busyId === prepModalOrder.id}
+              >
+                Accept & Start
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
 
 

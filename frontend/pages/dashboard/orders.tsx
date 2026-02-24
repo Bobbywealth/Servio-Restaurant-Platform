@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import Head from 'next/head'
+import { useRouter } from 'next/router'
 import DashboardLayout from '../../components/Layout/DashboardLayout'
 import { useUser } from '../../contexts/UserContext'
 import { api } from '../../lib/api'
@@ -294,6 +295,7 @@ function OrderDetailModal({ order, onClose }: { order: Order | null; onClose: ()
 }
 
 export default function OrdersPage() {
+  const router = useRouter()
   const { user, hasPermission } = useUser()
   const socket = useSocket()
   const { haptic, hapticWithVisual } = useHaptic()
@@ -312,6 +314,21 @@ export default function OrdersPage() {
   const [secondsUntilRefresh, setSecondsUntilRefresh] = useState(30)
 
   const canUpdateOrders = hasPermission('orders', 'update')
+
+  useEffect(() => {
+    const orderIdParam = router.query.orderId
+    const orderId = Array.isArray(orderIdParam) ? orderIdParam[0] : orderIdParam
+
+    if (!orderId || orders.length === 0) return
+
+    const matchingOrder = orders.find(order => order.id === orderId || order.external_id === orderId)
+    if (!matchingOrder) return
+
+    setSelectedOrder(matchingOrder)
+    setStatusFilter('all')
+
+    router.replace('/dashboard/orders', undefined, { shallow: true })
+  }, [orders, router])
 
   const createTestOrder = async () => {
     setIsLoading(true)
