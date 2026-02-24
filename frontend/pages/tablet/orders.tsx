@@ -1204,7 +1204,13 @@ export default function TabletOrdersPage() {
 
   const activeOrders = useMemo(() => {
     const activeStatuses = new Set(['received', 'preparing', 'ready']);
-    return orders.filter((o) => activeStatuses.has(normalizeStatus(o.status)));
+    // Deduplicate by order ID to prevent the same order from appearing multiple times
+    const seen = new Set<string>();
+    return orders.filter((o) => {
+      if (seen.has(o.id)) return false;
+      seen.add(o.id);
+      return activeStatuses.has(normalizeStatus(o.status));
+    });
   }, [orders]);
 
   const filteredOrders = useMemo(() => {
@@ -1304,8 +1310,6 @@ export default function TabletOrdersPage() {
     { key: 'ready' as const, label: 'Ready', orders: readyOrders },
   ]), [receivedOrders, preparingOrders, readyOrders]);
 
-  const filtered = filteredOrders;
-
   const visibleSections = useMemo(() => {
     if (statusFilter === 'all') {
       return queueSections;
@@ -1313,34 +1317,6 @@ export default function TabletOrdersPage() {
 
     return queueSections.filter((section) => section.key === statusFilter);
   }, [queueSections, statusFilter]);
-
-  const laneLayout = useMemo(() => {
-    const showAllLanes = statusFilter === 'all';
-
-    if (!showAllLanes) {
-      return visibleSections.map((section) => ({
-        key: section.key,
-        isCollapsed: false,
-        style: undefined,
-      }));
-    }
-
-    return queueSections.map((section) => {
-      const orderCount = section.orders.length;
-      const isCollapsed = orderCount === 0;
-      const laneWeight = isCollapsed ? 0.55 : 1 + Math.min(orderCount, 6) * 0.2;
-
-      return {
-        key: section.key,
-        isCollapsed,
-        style: {
-          flexGrow: laneWeight,
-          flexBasis: isCollapsed ? 'clamp(10rem, 22vw, 12rem)' : 'clamp(16rem, 34vw, 24rem)',
-          minWidth: isCollapsed ? '10rem' : '16rem',
-        },
-      };
-    });
-  }, [queueSections, statusFilter, visibleSections]);
 
   const renderOrderCard = useCallback((o: Order, laneIndex: number, options?: { isArchived?: boolean }) => {
     const isArchived = Boolean(options?.isArchived);
@@ -1399,12 +1375,13 @@ export default function TabletOrdersPage() {
           }
         }}
         className={clsx(
-          'w-full text-left rounded-xl border shadow-sm transition transform hover:brightness-105 hover:scale-[1.01] touch-manipulation overflow-hidden relative',
+          'w-full text-left rounded-xl border shadow-sm transition transform hover:brightness-105 hover:scale-[1.01] touch-manipulation overflow-hidden relative animate-slide-in-right',
           isArchived && 'opacity-65 saturate-75',
           isSelected
             ? 'border-[var(--tablet-info)] shadow-[0_0_0_1px_var(--tablet-info)] bg-[color-mix(in_srgb,var(--tablet-info)_8%,var(--tablet-card))]'
             : 'border-[var(--tablet-border)] bg-[var(--tablet-card)]',
         )}
+        style={{ animationDelay: `${laneIndex * 50}ms` }}
       >
         {/* Status colored left border strip */}
         <div className={clsx(
@@ -1918,75 +1895,75 @@ export default function TabletOrdersPage() {
               </div>
             )}
 
-            <div
-              className={clsx(
-                'grid grid-cols-1 gap-4 sm:gap-5 tablet-orders-responsive',
-                statusFilter === 'all'
-                  ? 'md:flex md:items-stretch md:overflow-x-auto md:pb-2'
-                  : 'lg:grid-cols-1'
-              )}
-            >
-              {visibleSections.map((section) => {
-                const lane = laneLayout.find((item) => item.key === section.key);
-                const isCollapsedRail = statusFilter === 'all' && lane?.isCollapsed;
-                const emptyStateByLane = {
-                  received: 'No new orders',
-                  preparing: 'No orders in progress',
-                  ready: 'No orders ready'
-                } as const;
-
-                const columnAccentClass = {
-                  received: 'text-[var(--tablet-danger)]',
-                  preparing: 'text-[var(--tablet-warning)]',
-                  ready: 'text-[var(--tablet-success)]',
-                } as const;
-
-                const columnBadgeClass = {
-                  received: 'bg-[var(--tablet-danger)]/15 text-[var(--tablet-danger)]',
-                  preparing: 'bg-[var(--tablet-warning)]/15 text-[var(--tablet-warning)]',
-                  ready: 'bg-[var(--tablet-success)]/18 text-[var(--tablet-success)]',
-                } as const;
-
-                const columnBorderClass = {
-                  received: 'border-b-2 border-b-[var(--tablet-danger)]/35',
-                  preparing: 'border-b-2 border-b-[var(--tablet-warning)]/35',
-                  ready: 'border-b-2 border-b-[var(--tablet-success)]/35',
-                } as const;
-
-                return (
-                  <section
-                    key={section.key}
-                    style={lane?.style}
-                    className={clsx(
-                      'bg-[var(--tablet-surface)] rounded-2xl shadow-sm border border-[var(--tablet-border)] flex flex-col min-h-[50vh] md:min-h-[60vh] lg:min-h-[70vh] overflow-hidden',
-                      statusFilter === 'all' && 'md:shrink-0',
-                      isCollapsedRail && 'xl:min-w-[10rem]'
+            {statusFilter === 'all' ? (
+              <div className="grid grid-cols-1 gap-4 sm:gap-5">
+                <section className="bg-[var(--tablet-surface)] rounded-2xl shadow-sm border border-[var(--tablet-border)] flex flex-col overflow-hidden">
+                  <div className="px-4 py-3.5 border-b border-[var(--tablet-border)] flex items-center justify-between">
+                    <h3 className="text-sm font-bold uppercase tracking-wider text-[var(--tablet-text)]">
+                      All Orders
+                    </h3>
+                    <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-[var(--tablet-surface-alt)] text-[var(--tablet-muted)]">
+                      {activeQueueOrders.length}
+                    </span>
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-3 scrollbar-thin">
+                    {activeQueueOrders.length === 0 ? (
+                      <div className="text-xs text-[var(--tablet-muted)] uppercase tracking-wide py-6 text-center border border-dashed border-[var(--tablet-border)] rounded-xl mt-1">
+                        No active orders
+                      </div>
+                    ) : (
+                      <div className="space-y-2.5">
+                        {activeQueueOrders.map((o, index) => renderOrderCard(o, index))}
+                      </div>
                     )}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => isCollapsedRail && setStatusFilter(section.key)}
-                      className={clsx(
-                        'px-4 py-3.5 border-b border-[var(--tablet-border)] flex items-center justify-between text-left',
-                        columnBorderClass[section.key],
-                        isCollapsedRail && 'xl:px-2 xl:py-4 xl:flex-col xl:justify-center xl:gap-2 xl:h-full xl:border-b-0',
-                        isCollapsedRail && 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tablet-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--tablet-surface)]'
-                      )}
-                      aria-label={
-                        isCollapsedRail
-                          ? `Show ${section.label} lane`
-                          : `${section.label} lane`
-                      }
-                    >
-                      <h3 className={clsx('text-sm font-bold uppercase tracking-wider', columnAccentClass[section.key], isCollapsedRail && 'xl:text-xs')}>
-                        {section.label}
-                      </h3>
-                      <span className={clsx('px-2.5 py-0.5 rounded-full text-xs font-bold', columnBadgeClass[section.key])}>
-                        {section.orders.length}
-                      </span>
-                    </button>
+                  </div>
+                </section>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-4 sm:gap-5">
+                {visibleSections.map((section) => {
+                  const columnAccentClass = {
+                    received: 'text-[var(--tablet-danger)]',
+                    preparing: 'text-[var(--tablet-warning)]',
+                    ready: 'text-[var(--tablet-success)]',
+                  } as const;
 
-                    {!isCollapsedRail && (
+                  const columnBadgeClass = {
+                    received: 'bg-[var(--tablet-danger)]/15 text-[var(--tablet-danger)]',
+                    preparing: 'bg-[var(--tablet-warning)]/15 text-[var(--tablet-warning)]',
+                    ready: 'bg-[var(--tablet-success)]/18 text-[var(--tablet-success)]',
+                  } as const;
+
+                  const columnBorderClass = {
+                    received: 'border-b-2 border-b-[var(--tablet-danger)]/35',
+                    preparing: 'border-b-2 border-b-[var(--tablet-warning)]/35',
+                    ready: 'border-b-2 border-b-[var(--tablet-success)]/35',
+                  } as const;
+
+                  const emptyStateByLane = {
+                    received: 'No new orders',
+                    preparing: 'No orders in progress',
+                    ready: 'No orders ready'
+                  } as const;
+
+                  return (
+                    <section
+                      key={section.key}
+                      className="bg-[var(--tablet-surface)] rounded-2xl shadow-sm border border-[var(--tablet-border)] flex flex-col overflow-hidden"
+                    >
+                      <div
+                        className={clsx(
+                          'px-4 py-3.5 border-b border-[var(--tablet-border)] flex items-center justify-between',
+                          columnBorderClass[section.key]
+                        )}
+                      >
+                        <h3 className={clsx('text-sm font-bold uppercase tracking-wider', columnAccentClass[section.key])}>
+                          {section.label}
+                        </h3>
+                        <span className={clsx('px-2.5 py-0.5 rounded-full text-xs font-bold', columnBadgeClass[section.key])}>
+                          {section.orders.length}
+                        </span>
+                      </div>
                       <div className="flex-1 overflow-y-auto p-3 scrollbar-thin">
                         {section.orders.length === 0 ? (
                           <div className="text-xs text-[var(--tablet-muted)] uppercase tracking-wide py-6 text-center border border-dashed border-[var(--tablet-border)] rounded-xl mt-1">
@@ -1998,11 +1975,11 @@ export default function TabletOrdersPage() {
                           </div>
                         )}
                       </div>
-                    )}
-                  </section>
-                );
-              })}
-            </div>
+                    </section>
+                  );
+                })}
+              </div>
+            )}
 
             {showArchivedOrders && (
               <section className="bg-[var(--tablet-surface)] rounded-2xl border border-[var(--tablet-border)] p-3 sm:p-4">
