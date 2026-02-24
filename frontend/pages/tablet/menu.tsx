@@ -108,6 +108,10 @@ export default function TabletMenuPage() {
   }, [loadMenu]);
 
   const totalItems = useMemo(() => categories.reduce((sum, category) => sum + category.items.length, 0), [categories]);
+  const availableItems = useMemo(
+    () => categories.reduce((sum, category) => sum + category.items.filter((item) => item.is_available).length, 0),
+    [categories]
+  );
 
   const toggleAvailability = async (item: MenuItem) => {
     const nextAvailable = !item.is_available;
@@ -160,9 +164,19 @@ export default function TabletMenuPage() {
             </div>
 
             <div className="mt-5 bg-[var(--tablet-surface)] border border-[var(--tablet-border)] rounded-2xl p-5 sm:p-6 shadow-[0_2px_8px_rgba(0,0,0,0.3)]">
-              <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-[var(--tablet-muted)]">
-                <span className="text-base">{categories.length} categories</span>
-                <span className="text-base">{totalItems} items</span>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div className="rounded-xl border border-[var(--tablet-border)] bg-[var(--tablet-bg)]/60 px-4 py-3">
+                  <div className="text-xs font-medium uppercase tracking-wide text-[var(--tablet-muted)]">Categories</div>
+                  <div className="mt-1 text-2xl font-semibold">{categories.length}</div>
+                </div>
+                <div className="rounded-xl border border-[var(--tablet-border)] bg-[var(--tablet-bg)]/60 px-4 py-3">
+                  <div className="text-xs font-medium uppercase tracking-wide text-[var(--tablet-muted)]">Menu Items</div>
+                  <div className="mt-1 text-2xl font-semibold">{totalItems}</div>
+                </div>
+                <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3">
+                  <div className="text-xs font-medium uppercase tracking-wide text-emerald-200">Currently Available</div>
+                  <div className="mt-1 text-2xl font-semibold text-emerald-100">{availableItems}</div>
+                </div>
               </div>
 
               {error && (
@@ -197,35 +211,43 @@ export default function TabletMenuPage() {
                           <div className="text-sm text-[var(--tablet-muted)]">No items in this category.</div>
                         ) : (
                           category.items.map((item) => (
-                            <div
-                              key={item.id}
-                              className="flex flex-col gap-3 rounded-xl border border-[var(--tablet-border)] bg-[var(--tablet-surface)] p-4 sm:flex-row sm:items-center sm:justify-between"
-                            >
-                              <div className="flex-1">
-                                <div className="text-base font-semibold">{item.name}</div>
-                                {item.description && (
-                                  <div className="text-sm text-[var(--tablet-muted)] mt-1">{item.description}</div>
-                                )}
-                              </div>
-                              <div className="flex flex-wrap items-center gap-3 text-sm">
-                                <span className="rounded-full bg-[var(--tablet-bg)] px-4 py-2 text-[var(--tablet-text)] font-medium">
-                                  {formatMoney(item.price)}
-                                </span>
-                                <button
-                                  onClick={() => toggleAvailability(item)}
-                                  disabled={pendingItemId === item.id}
-                                  className={`rounded-full px-4 py-2 font-semibold transition-colors touch-manipulation min-w-[100px] ${
-                                    item.is_available
-                                      ? 'bg-emerald-500/20 text-emerald-200 hover:bg-emerald-500/30'
-                                      : 'bg-rose-500/20 text-rose-200 hover:bg-rose-500/30'
-                                  }`}
-                                >
-                                  {pendingItemId === item.id
-                                    ? 'Updating...'
-                                    : item.is_available
-                                      ? 'Available'
-                                      : 'Unavailable'}
-                                </button>
+                            <div key={item.id} className="rounded-xl border border-[var(--tablet-border)] bg-[var(--tablet-surface)] p-4">
+                              <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                                <div className="flex-1">
+                                  <div className="text-base font-semibold">{item.name}</div>
+                                  {item.description && (
+                                    <div className="text-sm text-[var(--tablet-muted)] mt-1">{item.description}</div>
+                                  )}
+                                </div>
+                                <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-end">
+                                  <span className="rounded-full border border-[var(--tablet-border)] bg-[var(--tablet-bg)] px-4 py-2 text-[var(--tablet-text)] font-medium">
+                                    {formatMoney(item.price)}
+                                  </span>
+                                  <div
+                                    className={`rounded-full px-4 py-2 text-sm font-semibold ${
+                                      item.is_available
+                                        ? 'bg-emerald-500/20 text-emerald-100 border border-emerald-500/40'
+                                        : 'bg-rose-500/20 text-rose-100 border border-rose-500/40'
+                                    }`}
+                                  >
+                                    Status: {item.is_available ? 'Available' : 'Unavailable'}
+                                  </div>
+                                  <button
+                                    onClick={() => toggleAvailability(item)}
+                                    disabled={pendingItemId === item.id}
+                                    className={`rounded-xl px-5 py-3 text-sm font-bold transition-colors touch-manipulation min-w-[170px] min-h-[48px] shadow-sm ${
+                                      item.is_available
+                                        ? 'bg-rose-500 text-white hover:bg-rose-600'
+                                        : 'bg-emerald-500 text-white hover:bg-emerald-600'
+                                    }`}
+                                  >
+                                    {pendingItemId === item.id
+                                      ? 'Updating...'
+                                      : item.is_available
+                                        ? 'Mark Unavailable'
+                                        : 'Mark Available'}
+                                  </button>
+                                </div>
                               </div>
                             </div>
                           ))
