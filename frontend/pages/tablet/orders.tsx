@@ -1228,7 +1228,7 @@ export default function TabletOrdersPage() {
     return sections.filter((section) => section.key === statusFilter);
   }, [receivedOrders, preparingOrders, readyOrders, statusFilter]);
 
-  const renderOrderCard = useCallback((o: Order, laneIndex: number) => {
+  const renderOrderCard = (o: Order, laneIndex: number) => {
     const status = normalizeStatus(o.status);
     const isNew = status === 'received';
     const isPreparing = status === 'preparing';
@@ -1236,6 +1236,7 @@ export default function TabletOrdersPage() {
     const timeStr = formatTimeAgo(o.created_at, now);
     const itemCount = (o.items || []).reduce((sum, it) => sum + (it.quantity || 1), 0);
     const hasPendingAction = pendingActions.has(o.id);
+    const isActionBusy = busyId === o.id || hasPendingAction;
     const isLatest = laneIndex === 0;
     const isSelected = selectedOrder?.id === o.id;
 
@@ -1268,10 +1269,17 @@ export default function TabletOrdersPage() {
     };
 
     return (
-      <button
+      <div
         key={o.id}
-        type="button"
-        onClickCapture={openOrderDetails}
+        onClick={openOrderDetails}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            openOrderDetails();
+          }
+        }}
         className={clsx(
           'w-full text-left rounded-xl border shadow-sm transition transform hover:brightness-105 hover:scale-[1.01] touch-manipulation overflow-hidden relative',
           isSelected
@@ -1361,10 +1369,80 @@ export default function TabletOrdersPage() {
               <span className="text-xs text-[var(--tablet-accent)] font-semibold">↻ Syncing</span>
             )}
           </div>
+
+          <div className="mt-3 pt-3 border-t border-[var(--tablet-border)] flex items-center gap-2">
+            {status === 'received' && (
+              <>
+                <button
+                  type="button"
+                  disabled={isActionBusy}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    acceptOrder(o);
+                  }}
+                  className="flex-1 min-h-[44px] rounded-lg px-3 py-2 text-sm font-semibold text-[var(--tablet-accent-contrast)] bg-[var(--tablet-accent)] transition active:brightness-95 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:saturate-50"
+                >
+                  Accept
+                </button>
+                <button
+                  type="button"
+                  disabled={isActionBusy}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    declineOrder(o);
+                  }}
+                  className="flex-1 min-h-[44px] rounded-lg px-3 py-2 text-sm font-semibold border border-[var(--tablet-danger)] text-[var(--tablet-danger)] transition active:bg-[var(--tablet-danger)]/10 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Reject
+                </button>
+              </>
+            )}
+
+            {status === 'preparing' && (
+              <button
+                type="button"
+                disabled={isActionBusy}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setStatus(o.id, 'ready');
+                }}
+                className="w-full min-h-[44px] rounded-lg px-3 py-2 text-sm font-semibold text-[var(--tablet-accent-contrast)] bg-[var(--tablet-success)] transition active:brightness-95 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:saturate-50"
+              >
+                Mark Ready
+              </button>
+            )}
+
+            {status === 'ready' && (
+              <>
+                <button
+                  type="button"
+                  disabled={isActionBusy}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setStatus(o.id, 'completed');
+                  }}
+                  className="flex-1 min-h-[44px] rounded-lg px-3 py-2 text-sm font-semibold text-[var(--tablet-accent-contrast)] bg-[var(--tablet-accent)] transition active:brightness-95 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:saturate-50"
+                >
+                  Complete
+                </button>
+                <button
+                  type="button"
+                  disabled={isActionBusy}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setStatus(o.id, 'picked_up');
+                  }}
+                  className="flex-1 min-h-[44px] rounded-lg px-3 py-2 text-sm font-semibold border border-[var(--tablet-border-strong)] text-[var(--tablet-text)] transition active:bg-[var(--tablet-surface-alt)] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Picked Up
+                </button>
+              </>
+            )}
+          </div>
         </div>
-      </button>
+      </div>
     );
-  }, [now, pendingActions, selectedOrder?.id]);
+  };
   const { soundEnabled, toggleSound } = useOrderAlerts(receivedOrders.length);
 
   const orderSyncIssues = useMemo(() => {
