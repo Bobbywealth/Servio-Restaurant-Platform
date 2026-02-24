@@ -1682,39 +1682,53 @@ export default function TabletOrdersPage() {
                 >
                   All ({activeOrders.length})
                 </button>
-                <button
-                  onClick={() => setStatusFilter('received')}
-                  className={clsx(
-                    'px-3 py-1.5 rounded-lg text-xs font-semibold transition touch-manipulation',
-                    statusFilter === 'received'
-                      ? 'bg-[var(--tablet-danger)] text-white'
-                      : 'bg-[var(--tablet-surface)] border border-[var(--tablet-border)] text-[var(--tablet-text)] hover:bg-[var(--tablet-surface-alt)]'
-                  )}
-                >
-                  New ({receivedOrders.length})
-                </button>
-                <button
-                  onClick={() => setStatusFilter('preparing')}
-                  className={clsx(
-                    'px-3 py-1.5 rounded-lg text-xs font-semibold transition touch-manipulation',
-                    statusFilter === 'preparing'
-                      ? 'bg-[var(--tablet-warning)] text-[var(--tablet-accent-contrast)]'
-                      : 'bg-[var(--tablet-surface)] border border-[var(--tablet-border)] text-[var(--tablet-text)] hover:bg-[var(--tablet-surface-alt)]'
-                  )}
-                >
-                  In Progress ({preparingOrders.length})
-                </button>
-                <button
-                  onClick={() => setStatusFilter('ready')}
-                  className={clsx(
-                    'px-3 py-1.5 rounded-lg text-xs font-semibold transition touch-manipulation',
-                    statusFilter === 'ready'
-                      ? 'bg-[var(--tablet-success)] text-white'
-                      : 'bg-[var(--tablet-surface)] border border-[var(--tablet-border)] text-[var(--tablet-text)] hover:bg-[var(--tablet-surface-alt)]'
-                  )}
-                >
-                  Ready ({readyOrders.length})
-                </button>
+
+                {[
+                  {
+                    key: 'received',
+                    label: 'New',
+                    count: receivedOrders.length,
+                    activeClass: 'bg-[var(--tablet-danger)] text-white'
+                  },
+                  {
+                    key: 'preparing',
+                    label: 'In Progress',
+                    count: preparingOrders.length,
+                    activeClass: 'bg-[var(--tablet-warning)] text-[var(--tablet-accent-contrast)]'
+                  },
+                  {
+                    key: 'ready',
+                    label: 'Ready',
+                    count: readyOrders.length,
+                    activeClass: 'bg-[var(--tablet-success)] text-white'
+                  }
+                ].map((chip) => {
+                  const isActive = statusFilter === chip.key;
+                  const isZeroCount = chip.count === 0;
+                  const hideWhenEmpty = statusFilter === 'all' && isZeroCount;
+
+                  if (hideWhenEmpty) {
+                    return null;
+                  }
+
+                  return (
+                    <button
+                      key={chip.key}
+                      onClick={() => setStatusFilter(chip.key as OrderFilter['status'])}
+                      disabled={!isActive && isZeroCount}
+                      className={clsx(
+                        'px-3 py-1.5 rounded-lg text-xs font-semibold transition touch-manipulation',
+                        isActive
+                          ? chip.activeClass
+                          : isZeroCount
+                            ? 'bg-[var(--tablet-surface-alt)] border border-[var(--tablet-border)] text-[var(--tablet-muted)] opacity-55 cursor-not-allowed'
+                            : 'bg-[var(--tablet-surface)] border border-[var(--tablet-border)] text-[var(--tablet-text)] hover:bg-[var(--tablet-surface-alt)]'
+                      )}
+                    >
+                      {chip.label} ({chip.count})
+                    </button>
+                  );
+                })}
               </div>
 
               {/* Expanded Filters Panel */}
