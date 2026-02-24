@@ -1242,12 +1242,18 @@ export default function TabletOrdersPage() {
   }, [filteredOrders]);
 
   const queueSections = useMemo(() => {
-    return [
-      { key: 'received' as const, label: 'New orders', orders: receivedOrders },
-      { key: 'preparing' as const, label: 'In progress', orders: preparingOrders },
-      { key: 'ready' as const, label: 'Ready', orders: readyOrders },
-    ];
-  }, [receivedOrders, preparingOrders, readyOrders]);
+    const allSections = [
+      { key: 'received', label: 'New Orders', orders: receivedOrders },
+      { key: 'preparing', label: 'In Progress', orders: preparingOrders },
+      { key: 'ready', label: 'Ready', orders: readyOrders },
+    ] as const;
+
+    if (statusFilter === 'all') {
+      return allSections;
+    }
+
+    return allSections.filter((section) => section.key === statusFilter);
+  }, [preparingOrders, readyOrders, receivedOrders, statusFilter]);
 
   const filtered = filteredOrders;
 
