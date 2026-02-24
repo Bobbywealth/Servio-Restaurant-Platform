@@ -703,7 +703,6 @@ export default function TabletOrdersPage() {
       if (typeof window !== 'undefined') {
         const payload = JSON.stringify({ orders: list, cachedAt: new Date().toISOString() });
         safeLocalStorage.setItem(ORDER_CACHE_KEY, payload);
-        setCachedAt(new Date().toISOString());
       }
       lastRefreshAt.current = Date.now();
     } catch (e: unknown) {
