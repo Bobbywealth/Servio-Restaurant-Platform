@@ -161,16 +161,10 @@ router.post(
       `[checkout.create-session] user_created ${JSON.stringify({ userId, restaurantId })}`
     );
 
-    // --- Update restaurant with subscription info (pending until Stripe confirms) ---
-    await db.run(
-      `UPDATE restaurants
-          SET subscription_tier    = ?,
-              subscription_status  = 'pending',
-              billing_email        = ?,
-              updated_at           = CURRENT_TIMESTAMP
-        WHERE id = ?`,
-      [String(planSlug), normalizedEmail, restaurantId]
-    );
+    // NOTE: subscription_tier/subscription_status/billing_email live on the
+    // `companies` table, NOT `restaurants`. We track billing via
+    // admin_billing_subscriptions (upserted in the webhook handler).
+    // The restaurant + user are created above; Stripe webhook activates billing.
 
     logger.info(
       `[checkout.create-session] subscription_pending ${JSON.stringify({
@@ -339,16 +333,8 @@ router.post(
         return res.status(200).json({ received: true });
       }
 
-      // Activate subscription on restaurant
-      await db.run(
-        `UPDATE restaurants
-            SET subscription_status = 'active',
-                subscription_tier   = ?,
-                billing_email       = COALESCE(billing_email, ?),
-                updated_at          = CURRENT_TIMESTAMP
-          WHERE id = ?`,
-        [planSlug ?? null, session.customer_email ?? null, restaurantId]
-      );
+      // NOTE: subscription columns live on `companies`, not `restaurants`.
+      // Billing is tracked via admin_billing_subscriptions below.
 
       logger.info(
         `[checkout.webhook] subscription_activated ${JSON.stringify({
@@ -413,15 +399,7 @@ router.post(
         null;
 
       if (restaurantId) {
-        await db.run(
-          `UPDATE restaurants
-              SET subscription_status = 'canceled',
-                  updated_at          = CURRENT_TIMESTAMP
-            WHERE id = ?`,
-          [restaurantId]
-        );
-
-        // Also update billing subscription record if it exists
+        // Update billing subscription record if it exists
         try {
           await db.run(
             `UPDATE admin_billing_subscriptions
