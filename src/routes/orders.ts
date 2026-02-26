@@ -2,534 +2,1122 @@ import { validateItemSelections } from '../services/modifierValidation';
 import { Router, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import { DatabaseService } from '../services/DatabaseService';
-import { asyncHandler, ForbiddenError, NotFoundError, UnauthorizedError, ValidationError } from '../middleware/errorHandler';
-import { requireAuth } from '../middleware/auth';
+import { asyncHandler, BadRequestError } from '../middleware/errorHandler';
+import { getEffectiveRestaurantId, requireApiKeyScopeByHttpMethod } from '../middleware/apiKeyAuth';
+import { logger } from '../utils/logger';
+import { v4 as uuidv4 } from 'uuid';
+import { eventBus } from '../events/bus';
 
 const router = Router();
+const num = (v: any) => (typeof v === 'number' ? v : Number(v ?? 0));
+const getRequestId = (req: Request) => {
+  const headerId =
+    (req.headers['x-request-id'] as string) ||
+    (req.headers['x-correlation-id'] as string) ||
+    (req.headers['x-amzn-trace-id'] as string);
+  return headerId || uuidv4();
+};
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+const getStripeSecretKey = (): string | null => {
+  const stripeSecretKey = process.env.STRIPE_SECRET_KEY?.trim();
+  return stripeSecretKey || null;
+};
 
-function getRestaurantId(req: Request): string {
-  const rid = (req as any).user?.restaurantId;
-  if (!rid) throw new UnauthorizedError('Missing restaurant context');
-  return rid;
-}
+const buildPublicBaseUrl = (req: Request): string => {
+  const envBaseUrl = process.env.FRONTEND_URL?.trim();
+  if (envBaseUrl) {
+    return envBaseUrl.replace(/\/$/, '');
+  }
 
-function getUserId(req: Request): string {
-  const uid = (req as any).user?.id;
-  if (!uid) throw new UnauthorizedError('Missing user context');
-  return uid;
-}
+  const host = req.get('host');
+  const protocol = req.protocol;
+  return `${protocol}://${host}`;
+};
 
-interface OrderRow {
-  id: string;
-  restaurant_id: string;
-  table_id: string | null;
-  table_name?: string | null;
-  status: string;
-  payment_status: string;
-  total_amount: number;
-  notes: string | null;
-  created_at: string;
-  updated_at: string;
-}
 
-interface OrderItemRow {
-  id: string;
-  order_id: string;
-  menu_item_id: string;
-  menu_item_name?: string;
-  quantity: number;
-  unit_price: number;
-  total_price: number;
-  special_instructions: string | null;
-  modifier_selections?: string | null;
-}
+const parseJson = <T>(value: unknown, fallback: T): T => {
+  if (value == null) return fallback;
+  if (typeof value !== 'string') {
+    return (value as T) ?? fallback;
+  }
 
-// ─── Routes ───────────────────────────────────────────────────────────────────
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return fallback;
+  }
+};
 
-// GET /orders - list orders for the restaurant
-router.get('/', requireAuth, asyncHandler(async (req: Request, res: Response) => {
-  const restaurantId = getRestaurantId(req);
+const hasOrderItems = (items: unknown): boolean => Array.isArray(items) && items.length > 0;
+
+
+const requireOrdersScopeByMethod = requireApiKeyScopeByHttpMethod('orders');
+router.use((req, res, next) => {
+  if (req.path.startsWith('/public')) {
+    return next();
+  }
+  return requireOrdersScopeByMethod(req, res, next);
+});
+
+const hydrateOrderItemsFromRows = async (db: any, orderId: string): Promise<any[]> => {
+  const rows = await db.all(
+    `SELECT name, item_name_snapshot, item_id, quantity, qty, unit_price, price, modifiers_json, notes
+     FROM order_items WHERE order_id = ? ORDER BY created_at ASC`,
+    [orderId]
+  );
+
+  return rows.map((row: any) => {
+    const modifiers = parseJson<Record<string, unknown> | string[]>(row.modifiers_json, {});
+    return {
+      name: row.name || row.item_name_snapshot || row.item_id || 'Item',
+      quantity: num(row.quantity || row.qty || 1),
+      qty: num(row.qty || row.quantity || 1),
+      unit_price: num(row.unit_price || row.price || 0),
+      price: num(row.price || row.unit_price || 0),
+      modifiers,
+      notes: row.notes || null
+    };
+  });
+};
+
+
+/**
+ * GET /api/orders
+ * Get orders with optional filtering
+ */
+router.get('/', asyncHandler(async (req: Request, res: Response) => {
+  const { status, channel, limit = 50, offset = 0 } = req.query;
   const db = DatabaseService.getInstance().getDatabase();
+  const restaurantId = getEffectiveRestaurantId(req) || (typeof req.query.restaurantId === 'string' ? req.query.restaurantId : null);
+  const requestId = getRequestId(req);
 
-  const { status, payment_status, table_id, limit = '50', offset = '0', date } = req.query as Record<string, string>;
+  const authHeader = req.headers.authorization;
+  let decodedToken: any = null;
+  if (authHeader?.startsWith('Bearer ')) {
+    const token = authHeader.slice('Bearer '.length).trim();
+    try {
+      decodedToken = jwt.decode(token);
+    } catch {
+      decodedToken = { error: 'decode_failed' };
+    }
+  }
 
-  let query = `
-    SELECT o.*, t.name as table_name
-    FROM orders o
-    LEFT JOIN tables t ON o.table_id = t.id
-    WHERE o.restaurant_id = ?
-  `;
+  logger.info(
+    `[orders.list] entry ${JSON.stringify({
+      requestId,
+      user: req.user ?? null,
+      decodedToken,
+      restaurantId: restaurantId ?? null,
+      query: req.query
+    })}`
+  );
+
+  if (!restaurantId) {
+    logger.warn(
+      `[orders.list] missing_restaurant_id ${JSON.stringify({
+        requestId,
+        user: req.user ?? null,
+        decodedToken
+      })}`
+    );
+    throw new BadRequestError('Missing restaurantId for orders lookup');
+  }
+
+  let query = 'SELECT * FROM orders';
   const params: any[] = [restaurantId];
+  const conditions: string[] = ['restaurant_id = ?'];
 
   if (status) {
-    query += ' AND o.status = ?';
+    conditions.push('status = ?');
     params.push(status);
   }
 
-  if (payment_status) {
-    query += ' AND o.payment_status = ?';
-    params.push(payment_status);
+  if (channel) {
+    conditions.push('channel = ?');
+    params.push(channel);
   }
 
-  if (table_id) {
-    query += ' AND o.table_id = ?';
-    params.push(table_id);
+  if (conditions.length > 0) {
+    query += ' WHERE ' + conditions.join(' AND ');
   }
 
-  if (date) {
-    query += ' AND DATE(o.created_at) = ?';
-    params.push(date);
-  }
-
-  // Count query
-  const countQuery = query.replace(
-    'SELECT o.*, t.name as table_name',
-    'SELECT COUNT(*) as count'
-  );
-  const total = await db.get<{ count: number }>(countQuery, params);
-
-  query += ' ORDER BY o.created_at DESC LIMIT ? OFFSET ?';
+  query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
   params.push(Number(limit), Number(offset));
 
-  const orders = await db.all<OrderRow>(query, params);
+  const orders = await db.all(query, params);
 
-  // Get items for each order
-  const ordersWithItems = await Promise.all(
-    orders.map(async (order) => {
-      const items = await db.all<OrderItemRow>(
-        `SELECT oi.*, mi.name as menu_item_name
-         FROM order_items oi
-         LEFT JOIN menu_items mi ON oi.menu_item_id = mi.id
-         WHERE oi.order_id = ?`,
-        [order.id]
+  // Parse JSON fields
+  const formattedOrders = orders.map((order: any) => {
+    const items = parseJson<any[]>(order.items, []);
+    if (order.items && !Array.isArray(items)) {
+      logger.warn(
+        `[orders.list] invalid_items_json ${JSON.stringify({
+          requestId,
+          orderId: order?.id ?? null
+        })}`
       );
-      return {
-        ...order,
-        items: items.map(item => ({
-          ...item,
-          modifier_selections: item.modifier_selections
-            ? (() => { try { return JSON.parse(item.modifier_selections!); } catch { return []; } })()
-            : []
-        }))
-      };
-    })
-  );
+    }
+
+    return {
+      ...order,
+      items: Array.isArray(items) ? items : []
+    };
+  });
+
+  // Get total count for pagination
+  let countQuery = 'SELECT COUNT(*) as total FROM orders';
+  const countParams: any[] = [];
+
+  if (conditions.length > 0) {
+    countQuery += ' WHERE ' + conditions.join(' AND ');
+    // Remove the limit/offset params for count query
+    countParams.push(...params.slice(0, -2));
+  }
+
+  const countResult = await db.get(countQuery, countParams);
 
   res.json({
     success: true,
     data: {
-      orders: ordersWithItems,
+      orders: formattedOrders,
       pagination: {
-        total: total?.count ?? 0,
+        total: countResult.total,
         limit: Number(limit),
         offset: Number(offset),
-        hasMore: total ? total.count > Number(offset) + orders.length : false
+        hasMore: countResult.total > Number(offset) + formattedOrders.length
       }
     }
   });
 }));
 
-// GET /orders/analytics - revenue and order analytics
-router.get('/analytics', requireAuth, asyncHandler(async (req: Request, res: Response) => {
-  const restaurantId = getRestaurantId(req);
+/**
+ * GET /api/orders/:id
+ * Get a specific order by ID
+ */
+router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const db = DatabaseService.getInstance().getDatabase();
 
-  const { period = 'today', date } = req.query as Record<string, string>;
+  const restaurantId = req.user?.restaurantId;
+  const order = restaurantId 
+    ? await db.get('SELECT * FROM orders WHERE id = ? AND restaurant_id = ?', [id, restaurantId])
+    : await db.get('SELECT * FROM orders WHERE id = ?', [id]);
 
-  let dateFilter: string;
-  let compareFilter: string;
-  const params: any[] = [restaurantId];
-  const compareParams: any[] = [restaurantId];
-
-  const targetDate = date || new Date().toISOString().split('T')[0];
-
-  if (period === 'today') {
-    dateFilter = `DATE(o.created_at) = ?`;
-    compareFilter = `DATE(o.created_at) = DATE(? - INTERVAL '1 day')`;
-    params.push(targetDate);
-    compareParams.push(targetDate);
-  } else if (period === 'week') {
-    dateFilter = `o.created_at >= NOW() - INTERVAL '7 days'`;
-    compareFilter = `o.created_at >= NOW() - INTERVAL '14 days' AND o.created_at < NOW() - INTERVAL '7 days'`;
-  } else if (period === 'month') {
-    dateFilter = `o.created_at >= NOW() - INTERVAL '30 days'`;
-    compareFilter = `o.created_at >= NOW() - INTERVAL '60 days' AND o.created_at < NOW() - INTERVAL '30 days'`;
-  } else {
-    dateFilter = `DATE(o.created_at) = ?`;
-    compareFilter = `DATE(o.created_at) = DATE(? - INTERVAL '1 day')`;
-    params.push(targetDate);
-    compareParams.push(targetDate);
+  if (!order) {
+    return res.status(404).json({
+      success: false,
+      error: { message: 'Order not found' }
+    });
   }
 
-  // Current period stats
-  const statsQuery = `
-    SELECT
-      COUNT(*) as total_orders,
-      COALESCE(SUM(CASE WHEN o.payment_status = 'paid' THEN o.total_amount ELSE 0 END), 0) as total_revenue,
-      COALESCE(AVG(CASE WHEN o.payment_status = 'paid' THEN o.total_amount END), 0) as avg_order_value,
-      COUNT(CASE WHEN o.status = 'pending' THEN 1 END) as pending_orders,
-      COUNT(CASE WHEN o.status = 'preparing' THEN 1 END) as preparing_orders,
-      COUNT(CASE WHEN o.status = 'ready' THEN 1 END) as ready_orders,
-      COUNT(CASE WHEN o.status = 'completed' THEN 1 END) as completed_orders
-    FROM orders o
-    WHERE o.restaurant_id = ? AND ${dateFilter}
-  `;
+  let items = parseJson<any[]>(order.items, []);
+  if (!hasOrderItems(items)) {
+    items = await hydrateOrderItemsFromRows(db, id);
+  }
 
-  const stats = await db.get<any>(statsQuery, params);
-
-  // Compare period stats
-  const compareQuery = `
-    SELECT
-      COUNT(*) as total_orders,
-      COALESCE(SUM(CASE WHEN o.payment_status = 'paid' THEN o.total_amount ELSE 0 END), 0) as total_revenue
-    FROM orders o
-    WHERE o.restaurant_id = ? AND ${compareFilter}
-  `;
-
-  const compareStats = await db.get<any>(compareQuery, compareParams);
-
-  // Hourly breakdown (PostgreSQL)
-  const hourlyQuery = `
-    SELECT
-      EXTRACT(HOUR FROM created_at)::text as hour,
-      COUNT(*) as orders,
-      COALESCE(SUM(CASE WHEN payment_status = 'paid' THEN total_amount ELSE 0 END), 0) as revenue
-    FROM orders
-    WHERE restaurant_id = ? AND ${dateFilter}
-    GROUP BY EXTRACT(HOUR FROM created_at)
-    ORDER BY EXTRACT(HOUR FROM created_at)
-  `;
-
-  const hourly = await db.all<any>(hourlyQuery, params);
-
-  // Top items
-  const topItemsQuery = `
-    SELECT
-      mi.name,
-      SUM(oi.quantity) as total_quantity,
-      SUM(oi.total_price) as total_revenue
-    FROM order_items oi
-    JOIN menu_items mi ON oi.menu_item_id = mi.id
-    JOIN orders o ON oi.order_id = o.id
-    WHERE o.restaurant_id = ? AND ${dateFilter}
-    GROUP BY mi.id, mi.name
-    ORDER BY total_quantity DESC
-    LIMIT 10
-  `;
-
-  const topItems = await db.all<any>(topItemsQuery, params);
-
-  const revenueChange = compareStats && compareStats.total_revenue > 0
-    ? ((stats.total_revenue - compareStats.total_revenue) / compareStats.total_revenue) * 100
-    : 0;
-
-  const ordersChange = compareStats && compareStats.total_orders > 0
-    ? ((stats.total_orders - compareStats.total_orders) / compareStats.total_orders) * 100
-    : 0;
+  const formattedOrder = {
+    ...order,
+    items
+  };
 
   res.json({
     success: true,
-    data: {
-      period,
-      stats: {
-        totalOrders: stats?.total_orders ?? 0,
-        totalRevenue: stats?.total_revenue ?? 0,
-        avgOrderValue: stats?.avg_order_value ?? 0,
-        pendingOrders: stats?.pending_orders ?? 0,
-        preparingOrders: stats?.preparing_orders ?? 0,
-        readyOrders: stats?.ready_orders ?? 0,
-        completedOrders: stats?.completed_orders ?? 0
-      },
-      changes: {
-        revenue: revenueChange,
-        orders: ordersChange
-      },
-      hourly,
-      topItems
-    }
+    data: formattedOrder
   });
 }));
 
-// GET /orders/:id - get a single order
-router.get('/:id', requireAuth, asyncHandler(async (req: Request, res: Response) => {
-  const restaurantId = getRestaurantId(req);
-  const { id } = req.params;
-  const db = DatabaseService.getInstance().getDatabase();
+/**
+ * POST /api/orders/:id/status
+ * Update order status
+ */
+router.post('/:id/status', asyncHandler(async (req: Request, res: Response) => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const { status } = req.body;
 
-  const order = await db.get<OrderRow>(
-    `SELECT o.*, t.name as table_name
-     FROM orders o
-     LEFT JOIN tables t ON o.table_id = t.id
-     WHERE o.id = ? AND o.restaurant_id = ?`,
-    [id, restaurantId]
-  );
+  const validStatuses = ['received', 'preparing', 'ready', 'completed', 'cancelled'];
 
-  if (!order) throw new NotFoundError('Order not found');
-
-  const items = await db.all<OrderItemRow>(
-    `SELECT oi.*, mi.name as menu_item_name
-     FROM order_items oi
-     LEFT JOIN menu_items mi ON oi.menu_item_id = mi.id
-     WHERE oi.order_id = ?`,
-    [order.id]
-  );
-
-  res.json({
-    success: true,
-    data: {
-      ...order,
-      items: items.map(item => ({
-        ...item,
-        modifier_selections: item.modifier_selections
-          ? (() => { try { return JSON.parse(item.modifier_selections!); } catch { return []; } })()
-          : []
-      }))
-    }
-  });
-}));
-
-// POST /orders - create a new order
-router.post('/', requireAuth, asyncHandler(async (req: Request, res: Response) => {
-  const restaurantId = getRestaurantId(req);
-  const { table_id, items, notes } = req.body ?? {};
-
-  if (!items || !Array.isArray(items) || items.length === 0) {
-    throw new ValidationError('Order must contain at least one item');
-  }
-
-  const db = DatabaseService.getInstance().getDatabase();
-
-  // Validate table belongs to this restaurant
-  if (table_id) {
-    const table = await db.get<any>(
-      'SELECT id FROM tables WHERE id = ? AND restaurant_id = ?',
-      [table_id, restaurantId]
-    );
-    if (!table) throw new NotFoundError('Table not found');
-  }
-
-  // Validate and price items
-  const pricedItems = await Promise.all(
-    items.map(async (item: any) => {
-      const menuItem = await db.get<any>(
-        'SELECT * FROM menu_items WHERE id = ? AND restaurant_id = ? AND is_available = TRUE',
-        [item.menu_item_id, restaurantId]
-      );
-      if (!menuItem) throw new NotFoundError(`Menu item ${item.menu_item_id} not found or unavailable`);
-
-      // Validate modifier selections
-      let modifierSelections: any[] = [];
-      let modifierTotal = 0;
-
-      if (item.modifier_selections && Array.isArray(item.modifier_selections) && item.modifier_selections.length > 0) {
-        const validation = await validateItemSelections(db, item.menu_item_id, item.modifier_selections);
-        if (!validation.valid) {
-          throw new ValidationError(`Invalid modifier selections for ${menuItem.name}: ${validation.errors.join(', ')}`);
-        }
-        modifierSelections = item.modifier_selections;
-        modifierTotal = validation.total ?? 0;
+  if (!status || !validStatuses.includes(status)) {
+    return res.status(400).json({
+      success: false,
+      error: {
+        message: 'Invalid status. Must be one of: ' + validStatuses.join(', ')
       }
+    });
+  }
 
-      const unitPrice = menuItem.price + modifierTotal;
-      const quantity = Number(item.quantity) || 1;
+  const db = DatabaseService.getInstance().getDatabase();
 
-      return {
-        menu_item_id: item.menu_item_id,
-        menu_item_name: menuItem.name,
-        quantity,
-        unit_price: unitPrice,
-        total_price: unitPrice * quantity,
-        special_instructions: item.special_instructions || null,
-        modifier_selections: modifierSelections
-      };
-    })
+  // Check if order exists
+  const restaurantId = req.user?.restaurantId;
+  const order = restaurantId
+    ? await db.get('SELECT * FROM orders WHERE id = ? AND restaurant_id = ?', [id, restaurantId])
+    : await db.get('SELECT * FROM orders WHERE id = ?', [id]);
+  if (!order) {
+    return res.status(404).json({
+      success: false,
+      error: { message: 'Order not found' }
+    });
+  }
+
+  // Update the order
+  await db.run(
+    'UPDATE orders SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+    [status, id]
   );
 
-  const totalAmount = pricedItems.reduce((sum, item) => sum + item.total_price, 0);
+  // Log the action
+  await DatabaseService.getInstance().logAudit(
+    req.user?.restaurantId!,
+    req.user?.id || 'system',
+    'update_order_status',
+    'order',
+    id,
+    { previousStatus: order.status, newStatus: status }
+  );
 
-  // Create order
-  const { v4: uuidv4 } = await import('uuid');
-  const orderId = uuidv4();
+  await eventBus.emit('order.status_changed', {
+    restaurantId: req.user?.restaurantId!,
+    type: 'order.status_changed',
+    actor: { actorType: 'user', actorId: req.user?.id },
+    payload: { orderId: id, previousStatus: order.status, newStatus: status },
+    occurredAt: new Date().toISOString()
+  });
+
+  logger.info(`Order ${id} status updated from ${order.status} to ${status}`);
+
+  // Broadcast status change via Socket.IO
+  try {
+    const io = req.app.get('socketio');
+    if (io) {
+      io.to(`restaurant-${req.user?.restaurantId}`).emit('order:status_changed', {
+        orderId: id,
+        previousStatus: order.status,
+        status,
+        timestamp: new Date()
+      });
+    }
+  } catch (socketError) {
+    logger.warn('Failed to broadcast order status change via socket', { orderId: id, error: socketError });
+  }
+
+  res.json({
+    success: true,
+    data: {
+      orderId: id,
+      previousStatus: order.status,
+      newStatus: status,
+      updatedAt: new Date().toISOString()
+    }
+  });
+}));
+
+/**
+ * POST /api/orders/:id/prep-time
+ * Set prep time before starting preparation
+ */
+router.post('/:id/prep-time', asyncHandler(async (req: Request, res: Response) => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const { prepMinutes } = req.body ?? {};
+
+  const minutes = Number(prepMinutes);
+  if (!Number.isFinite(minutes) || minutes <= 0 || minutes > 180) {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'prepMinutes must be between 1 and 180' }
+    });
+  }
+
+  const db = DatabaseService.getInstance().getDatabase();
+  const restaurantId = req.user?.restaurantId;
+  const order = restaurantId
+    ? await db.get<any>('SELECT * FROM orders WHERE id = ? AND restaurant_id = ?', [id, restaurantId])
+    : await db.get<any>('SELECT * FROM orders WHERE id = ?', [id]);
+  if (!order) {
+    return res.status(404).json({
+      success: false,
+      error: { message: 'Order not found' }
+    });
+  }
+
+  const pickupTime = new Date(Date.now() + minutes * 60 * 1000).toISOString();
 
   await db.run(
-    'INSERT INTO orders (id, restaurant_id, table_id, status, payment_status, total_amount, notes) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    [orderId, restaurantId, table_id || null, 'pending', 'unpaid', totalAmount, notes || null]
+    'UPDATE orders SET status = ?, pickup_time = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+    ['preparing', pickupTime, id]
   );
 
-  // Create order items
-  await Promise.all(
-    pricedItems.map(async (item) => {
-      const itemId = uuidv4();
-      await db.run(
-        'INSERT INTO order_items (id, order_id, menu_item_id, quantity, unit_price, total_price, special_instructions, modifier_selections) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-        [
-          itemId,
+  await DatabaseService.getInstance().logAudit(
+    req.user?.restaurantId!,
+    req.user?.id || 'system',
+    'set_prep_time',
+    'order',
+    id,
+    { prepMinutes: minutes, pickupTime }
+  );
+
+  res.json({
+    success: true,
+    data: {
+      orderId: id,
+      status: 'preparing',
+      prepMinutes: minutes,
+      pickupTime
+    }
+  });
+}));
+
+/**
+ * GET /api/orders/stats/summary
+ * Get order statistics summary
+ */
+router.get('/stats/summary', asyncHandler(async (req: Request, res: Response) => {
+  const db = DatabaseService.getInstance().getDatabase();
+
+  const restaurantId = req.user?.restaurantId;
+
+  // Get today's date in local timezone
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
+  
+  const todayStartStr = todayStart.toISOString();
+  const todayEndStr = todayEnd.toISOString();
+
+  // Revenue = all orders that are not cancelled/refunded
+  const revenueCondition = "restaurant_id = ? AND created_at >= ? AND created_at < ? AND status NOT IN ('cancelled', 'refunded')";
+  // Today orders should include all statuses to match dashboard order volume
+  const todayOrdersCondition = 'restaurant_id = ? AND created_at >= ? AND created_at < ?';
+  const completedCondition = "restaurant_id = ? AND created_at >= ? AND created_at < ? AND status = 'completed'";
+  
+  const [
+    totalOrdersResult,
+    activeOrders,
+    completedToday,
+    completedTodaySales,
+    avgOrderValue,
+    todayOrders,
+    ordersByStatus,
+    ordersByChannel
+  ] = await Promise.all([
+    // Total orders (all time)
+    db.get('SELECT COUNT(*) as count FROM orders WHERE restaurant_id = ?', [restaurantId]),
+    // Active orders (in progress)
+    db.get('SELECT COUNT(*) as count FROM orders WHERE restaurant_id = ? AND status IN (\'received\', \'preparing\', \'ready\')', [restaurantId]),
+    // Completed today
+    db.get(`SELECT COUNT(*) as count FROM orders WHERE ${completedCondition}`, [restaurantId, todayStartStr, todayEndStr]),
+    // Revenue from all non-cancelled orders today
+    db.get(`SELECT COALESCE(SUM(total_amount), 0) as sum FROM orders WHERE ${revenueCondition}`, [restaurantId, todayStartStr, todayEndStr]),
+    // Average order value for completed orders today
+    db.get(`SELECT AVG(total_amount) as avg FROM orders WHERE ${completedCondition}`, [restaurantId, todayStartStr, todayEndStr]),
+    // Total orders today (all statuses)
+    db.get(`SELECT COUNT(*) as count FROM orders WHERE ${todayOrdersCondition}`, [restaurantId, todayStartStr, todayEndStr]),
+    // Orders grouped by status
+    db.all('SELECT status, COUNT(*) as count FROM orders WHERE restaurant_id = ? GROUP BY status', [restaurantId]),
+    // Orders grouped by channel
+    db.all('SELECT channel, COUNT(*) as count FROM orders WHERE restaurant_id = ? GROUP BY channel', [restaurantId])
+  ]);
+
+  const stats = {
+    totalOrders: num(totalOrdersResult.count),
+    activeOrders: num(activeOrders.count),
+    completedToday: num(completedToday.count),
+    completedTodaySales: parseFloat((completedTodaySales.sum || 0).toFixed(2)),
+    todayOrders: num(todayOrders.count),
+    avgOrderValue: parseFloat((avgOrderValue.avg || 0).toFixed(2)),
+    ordersByStatus: ordersByStatus.reduce((acc: any, row: any) => {
+      acc[row.status] = num(row.count);
+      return acc;
+    }, {}),
+    ordersByChannel: ordersByChannel.reduce((acc: any, row: any) => {
+      acc[row.channel] = num(row.count);
+      return acc;
+    }, {})
+  };
+
+  res.json({
+    success: true,
+    data: stats
+  });
+}));
+
+/**
+ * GET /api/orders/analytics
+ * Get comprehensive order analytics
+ */
+router.get('/analytics', asyncHandler(async (req: Request, res: Response) => {
+  const db = DatabaseService.getInstance().getDatabase();
+  const restaurantId = req.user?.restaurantId;
+  
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const weekAgo = new Date(today);
+  weekAgo.setDate(weekAgo.getDate() - 7);
+  const monthAgo = new Date(today);
+  monthAgo.setDate(monthAgo.getDate() - 30);
+  
+  const todayStr = today.toISOString();
+  const yesterdayStr = yesterday.toISOString();
+  const weekStr = weekAgo.toISOString();
+  const monthStr = monthAgo.toISOString();
+  
+  // Revenue and orders for different periods
+  const [
+    todayRevenue,
+    yesterdayRevenue,
+    weekRevenue,
+    monthRevenue,
+    todayOrders,
+    yesterdayOrders,
+    weekOrders,
+    monthOrders,
+    avgOrderValue,
+    ordersByStatus,
+    ordersByChannel,
+    recentOrders,
+    hourlyDistribution
+  ] = await Promise.all([
+    // Today revenue
+    db.get(`SELECT COALESCE(SUM(total_amount), 0) as sum FROM orders WHERE restaurant_id = ? AND created_at >= ?`, [restaurantId, todayStr]),
+    // Yesterday revenue
+    db.get(`SELECT COALESCE(SUM(total_amount), 0) as sum FROM orders WHERE restaurant_id = ? AND created_at >= ? AND created_at < ?`, [restaurantId, yesterdayStr, todayStr]),
+    // Week revenue
+    db.get(`SELECT COALESCE(SUM(total_amount), 0) as sum FROM orders WHERE restaurant_id = ? AND created_at >= ?`, [restaurantId, weekStr]),
+    // Month revenue
+    db.get(`SELECT COALESCE(SUM(total_amount), 0) as sum FROM orders WHERE restaurant_id = ? AND created_at >= ?`, [restaurantId, monthStr]),
+    // Today orders
+    db.get(`SELECT COUNT(*) as count FROM orders WHERE restaurant_id = ? AND created_at >= ?`, [restaurantId, todayStr]),
+    // Yesterday orders
+    db.get(`SELECT COUNT(*) as count FROM orders WHERE restaurant_id = ? AND created_at >= ? AND created_at < ?`, [restaurantId, yesterdayStr, todayStr]),
+    // Week orders
+    db.get(`SELECT COUNT(*) as count FROM orders WHERE restaurant_id = ? AND created_at >= ?`, [restaurantId, weekStr]),
+    // Month orders
+    db.get(`SELECT COUNT(*) as count FROM orders WHERE restaurant_id = ? AND created_at >= ?`, [restaurantId, monthStr]),
+    // Average order value
+    db.get(`SELECT AVG(total_amount) as avg FROM orders WHERE restaurant_id = ? AND status = 'completed'`, [restaurantId]),
+    // Orders by status
+    db.all('SELECT status, COUNT(*) as count FROM orders WHERE restaurant_id = ? GROUP BY status', [restaurantId]),
+    // Orders by channel
+    db.all('SELECT channel, COUNT(*) as count FROM orders WHERE restaurant_id = ? GROUP BY channel', [restaurantId]),
+    // Recent orders (last 50)
+    db.all('SELECT * FROM orders WHERE restaurant_id = ? ORDER BY created_at DESC LIMIT 50', [restaurantId]),
+    // Hourly distribution (today)
+    db.all(`SELECT EXTRACT(HOUR FROM created_at)::text as hour, COUNT(*) as count FROM orders WHERE restaurant_id = ? AND created_at >= ? GROUP BY hour ORDER BY hour`, [restaurantId, todayStr])
+  ]);
+  
+  // Calculate top items from recent orders
+  const itemCounts: Record<string, { count: number; revenue: number }> = {};
+  for (const order of recentOrders as any[]) {
+    if (Array.isArray(order.items)) {
+      for (const item of order.items) {
+        if (item.name) {
+          if (!itemCounts[item.name]) {
+            itemCounts[item.name] = { count: 0, revenue: 0 };
+          }
+          itemCounts[item.name].count += item.quantity || 1;
+          itemCounts[item.name].revenue += (item.price || 0) * (item.quantity || 1);
+        }
+      }
+    }
+  }
+  
+  const topItems = Object.entries(itemCounts)
+    .map(([name, data]) => ({ name, ...data }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 10);
+  
+  // Format hourly distribution
+  const hourlyData = Array.from({ length: 24 }, (_, i) => {
+    const hour = i.toString().padStart(2, '0');
+    const found = (hourlyDistribution as any[]).find((h: any) => h.hour === hour);
+    return { hour: i, count: found ? found.count : 0 };
+  });
+  
+  // Format recent orders
+  const formattedRecentOrders = (recentOrders as any[]).map((order: any) => ({
+    ...order,
+    items: JSON.parse(order.items || '[]')
+  }));
+  
+  const analytics = {
+    todayRevenue: parseFloat((todayRevenue.sum || 0).toFixed(2)),
+    yesterdayRevenue: parseFloat((yesterdayRevenue.sum || 0).toFixed(2)),
+    weekRevenue: parseFloat((weekRevenue.sum || 0).toFixed(2)),
+    monthRevenue: parseFloat((monthRevenue.sum || 0).toFixed(2)),
+    todayOrders: num(todayOrders.count),
+    yesterdayOrders: num(yesterdayOrders.count),
+    weekOrders: num(weekOrders.count),
+    monthOrders: num(monthOrders.count),
+    avgOrderValue: parseFloat((avgOrderValue.avg || 0).toFixed(2)),
+    avgPrepTime: 12, // Would need additional tracking
+    ordersByStatus: (ordersByStatus as any[]).reduce((acc: any, row: any) => {
+      acc[row.status] = num(row.count);
+      return acc;
+    }, {}),
+    ordersByChannel: (ordersByChannel as any[]).reduce((acc: any, row: any) => {
+      acc[row.channel] = num(row.count);
+      return acc;
+    }, {}),
+    hourlyDistribution: hourlyData,
+    recentOrders: formattedRecentOrders,
+    topItems
+  };
+  
+  res.json({
+    success: true,
+    data: analytics
+  });
+}));
+
+/**
+ * POST /api/orders/public/:slug
+ * Create a new order via public site
+ */
+router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) => {
+  const slug = Array.isArray(req.params.slug) ? req.params.slug[0] : req.params.slug;
+  const {
+    items,
+    customerName,
+    customerPhone,
+    customerEmail,
+    orderType,
+    specialInstructions,
+    paymentMethod,
+    marketingConsent
+  } = req.body;
+  const db = DatabaseService.getInstance().getDatabase();
+  const requestId = getRequestId(req);
+
+  let parsedItems = items;
+  if (typeof items === 'string') {
+    try {
+      parsedItems = JSON.parse(items);
+    } catch {
+      return res.status(400).json({ success: false, error: { message: 'Items must be valid JSON' } });
+    }
+  }
+
+  const safeBody = {
+    customerName,
+    customerPhone,
+    customerEmail,
+    orderType,
+    paymentMethod,
+    itemsCount: Array.isArray(parsedItems) ? parsedItems.length : 0
+  };
+
+  const restaurant = await db.get('SELECT id, slug FROM restaurants WHERE slug = ?', [slug]);
+  const restaurantId = restaurant?.id ?? null;
+
+  logger.info(
+    `[orders.public] entry ${JSON.stringify({
+      requestId,
+      slug,
+      restaurant: restaurant ?? null,
+      restaurantId,
+      body: safeBody
+    })}`
+  );
+
+  if (!restaurant) {
+    return res.status(404).json({ success: false, error: { message: 'Restaurant not found' } });
+  }
+
+  if (!restaurantId) {
+    return res.status(400).json({ success: false, error: { message: 'Missing restaurantId for order' } });
+  }
+
+  if (!parsedItems || !Array.isArray(parsedItems) || parsedItems.length === 0) {
+    return res.status(400).json({ success: false, error: { message: 'Items are required' } });
+  }
+
+  const normalizedCustomerEmail =
+    typeof customerEmail === 'string' && customerEmail.trim().length > 0
+      ? customerEmail.trim().toLowerCase()
+      : null;
+
+  if (normalizedCustomerEmail) {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(normalizedCustomerEmail)) {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'customerEmail must be a valid email address when provided' }
+      });
+    }
+  }
+
+  const normalizedPaymentMethod = paymentMethod === 'online' ? 'online' : 'pickup';
+  const stripeSecretKey = getStripeSecretKey();
+
+  if (normalizedPaymentMethod === 'online' && !stripeSecretKey) {
+    return res.status(503).json({
+      success: false,
+      error: { message: 'Online payments are temporarily unavailable' }
+    });
+  }
+
+  const orderId = uuidv4();
+  // Calculate total and validate items (simplified for v1 fast build)
+  let totalAmount = 0;
+  for (const item of parsedItems) {
+    const price = Number(item?.price ?? 0);
+    const quantity = Number(item?.quantity ?? 0);
+    if (!Number.isFinite(price) || !Number.isFinite(quantity) || quantity <= 0) {
+      return res.status(400).json({ success: false, error: { message: 'Invalid items' } });
+    }
+    totalAmount += price * quantity;
+  }
+
+  try {
+    await db.run(`
+      INSERT INTO orders (
+        id, restaurant_id, channel, status, total_amount, payment_status,
+        items, customer_name, customer_phone, customer_email, order_type, special_instructions, marketing_consent, created_at, updated_at
+      ) VALUES (?, ?, 'website', 'received', ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `, [
+      orderId,
+      restaurantId,
+      totalAmount,
+      normalizedPaymentMethod === 'online' ? 'pending' : 'unpaid',
+      JSON.stringify(parsedItems),
+      customerName || null,
+      customerPhone || null,
+      normalizedCustomerEmail,
+      orderType || 'pickup',
+      specialInstructions || null,
+      marketingConsent === true || marketingConsent === 'true' ? 1 : 0
+    ]);
+
+    // Create order items
+    for (const item of parsedItems) {
+      // Build notes with size and modifiers info
+      const notesData: any = {};
+      if (item.selectedSize) {
+        notesData.size = {
+          id: item.selectedSize.id,
+          name: item.selectedSize.name,
+          price: item.selectedSize.price
+        };
+      }
+      if (item.selectedModifiers && item.selectedModifiers.length > 0) {
+        notesData.modifiers = item.selectedModifiers.map((mod: any) => ({
+          groupName: mod.groupName,
+          optionName: mod.optionName,
+          priceDelta: mod.priceDelta,
+          quantity: mod.quantity
+        }));
+      }
+      const notes = Object.keys(notesData).length > 0 ? JSON.stringify(notesData) : null;
+
+      await db.run(`
+        INSERT INTO order_items (id, order_id, menu_item_id, name, quantity, unit_price, notes)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `, [uuidv4(), orderId, item.id, item.name, item.quantity, item.price, notes]);
+    }
+
+  } catch (error) {
+    logger.error(
+      `[orders.public] db_error ${JSON.stringify({
+        requestId,
+        slug,
+        restaurantId,
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      })}`
+    );
+    return res.status(500).json({ success: false, error: { message: 'Failed to create order' } });
+  }
+
+  let checkoutUrl: string | null = null;
+  if (normalizedPaymentMethod === 'online' && stripeSecretKey) {
+    try {
+      const baseUrl = buildPublicBaseUrl(req);
+      const currency = (process.env.STRIPE_CURRENCY || 'usd').toLowerCase();
+      const params = new URLSearchParams();
+
+      params.append('mode', 'payment');
+      params.append('success_url', `${baseUrl}/${slug}/order-success?orderId=${orderId}&session_id={CHECKOUT_SESSION_ID}`);
+      params.append('cancel_url', `${baseUrl}/${slug}/menu?checkout=cancelled`);
+
+      if (normalizedCustomerEmail) {
+        params.append('customer_email', normalizedCustomerEmail);
+      }
+
+      params.append('metadata[orderId]', orderId);
+      params.append('metadata[restaurantId]', String(restaurantId));
+      params.append('metadata[restaurantSlug]', slug);
+
+      parsedItems.forEach((item: any, index: number) => {
+        params.append(`line_items[${index}][quantity]`, String(Number(item.quantity)));
+        params.append(`line_items[${index}][price_data][currency]`, currency);
+        params.append(`line_items[${index}][price_data][unit_amount]`, String(Math.round(Number(item.price) * 100)));
+        params.append(`line_items[${index}][price_data][product_data][name]`, String(item.name || 'Menu item'));
+      });
+
+      const sessionResponse = await fetch('https://api.stripe.com/v1/checkout/sessions', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${stripeSecretKey}`,
+          'Content-Type': 'application/x-www-form-urlencoded'
+        },
+        body: params.toString()
+      });
+
+      if (!sessionResponse.ok) {
+        const responseText = await sessionResponse.text();
+        throw new Error(`Stripe session failed (${sessionResponse.status}): ${responseText}`);
+      }
+
+      const sessionPayload = await sessionResponse.json() as { url?: string };
+      checkoutUrl = sessionPayload.url || null;
+
+      if (!checkoutUrl) {
+        throw new Error('Stripe session did not include a checkout URL');
+      }
+    } catch (error) {
+      logger.error(
+        `[orders.public] stripe_error ${JSON.stringify({
+          requestId,
+          slug,
+          restaurantId,
           orderId,
-          item.menu_item_id,
-          item.quantity,
-          item.unit_price,
-          item.total_price,
-          item.special_instructions,
-          item.modifier_selections.length > 0 ? JSON.stringify(item.modifier_selections) : null
-        ]
+          message: error instanceof Error ? error.message : String(error)
+        })}`
       );
-    })
+
+      await db.run('UPDATE orders SET payment_status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', ['failed', orderId]);
+
+      return res.status(502).json({
+        success: false,
+        error: { message: 'Unable to start secure payment session' }
+      });
+    }
+  }
+
+  try {
+    // Notify dashboard via Socket.IO
+    const io = req.app.get('socketio');
+    if (io) {
+      io.to(`restaurant-${restaurantId}`).emit('new-order', { orderId, totalAmount });
+    }
+
+    await eventBus.emit('order.created_web', {
+      restaurantId,
+      type: 'order.created_web',
+      actor: { actorType: 'system' },
+      payload: {
+        orderId,
+        customerName,
+        totalAmount,
+        channel: 'website'
+      },
+      occurredAt: new Date().toISOString()
+    });
+
+    await DatabaseService.getInstance().logAudit(restaurantId, null, 'create_public_order', 'order', orderId, { totalAmount });
+  } catch (error) {
+    logger.warn(
+      `[orders.public] post_create_warning ${JSON.stringify({
+        requestId,
+        slug,
+        restaurantId,
+        message: error instanceof Error ? error.message : String(error)
+      })}`
+    );
+  }
+
+  return res.status(201).json({
+    success: true,
+    data: {
+      orderId,
+      status: 'received',
+      paymentMethod: normalizedPaymentMethod,
+      checkoutUrl
+    }
+  });
+}));
+
+/**
+ * GET /api/orders/public/order/:id
+ * Public order status for customers
+ */
+router.get('/public/order/:id', asyncHandler(async (req: Request, res: Response) => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const db = DatabaseService.getInstance().getDatabase();
+  const order = await db.get<any>(
+    'SELECT id, status, pickup_time, created_at, total_amount FROM orders WHERE id = ?',
+    [id]
   );
 
-  const order = await db.get<OrderRow>('SELECT * FROM orders WHERE id = ?', [orderId]);
-  const orderItems = await db.all<OrderItemRow>(
-    `SELECT oi.*, mi.name as menu_item_name
-     FROM order_items oi
-     LEFT JOIN menu_items mi ON oi.menu_item_id = mi.id
-     WHERE oi.order_id = ?`,
-    [orderId]
+  if (!order) {
+    return res.status(404).json({ success: false, error: { message: 'Order not found' } });
+  }
+
+  res.json({
+    success: true,
+    data: order
+  });
+}));
+router.get('/waiting-times', asyncHandler(async (req: Request, res: Response) => {
+  const db = DatabaseService.getInstance().getDatabase();
+
+  const orders = await db.all(`
+    SELECT
+      id,
+      external_id,
+      channel,
+      status,
+      customer_name,
+      created_at,
+      ROUND(EXTRACT(EPOCH FROM (NOW() - created_at)) / 60) as waiting_minutes
+    FROM orders
+    WHERE status IN ('received', 'preparing', 'ready')
+    ORDER BY waiting_minutes DESC
+  `);
+
+  res.json({
+    success: true,
+    data: orders
+  });
+}));
+
+/**
+ * POST /api/orders
+ * Create a new order (typically from delivery platforms or test orders)
+ */
+router.post('/', asyncHandler(async (req: Request, res: Response) => {
+  const {
+    externalId,
+    channel,
+    items,
+    customerName,
+    customerPhone,
+    totalAmount,
+    restaurantId: bodyRestaurantId
+  } = req.body;
+
+  if (!externalId || !channel || !items || !totalAmount) {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'externalId, channel, items, and totalAmount are required' }
+    });
+  }
+
+  const db = DatabaseService.getInstance().getDatabase();
+  const restaurantId = bodyRestaurantId || req.user?.restaurantId;
+  
+  // Validate restaurantId is present
+  if (!restaurantId) {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'Restaurant ID is required to create an order' }
+    });
+  }
+  
+  const orderId = `order_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+  // Validate modifiers (new schema) per item if selections provided
+  const normalizedItems = [];
+  const isTestOrder = String(channel || '').toLowerCase() === 'test';
+  if (Array.isArray(items)) {
+    let idx = 0;
+    for (const line of items) {
+      const lineItemId = line?.itemId || line?.id;
+      const selections = Array.isArray(line?.selections) ? line.selections : [];
+
+      // For dashboard "Create Test Order", allow orders without menu item IDs or modifier selections.
+      // This keeps the demo button working even when menu items have required modifier groups.
+      if (isTestOrder) {
+        normalizedItems.push({
+          ...line,
+          itemId: lineItemId || `test_item_${idx}`,
+          modifiersSnapshot: [],
+          modifiersPriceDelta: 0
+        });
+        idx += 1;
+        continue;
+      }
+
+      if (!lineItemId) {
+        return res.status(400).json({
+          success: false,
+          error: { message: 'Each item must include itemId' }
+        });
+      }
+
+      const validation = await validateItemSelections(lineItemId, selections);
+      if (!validation.valid) {
+        const err = validation.errors?.[0];
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: err?.code || 'MODIFIER_INVALID',
+            message: err?.message || 'Invalid modifier selection',
+            groupId: err?.groupId,
+            groupName: err?.groupName,
+            reason: err?.reason
+          }
+        });
+      }
+      normalizedItems.push({
+        ...line,
+        itemId: lineItemId,
+        modifiersSnapshot: validation.snapshot || [],
+        modifiersPriceDelta: validation.priceDeltaTotal || 0
+      });
+      idx += 1;
+    }
+  }
+
+  await db.run(`
+    INSERT INTO orders (
+      id, restaurant_id, external_id, channel, items, customer_name,
+      customer_phone, total_amount, status, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+  `, [
+    orderId,
+    restaurantId,
+    externalId,
+    channel,
+    JSON.stringify(normalizedItems),
+    customerName || null,
+    customerPhone || null,
+    totalAmount,
+    'received'
+  ]);
+
+  // Log the action
+  await DatabaseService.getInstance().logAudit(
+    req.user?.restaurantId!,
+    req.user?.id || 'system',
+    'create_order',
+    'order',
+    orderId,
+    { externalId, channel, totalAmount, itemCount: items.length }
   );
+
+  await eventBus.emit('order.created_web', {
+    restaurantId: req.user?.restaurantId!,
+    type: 'order.created_web',
+    actor: { actorType: 'user', actorId: req.user?.id },
+    payload: {
+      orderId,
+      customerName,
+      totalAmount,
+      channel
+    },
+    occurredAt: new Date().toISOString()
+  });
+
+  logger.info(`New order created: ${orderId} from ${channel}`);
 
   res.status(201).json({
     success: true,
     data: {
-      ...order,
-      items: orderItems.map(item => ({
-        ...item,
-        modifier_selections: item.modifier_selections
-          ? (() => { try { return JSON.parse(item.modifier_selections!); } catch { return []; } })()
-          : []
-      }))
+      orderId,
+      externalId,
+      channel,
+      status: 'received',
+      createdAt: new Date().toISOString()
     }
   });
 }));
 
-// PATCH /orders/:id/status - update order status
-router.patch('/:id/status', requireAuth, asyncHandler(async (req: Request, res: Response) => {
-  const restaurantId = getRestaurantId(req);
-  const { id } = req.params;
-  const { status } = req.body ?? {};
-
-  const validStatuses = ['pending', 'preparing', 'ready', 'completed', 'cancelled'];
-  if (!status || !validStatuses.includes(status)) {
-    throw new ValidationError(`Status must be one of: ${validStatuses.join(', ')}`);
-  }
-
+/**
+ * GET /api/orders/history/stats
+ * Get aggregated statistics for historical orders
+ */
+router.get('/history/stats', asyncHandler(async (req: Request, res: Response) => {
+  const { dateFrom, dateTo } = req.query;
   const db = DatabaseService.getInstance().getDatabase();
+  const restaurantId = req.user?.restaurantId;
 
-  const order = await db.get<OrderRow>(
-    'SELECT * FROM orders WHERE id = ? AND restaurant_id = ?',
-    [id, restaurantId]
-  );
-  if (!order) throw new NotFoundError('Order not found');
-
-  await db.run(
-    'UPDATE orders SET status = ?, updated_at = NOW() WHERE id = ? AND restaurant_id = ?',
-    [status, id, restaurantId]
-  );
-
-  res.json({ success: true, data: { id, status } });
-}));
-
-// PATCH /orders/:id/payment - update payment status
-router.patch('/:id/payment', requireAuth, asyncHandler(async (req: Request, res: Response) => {
-  const restaurantId = getRestaurantId(req);
-  const { id } = req.params;
-  const { payment_status, payment_method } = req.body ?? {};
-
-  const validPaymentStatuses = ['unpaid', 'paid', 'refunded'];
-  if (!payment_status || !validPaymentStatuses.includes(payment_status)) {
-    throw new ValidationError(`Payment status must be one of: ${validPaymentStatuses.join(', ')}`);
-  }
-
-  const db = DatabaseService.getInstance().getDatabase();
-
-  const order = await db.get<OrderRow>(
-    'SELECT * FROM orders WHERE id = ? AND restaurant_id = ?',
-    [id, restaurantId]
-  );
-  if (!order) throw new NotFoundError('Order not found');
-
-  await db.run(
-    'UPDATE orders SET payment_status = ?, payment_method = ?, updated_at = NOW() WHERE id = ? AND restaurant_id = ?',
-    [payment_status, payment_method || null, id, restaurantId]
-  );
-
-  res.json({ success: true, data: { id, payment_status } });
-}));
-
-// DELETE /orders/:id - cancel/delete an order
-router.delete('/:id', requireAuth, asyncHandler(async (req: Request, res: Response) => {
-  const restaurantId = getRestaurantId(req);
-  const { id } = req.params;
-  const db = DatabaseService.getInstance().getDatabase();
-
-  const order = await db.get<OrderRow>(
-    'SELECT * FROM orders WHERE id = ? AND restaurant_id = ?',
-    [id, restaurantId]
-  );
-  if (!order) throw new NotFoundError('Order not found');
-
-  if (order.payment_status === 'paid') {
-    throw new ForbiddenError('Cannot delete a paid order');
-  }
-
-  await db.run('DELETE FROM order_items WHERE order_id = ?', [id]);
-  await db.run('DELETE FROM orders WHERE id = ? AND restaurant_id = ?', [id, restaurantId]);
-
-  res.json({ success: true, data: { deleted: true } });
-}));
-
-// GET /orders/table/:tableId - get active orders for a table
-router.get('/table/:tableId', requireAuth, asyncHandler(async (req: Request, res: Response) => {
-  const restaurantId = getRestaurantId(req);
-  const { tableId } = req.params;
-  const db = DatabaseService.getInstance().getDatabase();
-
-  // Verify table belongs to restaurant
-  const table = await db.get<any>(
-    'SELECT * FROM tables WHERE id = ? AND restaurant_id = ?',
-    [tableId, restaurantId]
-  );
-  if (!table) throw new NotFoundError('Table not found');
-
-  const orders = await db.all<OrderRow>(
-    `SELECT o.*, t.name as table_name
-     FROM orders o
-     LEFT JOIN tables t ON o.table_id = t.id
-     WHERE o.table_id = ? AND o.restaurant_id = ? AND o.status NOT IN ('completed', 'cancelled')
-     ORDER BY o.created_at DESC`,
-    [tableId, restaurantId]
-  );
-
-  const ordersWithItems = await Promise.all(
-    orders.map(async (order) => {
-      const items = await db.all<OrderItemRow>(
-        `SELECT oi.*, mi.name as menu_item_name
-         FROM order_items oi
-         LEFT JOIN menu_items mi ON oi.menu_item_id = mi.id
-         WHERE oi.order_id = ?`,
-        [order.id]
-      );
-      return {
-        ...order,
-        items: items.map(item => ({
-          ...item,
-          modifier_selections: item.modifier_selections
-            ? (() => { try { return JSON.parse(item.modifier_selections!); } catch { return []; } })()
-            : []
-        }))
-      };
-    })
-  );
+  const stats = await db.get(`
+    SELECT 
+      COUNT(*) as total_orders,
+      SUM(total_amount) as total_revenue,
+      AVG(total_amount) as avg_order_value,
+      COUNT(DISTINCT customer_id) as unique_customers
+    FROM orders
+    WHERE restaurant_id = ?
+      AND created_at >= ?
+      AND created_at <= ?
+  `, [restaurantId, dateFrom, dateTo]);
 
   res.json({
     success: true,
     data: {
-      table,
-      orders: ordersWithItems,
+      totalOrders: stats.total_orders || 0,
+      totalRevenue: stats.total_revenue || 0,
+      avgOrderValue: stats.avg_order_value || 0,
+      uniqueCustomers: stats.unique_customers || 0
+    }
+  });
+}));
+
+/**
+ * GET /api/orders/history
+ * Get historical orders with filters and pagination
+ */
+router.get('/history', asyncHandler(async (req: Request, res: Response) => {
+  const { 
+    dateFrom, 
+    dateTo, 
+    status, 
+    channel, 
+    limit = 20, 
+    offset = 0 
+  } = req.query;
+  const db = DatabaseService.getInstance().getDatabase();
+  const restaurantId = req.user?.restaurantId;
+
+  const where: string[] = ['restaurant_id = ?'];
+  const params: any[] = [restaurantId];
+
+  if (dateFrom) {
+    where.push('created_at >= ?');
+    params.push(dateFrom);
+  }
+  if (dateTo) {
+    where.push('created_at <= ?');
+    params.push(dateTo);
+  }
+  if (status && status !== 'all') {
+    where.push('status = ?');
+    params.push(status);
+  }
+  if (channel && channel !== 'all') {
+    where.push('channel = ?');
+    params.push(channel);
+  }
+
+  const orders = await db.all(`
+    SELECT * FROM orders
+    WHERE ${where.join(' AND ')}
+    ORDER BY created_at DESC
+    LIMIT ? OFFSET ?
+  `, [...params, Number(limit), Number(offset)]);
+
+  const total = await db.get(`
+    SELECT COUNT(*) as count FROM orders
+    WHERE ${where.join(' AND ')}
+  `, params);
+
+  const formattedOrders = orders.map((order: any) => ({
+    ...order,
+    items: parseJson(order.items, [])
+  }));
+
+  res.json({
+    success: true,
+    data: {
+      orders: formattedOrders,
       pagination: {
-        total: ordersWithItems.length,
-        limit: 50,
-        offset: 0,
-        More: total.count > Number(offset) + orders.length
+        total: total.count,
+        limit: Number(limit),
+        offset: Number(offset),
+        hasMore: total.count > Number(offset) + orders.length
       }
     }
   });
