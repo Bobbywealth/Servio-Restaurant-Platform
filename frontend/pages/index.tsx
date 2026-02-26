@@ -163,7 +163,7 @@ export default function HomePage() {
                   <a href="#faq" className="text-gray-300 hover:text-white font-medium transition-colors">FAQ</a>
                   <Link href="/login" className="text-gray-300 hover:text-white font-medium transition-colors">Login</Link>
                   <Link
-                    href="/dashboard/assistant"
+                    href="/signup"
                     className="bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700 text-white px-5 py-2 rounded-xl font-semibold transition-all duration-300 shadow-lg shadow-primary-500/25 hover:shadow-primary-500/40"
                   >
                     Get Started
@@ -247,7 +247,7 @@ export default function HomePage() {
                     FAQ
                   </a>
                   <Link
-                    href="/dashboard/assistant"
+                    href="/signup"
                     className="px-4 py-3 rounded-xl bg-gradient-to-r from-primary-500 to-primary-600 text-white font-semibold text-center transition-colors mt-4 shadow-lg shadow-primary-500/25"
                   >
                     Get Started
@@ -314,7 +314,7 @@ export default function HomePage() {
                 transition={{ delay: 0.5 }}
               >
                 <Link
-                  href="/dashboard/assistant"
+                  href="/signup"
                   className="group relative inline-flex items-center gap-3 bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700 text-white px-8 py-4 rounded-2xl font-bold text-lg transition-all duration-300 shadow-2xl shadow-primary-500/30 hover:shadow-primary-500/50 hover:scale-105"
                 >
                   <motion.div
@@ -949,13 +949,16 @@ export default function HomePage() {
                     <span className="text-gray-400 ml-3">/mo</span>
                   </div>
                   <p className="text-gray-400 mb-8">{plan.description}</p>
-                  <button className={`w-full text-white py-4 px-6 rounded-2xl font-semibold transition-all duration-200 flex items-center justify-center gap-2 ${plan.is_featured
-                    ? 'bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700 shadow-lg shadow-primary-500/30'
-                    : 'bg-gray-700 hover:bg-gray-600'
-                  }`}>
+                  <Link
+                    href={`/signup?plan=${plan.slug}`}
+                    className={`w-full text-white py-4 px-6 rounded-2xl font-semibold transition-all duration-200 flex items-center justify-center gap-2 ${plan.is_featured
+                      ? 'bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700 shadow-lg shadow-primary-500/30'
+                      : 'bg-gray-700 hover:bg-gray-600'
+                    }`}
+                  >
                     Select Plan
                     <ArrowRight className="w-4 h-4" />
-                  </button>
+                  </Link>
                 </motion.div>
               ))}
             </div>

@@ -168,9 +168,11 @@ async function initializeServer() {
     const { default: docsRoutes } = await import('./routes/docs');
     const { default: bulkRoutes } = await import('./routes/bulk');
     const { default: v2Routes } = await import('./routes/v2');
+    const { default: checkoutRoutes } = await import('./routes/checkout');
 
     // API Routes
     app.use('/api/auth', authRoutes);
+    app.use('/api/checkout', checkoutRoutes);
     app.use('/api/bookings', bookingsRoutes);
     app.use('/api/public', publicRoutes);
     
@@ -419,6 +421,9 @@ app.use(morgan(morganFormat, {
 }));
 
 // OPTIMIZED BODY PARSING
+// Stripe webhook needs raw body for signature verification — must be registered BEFORE json parser
+app.use('/api/checkout/webhook/stripe', express.raw({ type: 'application/json' }));
+
 app.use(express.json({
   limit: '10mb',
   strict: true,
