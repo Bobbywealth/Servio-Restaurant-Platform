@@ -39,7 +39,7 @@ router.post('/pin-login', pinRateLimiter, asyncHandler(async (req: Request, res:
 
   const db = DatabaseService.getInstance().getDatabase();
 
-  const user = await db.get(`
+  const matchingUsers = await db.all(`
     SELECT
       u.id,
       u.name,
@@ -51,7 +51,18 @@ router.post('/pin-login', pinRateLimiter, asyncHandler(async (req: Request, res:
     FROM users u
     JOIN restaurants r ON u.restaurant_id = r.id
     WHERE u.pin = ? AND u.is_active = TRUE AND r.is_active = TRUE
+    ORDER BY u.created_at ASC
   `, [pin]);
+
+  if (matchingUsers.length > 1) {
+    logger.warn('[staff-clock] pin-login failed: duplicate active PIN detected');
+    return res.status(409).json({
+      success: false,
+      error: { message: 'This PIN is assigned to multiple active staff accounts. Please contact your manager.' }
+    });
+  }
+
+  const user = matchingUsers[0];
 
   if (!user) {
     logger.info('[staff-clock] pin-login failed: invalid PIN');
@@ -134,9 +145,22 @@ router.post('/clock-in', asyncHandler(async (req: Request, res: Response) => {
 
   const db = DatabaseService.getInstance().getDatabase();
 
-  const user = await db.get(`
-    SELECT * FROM users WHERE pin = ? AND is_active = TRUE
+  const matchingUsers = await db.all(`
+    SELECT u.*
+    FROM users u
+    JOIN restaurants r ON u.restaurant_id = r.id
+    WHERE u.pin = ? AND u.is_active = TRUE AND r.is_active = TRUE
+    ORDER BY u.created_at ASC
   `, [pin]);
+
+  if (matchingUsers.length > 1) {
+    return res.status(409).json({
+      success: false,
+      error: { message: 'This PIN is assigned to multiple active staff accounts. Please contact your manager.' }
+    });
+  }
+
+  const user = matchingUsers[0];
 
   if (!user) {
     return res.status(404).json({
@@ -225,9 +249,22 @@ router.post('/clock-out', asyncHandler(async (req: Request, res: Response) => {
 
   const db = DatabaseService.getInstance().getDatabase();
 
-  const user = await db.get(`
-    SELECT * FROM users WHERE pin = ? AND is_active = TRUE
+  const matchingUsers = await db.all(`
+    SELECT u.*
+    FROM users u
+    JOIN restaurants r ON u.restaurant_id = r.id
+    WHERE u.pin = ? AND u.is_active = TRUE AND r.is_active = TRUE
+    ORDER BY u.created_at ASC
   `, [pin]);
+
+  if (matchingUsers.length > 1) {
+    return res.status(409).json({
+      success: false,
+      error: { message: 'This PIN is assigned to multiple active staff accounts. Please contact your manager.' }
+    });
+  }
+
+  const user = matchingUsers[0];
 
   if (!user) {
     return res.status(404).json({
