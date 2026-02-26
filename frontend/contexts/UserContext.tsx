@@ -252,7 +252,7 @@ export function UserProvider({ children }: UserProviderProps) {
   }
 
   const logout = () => {
-    if (process.env.NODE_ENV === 'production') {
+    if (process.env.NODE_ENV !== 'production') {
       console.log('[auth] Logging out:', { user, hasTokens: {
         accessToken: Boolean(safeLocalStorage.getItem('servio_access_token')),
         refreshToken: Boolean(safeLocalStorage.getItem('servio_refresh_token'))

@@ -4,6 +4,15 @@ import { asyncHandler } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
 import { eventBus } from '../events/bus';
+import rateLimit from 'express-rate-limit';
+
+const pinRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5, // 5 PIN attempts per window (stricter)
+  message: { success: false, error: { message: 'Too many PIN attempts. Please try again in 15 minutes.' } },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 const router = Router();
 
@@ -17,7 +26,7 @@ const router = Router();
  * POST /api/staff/clock/pin-login
  * Authenticate staff by PIN for PWA clock-in (public - no auth required)
  */
-router.post('/pin-login', asyncHandler(async (req: Request, res: Response) => {
+router.post('/pin-login', pinRateLimiter, asyncHandler(async (req: Request, res: Response) => {
   logger.info('[staff-clock] pin-login request received');
   const { pin } = req.body;
 

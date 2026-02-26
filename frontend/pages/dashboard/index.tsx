@@ -97,6 +97,7 @@ const DashboardIndex = memo(() => {
   const [pendingOrders, setPendingOrders] = useState(0)
   const [todayOrderCount, setTodayOrderCount] = useState(0)
   const [isFetching, setIsFetching] = useState(true)
+  const [fetchError, setFetchError] = useState(false)
   const [restaurantTimezone, setRestaurantTimezone] = useState('America/New_York')
   const [isOpen, setIsOpen] = useState(true)
   const [restaurantName, setRestaurantName] = useState<string>('')
@@ -150,6 +151,7 @@ const DashboardIndex = memo(() => {
   const fetchStats = async () => {
     setIsFetching(true)
     try {
+      setFetchError(false)
       const [ordersRes, summaryRes, profileRes] = await Promise.all([
         // Get recent orders (all orders, let frontend sort by status)
         api.get('/api/orders', { params: { limit: 10 } }),
@@ -171,7 +173,7 @@ const DashboardIndex = memo(() => {
       setActiveOrders(summaryRes.data.data.activeOrders || 0)
       setTotalOrders(summaryRes.data.data.totalOrders || 0)
       setTodaySales(summaryRes.data.data.completedTodaySales || 0)
-      setPendingOrders(summaryRes.data.data.pendingOrders || 0)
+      setPendingOrders(summaryRes.data.data.activeOrders || summaryRes.data.data.pendingOrders || 0)
       setTodayOrderCount(summaryRes.data.data.todayOrders || summaryRes.data.data.totalOrders || 0)
 
       // Set restaurant name and timezone from profile
@@ -186,6 +188,7 @@ const DashboardIndex = memo(() => {
       setLastUpdatedAt(new Date())
     } catch (err) {
       console.error('Failed to fetch dashboard stats', err)
+      setFetchError(true)
     } finally {
       setIsFetching(false)
     }
@@ -624,6 +627,17 @@ const DashboardIndex = memo(() => {
               </div>
             </div>
           </motion.div>
+
+          {/* Fetch Error Banner */}
+          {fetchError && (
+            <motion.div
+              className="flex items-center gap-3 px-4 py-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400"
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+            >
+              <span className="font-semibold text-sm">⚠ Could not load dashboard stats — displaying last known values. Check your connection and try refreshing.</span>
+            </motion.div>
+          )}
 
           {/* Stats Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">

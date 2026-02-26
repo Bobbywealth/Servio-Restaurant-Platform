@@ -165,7 +165,7 @@ export default function TabletLoginPage() {
       <Head>
         <title>Tablet Login | Servio</title>
         <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=yes" />
       </Head>
 
       <div className="absolute inset-0">
@@ -245,3 +245,4 @@ export default function TabletLoginPage() {
     </div>
   );
 }
+

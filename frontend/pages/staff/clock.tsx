@@ -349,7 +349,7 @@ function WeeklyHoursCard({ weeklyHours, breakMinutes = 0 }: WeeklyHoursCardProps
       <div className="flex items-center justify-between text-xs md:text-sm lg:text-base">
         <p className={isComplete ? 'text-emerald-400' : 'text-slate-400'}>
           {isComplete
-            ? '✓ Full week completed!'
+            ? '\u2713 Full week completed!'
             : `${(40 - weeklyHours).toFixed(1)} hours to reach 40`
           }
         </p>
@@ -1073,7 +1073,7 @@ export default function StaffClockPage() {
       <>
         <Head>
           <title>Staff Clock-In - Servio</title>
-          <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+          <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=yes" />
           <meta name="apple-mobile-web-app-capable" content="yes" />
           <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
           <meta name="theme-color" content="#0f172a" />
@@ -1091,7 +1091,7 @@ export default function StaffClockPage() {
     <>
       <Head>
         <title>{currentShift ? 'On Shift' : 'Clock In'} - Servio Staff</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="theme-color" content="#0f172a" />

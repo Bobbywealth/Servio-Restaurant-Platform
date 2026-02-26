@@ -52,45 +52,22 @@ export function OrderAnalytics({ onRefresh }: { onRefresh?: () => void }) {
     } catch (err) {
       console.error('Failed to fetch order stats:', err);
       setError('Failed to load analytics');
-      // Set mock data for demo
+      // Set zeroed data so UI shows real state, not fake numbers
       setStats({
-        todayRevenue: 2456.78,
-        yesterdayRevenue: 2189.32,
-        weekRevenue: 12456.90,
-        monthRevenue: 45678.50,
-        todayOrders: 67,
-        yesterdayOrders: 58,
-        weekOrders: 423,
-        monthOrders: 1567,
-        avgOrderValue: 32.45,
-        ordersByStatus: {
-          received: 6,
-          preparing: 4,
-          ready: 2,
-          completed: 142,
-          cancelled: 8
-        },
-        ordersByChannel: {
-          phone: 45,
-          vapi: 38,
-          online: 52,
-          doordash: 12,
-          grubhub: 9
-        },
-        hourlyDistribution: Array.from({ length: 24 }, (_, i) => ({
-          hour: i,
-          count: Math.floor(Math.random() * 20) + (i >= 11 && i <= 14 ? 15 : i >= 17 && i <= 20 ? 20 : 0)
-        })),
-        recentOrders: [
-          { id: '1', external_id: 'ORD-001', channel: 'phone', status: 'completed', total_amount: 45.99, customer_name: 'John D.', created_at: new Date().toISOString() },
-          { id: '2', external_id: 'ORD-002', channel: 'vapi', status: 'preparing', total_amount: 28.50, customer_name: 'Sarah M.', created_at: new Date(Date.now() - 300000).toISOString() },
-          { id: '3', external_id: 'ORD-003', channel: 'online', status: 'ready', total_amount: 67.25, customer_name: 'Mike R.', created_at: new Date(Date.now() - 600000).toISOString() },
-        ],
-        topItems: [
-          { name: 'Classic Burger', count: 45, revenue: 892.50 },
-          { name: 'Chicken Wings', count: 38, revenue: 532.00 },
-          { name: 'Caesar Salad', count: 32, revenue: 416.00 },
-        ]
+        todayRevenue: 0,
+        yesterdayRevenue: 0,
+        weekRevenue: 0,
+        monthRevenue: 0,
+        todayOrders: 0,
+        yesterdayOrders: 0,
+        weekOrders: 0,
+        monthOrders: 0,
+        avgOrderValue: 0,
+        ordersByStatus: {},
+        ordersByChannel: {},
+        hourlyDistribution: [],
+        recentOrders: [],
+        topItems: []
       });
     } finally {
       setLoading(false);

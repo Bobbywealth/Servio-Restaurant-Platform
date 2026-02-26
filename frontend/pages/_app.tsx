@@ -248,7 +248,7 @@ export default function App({ Component, pageProps }: AppProps) {
     <>
       <Head>
         {/* OPTIMIZE VIEWPORT */}
-        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no, maximum-scale=1" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=yes" />
 
         {/* PWA META TAGS */}
         <meta name="apple-mobile-web-app-capable" content="yes" />

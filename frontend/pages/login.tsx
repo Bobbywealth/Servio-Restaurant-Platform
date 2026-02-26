@@ -166,7 +166,7 @@ export default function LoginPage() {
       <Head>
         <title>Login | Servio - Restaurant Operating System</title>
         <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=yes" />
       </Head>
 
       {/* Restaurant Background Image */}
