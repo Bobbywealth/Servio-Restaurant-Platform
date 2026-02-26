@@ -98,6 +98,7 @@ router.post(
   authRateLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const start = Date.now();
+    const requestId = getRequestId(req);
 
     const { email, password, stayLoggedIn } = req.body ?? {};
     const normalizedEmail = String(email ?? '').trim().toLowerCase();
