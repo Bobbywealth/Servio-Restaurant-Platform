@@ -983,6 +983,88 @@ router.post('/links/:id/click', asyncHandler(async (req: Request, res: Response)
   });
 }));
 
+// ============================================================================
+// ONBOARDING
+// ============================================================================
+
+/**
+ * GET /api/restaurant/onboarding-status
+ * Check if the current user's restaurant has completed onboarding.
+ * Returns { onboardingCompleted: boolean }
+ */
+router.get('/onboarding-status', asyncHandler(async (req: Request, res: Response) => {
+  const restaurantId = (req as any).user?.restaurantId;
+  if (!restaurantId) {
+    return res.status(401).json({ success: false, error: { message: 'Not authenticated' } });
+  }
+
+  const db = DatabaseService.getInstance().getDatabase();
+  const restaurant = await db.get<{ settings: string }>(
+    'SELECT settings FROM restaurants WHERE id = ?',
+    [restaurantId]
+  );
+
+  if (!restaurant) {
+    return res.status(404).json({ success: false, error: { message: 'Restaurant not found' } });
+  }
+
+  let settings: any = {};
+  try {
+    settings = restaurant.settings ? JSON.parse(restaurant.settings) : {};
+  } catch {
+    settings = {};
+  }
+
+  return res.json({
+    success: true,
+    data: { onboardingCompleted: Boolean(settings.onboarding_completed) }
+  });
+}));
+
+/**
+ * POST /api/restaurant/onboarding-complete
+ * Mark the current user's restaurant onboarding as completed.
+ * Stores onboarding_completed: true in the restaurant's settings JSON.
+ */
+router.post('/onboarding-complete', asyncHandler(async (req: Request, res: Response) => {
+  const restaurantId = (req as any).user?.restaurantId;
+  if (!restaurantId) {
+    return res.status(401).json({ success: false, error: { message: 'Not authenticated' } });
+  }
+
+  const db = DatabaseService.getInstance().getDatabase();
+  const restaurant = await db.get<{ settings: string }>(
+    'SELECT settings FROM restaurants WHERE id = ?',
+    [restaurantId]
+  );
+
+  if (!restaurant) {
+    return res.status(404).json({ success: false, error: { message: 'Restaurant not found' } });
+  }
+
+  let settings: any = {};
+  try {
+    settings = restaurant.settings ? JSON.parse(restaurant.settings) : {};
+  } catch {
+    settings = {};
+  }
+
+  settings.onboarding_completed = true;
+  settings.onboarding_completed_at = new Date().toISOString();
+
+  await db.run(
+    'UPDATE restaurants SET settings = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+    [JSON.stringify(settings), restaurantId]
+  );
+
+  logger.info(`[onboarding] completed for restaurant ${restaurantId}`);
+
+  return res.json({
+    success: true,
+    data: { onboardingCompleted: true }
+  });
+}));
+
 export default router;
 
 // ============================================================================
