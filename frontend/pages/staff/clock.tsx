@@ -83,14 +83,54 @@ function ConfirmDialog({ isOpen, title, message, confirmText, onConfirm, onCance
 interface PINEntryProps {
   onLogin: (pin: string) => void;
   error?: string | null;
+  lockedUntil?: number | null;
+  onLockoutExpired?: () => void;
 }
 
-function PINEntry({ onLogin, error }: PINEntryProps) {
+function PINEntry({ onLogin, error, lockedUntil, onLockoutExpired }: PINEntryProps) {
   const [pin, setPin] = useState(['', '', '', '']);
   const [isFocused, setIsFocused] = useState<number | null>(0);
+  const [secondsRemaining, setSecondsRemaining] = useState<number>(0);
   const inputRefs = [React.useRef<HTMLInputElement>(null), React.useRef<HTMLInputElement>(null), React.useRef<HTMLInputElement>(null), React.useRef<HTMLInputElement>(null)];
 
+  const isLocked = lockedUntil != null && secondsRemaining > 0;
+
+  // Countdown timer for lockout
+  useEffect(() => {
+    if (!lockedUntil) {
+      setSecondsRemaining(0);
+      return;
+    }
+    const update = () => {
+      const remaining = Math.ceil((lockedUntil - Date.now()) / 1000);
+      if (remaining <= 0) {
+        setSecondsRemaining(0);
+        onLockoutExpired?.();
+      } else {
+        setSecondsRemaining(remaining);
+      }
+    };
+    update();
+    const interval = setInterval(update, 1000);
+    return () => clearInterval(interval);
+  }, [lockedUntil, onLockoutExpired]);
+
+  // Clear PIN when lockout expires
+  useEffect(() => {
+    if (!isLocked) {
+      setPin(['', '', '', '']);
+      setTimeout(() => inputRefs[0].current?.focus(), 50);
+    }
+  }, [isLocked]);
+
+  const formatCountdown = (secs: number) => {
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${m}:${String(s).padStart(2, '0')}`;
+  };
+
   const handleChange = (index: number, value: string) => {
+    if (isLocked) return;
     if (value.length <= 1 && /^\d*$/.test(value)) {
       const newPin = [...pin];
       newPin[index] = value;
@@ -110,6 +150,7 @@ function PINEntry({ onLogin, error }: PINEntryProps) {
   };
 
   const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    if (isLocked) return;
     e.preventDefault();
     const pastedData = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 4);
     if (pastedData.length > 0) {
@@ -150,7 +191,11 @@ function PINEntry({ onLogin, error }: PINEntryProps) {
         <div className="w-full max-w-md md:max-w-xl lg:max-w-2xl">
           {/* Welcome Section */}
           <div className="text-center mb-8 md:mb-12 lg:mb-14">
-            <div className="w-20 h-20 md:w-28 md:h-28 lg:w-32 lg:h-32 bg-gradient-to-br from-orange-400 to-orange-500 rounded-2xl md:rounded-3xl flex items-center justify-center mx-auto mb-4 md:mb-6 shadow-2xl shadow-orange-500/20">
+            <div className={`w-20 h-20 md:w-28 md:h-28 lg:w-32 lg:h-32 rounded-2xl md:rounded-3xl flex items-center justify-center mx-auto mb-4 md:mb-6 shadow-2xl transition-all duration-500 ${
+              isLocked
+                ? 'bg-gradient-to-br from-red-500 to-red-600 shadow-red-500/20'
+                : 'bg-gradient-to-br from-orange-400 to-orange-500 shadow-orange-500/20'
+            }`}>
               <User className="w-10 h-10 md:w-14 md:h-14 lg:w-16 lg:h-16 text-white" />
             </div>
             <h2 className="text-2xl md:text-4xl lg:text-5xl font-bold text-white mb-2 md:mb-4">Welcome Back</h2>
@@ -158,7 +203,11 @@ function PINEntry({ onLogin, error }: PINEntryProps) {
           </div>
 
           {/* PIN Input Card */}
-          <div className="bg-slate-800/50 backdrop-blur-xl rounded-3xl p-8 md:p-12 lg:p-16 border border-slate-700/50 shadow-2xl">
+          <div className={`backdrop-blur-xl rounded-3xl p-8 md:p-12 lg:p-16 border shadow-2xl transition-all duration-500 ${
+            isLocked
+              ? 'bg-red-950/30 border-red-500/30'
+              : 'bg-slate-800/50 border-slate-700/50'
+          }`}>
             {/* PIN Dots */}
             <div className="flex justify-center gap-4 md:gap-6 lg:gap-8 mb-8 md:mb-12">
               {pin.map((digit, index) => (
@@ -171,15 +220,18 @@ function PINEntry({ onLogin, error }: PINEntryProps) {
                   value={digit}
                   onChange={(e) => handleChange(index, e.target.value)}
                   onPaste={handlePaste}
-                  onFocus={() => setIsFocused(index)}
+                  onFocus={() => !isLocked && setIsFocused(index)}
                   onBlur={() => setIsFocused(null)}
                   placeholder="•"
+                  disabled={isLocked}
                   className={`
                     w-16 h-16 md:w-24 md:h-24 lg:w-28 lg:h-28 text-center text-3xl md:text-5xl lg:text-6xl font-bold rounded-2xl md:rounded-3xl
                     transition-all duration-300 ease-out
-                    ${isFocused === index
-                      ? 'bg-orange-500/20 border-orange-500 text-white shadow-lg shadow-orange-500/20 scale-105'
-                      : 'bg-slate-700/50 border-slate-600/50 text-white'
+                    ${isLocked
+                      ? 'bg-red-900/30 border-red-500/30 text-red-400/50 cursor-not-allowed opacity-60'
+                      : isFocused === index
+                        ? 'bg-orange-500/20 border-orange-500 text-white shadow-lg shadow-orange-500/20 scale-105'
+                        : 'bg-slate-700/50 border-slate-600/50 text-white'
                     }
                     border-2 md:border-3 outline-none
                   `}
@@ -187,8 +239,24 @@ function PINEntry({ onLogin, error }: PINEntryProps) {
               ))}
             </div>
 
-            {/* Error Message */}
-            {error && (
+            {/* Lockout Banner */}
+            {isLocked && (
+              <div className="mb-6 md:mb-8 rounded-2xl bg-red-500/10 border border-red-500/30 p-4 md:p-6">
+                <div className="flex items-center justify-center gap-2 md:gap-3 mb-3 md:mb-4">
+                  <AlertCircle className="w-5 h-5 md:w-6 md:h-6 text-red-400 flex-shrink-0" />
+                  <span className="text-red-400 font-semibold text-sm md:text-base lg:text-lg">Too many PIN attempts</span>
+                </div>
+                <div className="text-center">
+                  <p className="text-slate-400 text-xs md:text-sm lg:text-base mb-2">Try again in</p>
+                  <p className="text-4xl md:text-5xl lg:text-6xl font-bold tabular-nums text-red-400 tracking-tight">
+                    {formatCountdown(secondsRemaining)}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Non-lockout Error Message */}
+            {!isLocked && error && (
               <div className="flex items-center justify-center text-red-400 mb-4 md:mb-6 animate-pulse">
                 <AlertCircle className="w-5 h-5 md:w-6 md:h-6 mr-2" />
                 <span className="text-sm md:text-lg lg:text-xl">{error}</span>
@@ -197,7 +265,7 @@ function PINEntry({ onLogin, error }: PINEntryProps) {
 
             {/* Help Text */}
             <div className="text-center">
-              <p className="text-slate-400 text-sm md:text-lg lg:text-xl mb-2 md:mb-3">
+              <p className={`text-sm md:text-lg lg:text-xl mb-2 md:mb-3 ${isLocked ? 'text-slate-500' : 'text-slate-400'}`}>
                 Enter your 4-digit employee PIN
               </p>
               <p className="text-slate-500 text-xs md:text-base lg:text-lg">
@@ -673,6 +741,17 @@ export default function StaffClockPage() {
   const [currentShift, setCurrentShift] = useState<any>(null);
   const [weeklyHours, setWeeklyHours] = useState(0);
   const [rememberDevice, setRememberDevice] = useState(false);
+  const [lockedUntil, setLockedUntil] = useState<number | null>(() => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('pinLockedUntil');
+      if (stored) {
+        const ts = parseInt(stored, 10);
+        if (ts > Date.now()) return ts;
+        localStorage.removeItem('pinLockedUntil');
+      }
+    }
+    return null;
+  });
   const userRef = useRef<any>(null);
 
   // Confirmation dialog state
@@ -723,9 +802,23 @@ export default function StaffClockPage() {
         body: JSON.stringify({ pin })
       });
 
+      // Handle rate-limit lockout (429)
+      if (response.status === 429) {
+        const retryAfter = response.headers.get('Retry-After');
+        const retryAfterSecs = retryAfter ? parseInt(retryAfter, 10) : 15 * 60;
+        const lockoutEnd = Date.now() + retryAfterSecs * 1000;
+        setLockedUntil(lockoutEnd);
+        localStorage.setItem('pinLockedUntil', String(lockoutEnd));
+        setError(null);
+        setLoading(false);
+        return;
+      }
+
       const data = await response.json();
 
       if (data.success) {
+        setLockedUntil(null);
+        localStorage.removeItem('pinLockedUntil');
         const userData = {
           ...data.data.user,
           pin
@@ -1082,6 +1175,12 @@ export default function StaffClockPage() {
         <PINEntry
           onLogin={handleLogin}
           error={error}
+          lockedUntil={lockedUntil}
+          onLockoutExpired={() => {
+            setLockedUntil(null);
+            localStorage.removeItem('pinLockedUntil');
+            setError(null);
+          }}
         />
       </>
     );
