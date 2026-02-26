@@ -48,84 +48,257 @@ type Order = {
   subtotal?: number | null;
   created_at?: string | null;
   items?: OrderItem[];
-  restaurant?: {
-    name?: string;
-    address?: string;
-    phone?: string;
-    logo_url?: string;
-  };
-  [key: string]: unknown;
+  prep_time?: string | null;
+  prep_minutes?: number | null;
 };
 
-type OrdersApiResponse = {
+type OrdersResponse = {
   success: boolean;
   data?: {
     orders?: Order[];
-    pagination?: {
-      total: number;
-      limit: number;
-      offset: number;
-      hasMore: boolean;
+    pagination?: { total?: number; limit?: number; offset?: number; hasMore?: boolean };
+  };
+  error?: { message?: string };
+};
+
+type OrderFilter = {
+  status: 'all' | 'received' | 'preparing' | 'ready';
+  channel: string;
+  orderType: string;
+  sortBy: 'newest' | 'oldest' | 'prep-time';
+  searchQuery: string;
+};
+
+type PendingAction =
+  | {
+      id: string;
+      orderId: string;
+      type: 'status';
+      payload: { status: string };
+      queuedAt: number;
+      idempotencyKey: string;
+      retryCount: number;
+      lastError: string | null;
+      lastAttemptAt?: number;
+      permanentFailure?: boolean;
+    }
+  | {
+      id: string;
+      orderId: string;
+      type: 'prep-time';
+      payload: { prepMinutes: number };
+      queuedAt: number;
+      idempotencyKey: string;
+      retryCount: number;
+      lastError: string | null;
+      lastAttemptAt?: number;
+      permanentFailure?: boolean;
     };
-  };
-  error?: { message?: string };
-};
 
-type StatusUpdateResponse = {
-  success: boolean;
-  data?: { order?: Order };
-  error?: { message?: string };
-};
+type EnqueueAction = PendingAction extends infer Action
+  ? Action extends PendingAction
+    ? Omit<Action, 'idempotencyKey' | 'retryCount' | 'lastError'>
+    : never
+  : never;
 
-type RestaurantProfileResponse = {
-  success: boolean;
-  data?: {
-    name?: string;
-    address?: string;
-    phone?: string;
-    logo_url?: string;
-    settings?: Record<string, unknown>;
-  };
-  error?: { message?: string };
-};
-
-const STATUS_FILTERS = [
-  { value: 'active', label: 'Active' },
-  { value: 'pending', label: 'Pending' },
-  { value: 'confirmed', label: 'Confirmed' },
-  { value: 'preparing', label: 'Preparing' },
-  { value: 'ready', label: 'Ready' },
-  { value: 'completed', label: 'Completed' },
-  { value: 'cancelled', label: 'Cancelled' },
-];
-
-const ACTIVE_STATUSES = ['pending', 'confirmed', 'preparing', 'ready'];
-
-function isActiveOrder(order: Order): boolean {
-  return ACTIVE_STATUSES.includes((order.status || '').toLowerCase());
+async function apiGet<T>(path: string): Promise<T> {
+  const res = await api.get(path);
+  return res.data as T;
 }
 
-function formatMoney(value: number | null | undefined): string {
-  const amount = typeof value === 'number' ? value : 0;
+async function apiPost<T>(path: string, body: unknown): Promise<T> {
+  const res = await api.post(path, body);
+  return res.data as T;
+}
+
+function shortId(id: string) {
+  if (!id) return '';
+  return id.length <= 8 ? id : `${id.slice(0, 4)}…${id.slice(-4)}`;
+}
+
+function formatMoney(v: number | null | undefined) {
+  const n = typeof v === 'number' ? v : 0;
   try {
-    return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(amount);
+    return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(n);
   } catch {
-    return `$${amount.toFixed(2)}`;
+    return `$${n.toFixed(2)}`;
   }
 }
 
-function formatRelativeTime(value: string | null | undefined): string {
-  if (!value) return '—';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '—';
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.round(diffMs / 60000);
-  if (diffMins < 1) return 'just now';
-  if (diffMins < 60) return `${diffMins}m ago`;
-  const diffHours = Math.round(diffMs / 3600000);
-  if (diffHours < 24) return `${diffHours}h ago`;
-  return date.toLocaleDateString();
+function formatTimeAgo(iso: string | null | undefined, now: number | null) {
+  if (now === null || !iso) return { text: '—', elapsedMinutes: null };
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return { text: '—', elapsedMinutes: null };
+  const diffMs = now - d.getTime();
+  const mins = Math.max(0, Math.floor(diffMs / 60000));
+
+  if (mins < 1) {
+    return { text: 'Just now', elapsedMinutes: mins };
+  }
+
+  if (mins < 60) {
+    return { text: `${mins}m`, elapsedMinutes: mins };
+  }
+
+  const hours = Math.floor(mins / 60);
+  const remainingMinutes = mins % 60;
+  return { text: `${hours}h ${remainingMinutes}m`, elapsedMinutes: mins };
+}
+
+type UrgencyLevel = 'normal' | 'warning' | 'critical';
+
+function getOrderUrgencyLevel(elapsedMinutes: number | null): UrgencyLevel {
+  if (elapsedMinutes === null || elapsedMinutes < 10) return 'normal';
+  if (elapsedMinutes <= 20) return 'warning';
+  return 'critical';
+}
+
+function getOrderUrgencyClass(level: UrgencyLevel): string {
+  switch (level) {
+    case 'critical':
+      return 'text-[var(--tablet-danger)]';
+    case 'warning':
+      return 'text-[var(--tablet-warning)]';
+    default:
+      return 'text-[var(--tablet-muted)]';
+  }
+}
+
+function getOrderUrgencyBadgeClass(level: UrgencyLevel): string {
+  switch (level) {
+    case 'critical':
+      return 'bg-[color-mix(in_srgb,var(--tablet-danger)_18%,transparent)] text-[var(--tablet-danger)]';
+    case 'warning':
+      return 'bg-[color-mix(in_srgb,var(--tablet-warning)_18%,transparent)] text-[var(--tablet-warning)]';
+    default:
+      return 'bg-[var(--tablet-surface-alt)] text-[var(--tablet-muted)]';
+  }
+}
+
+function normalizeStatus(s: string | null | undefined) {
+  const v = (s || '').trim();
+  if (!v) return 'received';
+  const lower = v.toLowerCase();
+  if (lower === 'new') return 'received';
+  return lower;
+}
+
+function isArchivedOrder(order: Order, now: number | null): boolean {
+  if (!Number.isFinite(STALE_ORDER_THRESHOLD_MINUTES) || STALE_ORDER_THRESHOLD_MINUTES <= 0) return false;
+  const { elapsedMinutes } = formatTimeAgo(order.created_at, now);
+  return typeof elapsedMinutes === 'number' && elapsedMinutes >= STALE_ORDER_THRESHOLD_MINUTES;
+}
+
+function normalizeOrderItems(items: unknown): OrderItem[] {
+  if (!Array.isArray(items)) return [];
+
+  return items.map((item: any) => {
+    const parsedQuantity = Number(item?.quantity ?? item?.qty ?? 1);
+    const quantity = Number.isFinite(parsedQuantity) && parsedQuantity > 0 ? parsedQuantity : 1;
+
+    let modifiers = item?.modifiers;
+    if ((!modifiers || typeof modifiers !== 'object') && typeof item?.notes === 'string') {
+      try {
+        const parsedNotes = JSON.parse(item.notes);
+        if (parsedNotes?.modifiers) {
+          modifiers = parsedNotes.modifiers;
+        }
+      } catch {
+        // Notes can be plain text; ignore parse errors.
+      }
+    }
+
+    return {
+      ...item,
+      name: item?.name || item?.item_name_snapshot || item?.item_id || 'Item',
+      quantity,
+      modifiers
+    };
+  });
+}
+
+// Prep time countdown function
+function formatPrepTimeRemaining(
+  prepMinutes: number | null | undefined,
+  createdAt: string | null | undefined,
+  now: number | null
+): { text: string; isOverdue: boolean; percentRemaining: number; overdueMinutes: number | null } | null {
+  if (!prepMinutes || !createdAt || now === null) return null;
+
+  const created = new Date(createdAt).getTime();
+  if (Number.isNaN(created)) return null;
+
+  const totalMs = prepMinutes * 60 * 1000;
+  const elapsedMs = now - created;
+  const remainingMs = totalMs - elapsedMs;
+  const percentRemaining = Math.max(0, Math.min(100, (remainingMs / totalMs) * 100));
+
+  if (remainingMs <= 0) {
+    const overdueMinutes = Math.ceil(Math.abs(remainingMs) / 60000);
+    return {
+      text: overdueMinutes > 0 ? `Overdue by ${overdueMinutes} min` : 'Overdue',
+      isOverdue: true,
+      percentRemaining: 0,
+      overdueMinutes
+    };
+  }
+
+  const minsRemaining = Math.ceil(remainingMs / 60000);
+  return {
+    text: `${minsRemaining}m`,
+    isOverdue: false,
+    percentRemaining,
+    overdueMinutes: null
+  };
+}
+
+function getPrepTimeWarningLevel(percentRemaining: number): 'normal' | 'warning' | 'critical' {
+  if (percentRemaining <= 25) return 'critical';
+  if (percentRemaining <= 50) return 'warning';
+  return 'normal';
+}
+
+function getPrepTimeColorClass(level: 'normal' | 'warning' | 'critical'): string {
+  switch (level) {
+    case 'critical':
+      return 'bg-[var(--tablet-danger)] text-[var(--tablet-text)]';
+    case 'warning':
+      return 'bg-[var(--tablet-warning)] text-[var(--tablet-text)]';
+    default:
+      return 'bg-[var(--tablet-success)] text-[var(--tablet-text)]';
+  }
+}
+
+function statusBadgeClassesForStatus(status: string): string {
+  switch (status) {
+    case 'received':
+      return 'bg-[var(--tablet-danger)] text-white';
+    case 'preparing':
+      return 'bg-[var(--tablet-warning)] text-[var(--tablet-text)]';
+    case 'ready':
+      return 'bg-[var(--tablet-success)] text-white';
+    default:
+      return 'bg-[var(--tablet-surface-alt)] text-[var(--tablet-text)]';
+  }
+}
+
+const STALE_ORDER_THRESHOLD_MINUTES = Number(process.env.NEXT_PUBLIC_TABLET_STALE_ORDER_MINUTES ?? 120);
+
+// Search/filter utilities
+function matchesSearchQuery(order: Order, query: string): boolean {
+  if (!query.trim()) return true;
+  const searchTerms = query.toLowerCase().split(' ').filter(Boolean);
+
+  const searchableText = [
+    order.customer_name || '',
+    order.customer_phone || '',
+    order.external_id || order.id || '',
+    order.channel || '',
+    order.order_type || '',
+    (order.items || []).map(i => i.name || '').join(' ')
+  ].join(' ').toLowerCase();
+
+  return searchTerms.every(term => searchableText.includes(term));
 }
 
 function getChannelIcon(channel: string | null | undefined): string {
@@ -141,614 +314,1839 @@ function getChannelIcon(channel: string | null | undefined): string {
   return '📋';
 }
 
-function getStatusColor(status: string | null | undefined): string {
-  const s = (status || '').toLowerCase();
-  switch (s) {
-    case 'pending': return 'bg-yellow-500/20 text-yellow-200 border border-yellow-500/40';
-    case 'confirmed': return 'bg-blue-500/20 text-blue-200 border border-blue-500/40';
-    case 'preparing': return 'bg-orange-500/20 text-orange-200 border border-orange-500/40';
-    case 'ready': return 'bg-emerald-500/20 text-emerald-200 border border-emerald-500/40';
-    case 'completed': return 'bg-gray-500/20 text-gray-300 border border-gray-500/40';
-    case 'cancelled': return 'bg-red-500/20 text-red-200 border border-red-500/40';
-    default: return 'bg-[var(--tablet-border)] text-[var(--tablet-muted)]';
+
+const ACTION_QUEUE_KEY = 'servio_tablet_action_queue';
+const ORDER_CACHE_KEY = 'servio_cached_orders';
+const ACTION_RETRY_THRESHOLD = 3;
+
+function normalizeQueuedAction(action: any): PendingAction | null {
+  if (!action || typeof action !== 'object') return null;
+  if (!action.id || !action.orderId || !action.type || !action.payload) return null;
+  if (action.type !== 'status' && action.type !== 'prep-time') return null;
+  const idempotencyKey = action.idempotencyKey
+    || (action.type === 'status'
+      ? `status:${action.orderId}:${String(action.payload?.status || '').toLowerCase()}`
+      : `prep-time:${action.orderId}:${action.queuedAt || Date.now()}`);
+
+  return {
+    ...action,
+    queuedAt: Number(action.queuedAt) || Date.now(),
+    idempotencyKey,
+    retryCount: Number(action.retryCount) || 0,
+    lastError: typeof action.lastError === 'string' ? action.lastError : null,
+    lastAttemptAt: typeof action.lastAttemptAt === 'number' ? action.lastAttemptAt : undefined,
+    permanentFailure: Boolean(action.permanentFailure)
+  } as PendingAction;
+}
+
+function loadActionQueue(): PendingAction[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = safeLocalStorage.getItem(ACTION_QUEUE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((entry) => normalizeQueuedAction(entry))
+      .filter((entry): entry is PendingAction => Boolean(entry));
+  } catch {
+    return [];
   }
 }
 
-function getOrderTypeLabel(type: string | null | undefined): string {
-  const t = (type || '').toLowerCase();
-  switch (t) {
-    case 'pickup': case 'pick-up': return 'Pickup';
-    case 'delivery': return 'Delivery';
-    case 'dine-in': case 'dinein': return 'Dine In';
-    case 'takeout': case 'take-out': return 'Takeout';
-    default: return type || 'Unknown';
-  }
+function saveActionQueue(next: PendingAction[]) {
+  if (typeof window === 'undefined') return;
+  safeLocalStorage.setItem(ACTION_QUEUE_KEY, JSON.stringify(next));
 }
 
-const NEXT_STATUS: Record<string, string> = {
-  pending: 'confirmed',
-  confirmed: 'preparing',
-  preparing: 'ready',
-  ready: 'completed',
-};
-
-const NEXT_STATUS_LABEL: Record<string, string> = {
-  pending: 'Confirm',
-  confirmed: 'Start Prep',
-  preparing: 'Mark Ready',
-  ready: 'Complete',
-};
+function removeAuthTokens() {
+  if (typeof window === 'undefined') return;
+  safeLocalStorage.removeItem('servio_access_token');
+  safeLocalStorage.removeItem('servio_refresh_token');
+  safeLocalStorage.removeItem('servio_user');
+}
 
 export default function TabletOrdersPage() {
   const router = useRouter();
-  const { user, isLoading: userLoading } = useUser();
+  const { user, isLoading: authLoading } = useUser();
+  const socket = useSocket();
   const [orders, setOrders] = useState<Order[]>([]);
-  const [statusFilter, setStatusFilter] = useState<string>('active');
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [loading, setLoading] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
-  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
-  const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
-  const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null);
-  const [printingOrderId, setPrintingOrderId] = useState<string | null>(null);
-  const [printOrder, setPrintOrder] = useState<Order | null>(null);
-  const [restaurantProfile, setRestaurantProfile] = useState<RestaurantProfileResponse['data'] | null>(null);
-  const [showFilters, setShowFilters] = useState<boolean>(false);
-  const [autoRefresh, setAutoRefresh] = useState<boolean>(true);
-  const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
-  const [pagination, setPagination] = useState<{ total: number; limit: number; offset: number; hasMore: boolean } | null>(null);
-  const autoRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const searchRef = useRef<HTMLInputElement | null>(null);
-  const [printMode, setPrintMode] = useState<'bluetooth' | 'system' | 'bridge' | 'rawbt'>('system');
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [now, setNow] = useState<number | null>(null);
+  const [autoPrintEnabled, setAutoPrintEnabled] = useState<boolean>(false);
   const [paperWidth, setPaperWidth] = useState<ReceiptPaperWidth>('80mm');
-  const [rawBtPrinting, setRawBtPrinting] = useState(false);
+  const [printMode, setPrintMode] = useState<'bluetooth' | 'system' | 'bridge' | 'rawbt'>('system');
+  const [fontSize, setFontSize] = useState<string>('medium');
+  const [headerText, setHeaderText] = useState<string>('');
+  const [footerText, setFooterText] = useState<string>('');
 
-  const { alerts, dismissAlert, clearAlerts } = useOrderAlerts(orders);
+  const [lastPrintResult, setLastPrintResult] = useState<{ status: 'success' | 'error'; message?: string } | null>(null);
+  const [autoPrintPendingId, setAutoPrintPendingId] = useState<string | null>(null);
+  const lastAutoPromptedId = useRef<string | null>(null);
+  const [prepModalOrder, setPrepModalOrder] = useState<Order | null>(null);
+  const [prepMinutes, setPrepMinutes] = useState<number>(15);
+  const [printingOrderId, setPrintingOrderId] = useState<string | null>(null);
+  const [printedOrders, setPrintedOrders] = useState<Set<string>>(() => new Set());
+  const printedOrdersRef = useRef<Set<string>>(new Set());
+  const hasInitializedPrintedRef = useRef(false);
+  const [restaurantProfile, setRestaurantProfile] = useState<ReceiptRestaurant | null>(null);
+  const [receiptHtml, setReceiptHtml] = useState<string | null>(null);
+  const lastRefreshAt = useRef<number>(0);
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [pendingActions, setPendingActions] = useState<Set<string>>(() => new Set());
+  const [isOnline, setIsOnline] = useState<boolean>(true);
+  const [socketConnected, setSocketConnected] = useState<boolean>(false);
+  const [showUpdateBanner, setShowUpdateBanner] = useState(false);
+  const [actionQueue, setActionQueue] = useState<PendingAction[]>(() => loadActionQueue());
+  const [lastSuccessfulSyncAt, setLastSuccessfulSyncAt] = useState<number | null>(null);
+  const [syncAttemptStatus, setSyncAttemptStatus] = useState<'idle' | 'syncing' | 'success' | 'error'>('idle');
+  
+  // New feature toggles
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  // Search and filter state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<OrderFilter['status']>('all');
+  const [channelFilter, setChannelFilter] = useState('all');
+  const [sortBy, setSortBy] = useState<OrderFilter['sortBy']>('newest');
+  const [showFilters, setShowFilters] = useState(false);
+  const [showArchivedOrders, setShowArchivedOrders] = useState(false);
+  const [orderDetailsOrder, setOrderDetailsOrder] = useState<Order | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Auth guard
-  useEffect(() => {
-    if (!userLoading && !user) {
-      router.replace(`/tablet/login?next=${encodeURIComponent(router.asPath)}`);
+  const handleSearchToggle = useCallback(() => {
+    setIsSearchOpen(true);
+  }, []);
+
+  const handleSearchClear = useCallback(() => {
+    setSearchQuery('');
+    setIsSearchOpen(false);
+  }, []);
+
+  const handleSearchBlur = useCallback(() => {
+    if (!searchQuery.trim()) {
+      setIsSearchOpen(false);
     }
-  }, [user, userLoading, router]);
+  }, [searchQuery]);
 
-  // Load print settings from localStorage
-  useEffect(() => {
-    const storedMode = safeLocalStorage.getItem('servio_print_mode');
-    if (storedMode === 'bluetooth' || storedMode === 'system' || storedMode === 'bridge' || storedMode === 'rawbt') {
-      setPrintMode(storedMode);
+  const handleSearchKeyDown = useCallback((event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      setSearchQuery('');
+      setIsSearchOpen(false);
+      searchInputRef.current?.blur();
+      return;
     }
-    const storedWidth = safeLocalStorage.getItem('servio_thermal_paper_width');
-    if (storedWidth === '58mm' || storedWidth === '80mm') {
-      setPaperWidth(storedWidth);
+
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      if (!searchQuery.trim()) {
+        setIsSearchOpen(false);
+      }
+      searchInputRef.current?.blur();
+    }
+  }, [searchQuery]);
+
+  // Get unique channels for filter dropdown
+  const channels = useMemo(() => {
+    const channelSet = new Set<string>();
+    orders.forEach(o => {
+      if (o.channel) channelSet.add(o.channel);
+    });
+    return Array.from(channelSet).sort();
+  }, [orders]);
+
+  useEffect(() => {
+    if (authLoading) return;
+    if (!user) {
+      const next = router.asPath || '/tablet/orders';
+      router.replace(`/tablet/login?next=${encodeURIComponent(next)}`);
+    }
+  }, [authLoading, user, router]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    setIsOnline(navigator.onLine);
+    const handleOnline = () => {
+      setIsOnline(true);
+      processActionQueue();
+    };
+    const handleOffline = () => {
+      setIsOnline(false);
+    };
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!socket) return;
+    const cleanup = socket.onConnectionChange((status) => {
+      setSocketConnected(status);
+    });
+    return () => cleanup();
+  }, [socket]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!('serviceWorker' in navigator)) return;
+    const handleMessage = (event: MessageEvent) => {
+      const data = event.data;
+      if (data?.type === 'SW_ACTIVATED') {
+        setShowUpdateBanner(true);
+      }
+    };
+    navigator.serviceWorker.addEventListener('message', handleMessage);
+    return () => {
+      navigator.serviceWorker.removeEventListener('message', handleMessage);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const cachedQueue = loadActionQueue();
+    if (cachedQueue.length > 0) {
+      setPendingActions(new Set(cachedQueue.map((item) => item.orderId)));
     }
   }, []);
 
-  // Socket for real-time order updates
-  const socket = useSocket();
   useEffect(() => {
-    if (!socket) return;
-    const handleNewOrder = (order: Order) => {
-      setOrders((prev) => {
-        const exists = prev.some((o) => o.id === order.id);
-        if (exists) return prev;
-        return [order, ...prev];
-      });
-    };
-    const handleOrderUpdate = (order: Order) => {
-      setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, ...order } : o)));
-      setSelectedOrder((prev) => (prev?.id === order.id ? { ...prev, ...order } : prev));
-    };
-    socket.on('order:new', handleNewOrder);
-    socket.on('order:updated', handleOrderUpdate);
-    socket.on('order:status_changed', handleOrderUpdate);
-    return () => {
-      socket.off('order:new', handleNewOrder);
-      socket.off('order:updated', handleOrderUpdate);
-      socket.off('order:status_changed', handleOrderUpdate);
-    };
-  }, [socket]);
-
-  const loadOrders = useCallback(async (offset = 0, replace = true) => {
-    if (!user) return;
+    if (typeof window === 'undefined') return;
+    const raw = safeLocalStorage.getItem(ORDER_CACHE_KEY);
+    if (!raw) return;
     try {
-      setLoading(true);
-      setError(null);
-      const params: Record<string, string | number> = { limit: 50, offset };
-      if (statusFilter !== 'active') {
-        params.status = statusFilter;
-      } else {
-        params.status = ACTIVE_STATUSES.join(',');
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed?.orders)) {
+        setOrders(parsed.orders);
+        setLoading(false);
       }
-      const response = await api.get<OrdersApiResponse>('/api/orders', { params });
-      const payload = response.data;
-      if (!payload.success) {
-        throw new Error(payload.error?.message || 'Failed to load orders');
+    } catch {
+      // ignore cache parse issues
+    }
+  }, []);
+
+  // Extended idle timeout - 8 hours for tablet use (restaurant shift duration)
+  // Session is kept alive by _app.tsx proactive token refresh
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    // 8 hours = 28800000ms - covers a full restaurant shift
+    const idleMs = 8 * 60 * 60 * 1000;
+    let idleTimer: number | null = null;
+    let lastActivity = Date.now();
+
+    const handleIdleLogout = () => {
+      // Only logout if truly idle (no activity for the full duration)
+      if (Date.now() - lastActivity >= idleMs) {
+        removeAuthTokens();
+        const next = router.asPath || '/tablet/orders';
+        router.replace(`/tablet/login?next=${encodeURIComponent(next)}`);
       }
-      const nextOrders = payload.data?.orders || [];
-      setOrders((prev) => (replace ? nextOrders : [...prev, ...nextOrders]));
-      setPagination(payload.data?.pagination || null);
-      setLastRefreshed(new Date());
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to load orders.';
-      setError(message);
+    };
+
+    const resetIdleTimer = () => {
+      lastActivity = Date.now();
+      if (idleTimer) window.clearTimeout(idleTimer);
+      idleTimer = window.setTimeout(handleIdleLogout, idleMs);
+    };
+
+    resetIdleTimer();
+    const events = ['mousemove', 'mousedown', 'touchstart', 'touchmove', 'keydown', 'scroll', 'click'];
+    events.forEach((eventName) => window.addEventListener(eventName, resetIdleTimer, { passive: true }));
+
+    return () => {
+      if (idleTimer) window.clearTimeout(idleTimer);
+      events.forEach((eventName) => window.removeEventListener(eventName, resetIdleTimer));
+    };
+  }, [router]);
+
+  useEffect(() => {
+    const storedAuto = typeof window !== 'undefined' ? safeLocalStorage.getItem('servio_auto_print_enabled') : null;
+    const auto = storedAuto === 'true';
+    setAutoPrintEnabled(auto);
+
+    const storedPaper = typeof window !== 'undefined' ? safeLocalStorage.getItem('servio_thermal_paper_width') : null;
+    const paper: ReceiptPaperWidth = storedPaper === '58mm' ? '58mm' : '80mm';
+    setPaperWidth(paper);
+
+    const storedMode = typeof window !== 'undefined' ? safeLocalStorage.getItem('servio_print_mode') : null;
+    if (storedMode === 'bluetooth' || storedMode === 'bridge' || storedMode === 'system' || storedMode === 'rawbt') {
+      setPrintMode(storedMode);
+    }
+
+    const storedFontSize = typeof window !== 'undefined' ? safeLocalStorage.getItem('servio_font_size') : null;
+    if (storedFontSize === 'small' || storedFontSize === 'medium' || storedFontSize === 'large' || storedFontSize === 'xlarge') {
+      setFontSize(storedFontSize);
+    }
+
+    const storedResult = typeof window !== 'undefined' ? safeLocalStorage.getItem('servio_last_print_result') : null;
+    if (storedResult) {
+      try {
+        setLastPrintResult(JSON.parse(storedResult));
+      } catch {
+        // ignore
+      }
+    }
+    
+  }, []);
+
+  // Fullscreen toggle effect
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
+
+  useEffect(() => {
+    const loadPrinterSettings = async () => {
+      try {
+        const resp = await apiGet<{ success: boolean; data?: any }>('/api/restaurant/profile');
+        const settings = resp?.data?.settings || {};
+        if (settings.printer_auto_print_enabled !== undefined) {
+          const enabled = Boolean(settings.printer_auto_print_enabled);
+          setAutoPrintEnabled(enabled);
+          safeLocalStorage.setItem('servio_auto_print_enabled', enabled ? 'true' : 'false');
+        }
+        if (settings.printer_paper_width === '58mm' || settings.printer_paper_width === '80mm') {
+          const width = settings.printer_paper_width as ReceiptPaperWidth;
+          setPaperWidth(width);
+          safeLocalStorage.setItem('servio_thermal_paper_width', width);
+        }
+        if (['system', 'rawbt', 'bluetooth', 'bridge'].includes(settings.printer_mode)) {
+          const mode = settings.printer_mode as 'bluetooth' | 'system' | 'bridge' | 'rawbt';
+          setPrintMode(mode);
+          safeLocalStorage.setItem('servio_print_mode', mode);
+        }
+        if (['small', 'medium', 'large', 'xlarge'].includes(settings.printer_font_size)) {
+          const size = settings.printer_font_size;
+          setFontSize(size);
+          safeLocalStorage.setItem('servio_font_size', size);
+        }
+        if (settings.printer_receipt_header_text !== undefined) {
+          setHeaderText(settings.printer_receipt_header_text || '');
+        }
+        if (settings.printer_receipt_footer_text !== undefined) {
+          setFooterText(settings.printer_receipt_footer_text || '');
+        }
+      } catch (e) {
+        // ignore printer settings load failures
+      }
+    };
+
+    loadPrinterSettings();
+  }, []);
+
+  const persistActionQueue = useCallback((next: PendingAction[]) => {
+    saveActionQueue(next);
+    setActionQueue(next);
+    setPendingActions((prev) => {
+      const updated = new Set<string>();
+      next.forEach((queuedAction) => updated.add(queuedAction.orderId));
+      return updated;
+    });
+  }, []);
+
+  const enqueueAction = (action: EnqueueAction) => {
+    const current = loadActionQueue();
+    const idempotencyKey = action.type === 'status'
+      ? `status:${action.orderId}:${action.payload.status.toLowerCase()}`
+      : `prep-time:${action.orderId}:${action.queuedAt}`;
+    const nextAction: PendingAction = { ...action, idempotencyKey, retryCount: 0, lastError: null } as PendingAction;
+    const dedupedQueue = action.type === 'status'
+      ? current.filter((queuedAction) => !(queuedAction.type === 'status' && queuedAction.idempotencyKey === idempotencyKey))
+      : current;
+    const next = [...dedupedQueue, nextAction];
+    persistActionQueue(next);
+  };
+
+  const processActionQueue = async (force = false) => {
+    if (typeof window === 'undefined') return;
+    if (!navigator.onLine) return;
+    const queue = loadActionQueue();
+    if (queue.length === 0) return;
+    setSyncAttemptStatus('syncing');
+    const remaining: PendingAction[] = [];
+    let needsReload = false;
+    for (const action of queue) {
+      if (!force && (action.permanentFailure || action.retryCount >= ACTION_RETRY_THRESHOLD)) {
+        remaining.push(action);
+        continue;
+      }
+
+      try {
+        if (action.type === 'status') {
+          await apiPost(`/api/orders/${encodeURIComponent(action.orderId)}/status`, {
+            ...action.payload,
+            idempotencyKey: action.idempotencyKey
+          });
+        } else if (action.type === 'prep-time') {
+          await apiPost(`/api/orders/${encodeURIComponent(action.orderId)}/prep-time`, {
+            ...action.payload,
+            idempotencyKey: action.idempotencyKey
+          });
+        }
+      } catch (error: any) {
+        const statusCode = error?.response?.status;
+        const message = error?.response?.data?.error?.message || error?.message || 'Sync failed';
+        const permanentFailure = statusCode === 400 || statusCode === 404 || statusCode === 409 || statusCode === 422;
+        const nextRetryCount = (action.retryCount || 0) + 1;
+        remaining.push({
+          ...action,
+          retryCount: nextRetryCount,
+          lastError: String(message),
+          lastAttemptAt: Date.now(),
+          permanentFailure
+        });
+        if (permanentFailure) needsReload = true;
+      }
+    }
+    persistActionQueue(remaining);
+    if (remaining.length === queue.length) {
+      setSyncAttemptStatus('error');
+    } else {
+      setSyncAttemptStatus('success');
+      setLastSuccessfulSyncAt(Date.now());
+    }
+    if (needsReload) {
+      await refresh();
+    }
+  };
+
+  const retryQueueNow = async () => {
+    if (!window.confirm('Retry all failed and queued sync actions now?')) return;
+    const resetQueue = loadActionQueue().map((action) => ({ ...action, permanentFailure: false }));
+    persistActionQueue(resetQueue);
+    await processActionQueue(true);
+  };
+
+  const clearFailedActions = () => {
+    if (!window.confirm('Clear failed actions that exceeded retry limits? This cannot be undone.')) return;
+    const next = loadActionQueue().filter((action) => !action.permanentFailure && action.retryCount < ACTION_RETRY_THRESHOLD);
+    persistActionQueue(next);
+  };
+
+  async function refresh() {
+    try {
+      if (typeof window !== 'undefined' && !safeLocalStorage.getItem('servio_access_token')) {
+        setLoading(false);
+        return;
+      }
+      const json = await apiGet<OrdersResponse>('/api/orders?limit=50&offset=0');
+      const list = Array.isArray(json?.data?.orders) ? json.data!.orders! : [];
+      setOrders(list.map((order) => ({ ...order, items: normalizeOrderItems(order.items) })));
+      if (typeof window !== 'undefined') {
+        const payload = JSON.stringify({ orders: list, cachedAt: new Date().toISOString() });
+        safeLocalStorage.setItem(ORDER_CACHE_KEY, payload);
+      }
+      lastRefreshAt.current = Date.now();
+    } catch (e: unknown) {
+      console.error(e);
     } finally {
       setLoading(false);
     }
-  }, [user, statusFilter]);
+  }
 
-  const loadRestaurantProfile = useCallback(async () => {
+  async function fetchRestaurantProfile() {
     try {
-      const response = await api.get<RestaurantProfileResponse>('/api/restaurant/profile');
-      if (response.data?.success) {
-        setRestaurantProfile(response.data.data || null);
+      if (typeof window !== 'undefined' && !safeLocalStorage.getItem('servio_access_token')) {
+        return;
       }
-    } catch {
-      // Non-critical — receipt will just omit restaurant info
+      const json = await apiGet<{ success: boolean; data?: any }>('/api/restaurant/profile');
+      if (json?.success && json.data) {
+        setRestaurantProfile({
+          name: json.data.name,
+          phone: json.data.phone,
+          address: json.data.address,
+          logo_url: json.data.logo_url
+        });
+      }
+    } catch (e) {
+      // Non-fatal for printing; receipts will still print with fallback header.
+      console.warn('Failed to load restaurant profile for printing', e);
     }
+  }
+
+  async function printOrder(orderId: string, opts?: { markAsPrinted?: boolean }) {
+    // Prevent duplicate prints
+    if (printingOrderId) {
+      console.log('Print already in progress, ignoring');
+      return;
+    }
+    
+    setPrintingOrderId(orderId);
+    try {
+      // Fetch order details
+      const full = await apiGet<{ success: boolean; data?: any }>(`/api/orders/${encodeURIComponent(orderId)}`);
+      const order = (full?.data || full) as ReceiptOrder;
+
+      // Ensure we have restaurant info
+      let restaurant = restaurantProfile;
+      if (!restaurant) {
+        await fetchRestaurantProfile();
+        restaurant = restaurantProfile;
+      }
+
+      if (printMode === 'rawbt') {
+        // RawBT auto-print mode - plain text for thermal printer compatibility
+        const items = (order.items || []).map((it: any) => ({
+          name: it.name || 'Item',
+          quantity: it.quantity || 1,
+          price: it.unit_price || it.price || 0,
+          modifiers: getReceiptItemModifiers(it)
+        }));
+
+        const orderAny = order as any;
+        const plainText = generatePlainTextReceipt({
+          restaurantName: restaurant?.name || undefined,
+          restaurantPhone: restaurant?.phone || undefined,
+          restaurantAddress: restaurant?.address || undefined,
+          orderId: order.id,
+          orderNumber: orderAny.external_id?.slice(-4).toUpperCase() || order.id.slice(-4).toUpperCase(),
+          customerName: order.customer_name || undefined,
+          customerPhone: orderAny.customer_phone || undefined,
+          orderType: orderAny.order_type || undefined,
+          items,
+          subtotal: orderAny.subtotal || undefined,
+          tax: orderAny.tax || undefined,
+          total: order.total_amount || 0,
+          pickupTime: orderAny.pickup_time || undefined,
+          createdAt: order.created_at || undefined,
+          specialInstructions: orderAny.special_instructions || undefined,
+          headerText: headerText || undefined,
+          footerText: footerText || undefined
+        }, paperWidth);
+        const success = printViaRawBT(plainText);
+
+        if (success) {
+          if (opts?.markAsPrinted !== false) {
+            setPrintedOrders((prev) => {
+              const next = new Set(prev);
+              next.add(orderId);
+              printedOrdersRef.current = next;
+              return next;
+            });
+          }
+          setLastPrintResult({ status: 'success' });
+          safeLocalStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'success' }));
+        } else {
+          setLastPrintResult({ status: 'error', message: 'RawBT not available. Is the app installed?' });
+          safeLocalStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'error', message: 'RawBT not available' }));
+        }
+        return;
+      }
+
+      if (printMode === 'system') {
+        // Open a popup window with only the receipt content so the printer
+        // gets a clean rendered page (not the full orders UI).
+        const standaloneHtml = generateStandaloneReceiptHtml({
+          restaurant: restaurant || null,
+          order: order as ReceiptOrder,
+          paperWidth,
+          headerText,
+          footerText,
+          fontSize
+        });
+
+        const printWindow = window.open('', '_blank', 'width=400,height=600');
+        if (printWindow) {
+          printWindow.document.write(standaloneHtml);
+          printWindow.document.close();
+          printWindow.onload = () => {
+            printWindow.focus();
+            printWindow.print();
+            printWindow.close();
+          };
+        } else {
+          // Fallback if popup blocked: print current page
+          setReceiptHtml(generateReceiptHtml({
+            restaurant: restaurant || null,
+            order: order as ReceiptOrder,
+            paperWidth, headerText, footerText, fontSize
+          }));
+          await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+          window.print();
+        }
+
+        if (opts?.markAsPrinted !== false) {
+          setPrintedOrders((prev) => {
+            const next = new Set(prev);
+            next.add(orderId);
+            printedOrdersRef.current = next;
+            return next;
+          });
+        }
+        setLastPrintResult({ status: 'success' });
+        safeLocalStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'success' }));
+        return;
+      }
+
+      // Bluetooth or Bridge mode - not fully implemented
+      const message = printMode === 'bluetooth'
+        ? 'WebBluetooth mode requires BLE printer. Try RawBT or System Print instead.'
+        : 'Print Bridge mode is not configured';
+      setLastPrintResult({ status: 'error', message });
+      safeLocalStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'error', message }));
+
+    } catch (e) {
+      console.error('Print failed', e);
+      const message = e instanceof Error ? e.message : 'Print failed';
+      setLastPrintResult({ status: 'error', message });
+      safeLocalStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'error', message }));
+    } finally {
+      setPrintingOrderId(null);
+      // clear receipt after print dialog is opened; also clear onafterprint for some browsers
+      window.setTimeout(() => setReceiptHtml(null), 250);
+    }
+  }
+
+  async function printTestReceipt() {
+    if (printingOrderId) return;
+    setPrintingOrderId('test');
+
+    try {
+      let restaurant = restaurantProfile;
+      if (!restaurant) {
+        await fetchRestaurantProfile();
+        restaurant = restaurantProfile;
+      }
+
+      const now = new Date();
+      const testOrder: ReceiptOrder = {
+        id: `test_${now.getTime()}`,
+        external_id: 'TEST',
+        channel: 'POS',
+        status: 'received',
+        customer_name: 'Test Customer',
+        customer_phone: '(555) 123-4567',
+        order_type: 'pickup',
+        created_at: now.toISOString(),
+        items: [
+          { name: 'Test Burger', quantity: 1, price: 9.99, modifiers: ['No onions', 'Extra cheese'] },
+          { name: 'Fries', quantity: 1, price: 3.49 },
+          { name: 'Soda', quantity: 2, price: 1.75 }
+        ],
+        special_instructions: 'Test print from dashboard'
+      };
+
+      if (printMode === 'rawbt') {
+        // RawBT test print - plain text for thermal printer compatibility
+        const plainText = generatePlainTextReceipt({
+          restaurantName: restaurant?.name || undefined,
+          restaurantPhone: restaurant?.phone || undefined,
+          restaurantAddress: restaurant?.address || undefined,
+          orderId: testOrder.id,
+          orderNumber: testOrder.external_id || testOrder.id.slice(-4).toUpperCase(),
+          customerName: testOrder.customer_name || undefined,
+          customerPhone: testOrder.customer_phone || undefined,
+          orderType: testOrder.order_type || undefined,
+          items: (testOrder.items || []).map((it: any) => ({
+            name: it.name,
+            quantity: it.quantity || 1,
+            price: it.unit_price || it.price || 0,
+            modifiers: getReceiptItemModifiers(it)
+          })),
+          total: (testOrder.items || []).reduce((sum: number, it: any) => {
+            const qty = it.quantity || 1;
+            const price = it.unit_price || it.price || 0;
+            return sum + qty * price;
+          }, 0),
+          createdAt: testOrder.created_at || undefined,
+          specialInstructions: testOrder.special_instructions || undefined,
+          headerText: headerText || undefined,
+          footerText: footerText || undefined
+        }, paperWidth);
+        const success = printViaRawBT(plainText);
+        if (success) {
+          setLastPrintResult({ status: 'success' });
+          safeLocalStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'success' }));
+        } else {
+          setLastPrintResult({ status: 'error', message: 'RawBT not available. Is the app installed?' });
+          safeLocalStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'error', message: 'RawBT not available' }));
+        }
+        return;
+      }
+
+      if (printMode === 'system') {
+        const standaloneHtml = generateStandaloneReceiptHtml({
+          restaurant: restaurant || null,
+          order: testOrder,
+          paperWidth,
+          headerText,
+          footerText,
+          fontSize
+        });
+
+        const printWindow = window.open('', '_blank', 'width=400,height=600');
+        if (printWindow) {
+          printWindow.document.write(standaloneHtml);
+          printWindow.document.close();
+          printWindow.onload = () => {
+            printWindow.focus();
+            printWindow.print();
+            printWindow.close();
+          };
+        } else {
+          setReceiptHtml(generateReceiptHtml({
+            restaurant: restaurant || null, order: testOrder,
+            paperWidth, headerText, footerText, fontSize
+          }));
+          await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+          window.print();
+        }
+        setLastPrintResult({ status: 'success' });
+        safeLocalStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'success' }));
+        return;
+      }
+
+      const message = printMode === 'bluetooth'
+        ? 'WebBluetooth mode requires BLE printer. Try RawBT or System Print instead.'
+        : 'Print Bridge mode is not configured';
+      setLastPrintResult({ status: 'error', message });
+      safeLocalStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'error', message }));
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Test print failed';
+      setLastPrintResult({ status: 'error', message });
+      safeLocalStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'error', message }));
+    } finally {
+      setPrintingOrderId(null);
+      window.setTimeout(() => setReceiptHtml(null), 250);
+    }
+  }
+
+  async function setStatus(orderId: string, nextStatus: string) {
+    setBusyId(orderId);
+    setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, status: nextStatus } : o)));
+    setSelectedOrder((prev) => (prev?.id === orderId ? { ...prev, status: nextStatus } : prev));
+    try {
+      if (!navigator.onLine) {
+        enqueueAction({
+          id: `${orderId}-${Date.now()}`,
+          orderId,
+          type: 'status',
+          payload: { status: nextStatus },
+          queuedAt: Date.now()
+        });
+      } else {
+        await apiPost(`/api/orders/${encodeURIComponent(orderId)}/status`, { status: nextStatus });
+        if (socket) {
+          socket.emit('order:status_changed', { orderId, status: nextStatus, timestamp: new Date() });
+        }
+      }
+    } catch (e) {
+      enqueueAction({
+        id: `${orderId}-${Date.now()}`,
+        orderId,
+        type: 'status',
+        payload: { status: nextStatus },
+        queuedAt: Date.now()
+      });
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  function openAcceptModal(order: Order) {
+    setPrepModalOrder(order);
+    setPrepMinutes(order.prep_minutes && order.prep_minutes > 0 ? order.prep_minutes : 15);
+  }
+
+  async function acceptOrder(order: Order, minutes: number) {
+    setBusyId(order.id);
+    try {
+      await setPrepTime(order.id, minutes);
+      if (socket) {
+        socket.emit('order:status_changed', { orderId: order.id, status: 'preparing', timestamp: new Date() });
+      }
+      
+      if (autoPrintEnabled) {
+        await printOrder(order.id, { markAsPrinted: true });
+      }
+    } catch (e) {
+      enqueueAction({
+        id: `${order.id}-${Date.now()}`,
+        orderId: order.id,
+        type: 'prep-time',
+        payload: { prepMinutes: minutes },
+        queuedAt: Date.now()
+      });
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function declineOrder(order: Order) {
+    setBusyId(order.id);
+    setSelectedOrder(null);
+    try {
+      if (!navigator.onLine) {
+        enqueueAction({
+          id: `${order.id}-${Date.now()}`,
+          orderId: order.id,
+          type: 'status',
+          payload: { status: 'cancelled' },
+          queuedAt: Date.now()
+        });
+      } else {
+        await apiPost(`/api/orders/${encodeURIComponent(order.id)}/status`, { status: 'cancelled' });
+      }
+      setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, status: 'cancelled' } : o)));
+      if (socket) {
+        socket.emit('order:status_changed', { orderId: order.id, status: 'cancelled', timestamp: new Date() });
+      }
+    } catch (e) {
+      enqueueAction({
+        id: `${order.id}-${Date.now()}`,
+        orderId: order.id,
+        type: 'status',
+        payload: { status: 'cancelled' },
+        queuedAt: Date.now()
+      });
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function setPrepTime(orderId: string, minutes: number) {
+    setBusyId(orderId);
+    try {
+      let pickupTime: string | undefined;
+      if (!navigator.onLine) {
+        enqueueAction({
+          id: `${orderId}-${Date.now()}`,
+          orderId,
+          type: 'prep-time',
+          payload: { prepMinutes: minutes },
+          queuedAt: Date.now()
+        });
+      } else {
+        const resp = await apiPost<{ success: boolean; data?: { pickupTime?: string } }>(
+          `/api/orders/${encodeURIComponent(orderId)}/prep-time`,
+          { prepMinutes: minutes }
+        );
+        pickupTime = resp?.data?.pickupTime;
+      }
+      setOrders((prev) =>
+        prev.map((o) => (o.id === orderId ? { ...o, status: 'preparing', pickup_time: pickupTime, prep_minutes: minutes } : o))
+      );
+      setSelectedOrder((prev) =>
+        prev?.id === orderId ? { ...prev, status: 'preparing', pickup_time: pickupTime, prep_minutes: minutes } : prev
+      );
+      if (socket) {
+        socket.emit('order:status_changed', { orderId, status: 'preparing', timestamp: new Date() });
+      }
+    } catch (e) {
+      enqueueAction({
+        id: `${orderId}-${Date.now()}`,
+        orderId,
+        type: 'prep-time',
+        payload: { prepMinutes: minutes },
+        queuedAt: Date.now()
+      });
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  useEffect(() => {
+    refresh();
+    fetchRestaurantProfile();
+    const t = window.setInterval(() => {
+      if (Date.now() - lastRefreshAt.current < 5000) return;
+      refresh();
+    }, 10000);
+    return () => window.clearInterval(t);
   }, []);
 
   useEffect(() => {
-    if (user) {
-      loadOrders();
-      loadRestaurantProfile();
-    }
-  }, [user, loadOrders, loadRestaurantProfile]);
+    processActionQueue();
+    const t = window.setInterval(() => {
+      processActionQueue();
+    }, 15000);
+    return () => window.clearInterval(t);
+  }, []);
 
-  // Auto-refresh
   useEffect(() => {
-    if (autoRefreshRef.current) clearInterval(autoRefreshRef.current);
-    if (autoRefresh && user) {
-      autoRefreshRef.current = setInterval(() => {
-        loadOrders(0, true);
-      }, 30000);
-    }
-    return () => {
-      if (autoRefreshRef.current) clearInterval(autoRefreshRef.current);
+    if (!socket) return;
+
+    const handleNewNotification = (data: any) => {
+      if (data.notification.type === 'order.created_web' || 
+          data.notification.type === 'order.created_vapi' ||
+          data.notification.type === 'order.status_changed') {
+        refresh();
+      }
     };
-  }, [autoRefresh, user, loadOrders]);
 
-  const updateOrderStatus = async (order: Order, newStatus: string) => {
-    setUpdatingOrderId(order.id);
-    try {
-      const response = await api.patch<StatusUpdateResponse>(`/api/orders/${order.id}/status`, { status: newStatus });
-      if (!response.data?.success) {
-        throw new Error(response.data?.error?.message || 'Failed to update status');
+    const handlePrinterTest = () => {
+      printTestReceipt();
+    };
+
+    // Handle new orders from website/public ordering
+    const handleNewOrder = async (data: { orderId: string; totalAmount?: number }) => {
+      console.log('[tablet] New order received via socket:', data);
+      try {
+        // Fetch the full order details
+        const response = await api.get<{ success: boolean; data?: Order }>(`/api/orders/${encodeURIComponent(data.orderId)}`);
+        if (response?.data?.success && response?.data?.data) {
+          const newOrder = { ...response.data.data, items: normalizeOrderItems(response.data.data.items) };
+          setOrders(prev => {
+            // Don't add if already exists
+            if (prev.some(o => o.id === newOrder.id)) return prev;
+            return [newOrder, ...prev];
+          });
+        }
+      } catch (err) {
+        console.error('[tablet] Failed to fetch new order:', err);
+        // Fallback: just refresh all orders
+        refresh();
       }
-      const updatedOrder = response.data.data?.order || { ...order, status: newStatus };
-      setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, ...updatedOrder } : o)));
-      setSelectedOrder((prev) => (prev?.id === order.id ? { ...prev, ...updatedOrder } : prev));
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to update order status';
-      setError(message);
-    } finally {
-      setUpdatingOrderId(null);
-    }
-  };
+    };
 
-  const cancelOrder = async (order: Order) => {
-    setCancellingOrderId(order.id);
-    try {
-      const response = await api.patch<StatusUpdateResponse>(`/api/orders/${order.id}/status`, { status: 'cancelled' });
-      if (!response.data?.success) {
-        throw new Error(response.data?.error?.message || 'Failed to cancel order');
-      }
-      setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, status: 'cancelled' } : o)));
-      setSelectedOrder((prev) => (prev?.id === order.id ? { ...prev, status: 'cancelled' } : prev));
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to cancel order';
-      setError(message);
-    } finally {
-      setCancellingOrderId(null);
-    }
-  };
+    // Handle order status changes from other clients
+    const handleOrderStatusChanged = (data: { orderId: string; previousStatus?: string; status: string; timestamp?: Date }) => {
+      console.log('[tablet] Order status changed via socket:', data);
+      setOrders(prev => prev.map(o => {
+        if (o.id === data.orderId) {
+          return { ...o, status: data.status };
+        }
+        return o;
+      }));
+      setSelectedOrder(prev => {
+        if (prev?.id === data.orderId) {
+          return { ...prev, status: data.status };
+        }
+        return prev;
+      });
+    };
 
-  const handlePrintOrder = async (order: Order) => {
-    setPrintingOrderId(order.id);
-    try {
-      if (printMode === 'rawbt') {
-        // Use RawBT for silent printing
-        setRawBtPrinting(true);
-        const restaurant: ReceiptRestaurant = {
-          name: restaurantProfile?.name || 'Restaurant',
-          address: restaurantProfile?.address,
-          phone: restaurantProfile?.phone,
-          logo_url: restaurantProfile?.logo_url,
-        };
-        const receiptOrder: ReceiptOrder = {
-          id: order.id,
-          external_id: order.external_id,
-          customer_name: order.customer_name,
-          customer_phone: order.customer_phone,
-          order_type: order.order_type,
-          channel: order.channel,
-          status: order.status,
-          special_instructions: order.special_instructions,
-          total_amount: order.total_amount,
-          subtotal: order.subtotal,
-          created_at: order.created_at,
-          items: (order.items || []).map(item => ({
-            name: item.name || '',
-            quantity: item.quantity || item.qty || 1,
-            unit_price: item.unit_price || item.price || 0,
-            modifiers: getReceiptItemModifiers(item),
-            notes: item.notes,
-          })),
-        };
-        const plainText = generatePlainTextReceipt(receiptOrder, restaurant, paperWidth);
-        await printViaRawBT(plainText);
-        safeLocalStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'success' }));
-      } else if (printMode === 'system') {
-        // Use browser print dialog with formatted receipt
-        setPrintOrder(order);
-        // The PrintReceipt component handles the actual printing
-      } else {
-        // Fallback to system print
-        setPrintOrder(order);
-      }
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Print failed';
-      safeLocalStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'error', message }));
-      setError(`Print failed: ${message}`);
-    } finally {
-      setPrintingOrderId(null);
-      setRawBtPrinting(false);
-    }
-  };
+    socket.on('notifications.new', handleNewNotification);
+    socket.on('printer.test', handlePrinterTest);
+    socket.on('new-order', handleNewOrder);
+    socket.on('order:status_changed', handleOrderStatusChanged);
+    return () => {
+      socket.off('notifications.new', handleNewNotification);
+      socket.off('printer.test', handlePrinterTest);
+      socket.off('new-order', handleNewOrder);
+      socket.off('order:status_changed', handleOrderStatusChanged);
+    };
+  }, [socket]);
 
-  const handlePrintComplete = () => {
-    setPrintOrder(null);
-    safeLocalStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'success' }));
-  };
+  useEffect(() => {
+    setNow(Date.now());
+    const t = window.setInterval(() => setNow(Date.now()), 10000);
+    return () => window.clearInterval(t);
+  }, []);
 
-  // Filter orders by search query
-  const filteredOrders = useMemo(() => {
-    if (!searchQuery.trim()) return orders;
-    const query = searchQuery.toLowerCase();
-    return orders.filter((order) => {
-      const searchableText = [
-        order.customer_name || '',
-        order.customer_phone || '',
-        order.external_id || order.id || '',
-        order.channel || '',
-        order.order_type || '',
-        order.status || '',
-        (order.items || []).map((i) => i.name || '').join(' '),
-      ].join(' ').toLowerCase();
-      return searchableText.includes(query);
+  const activeOrders = useMemo(() => {
+    const activeStatuses = new Set(['received', 'preparing', 'ready']);
+    // Deduplicate by order ID to prevent the same order from appearing multiple times
+    const seen = new Set<string>();
+    return orders.filter((o) => {
+      if (seen.has(o.id)) return false;
+      seen.add(o.id);
+      return activeStatuses.has(normalizeStatus(o.status));
     });
-  }, [orders, searchQuery]);
+  }, [orders]);
 
-  const activeCount = useMemo(() => orders.filter(isActiveOrder).length, [orders]);
-  const pendingCount = useMemo(() => orders.filter((o) => (o.status || '').toLowerCase() === 'pending').length, [orders]);
+  const filteredOrders = useMemo(() => {
+    let result = [...activeOrders];
 
-  const handleSearchKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Escape') {
-      setSearchQuery('');
-      searchRef.current?.blur();
+    // Apply status filter
+    if (statusFilter !== 'all') {
+      result = result.filter(o => normalizeStatus(o.status) === statusFilter);
     }
-  };
 
-  if (userLoading) {
+    // Apply channel filter
+    if (channelFilter !== 'all') {
+      result = result.filter(o => o.channel === channelFilter);
+    }
+
+    // Apply search query
+    if (searchQuery.trim()) {
+      result = result.filter(o => matchesSearchQuery(o, searchQuery));
+    }
+
+    // Apply sorting
+    switch (sortBy) {
+      case 'oldest':
+        result.sort((a, b) => {
+          const ta = a.created_at ? new Date(a.created_at).getTime() : 0;
+          const tb = b.created_at ? new Date(b.created_at).getTime() : 0;
+          return ta - tb;
+        });
+        break;
+      case 'prep-time':
+        result.sort((a, b) => {
+          // Put orders with prep time at top, sorted by remaining time
+          const pa = a.prep_minutes || 15;
+          const pb = b.prep_minutes || 15;
+          const hasA = a.created_at ? Date.now() - new Date(a.created_at).getTime() : 0;
+          const hasB = b.created_at ? Date.now() - new Date(b.created_at).getTime() : 0;
+          const ra = pa * 60000 - hasA;
+          const rb = pb * 60000 - hasB;
+          return ra - rb; // Orders closer to deadline first
+        });
+        break;
+      case 'newest':
+      default:
+        result.sort((a, b) => {
+          const ta = a.created_at ? new Date(a.created_at).getTime() : 0;
+          const tb = b.created_at ? new Date(b.created_at).getTime() : 0;
+          return tb - ta;
+        });
+        break;
+    }
+
+    return result;
+  }, [activeOrders, statusFilter, channelFilter, searchQuery, sortBy]);
+
+  useEffect(() => {
+    if (filteredOrders.length === 0) {
+      if (selectedOrder) setSelectedOrder(null);
+      return;
+    }
+    // Only auto-select if no order is currently selected
+    if (!selectedOrder) {
+      const latest = filteredOrders[0];
+      setSelectedOrder(latest);
+    }
+  }, [filteredOrders, selectedOrder]);
+
+  const { activeQueueOrders, archivedOrders } = useMemo(() => {
+    const activeQueue: Order[] = [];
+    const archived: Order[] = [];
+
+    filteredOrders.forEach((order) => {
+      if (isArchivedOrder(order, now)) {
+        archived.push(order);
+        return;
+      }
+      activeQueue.push(order);
+    });
+
+    return { activeQueueOrders: activeQueue, archivedOrders: archived };
+  }, [filteredOrders, now]);
+
+  const receivedOrders = useMemo(() => {
+    return activeQueueOrders.filter((o) => normalizeStatus(o.status) === 'received');
+  }, [activeQueueOrders]);
+
+  const preparingOrders = useMemo(() => {
+    return activeQueueOrders.filter((o) => normalizeStatus(o.status) === 'preparing');
+  }, [activeQueueOrders]);
+
+  const readyOrders = useMemo(() => {
+    return activeQueueOrders.filter((o) => normalizeStatus(o.status) === 'ready');
+  }, [activeQueueOrders]);
+
+  const queueSections = useMemo(() => ([
+    { key: 'received' as const, label: 'New', orders: receivedOrders },
+    { key: 'preparing' as const, label: 'In Progress', orders: preparingOrders },
+    { key: 'ready' as const, label: 'Ready', orders: readyOrders },
+  ]), [receivedOrders, preparingOrders, readyOrders]);
+
+  const visibleSections = useMemo(() => {
+    if (statusFilter === 'all') {
+      return queueSections;
+    }
+
+    return queueSections.filter((section) => section.key === statusFilter);
+  }, [queueSections, statusFilter]);
+
+  const renderOrderCard = useCallback((o: Order, laneIndex: number, options?: { isArchived?: boolean }) => {
+    const isArchived = Boolean(options?.isArchived);
+    const status = normalizeStatus(o.status);
+    const isNew = status === 'received';
+    const isPreparing = status === 'preparing';
+    const isReady = status === 'ready';
+    const timeAgo = formatTimeAgo(o.created_at, now);
+    const urgencyLevel = isArchived ? 'normal' : getOrderUrgencyLevel(timeAgo.elapsedMinutes);
+    const urgencyTextClass = getOrderUrgencyClass(urgencyLevel);
+    const urgencyBadgeClass = getOrderUrgencyBadgeClass(urgencyLevel);
+    const itemCount = (o.items || []).reduce((sum, it) => sum + (it.quantity || 1), 0);
+    const hasPendingAction = pendingActions.has(o.id);
+    const isActionBusy = busyId === o.id || hasPendingAction || isArchived;
+    const isLatest = laneIndex === 0;
+    const isSelected = selectedOrder?.id === o.id;
+
+    const prepTimeData = isPreparing
+      ? formatPrepTimeRemaining(o.prep_minutes || 15, o.created_at, now)
+      : null;
+    const prepWarningLevel = prepTimeData && !isArchived
+      ? getPrepTimeWarningLevel(prepTimeData.percentRemaining)
+      : 'normal';
+    const prepTimeColorClass = getPrepTimeColorClass(prepWarningLevel);
+    const isOverdue = prepTimeData?.isOverdue;
+    const cardStatusBadgeClasses = isPreparing && !isArchived && (prepWarningLevel === 'critical' || prepWarningLevel === 'warning')
+      ? prepWarningLevel === 'critical'
+        ? 'bg-[var(--tablet-danger)] text-white'
+        : 'bg-[var(--tablet-warning)] text-[var(--tablet-text)]'
+      : statusBadgeClassesForStatus(status);
+    const openOrderDetails = async () => {
+      setSelectedOrder(o);
+      setOrderDetailsOrder({ ...o, items: normalizeOrderItems(o.items) });
+
+      try {
+        const response = await apiGet<{ success: boolean; data?: Order }>(`/api/orders/${encodeURIComponent(o.id)}`);
+        if (!response?.success || !response.data) return;
+        const detailedOrder = { ...response.data, items: normalizeOrderItems(response.data.items) };
+        setOrderDetailsOrder(detailedOrder);
+        setSelectedOrder((prev) => (prev?.id === detailedOrder.id ? detailedOrder : prev));
+      } catch (error) {
+        console.warn('Failed to load full order details', error);
+      }
+    };
+
     return (
-      <div className="tablet-theme min-h-screen bg-[var(--tablet-bg)] flex items-center justify-center">
-        <div className="animate-spin h-10 w-10 border-2 border-[var(--tablet-accent)] border-t-transparent rounded-full" />
+      <div
+        key={o.id}
+        onClick={openOrderDetails}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            openOrderDetails();
+          }
+        }}
+        className={clsx(
+          'w-[340px] min-w-[340px] text-left rounded-xl border shadow-sm transition transform hover:brightness-105 hover:scale-[1.01] touch-manipulation overflow-hidden relative',
+          isArchived && 'opacity-65 saturate-75',
+          isSelected
+            ? 'border-[var(--tablet-info)] shadow-[0_0_0_1px_var(--tablet-info)] bg-[color-mix(in_srgb,var(--tablet-info)_8%,var(--tablet-card))]'
+            : 'border-[var(--tablet-border)] bg-[var(--tablet-card)]',
+        )}
+        style={{ animationDelay: `${laneIndex * 50}ms` }}
+      >
+        {/* Status colored left border strip */}
+        <div className={clsx(
+          'absolute left-0 top-0 bottom-0 w-1',
+          isOverdue ? 'bg-[var(--tablet-danger)]' :
+          isNew ? 'bg-[var(--tablet-danger)]' :
+          isPreparing ? 'bg-[var(--tablet-warning)]' :
+          isReady ? 'bg-[var(--tablet-success)]' : 'bg-[var(--tablet-border)]'
+        )} />
+
+        <div className="pl-4 pr-4 pt-3.5 pb-3.5">
+          {/* Top row: time ago + order metadata */}
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className={clsx('text-xs font-semibold truncate', urgencyTextClass)}>
+                {timeAgo.text}
+              </span>
+              <span className={clsx('text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide', urgencyBadgeClass)}>
+                {urgencyLevel}
+              </span>
+              {isArchived && (
+                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-[var(--tablet-surface-alt)] text-[var(--tablet-muted)] uppercase tracking-wide">
+                  Archived
+                </span>
+              )}
+            </div>
+            <div className="flex flex-col items-end gap-1 pl-2">
+              <div className="flex items-center gap-1.5">
+                <span className="text-base font-bold text-[var(--tablet-text)] tabular-nums">
+                  {formatMoney(o.total_amount)}
+                </span>
+                {hasPendingAction && (
+                  <span className="text-[10px] text-[var(--tablet-accent)] font-semibold px-1.5 py-0.5 rounded bg-[color-mix(in_srgb,var(--tablet-accent)_14%,transparent)]">
+                    ↻
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                {isLatest && (
+                  <span className="text-xs font-semibold text-[var(--tablet-accent)] hidden sm:inline">Latest</span>
+                )}
+                {isPreparing && prepTimeData && (
+                  <span className={clsx(
+                    'text-xs font-bold px-2 py-0.5 rounded-md inline-flex items-center gap-1',
+                    prepTimeColorClass,
+                    prepWarningLevel === 'critical' && 'prep-time-critical'
+                  )}>
+                    {prepTimeData.isOverdue && <AlertTriangle className="h-3 w-3" aria-hidden="true" />}
+                    {prepTimeData.text}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Customer name - prominent */}
+          <div className="text-[1.1rem] font-bold text-[var(--tablet-text)] truncate mb-1">
+            {o.customer_name || 'Guest'}
+          </div>
+
+          {/* Items + channel info */}
+          <div className="flex items-center gap-2 text-xs text-[var(--tablet-muted)] mb-3 flex-wrap">
+            <span>{itemCount} item{itemCount !== 1 ? 's' : ''}</span>
+            {o.channel && (
+              <>
+                <span>·</span>
+                <span>{getChannelIcon(o.channel)} {o.channel}</span>
+              </>
+            )}
+            {o.order_type && o.order_type.toLowerCase() !== (o.channel || '').toLowerCase() && (
+              <>
+                <span>·</span>
+                <span className="capitalize">{o.order_type}</span>
+              </>
+            )}
+          </div>
+
+          {/* Prep time progress bar (single, no duplicate) */}
+          {isPreparing && prepTimeData && (
+            <div className="h-1.5 rounded-full bg-[var(--tablet-border)] overflow-hidden mb-3">
+              <div
+                className={clsx(
+                  'h-full rounded-full prep-time-progress-bar transition-all duration-1000',
+                  (prepTimeData.isOverdue && !isArchived) ? 'bg-[var(--tablet-danger)] opacity-70' :
+                  prepWarningLevel === 'critical' ? 'bg-[var(--tablet-danger)]' :
+                  prepWarningLevel === 'warning' ? 'bg-[var(--tablet-warning)]' :
+                  'bg-[var(--tablet-success)]'
+                )}
+                style={{ width: `${prepTimeData.isOverdue ? 100 : prepTimeData.percentRemaining}%` }}
+              />
+            </div>
+          )}
+
+          <div className="mt-3 pt-3 border-t border-[var(--tablet-border)] flex items-center gap-2">
+            {status === 'received' && (
+              <>
+                <button
+                  type="button"
+                  disabled={isActionBusy}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    openAcceptModal(o);
+                  }}
+                  className="flex-1 min-h-[44px] rounded-lg px-3 py-2 text-sm font-semibold text-[var(--tablet-accent-contrast)] bg-[var(--tablet-accent)] transition active:brightness-95 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:saturate-50"
+                >
+                  Accept
+                </button>
+                <button
+                  type="button"
+                  disabled={isActionBusy}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    declineOrder(o);
+                  }}
+                  className="flex-1 min-h-[44px] rounded-lg px-3 py-2 text-sm font-semibold border border-[var(--tablet-danger)] text-[var(--tablet-danger)] transition active:bg-[var(--tablet-danger)]/10 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Reject
+                </button>
+              </>
+            )}
+
+            {status === 'preparing' && (
+              <button
+                type="button"
+                disabled={isActionBusy}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setStatus(o.id, 'ready');
+                }}
+                className="w-full min-h-[44px] rounded-lg px-3 py-2 text-sm font-semibold text-[var(--tablet-accent-contrast)] bg-[var(--tablet-success)] transition active:brightness-95 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:saturate-50"
+              >
+                Mark Ready
+              </button>
+            )}
+
+            {status === 'ready' && (
+              <>
+                <button
+                  type="button"
+                  disabled={isActionBusy}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setStatus(o.id, 'completed');
+                  }}
+                  className="flex-1 min-h-[44px] rounded-lg px-3 py-2 text-sm font-semibold text-[var(--tablet-success-action-contrast)] bg-[var(--tablet-success-action)] transition active:bg-[var(--tablet-success-action-active)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tablet-success-action)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--tablet-card)] disabled:opacity-50 disabled:cursor-not-allowed disabled:saturate-50 disabled:active:scale-100"
+                >
+                  Complete
+                </button>
+                <button
+                  type="button"
+                  disabled={isActionBusy}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setStatus(o.id, 'picked_up');
+                  }}
+                  className="flex-1 min-h-[44px] rounded-lg px-3 py-2 text-sm font-semibold border border-[var(--tablet-border-strong)] text-[var(--tablet-text)] transition active:bg-[color-mix(in_srgb,var(--tablet-surface-alt)_65%,var(--tablet-border-strong)_35%)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tablet-border-strong)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--tablet-card)] disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100"
+                >
+                  Picked Up
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }, [busyId, now, pendingActions, selectedOrder]);
+  const { soundEnabled, toggleSound } = useOrderAlerts(receivedOrders.length);
+
+  const orderSyncIssues = useMemo(() => {
+    const map = new Map<string, { retryCount: number; lastError: string | null; permanentFailure: boolean }>();
+    actionQueue.forEach((action) => {
+      const existing = map.get(action.orderId);
+      if (!existing || action.retryCount > existing.retryCount) {
+        map.set(action.orderId, {
+          retryCount: action.retryCount,
+          lastError: action.lastError,
+          permanentFailure: Boolean(action.permanentFailure)
+        });
+      }
+    });
+    return map;
+  }, [actionQueue]);
+
+
+  useEffect(() => {
+    // Avoid printing everything on initial load; mark existing active orders as already-seen.
+    if (!hasInitializedPrintedRef.current) {
+      if (!loading) {
+        const initial = new Set<string>();
+        for (const o of filteredOrders) initial.add(o.id);
+        setPrintedOrders(initial);
+        printedOrdersRef.current = initial;
+        hasInitializedPrintedRef.current = true;
+      }
+      return;
+    }
+
+    if (!autoPrintEnabled) return;
+
+    const toAutoPrint = filteredOrders.filter(
+      (o) => normalizeStatus(o.status) === 'received' && !printedOrdersRef.current.has(o.id)
+    );
+
+    if (toAutoPrint.length === 0) return;
+
+    const newest = toAutoPrint[0];
+    if (autoPrintPendingId || lastAutoPromptedId.current === newest.id) return;
+    lastAutoPromptedId.current = newest.id;
+    setAutoPrintPendingId(newest.id);
+  }, [autoPrintEnabled, filteredOrders, loading, autoPrintPendingId]);
+
+  const connectionText = isOnline ? (socketConnected ? 'Online' : 'Reconnecting') : 'Offline';
+  const connectionDotClasses = isOnline
+    ? socketConnected
+      ? 'bg-emerald-400'
+      : 'bg-amber-400'
+    : 'bg-red-400';
+
+  if (authLoading || !user) {
+    return (
+      <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
+        <p className="text-sm text-gray-300">Redirecting to login…</p>
       </div>
     );
   }
 
-  if (!user) {
-    return null;
-  }
-
   return (
-    <div className="tablet-theme min-h-screen bg-[var(--tablet-bg)] text-[var(--tablet-text)] font-sans">
+    <div className="tablet-theme tablet-orders-theme min-h-screen bg-[var(--tablet-bg)] text-[var(--tablet-text)] font-sans">
       <Head>
         <title>Orders • Servio</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=yes" />
-        <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <link rel="manifest" href="/manifest-tablet.webmanifest" />
       </Head>
 
-      {/* Print receipt (hidden, triggers browser print) */}
-      {printOrder && (
-        <PrintReceipt
-          order={printOrder as ReceiptOrder}
-          restaurant={restaurantProfile as ReceiptRestaurant}
-          paperWidth={paperWidth}
-          onPrintComplete={handlePrintComplete}
-        />
-      )}
+      {/* Print-only receipt (duplicate copies) */}
+      <div id="print-root" className="print-only">
+        {receiptHtml ? <PrintReceipt receiptHtml={receiptHtml} copies={2} paperWidth={paperWidth} /> : null}
+      </div>
 
-      <div className="no-print flex min-h-screen flex-col lg:flex-row">
-        <TabletSidebar />
+      <div className="no-print flex min-h-screen flex-col md:flex-row">
+        <TabletSidebar statusDotClassName={isOnline && socketConnected ? 'bg-emerald-400' : 'bg-amber-400'} />
 
-        <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
-          {/* Header */}
-          <OrdersHeader
-            activeCount={activeCount}
-            pendingCount={pendingCount}
-            loading={loading}
-            autoRefresh={autoRefresh}
-            lastRefreshed={lastRefreshed}
-            alerts={alerts}
-            onRefresh={() => loadOrders(0, true)}
-            onToggleAutoRefresh={() => setAutoRefresh((v) => !v)}
-            onDismissAlert={dismissAlert}
-            onClearAlerts={clearAlerts}
-          />
-
-          {/* Alerts */}
-          {alerts.length > 0 && (
-            <div className="px-4 pt-3 space-y-2">
-              {alerts.slice(0, 3).map((alert) => (
-                <div
-                  key={alert.id}
-                  className="flex items-center gap-3 rounded-xl border border-yellow-500/40 bg-yellow-500/10 px-4 py-3 text-sm"
-                >
-                  <AlertTriangle className="h-4 w-4 text-yellow-300 flex-shrink-0" />
-                  <span className="flex-1 text-yellow-100">{alert.message}</span>
-                  <button
-                    onClick={() => dismissAlert(alert.id)}
-                    className="p-1 rounded hover:bg-yellow-500/20 text-yellow-300"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Search + Filter Bar */}
-          <div className="px-4 pt-4 pb-2 flex items-center gap-3">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--tablet-muted)]" />
-              <input
-                ref={searchRef}
-                type="text"
-                placeholder="Search orders..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={handleSearchKeyDown}
-                className="w-full pl-9 pr-9 py-2.5 rounded-xl border border-[var(--tablet-border)] bg-[var(--tablet-surface)] text-[var(--tablet-text)] placeholder-[var(--tablet-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--tablet-accent)] text-sm"
+        <main className="flex-1 bg-[var(--tablet-bg)] text-[var(--tablet-text)] px-4 py-4 sm:px-6 md:px-6 lg:px-8">
+          <div className="flex flex-col gap-5 lg:gap-6">
+            {/* Header with search and filters */}
+            <div className="flex flex-col gap-4">
+              <OrdersHeader
+                connectionDotClasses={connectionDotClasses}
+                connectionText={connectionText}
+                soundEnabled={soundEnabled}
+                toggleSound={toggleSound}
+                isFullscreen={isFullscreen}
+                onFullscreenToggle={() => {
+                  if (!document.fullscreenElement) {
+                    document.documentElement.requestFullscreen();
+                  } else {
+                    document.exitFullscreen();
+                  }
+                }}
+                now={now}
+                refresh={refresh}
+                loading={loading}
+                activeCount={activeOrders.length}
               />
-              {searchQuery && (
+
+              {/* Search and Filter Bar */}
+              <OrderFiltersBar>
+                {/* Search Input */}
+                <div className="relative">
+                  {isSearchOpen || searchQuery ? (
+                    <div className="relative min-w-[220px] sm:min-w-[260px]">
+                      <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-[var(--tablet-muted)]" />
+                      <input
+                        ref={searchInputRef}
+                        type="text"
+                        placeholder="Search orders..."
+                        value={searchQuery}
+                        autoFocus
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        onBlur={handleSearchBlur}
+                        onKeyDown={handleSearchKeyDown}
+                        className="w-full pl-11 pr-10 py-3.5 rounded-xl border border-[var(--tablet-border)] bg-[var(--tablet-surface)] text-[var(--tablet-text)] placeholder-[var(--tablet-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--tablet-accent)] focus:border-transparent transition-all text-base"
+                      />
+                      {searchQuery && (
+                        <button
+                          type="button"
+                          aria-label="Clear search"
+                          onClick={handleSearchClear}
+                          className="absolute right-3.5 top-1/2 -translate-y-1/2 p-1.5 rounded-full hover:bg-[var(--tablet-border)] transition touch-manipulation"
+                        >
+                          <X className="h-4 w-4 text-[var(--tablet-muted)]" />
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      aria-label="Open search"
+                      onClick={handleSearchToggle}
+                      className="flex items-center justify-center rounded-xl border border-[var(--tablet-border)] bg-[var(--tablet-surface)] p-3.5 text-[var(--tablet-text)] transition-all hover:bg-[var(--tablet-surface-alt)] focus:outline-none focus:ring-2 focus:ring-[var(--tablet-accent)]"
+                    >
+                      <Search className="h-5 w-5" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Filter Toggle */}
                 <button
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-[var(--tablet-border)]"
+                  onClick={() => setShowFilters(!showFilters)}
+                  className={clsx(
+                    'flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl border transition-all touch-manipulation min-h-[48px]',
+                    showFilters || statusFilter !== 'all' || channelFilter !== 'all'
+                      ? 'bg-[var(--tablet-accent)] border-[var(--tablet-accent)] text-[var(--tablet-accent-contrast)]'
+                      : 'bg-[var(--tablet-surface)] border-[var(--tablet-border)] text-[var(--tablet-text)]'
+                  )}
                 >
-                  <X className="h-3.5 w-3.5 text-[var(--tablet-muted)]" />
+                  <Filter className="h-5 w-5" />
+                  <span className="font-semibold">Filters</span>
+                  {(statusFilter !== 'all' || channelFilter !== 'all') && (
+                    <span className="ml-1 px-2 py-0.5 rounded-full text-xs bg-[var(--tablet-accent-contrast)] text-[var(--tablet-accent)]">
+                      {[statusFilter !== 'all' && statusFilter, channelFilter !== 'all' && channelFilter].filter(Boolean).length}
+                    </span>
+                  )}
                 </button>
-              )}
-            </div>
-            <button
-              onClick={() => setShowFilters((v) => !v)}
-              className={clsx(
-                'flex items-center gap-2 px-3 py-2.5 rounded-xl border text-sm font-medium transition',
-                showFilters
-                  ? 'border-[var(--tablet-accent)] bg-[var(--tablet-accent)]/15 text-[var(--tablet-accent)]'
-                  : 'border-[var(--tablet-border)] text-[var(--tablet-text)] hover:bg-[var(--tablet-surface)]'
-              )}
-            >
-              <Filter className="h-4 w-4" />
-              <span className="hidden sm:inline">Filter</span>
-            </button>
-          </div>
 
-          {/* Filters */}
-          {showFilters && (
-            <OrderFiltersBar
-              statusFilter={statusFilter}
-              statusFilters={STATUS_FILTERS}
-              onStatusChange={(s) => {
-                setStatusFilter(s);
-                setShowFilters(false);
-              }}
-            />
-          )}
+                {/* Sort Dropdown */}
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as OrderFilter['sortBy'])}
+                  className="px-4 py-3.5 rounded-xl border border-[var(--tablet-border)] bg-[var(--tablet-surface)] text-[var(--tablet-text)] focus:outline-none focus:ring-2 focus:ring-[var(--tablet-accent)] cursor-pointer min-h-[48px]"
+                >
+                  <option value="newest">Newest First</option>
+                  <option value="oldest">Oldest First</option>
+                  <option value="prep-time">Prep Time</option>
+                </select>
 
-          {/* Error */}
-          {error && (
-            <div className="mx-4 mb-3 flex items-center gap-3 rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
-              <AlertTriangle className="h-4 w-4 flex-shrink-0" />
-              <span className="flex-1">{error}</span>
-              <button onClick={() => setError(null)} className="p-0.5 rounded hover:bg-rose-500/20">
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          )}
+                {actionQueue.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={retryQueueNow}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--tablet-warning)]/15 border border-[var(--tablet-warning)]/30 text-xs font-semibold text-[var(--tablet-warning)] touch-manipulation"
+                  >
+                    ↻ {actionQueue.length} Pending Sync
+                  </button>
+                )}
 
-          {/* Orders Grid */}
-          <div className="flex-1 overflow-y-auto px-4 pb-6">
-            {loading && filteredOrders.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-64">
-                <div className="animate-spin h-8 w-8 border-2 border-[var(--tablet-accent)] border-t-transparent rounded-full mb-4" />
-                <p className="text-[var(--tablet-muted)] text-sm">Loading orders…</p>
-              </div>
-            ) : filteredOrders.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-64">
-                <div className="text-5xl mb-4 opacity-30">📋</div>
-                <h3 className="text-lg font-semibold mb-1">No orders</h3>
-                <p className="text-[var(--tablet-muted)] text-sm">
-                  {searchQuery ? 'Try a different search.' : 'No orders match the current filter.'}
-                </p>
-              </div>
-            ) : (
-              <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 pt-1">
-                {filteredOrders.map((order) => {
-                  const nextStatus = NEXT_STATUS[(order.status || '').toLowerCase()];
-                  const nextLabel = NEXT_STATUS_LABEL[(order.status || '').toLowerCase()];
-                  const isUpdating = updatingOrderId === order.id;
-                  const isCancelling = cancellingOrderId === order.id;
-                  const isPrinting = printingOrderId === order.id;
-                  const isActive = isActiveOrder(order);
+                <button
+                  type="button"
+                  onClick={() => setShowArchivedOrders((prev) => !prev)}
+                  className={clsx(
+                    'flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold touch-manipulation',
+                    showArchivedOrders
+                      ? 'bg-[var(--tablet-surface-alt)] border-[var(--tablet-border-strong)] text-[var(--tablet-text)]'
+                      : 'bg-transparent border-[var(--tablet-border)] text-[var(--tablet-muted)]'
+                  )}
+                >
+                  Archived ({archivedOrders.length})
+                </button>
+              </OrderFiltersBar>
 
+              {/* Quick Filter Chips */}
+              <div className="flex flex-wrap gap-2 mt-1">
+                <button
+                  onClick={() => setStatusFilter('all')}
+                  className={clsx(
+                    'px-3 py-1.5 rounded-lg text-xs font-semibold transition touch-manipulation',
+                    statusFilter === 'all'
+                      ? 'bg-[var(--tablet-accent)] text-[var(--tablet-accent-contrast)]'
+                      : 'bg-[var(--tablet-surface)] border border-[var(--tablet-border)] text-[var(--tablet-text)] hover:bg-[var(--tablet-surface-alt)]'
+                  )}
+                >
+                  All ({activeOrders.length})
+                </button>
+
+                {[
+                  {
+                    key: 'received',
+                    label: 'New',
+                    count: receivedOrders.length,
+                    activeClass: 'bg-[var(--tablet-danger)] text-white'
+                  },
+                  {
+                    key: 'preparing',
+                    label: 'In Progress',
+                    count: preparingOrders.length,
+                    activeClass: 'bg-[var(--tablet-warning)] text-[var(--tablet-accent-contrast)]'
+                  },
+                  {
+                    key: 'ready',
+                    label: 'Ready',
+                    count: readyOrders.length,
+                    activeClass: 'bg-[var(--tablet-success)] text-white'
+                  }
+                ].map((chip) => {
+                  const isActive = statusFilter === chip.key;
+                  const isZeroCount = chip.count === 0;
                   return (
-                    <div
-                      key={order.id}
+                    <button
+                      key={chip.key}
+                      onClick={() => setStatusFilter(chip.key as OrderFilter['status'])}
+                      disabled={!isActive && isZeroCount}
                       className={clsx(
-                        'bg-[var(--tablet-surface)] border rounded-2xl overflow-hidden shadow-[0_2px_8px_rgba(0,0,0,0.3)] flex flex-col transition-all',
+                        'px-3 py-1.5 rounded-lg text-xs font-semibold transition touch-manipulation',
                         isActive
-                          ? 'border-[var(--tablet-accent)]/40'
-                          : 'border-[var(--tablet-border)]'
+                          ? chip.activeClass
+                          : isZeroCount
+                            ? 'bg-[var(--tablet-surface-alt)] border border-[var(--tablet-border)] text-[var(--tablet-muted)] opacity-55 cursor-not-allowed'
+                            : 'bg-[var(--tablet-surface)] border border-[var(--tablet-border)] text-[var(--tablet-text)] hover:bg-[var(--tablet-surface-alt)]'
                       )}
                     >
-                      {/* Card Header */}
-                      <button
-                        onClick={() => setSelectedOrder(order)}
-                        className="w-full p-4 text-left hover:bg-[var(--tablet-surface-alt)] transition flex-1"
-                      >
-                        <div className="flex items-start justify-between gap-2 mb-2">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span className="text-xl flex-shrink-0">{getChannelIcon(order.channel)}</span>
-                            <div className="min-w-0">
-                              <div className="font-semibold truncate text-sm">
-                                {order.customer_name || 'Guest'}
-                              </div>
-                              <div className="text-xs text-[var(--tablet-muted)] truncate">
-                                {order.channel || 'Unknown'} • {getOrderTypeLabel(order.order_type)}
-                              </div>
-                            </div>
-                          </div>
-                          <span className={clsx('text-xs font-semibold px-2 py-1 rounded-full flex-shrink-0', getStatusColor(order.status))}>
-                            {order.status || 'Unknown'}
-                          </span>
-                        </div>
+                      {chip.label} ({chip.count})
+                    </button>
+                  );
+                })}
+              </div>
 
-                        <div className="flex items-center justify-between text-xs text-[var(--tablet-muted)] mb-2">
-                          <span>{order.items?.length || 0} items</span>
-                          <span>{formatRelativeTime(order.created_at)}</span>
-                        </div>
+              {/* Expanded Filters Panel */}
+              {showFilters && (
+                <div className="flex flex-wrap gap-4 p-4 rounded-xl bg-[var(--tablet-surface)] border border-[var(--tablet-border)] animate-fade-in">
+                  <div className="flex-1 min-w-[200px]">
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--tablet-muted)] mb-2">
+                      Status (from quick filters)
+                    </label>
+                    <select
+                      value={statusFilter}
+                      disabled
+                      aria-readonly="true"
+                      className="w-full px-3 py-2 rounded-lg border border-[var(--tablet-border)] bg-[var(--tablet-surface-alt)] text-[var(--tablet-muted)] cursor-not-allowed"
+                    >
+                      <option value="all">All Statuses</option>
+                      <option value="received">New Orders</option>
+                      <option value="preparing">In Progress</option>
+                      <option value="ready">Ready</option>
+                    </select>
+                    <p className="mt-1 text-[0.65rem] text-[var(--tablet-muted)]">Use the status chips above to change this filter.</p>
+                  </div>
+                  <div className="flex-1 min-w-[200px]">
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--tablet-muted)] mb-2">
+                      Channel
+                    </label>
+                    <select
+                      value={channelFilter}
+                      onChange={(e) => setChannelFilter(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg border border-[var(--tablet-border)] bg-[var(--tablet-bg)] text-[var(--tablet-text)] focus:outline-none focus:ring-2 focus:ring-[var(--tablet-accent)]"
+                    >
+                      <option value="all">All Channels</option>
+                      {channels.map(channel => (
+                        <option key={channel} value={channel}>{channel}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex items-end">
+                    <button
+                      onClick={() => {
+                        setStatusFilter('all');
+                        setChannelFilter('all');
+                        setSearchQuery('');
+                        setIsSearchOpen(false);
+                        setSortBy('newest');
+                      }}
+                      className="px-4 py-2 rounded-lg border border-[var(--tablet-border)] text-[var(--tablet-muted)] hover:text-[var(--tablet-text)] hover:bg-[var(--tablet-surface-alt)] transition"
+                    >
+                      Clear All
+                    </button>
+                  </div>
+                </div>
+              )}
 
-                        <div className="text-lg font-bold">{formatMoney(order.total_amount)}</div>
-
-                        {order.special_instructions && (
-                          <div className="mt-2 text-xs bg-yellow-500/10 border border-yellow-500/30 rounded-lg px-2 py-1.5 text-yellow-200 line-clamp-2">
-                            {order.special_instructions}
-                          </div>
-                        )}
+              {/* Active Filters Display */}
+              {(searchQuery || statusFilter !== 'all' || channelFilter !== 'all') && (
+                <div className="flex flex-wrap gap-2 items-center">
+                  <span className="text-xs text-[var(--tablet-muted)]">Showing:</span>
+                  {searchQuery && (
+                    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-[var(--tablet-info)]/25 text-[var(--tablet-text)] border border-[var(--tablet-border)]">
+                      Search: "{searchQuery}"
+                      <button onClick={handleSearchClear} className="ml-1">
+                        <X className="h-3 w-3" />
                       </button>
+                    </span>
+                  )}
+                  {statusFilter !== 'all' && (
+                    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-[var(--tablet-accent)] text-[var(--tablet-accent-contrast)]">
+                      {statusFilter}
+                      <button onClick={() => setStatusFilter('all')} className="ml-1">
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  )}
+                  {channelFilter !== 'all' && (
+                    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-[var(--tablet-surface-alt)] border border-[var(--tablet-border)]">
+                      {channelFilter}
+                      <button onClick={() => setChannelFilter('all')} className="ml-1">
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
 
-                      {/* Action Buttons */}
-                      <div className="border-t border-[var(--tablet-border)] p-3 flex gap-2">
-                        {nextStatus && (
-                          <button
-                            onClick={() => updateOrderStatus(order, nextStatus)}
-                            disabled={isUpdating || isCancelling}
-                            className="flex-1 py-2.5 rounded-xl bg-[var(--tablet-accent)] text-[var(--tablet-accent-contrast)] text-sm font-bold hover:opacity-90 disabled:opacity-50 transition"
-                          >
-                            {isUpdating ? '…' : nextLabel}
-                          </button>
+            {showUpdateBanner && (
+              <div className="bg-[var(--tablet-surface-alt)] text-[var(--tablet-text)] px-4 py-3 flex items-center justify-between rounded-xl border border-[var(--tablet-border-strong)] shadow-[0_2px_8px_rgba(0,0,0,0.3)]">
+                <div className="font-semibold">Update available — refresh to get the latest tablet improvements.</div>
+                <button
+                  type="button"
+                  className="bg-[var(--tablet-accent)] text-[var(--tablet-accent-contrast)] px-3 py-1 rounded-lg font-semibold"
+                  onClick={() => window.location.reload()}
+                >
+                  Refresh
+                </button>
+              </div>
+            )}
+
+            {statusFilter === 'all' ? (
+              <div className="flex flex-row gap-4 overflow-x-auto pb-4 scrollbar-thin">
+                <section className="bg-[var(--tablet-surface)] rounded-2xl shadow-sm border border-[var(--tablet-border)] flex flex-col min-w-[380px] w-[380px] shrink-0 overflow-hidden">
+                  <div className="px-4 py-3.5 border-b border-[var(--tablet-border)] flex items-center justify-between">
+                    <h3 className="text-sm font-bold uppercase tracking-wider text-[var(--tablet-text)]">
+                      All Orders
+                    </h3>
+                    <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-[var(--tablet-surface-alt)] text-[var(--tablet-muted)]">
+                      {activeQueueOrders.length}
+                    </span>
+                  </div>
+                  <div className="flex-1 overflow-x-auto overflow-y-hidden p-3 scrollbar-thin">
+                    {activeQueueOrders.length === 0 ? (
+                      <div className="text-xs text-[var(--tablet-muted)] uppercase tracking-wide py-6 text-center border border-dashed border-[var(--tablet-border)] rounded-xl mt-1">
+                        No active orders
+                      </div>
+                    ) : (
+                      <div className="flex flex-row gap-3">
+                        {activeQueueOrders.map((o, index) => renderOrderCard(o, index))}
+                      </div>
+                    )}
+                  </div>
+                </section>
+              </div>
+            ) : (
+              <div className="flex flex-row gap-4 overflow-x-auto pb-4 scrollbar-thin">
+                {visibleSections.map((section) => {
+                  const columnAccentClass = {
+                    received: 'text-[var(--tablet-danger)]',
+                    preparing: 'text-[var(--tablet-warning)]',
+                    ready: 'text-[var(--tablet-success)]',
+                  } as const;
+
+                  const columnBadgeClass = {
+                    received: 'bg-[var(--tablet-danger)]/15 text-[var(--tablet-danger)]',
+                    preparing: 'bg-[var(--tablet-warning)]/15 text-[var(--tablet-warning)]',
+                    ready: 'bg-[var(--tablet-success)]/18 text-[var(--tablet-success)]',
+                  } as const;
+
+                  const columnBorderClass = {
+                    received: 'border-b-2 border-b-[var(--tablet-danger)]/35',
+                    preparing: 'border-b-2 border-b-[var(--tablet-warning)]/35',
+                    ready: 'border-b-2 border-b-[var(--tablet-success)]/35',
+                  } as const;
+
+                  const emptyStateByLane = {
+                    received: 'No new orders',
+                    preparing: 'No orders in progress',
+                    ready: 'No orders ready'
+                  } as const;
+
+                  return (
+                    <section
+                      key={section.key}
+                      className="bg-[var(--tablet-surface)] rounded-2xl shadow-sm border border-[var(--tablet-border)] flex flex-col min-w-[380px] w-[380px] shrink-0 overflow-hidden"
+                    >
+                      <div
+                        className={clsx(
+                          'px-4 py-3.5 border-b border-[var(--tablet-border)] flex items-center justify-between',
+                          columnBorderClass[section.key]
                         )}
-                        <button
-                          onClick={() => handlePrintOrder(order)}
-                          disabled={isPrinting || rawBtPrinting}
-                          className="p-2.5 rounded-xl border border-[var(--tablet-border)] text-[var(--tablet-muted)] hover:bg-[var(--tablet-surface-alt)] disabled:opacity-50 transition"
-                          title="Print receipt"
-                        >
-                          <Printer className={clsx('h-4 w-4', isPrinting && 'animate-pulse')} />
-                        </button>
-                        {isActive && (
-                          <button
-                            onClick={() => cancelOrder(order)}
-                            disabled={isCancelling || isUpdating}
-                            className="p-2.5 rounded-xl border border-rose-500/40 text-rose-300 hover:bg-rose-500/10 disabled:opacity-50 transition"
-                            title="Cancel order"
-                          >
-                            <X className={clsx('h-4 w-4', isCancelling && 'animate-pulse')} />
-                          </button>
+                      >
+                        <h3 className={clsx('text-sm font-bold uppercase tracking-wider', columnAccentClass[section.key])}>
+                          {section.label}
+                        </h3>
+                        <span className={clsx('px-2.5 py-0.5 rounded-full text-xs font-bold', columnBadgeClass[section.key])}>
+                          {section.orders.length}
+                        </span>
+                      </div>
+                      <div className="flex-1 overflow-x-auto overflow-y-hidden p-3 scrollbar-thin">
+                        {section.orders.length === 0 ? (
+                          <div className="text-xs text-[var(--tablet-muted)] uppercase tracking-wide py-6 text-center border border-dashed border-[var(--tablet-border)] rounded-xl mt-1">
+                            {emptyStateByLane[section.key]}
+                          </div>
+                        ) : (
+                          <div className="flex flex-row gap-3">
+                            {section.orders.map((o, index) => renderOrderCard(o, index))}
+                          </div>
                         )}
                       </div>
-                    </div>
+                    </section>
                   );
                 })}
               </div>
             )}
 
-            {/* Load More */}
-            {pagination?.hasMore && (
-              <div className="flex justify-center mt-6">
-                <button
-                  onClick={() => loadOrders((pagination.offset || 0) + (pagination.limit || 50), false)}
-                  disabled={loading}
-                  className="px-6 py-3 rounded-xl border border-[var(--tablet-border)] text-[var(--tablet-text)] font-semibold hover:bg-[var(--tablet-surface)] disabled:opacity-50 transition"
-                >
-                  {loading ? 'Loading…' : 'Load More'}
-                </button>
-              </div>
+            {showArchivedOrders && (
+              <section className="bg-[var(--tablet-surface)] rounded-2xl border border-[var(--tablet-border)] p-3 sm:p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-[var(--tablet-muted)]">Archive</h3>
+                  <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-[var(--tablet-surface-alt)] text-[var(--tablet-muted)]">
+                    {archivedOrders.length}
+                  </span>
+                </div>
+                {archivedOrders.length === 0 ? (
+                  <div className="text-xs text-[var(--tablet-muted)] uppercase tracking-wide py-6 text-center border border-dashed border-[var(--tablet-border)] rounded-xl mt-1">
+                    No archived orders for current filters
+                  </div>
+                ) : (
+                  <div className="space-y-2.5">
+                    {archivedOrders.map((o, index) => renderOrderCard(o, index, { isArchived: true }))}
+                  </div>
+                )}
+              </section>
             )}
           </div>
         </main>
       </div>
 
-      {/* Order Detail Modal */}
-      {selectedOrder && (
-        <OrderDetailsModal
-          order={selectedOrder as ReceiptOrder & Order}
-          restaurant={restaurantProfile as ReceiptRestaurant}
-          paperWidth={paperWidth}
-          printMode={printMode}
-          updatingOrderId={updatingOrderId}
-          cancellingOrderId={cancellingOrderId}
-          printingOrderId={printingOrderId}
-          onClose={() => setSelectedOrder(null)}
-          onUpdateStatus={updateOrderStatus}
-          onCancel={cancelOrder}
-          onPrint={handlePrintOrder}
-        />
+      {/* Order Details Modal */}
+      <OrderDetailsModal
+        order={orderDetailsOrder}
+        onClose={() => setOrderDetailsOrder(null)}
+        onConfirmOrder={(order) => {
+          openAcceptModal(order);
+          setOrderDetailsOrder(null);
+        }}
+        onDeclineOrder={(order) => {
+          declineOrder(order);
+          setOrderDetailsOrder(null);
+        }}
+        onSetStatus={(orderId, status) => {
+          setStatus(orderId, status);
+          if (status === 'completed') {
+            setOrderDetailsOrder(null);
+          }
+        }}
+        onPrintOrder={(orderId) => {
+          printOrder(orderId);
+        }}
+        busyOrderId={busyId}
+        printingOrderId={printingOrderId}
+        formatMoney={formatMoney}
+      />
+
+      {prepModalOrder && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-sm rounded-2xl border border-[var(--tablet-border)] bg-[var(--tablet-surface)] p-5 shadow-lg">
+            <h3 className="text-lg font-semibold text-[var(--tablet-text)]">Accept order #{shortId(prepModalOrder.id)}</h3>
+            <p className="mt-2 text-sm text-[var(--tablet-muted)]">Set prep time before moving this order to In Progress.</p>
+
+            <label className="mt-4 block text-sm font-medium text-[var(--tablet-text)]" htmlFor="prep-minutes-input">
+              Preparation time (minutes)
+            </label>
+            <input
+              id="prep-minutes-input"
+              type="number"
+              min={1}
+              max={180}
+              value={prepMinutes}
+              onChange={(event) => {
+                const next = Number(event.target.value);
+                setPrepMinutes(Number.isFinite(next) ? next : 15);
+              }}
+              className="mt-2 w-full rounded-xl border border-[var(--tablet-border)] bg-[var(--tablet-card)] px-3 py-2 text-[var(--tablet-text)] focus:outline-none focus:ring-2 focus:ring-[var(--tablet-accent)]"
+            />
+
+            <div className="mt-5 flex items-center gap-2">
+              <button
+                type="button"
+                className="flex-1 rounded-lg border border-[var(--tablet-border)] px-3 py-2 font-semibold"
+                onClick={() => setPrepModalOrder(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="flex-1 rounded-lg bg-[var(--tablet-accent)] px-3 py-2 font-semibold text-[var(--tablet-accent-contrast)] disabled:opacity-50"
+                onClick={() => {
+                  if (!prepModalOrder) return;
+                  const boundedMinutes = Math.min(180, Math.max(1, Number(prepMinutes) || 15));
+                  void acceptOrder(prepModalOrder, boundedMinutes);
+                  setPrepModalOrder(null);
+                }}
+                disabled={busyId === prepModalOrder.id}
+              >
+                Accept & Start
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
+
+
       <style jsx global>{`
-        .tablet-theme {
-          --tablet-bg: #0f0f11;
-          --tablet-surface: #18181b;
-          --tablet-surface-alt: #1e1e23;
-          --tablet-border: #2a2a30;
-          --tablet-text: #f4f4f5;
-          --tablet-muted: #71717a;
-          --tablet-muted-strong: #a1a1aa;
-          --tablet-accent: #14b8a6;
-          --tablet-accent-contrast: #f0fdf4;
-          --tablet-success: #22c55e;
-          --tablet-danger: #ef4444;
-          --tablet-warning: #f59e0b;
-          --tablet-info: #93c5fd;
+        body {
+          overscroll-behavior-y: contain;
+          -webkit-tap-highlight-color: transparent;
         }
-
-        .tablet-theme.light {
-          --tablet-bg: #f8f9fa;
-          --tablet-surface: #ffffff;
-          --tablet-surface-alt: #f3f4f6;
-          --tablet-border: #e5e7eb;
-          --tablet-text: #111827;
-          --tablet-muted: #6b7280;
-          --tablet-muted-strong: #374151;
-          --tablet-accent: #0d9488;
+        .tablet-orders-theme {
+          --tablet-accent: #3b82f6;
           --tablet-accent-contrast: #ffffff;
-          --tablet-success: #16a34a;
-          --tablet-danger: #dc2626;
-          --tablet-warning: #d97706;
-          --tablet-info: #2563eb;
+          --tablet-warning: #f97316;
         }
-
-        @media print {
-          .no-print { display: none !important; }
+        .light .tablet-orders-theme {
+          --tablet-accent: #2563eb;
+          --tablet-accent-contrast: #ffffff;
+          --tablet-warning: #ea580c;
         }
-
-        /* Tablet-specific font scaling */
-        @media (min-width: 600px) and (max-width: 767px) {
-          .tablet-theme {
-            font-size: 15px;
+        /* Mobile-first responsive adjustments */
+        @media (max-width: 639px) {
+          .tablet-theme main {
+            padding: 0.75rem;
           }
-        }
-
-        /* 10-inch tablets */
-        @media (min-width: 1024px) and (max-width: 1279px) {
           .tablet-theme .text-3xl {
-            font-size: 2rem;
+            font-size: 1.5rem;
           }
           .tablet-theme .text-2xl {
-            font-size: 1.5rem;
+            font-size: 1.25rem;
           }
         }
         /* 8-inch+ tablets */
