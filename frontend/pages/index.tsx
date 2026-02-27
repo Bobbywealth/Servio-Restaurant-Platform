@@ -294,8 +294,9 @@ export default function HomePage() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.3 }}
               >
-                The premium, <span className="text-gradient">voice-first</span><br className="hidden sm:block" />
-                platform for restaurant teams.
+                The all in one<br className="hidden sm:block" />
+                <span className="text-gradient">operating system</span>
+                for restaurants.
               </motion.h1>
 
               <motion.p
