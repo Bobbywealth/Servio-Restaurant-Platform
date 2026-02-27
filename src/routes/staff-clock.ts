@@ -7,9 +7,11 @@ import { eventBus } from '../events/bus';
 import rateLimit from 'express-rate-limit';
 
 const pinRateLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 5, // 5 PIN attempts per window (stricter)
-  message: { success: false, error: { message: 'Too many PIN attempts. Please try again in 15 minutes.' } },
+  // Only count failed attempts so active staff usage (status refresh, break checks) is not penalized.
+  windowMs: 5 * 60 * 1000,
+  max: 10,
+  skipSuccessfulRequests: true,
+  message: { success: false, error: { message: 'Too many invalid PIN attempts. Please try again in 5 minutes.' } },
   standardHeaders: true,
   legacyHeaders: false,
 });

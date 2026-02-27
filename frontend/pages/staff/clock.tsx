@@ -805,7 +805,7 @@ export default function StaffClockPage() {
       // Handle rate-limit lockout (429)
       if (response.status === 429) {
         const retryAfter = response.headers.get('Retry-After');
-        const retryAfterSecs = retryAfter ? parseInt(retryAfter, 10) : 15 * 60;
+        const retryAfterSecs = retryAfter ? parseInt(retryAfter, 10) : 5 * 60;
         const lockoutEnd = Date.now() + retryAfterSecs * 1000;
         setLockedUntil(lockoutEnd);
         localStorage.setItem('pinLockedUntil', String(lockoutEnd));
