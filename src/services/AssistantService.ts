@@ -6,6 +6,7 @@ import { DatabaseService } from './DatabaseService';
 import { MiniMaxService } from './MiniMaxService';
 import { VoiceConversationService } from './VoiceConversationService';
 import { logger } from '../utils/logger';
+import { eventBus } from '../events/bus';
 import { safePreview } from '../utils/safePreview';
 import { ensureUploadsDir } from '../utils/uploads';
 import { v4 as uuidv4 } from 'uuid';
