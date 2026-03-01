@@ -149,6 +149,7 @@ async function initializeServer() {
     const { default: vapiRoutes } = await import('./routes/vapi');
     const { default: voiceRoutes } = await import('./routes/voice');
     const { default: voiceHubRoutes } = await import('./routes/voice-hub');
+    const { default: eightySixCheckRoutes } = await import('./routes/eightySixCheck');
     const { default: notificationsRoutes } = await import('./routes/notifications');
     const { default: pushRoutes } = await import('./routes/push');
     const { default: deliveryPlatformsRoutes } = await import('./routes/delivery-platforms');
@@ -189,6 +190,7 @@ async function initializeServer() {
     app.use('/api/vapi', vapiRoutes);
     app.use('/api/voice', voiceRoutes);
     app.use('/api/voice-hub', voiceHubRoutes);
+    app.use('/api/86-check', eightySixCheckRoutes);
     
     // API Versioning middleware for /api routes
     app.use('/api', apiVersioning);

@@ -667,6 +667,15 @@ export class VapiService {
             this.getPhoneUserId(message.call?.customer?.number)
           );
           break;
+        case 'getCurrentlyUnavailableItems':
+          result = await this.handleGetCurrentlyUnavailable(normalizedParameters, restaurantId);
+          break;
+        case 'updateItemAvailability':
+          result = await this.handleUpdateItemAvailability(normalizedParameters, restaurantId);
+          break;
+        case 'complete86Check':
+          result = await this.handleComplete86Check(normalizedParameters);
+          break;
         default: {
           logger.warn('[vapi] unknown_tool', { requestId, callId, toolName: name, normalizedName });
           const mockToolCall = {
@@ -1159,6 +1168,132 @@ export class VapiService {
     
     const diffDays = Math.round(diffHours / 24);
     return `${diffDays} day${diffDays === 1 ? '' : 's'} ago`;
+  }
+
+  // 86 Check Assistant handlers
+  private async handleGetCurrentlyUnavailable(args: any, restaurantId: string | null): Promise<any> {
+    if (!restaurantId) {
+      return { ok: false, error: 'restaurantId is required' };
+    }
+    
+    const db = DatabaseService.getInstance().getDatabase();
+    const items = await db.all(
+      `SELECT id, name, category_id 
+       FROM menu_items 
+       WHERE restaurant_id = ? AND is_available = FALSE
+       ORDER BY name`,
+      [restaurantId]
+    );
+    
+    return {
+      ok: true,
+      count: items.length,
+      items: items.map((item: any) => ({
+        id: item.id,
+        name: item.name,
+        category: item.category_id
+      }))
+    };
+  }
+
+  private async handleUpdateItemAvailability(args: any, restaurantId: string | null): Promise<any> {
+    const { itemId, itemName, available } = args;
+    
+    if (!restaurantId || !itemId) {
+      return { ok: false, error: 'restaurantId and itemId are required' };
+    }
+    
+    const db = DatabaseService.getInstance().getDatabase();
+    
+    await db.run(
+      `UPDATE menu_items 
+       SET is_available = ?, updated_at = CURRENT_TIMESTAMP 
+       WHERE id = ? AND restaurant_id = ?`,
+      [available ? 1 : 0, itemId, restaurantId]
+    );
+    
+    // Log audit
+    await DatabaseService.getInstance().logAudit(
+      restaurantId,
+      null,
+      'update_availability',
+      'menu_item',
+      itemId,
+      { newStatus: available, source: '86check_assistant' }
+    );
+    
+    return {
+      ok: true,
+      itemId,
+      itemName: itemName || itemId,
+      available,
+      message: `${itemName || itemId} is now ${available ? 'available' : 'unavailable'}`
+    };
+  }
+
+  private async handleComplete86Check(args: any): Promise<any> {
+    const { checkId, results, staffName, notes } = args;
+    
+    if (!checkId || !results) {
+      return { ok: false, error: 'checkId and results are required' };
+    }
+    
+    // Call the 86-check result endpoint logic
+    const db = DatabaseService.getInstance().getDatabase();
+    
+    const check = await db.get(
+      'SELECT * FROM eighty_six_checks WHERE id = ?',
+      [checkId]
+    );
+    
+    if (!check) {
+      return { ok: false, error: 'Check not found' };
+    }
+    
+    // Process updates
+    const itemsUpdated = [];
+    for (const item of results) {
+      if (item.updateRequired) {
+        await db.run(
+          `UPDATE menu_items 
+           SET is_available = ?, updated_at = CURRENT_TIMESTAMP 
+           WHERE id = ? AND restaurant_id = ?`,
+          [item.newStatus ? 1 : 0, item.id, check.restaurant_id]
+        );
+        
+        itemsUpdated.push({
+          id: item.id,
+          name: item.name,
+          newStatus: item.newStatus
+        });
+      }
+    }
+    
+    // Update check record
+    await db.run(
+      `UPDATE eighty_six_checks 
+       SET completed_at = CURRENT_TIMESTAMP,
+           items_confirmed = ?,
+           items_updated = ?,
+           staff_name = ?,
+           notes = ?,
+           status = 'completed'
+       WHERE id = ?`,
+      [
+        JSON.stringify(results),
+        JSON.stringify(itemsUpdated),
+        staffName || null,
+        notes || null,
+        checkId
+      ]
+    );
+    
+    return {
+      ok: true,
+      checkId,
+      itemsUpdated: itemsUpdated.length,
+      message: `86 check completed. Updated ${itemsUpdated.length} items.`
+    };
   }
 
   getPhoneSystemPrompt(): string {

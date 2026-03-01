@@ -781,13 +781,50 @@ YOUR CAPABILITIES:
 2. Menu/86: Mark items unavailable/available on delivery platforms
 3. Inventory: Record receipts, adjust quantities, check levels
 4. Tasks: View daily tasks, mark as complete
-5. General info: Provide restaurant operational assistance
+5. Customer Feedback: Record complaints, compliments, and suggestions
+6. Manager Escalation: Connect customers to management when requested
+7. General info: Provide restaurant operational assistance
+
+CUSTOMER FEEDBACK HANDLING:
+When customers provide feedback (complaints, compliments, suggestions):
+1. Listen actively and acknowledge their concern/praise
+2. Apologize sincerely for any issues (even if minor)
+3. Record the feedback details: customer name, order ID (if applicable), specific issue, timestamp
+4. For complaints: Offer appropriate resolution (refund, remake, discount, store credit)
+5. For compliments: Thank them and note which staff member they mentioned
+6. Always escalate serious complaints to management immediately
+7. Follow up to ensure satisfaction
+
+Examples:
+- "I'm sorry to hear your order was cold. Let me note this and connect you with a manager who can offer a remake or refund."
+- "Thank you for the compliment about our jerk chicken! I'll make sure the kitchen team knows."
+- "I understand your frustration with the wait time. May I get your order number so I can look into this and make it right?"
+
+MANAGER ESCALATION PROTOCOL:
+When a customer asks to speak to a manager:
+1. Immediately acknowledge: "Of course, I'll get a manager for you right away."
+2. Do NOT ask why or try to handle it yourself first
+3. Capture key details while transferring: customer name, order info, brief context
+4. Use the escalateToManager tool to notify staff
+5. Provide the customer with an estimated wait time for the manager
+6. Stay on the line until manager picks up OR confirm callback number
+
+Escalation triggers (always get manager immediately):
+- Customer explicitly says "I want to speak to a manager" or "supervisor"
+- Angry or frustrated tone
+- Refund/credit requests over $25
+- Food safety concerns
+- Threats of negative reviews/social media posts
+- Repeat complaints from same customer
+- Any legal concerns
 
 SAFETY RULES:
 1. Always confirm destructive actions (86ing items, large inventory changes)
 2. If multiple items match a request, ask for clarification
 3. Log all actions for audit purposes
 4. For 86 operations, confirm which channels (DoorDash, Uber Eats, GrubHub)
+5. NEVER argue with customers - escalate if unsure
+6. Always offer manager when customer is unhappy
 
 RESPONSE STYLE:
 - Be concise and actionable
@@ -1020,6 +1057,98 @@ Use the available tools to perform actions. Always be helpful and professional.`
             required: ['taskId']
           }
         }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'record_customer_feedback',
+          description: 'Record customer feedback, complaints, or compliments for follow-up and quality improvement',
+          parameters: {
+            type: 'object',
+            properties: {
+              customerName: {
+                type: 'string',
+                description: 'Customer name or phone number for identification'
+              },
+              orderId: {
+                type: 'string',
+                description: 'Order ID if related to a specific order'
+              },
+              feedbackType: {
+                type: 'string',
+                enum: ['complaint', 'compliment', 'suggestion', 'general'],
+                description: 'Type of feedback received'
+              },
+              category: {
+                type: 'string',
+                enum: ['food_quality', 'service', 'wait_time', 'order_accuracy', 'cleanliness', 'price', 'other'],
+                description: 'Category of the feedback'
+              },
+              details: {
+                type: 'string',
+                description: 'Detailed description of the feedback'
+              },
+              severity: {
+                type: 'string',
+                enum: ['low', 'medium', 'high', 'urgent'],
+                description: 'Severity level of the issue (urgent for food safety, threats, etc.)'
+              },
+              requestedResolution: {
+                type: 'string',
+                description: 'What the customer is asking for (refund, remake, discount, etc.)'
+              },
+              managerFollowUp: {
+                type: 'boolean',
+                description: 'Whether manager follow-up is required',
+                default: false
+              }
+            },
+            required: ['customerName', 'feedbackType', 'category', 'details']
+          }
+        }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'escalate_to_manager',
+          description: 'Escalate a customer issue to a manager immediately. Use when customer asks for manager or issue is serious.',
+          parameters: {
+            type: 'object',
+            properties: {
+              customerName: {
+                type: 'string',
+                description: 'Customer name or identifier'
+              },
+              customerPhone: {
+                type: 'string',
+                description: 'Customer phone number for callback'
+              },
+              orderId: {
+                type: 'string',
+                description: 'Order ID if related to an order'
+              },
+              reason: {
+                type: 'string',
+                description: 'Why the customer wants to speak to a manager'
+              },
+              urgency: {
+                type: 'string',
+                enum: ['low', 'medium', 'high', 'urgent'],
+                description: 'Urgency level'
+              },
+              issueSummary: {
+                type: 'string',
+                description: 'Brief summary of the issue for the manager'
+              },
+              customerSentiment: {
+                type: 'string',
+                enum: ['calm', 'frustrated', 'angry', 'threatening'],
+                description: 'Customer emotional state'
+              }
+            },
+            required: ['customerName', 'reason', 'urgency', 'issueSummary']
+          }
+        }
       }
     ];
   }
@@ -1069,6 +1198,10 @@ Use the available tools to perform actions. Always be helpful and professional.`
           return await this.handleGetTasks(parsedArgs, userId);
         case 'complete_task':
           return await this.handleCompleteTask(parsedArgs, userId);
+        case 'record_customer_feedback':
+          return await this.handleRecordFeedback(parsedArgs, userId);
+        case 'escalate_to_manager':
+          return await this.handleEscalateToManager(parsedArgs, userId);
         default:
           throw new Error(`Unknown tool: ${name}`);
       }
