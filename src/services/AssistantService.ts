@@ -1586,6 +1586,90 @@ Use the available tools to perform actions. Always be helpful and professional.`
       details: { taskId, taskTitle: task.title }
     };
   }
+
+  private async handleRecordFeedback(args: any, userId: string): Promise<AssistantResponse['actions'][0]> {
+    const { customerName, orderId, feedbackType, category, details, severity, requestedResolution, managerFollowUp } = args;
+    const restaurantId = await this.resolveRestaurantId(userId);
+
+    const feedbackId = `feedback_${Date.now()}`;
+    await this.db.run(
+      `INSERT INTO tasks (id, restaurant_id, title, description, type, status, priority, created_by, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+      [
+        feedbackId,
+        restaurantId,
+        `${feedbackType}: ${category}`,
+        JSON.stringify({ customerName, orderId, category, details, severity, requestedResolution, managerFollowUp }),
+        'feedback',
+        'pending',
+        severity === 'urgent' ? 'high' : severity || 'medium',
+        userId
+      ]
+    );
+
+    await DatabaseService.getInstance().logAudit(
+      restaurantId, userId, 'record_feedback', 'feedback', feedbackId,
+      { customerName, feedbackType, category }
+    );
+
+    return {
+      type: 'record_customer_feedback',
+      status: 'success',
+      description: `Recorded ${feedbackType} from ${customerName}. ${managerFollowUp ? 'Manager will follow up.' : ''}`,
+      details: { feedbackId, customerName, feedbackType, category }
+    };
+  }
+
+  private async handleEscalateToManager(args: any, userId: string): Promise<AssistantResponse['actions'][0]> {
+    const { customerName, customerPhone, orderId, reason, urgency, issueSummary, customerSentiment } = args;
+    const restaurantId = await this.resolveRestaurantId(userId);
+
+    const escalationId = `escalation_${Date.now()}`;
+    await this.db.run(
+      `INSERT INTO tasks (id, restaurant_id, title, description, type, status, priority, created_by, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+      [
+        escalationId,
+        restaurantId,
+        `Manager Escalation: ${customerName}`,
+        JSON.stringify({ customerName, customerPhone, orderId, reason, issueSummary, customerSentiment, urgency }),
+        'escalation',
+        'pending',
+        urgency === 'urgent' ? 'high' : 'high',
+        userId
+      ]
+    );
+
+    await DatabaseService.getInstance().logAudit(
+      restaurantId, userId, 'escalate_to_manager', 'escalation', escalationId,
+      { customerName, reason, urgency }
+    );
+
+    try {
+      await eventBus.emit('staff.manager_escalation', {
+        type: 'staff.manager_escalation',
+        restaurantId,
+        payload: {
+          escalationId,
+          customerName,
+          customerPhone,
+          reason,
+          urgency,
+          issueSummary,
+          timestamp: new Date().toISOString()
+        }
+      });
+    } catch (error) {
+      logger.warn('Failed to emit escalation event', error);
+    }
+
+    return {
+      type: 'escalate_to_manager',
+      status: 'success',
+      description: `Escalated to manager. ${customerName} will be contacted shortly.`,
+      details: { escalationId, customerName, urgency }
+    };
+  }
 }
 
 export default AssistantService;
