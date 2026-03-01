@@ -26,7 +26,5 @@ CREATE INDEX IF NOT EXISTS idx_eighty_six_checks_started_at ON eighty_six_checks
 ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS eighty_six_check_schedule TEXT DEFAULT '{"times": ["09:00", "14:00"], "enabled": false}';
 ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS eighty_six_check_phone TEXT;
 
--- Log the migration
-INSERT INTO migrations (id, name, applied_at)
-VALUES (45, '045_add_86_check_system.sql', CURRENT_TIMESTAMP)
-ON CONFLICT (id) DO NOTHING;
+-- Note: Migration tracking table may not exist in all environments
+-- This migration creates the 86 check functionality
