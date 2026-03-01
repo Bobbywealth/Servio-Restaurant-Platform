@@ -965,8 +965,8 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
 
   // Log the action
   await DatabaseService.getInstance().logAudit(
-    req.user?.restaurantId!,
-    req.user?.id || 'system',
+    restaurantId,
+    req.user?.id ?? null,
     'create_order',
     'order',
     orderId,
@@ -974,9 +974,9 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
   );
 
   await eventBus.emit('order.created_web', {
-    restaurantId: req.user?.restaurantId!,
+    restaurantId,
     type: 'order.created_web',
-    actor: { actorType: 'user', actorId: req.user?.id },
+    actor: { actorType: req.user?.id ? 'user' : 'system', actorId: req.user?.id ?? 'api' },
     payload: {
       orderId,
       customerName,
