@@ -987,10 +987,10 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
     'received'
   ]);
 
-  // Log the action
+  // Log the action (support both JWT and API key auth)
   await DatabaseService.getInstance().logAudit(
-    req.user?.restaurantId!,
-    req.user?.id || 'system',
+    restaurantId,
+    req.user?.id || 'api-key',
     'create_order',
     'order',
     orderId,
@@ -998,9 +998,9 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
   );
 
   await eventBus.emit('order.created_web', {
-    restaurantId: req.user?.restaurantId!,
+    restaurantId: restaurantId,
     type: 'order.created_web',
-    actor: { actorType: 'user', actorId: req.user?.id },
+    actor: { actorType: req.user?.id ? 'user' : 'api', actorId: req.user?.id || 'api-key' },
     payload: {
       orderId,
       customerName,
