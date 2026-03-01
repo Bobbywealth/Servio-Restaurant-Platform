@@ -244,9 +244,12 @@ router.post('/schedules', asyncHandler(async (req: Request, res: Response) => {
 
   console.log('[SCHEDULING-POST] SUCCESS: Created schedule', scheduleId.slice(0, 8), 'for date:', data.shift_date);
 
+  // For API key auth, userId is "apikey:xxx" - use null for audit
+  const auditUserId = userId?.startsWith('apikey:') ? null : userId;
+  
   await DatabaseService.getInstance().logAudit(
     restaurantId,
-    userId,
+    auditUserId,
     'create_schedule',
     'staff_schedule',
     scheduleId,
@@ -373,7 +376,7 @@ router.put('/schedules/:id', asyncHandler(async (req: Request, res: Response) =>
 
   await DatabaseService.getInstance().logAudit(
     restaurantId,
-    userId,
+    userId?.startsWith('apikey:') ? null : userId,
     'update_schedule',
     'staff_schedule',
     String(id),
@@ -428,7 +431,7 @@ router.delete('/schedules/:id', asyncHandler(async (req: Request, res: Response)
 
   await DatabaseService.getInstance().logAudit(
     restaurantId,
-    userId,
+    userId?.startsWith('apikey:') ? null : userId,
     'delete_schedule',
     'staff_schedule',
     String(id),
@@ -550,7 +553,7 @@ router.post('/schedules/bulk', asyncHandler(async (req: Request, res: Response) 
 
   await DatabaseService.getInstance().logAudit(
     restaurantId,
-    userId,
+    userId?.startsWith('apikey:') ? null : userId,
     'bulk_create_schedule',
     'staff_schedule',
     '',

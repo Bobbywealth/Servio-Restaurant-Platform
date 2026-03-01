@@ -198,7 +198,10 @@ router.get('/:id', asyncHandler(async (req: Request, res: Response) => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const db = DatabaseService.getInstance().getDatabase();
 
-  const order = await db.get('SELECT * FROM orders WHERE id = ?', [id]);
+  const restaurantId = req.user?.restaurantId;
+  const order = restaurantId 
+    ? await db.get('SELECT * FROM orders WHERE id = ? AND restaurant_id = ?', [id, restaurantId])
+    : await db.get('SELECT * FROM orders WHERE id = ?', [id]);
 
   if (!order) {
     return res.status(404).json({
@@ -245,7 +248,10 @@ router.post('/:id/status', asyncHandler(async (req: Request, res: Response) => {
   const db = DatabaseService.getInstance().getDatabase();
 
   // Check if order exists
-  const order = await db.get('SELECT * FROM orders WHERE id = ?', [id]);
+  const restaurantId = req.user?.restaurantId;
+  const order = restaurantId
+    ? await db.get('SELECT * FROM orders WHERE id = ? AND restaurant_id = ?', [id, restaurantId])
+    : await db.get('SELECT * FROM orders WHERE id = ?', [id]);
   if (!order) {
     return res.status(404).json({
       success: false,
@@ -279,6 +285,21 @@ router.post('/:id/status', asyncHandler(async (req: Request, res: Response) => {
 
   logger.info(`Order ${id} status updated from ${order.status} to ${status}`);
 
+  // Broadcast status change via Socket.IO
+  try {
+    const io = req.app.get('socketio');
+    if (io) {
+      io.to(`restaurant-${req.user?.restaurantId}`).emit('order:status_changed', {
+        orderId: id,
+        previousStatus: order.status,
+        status,
+        timestamp: new Date()
+      });
+    }
+  } catch (socketError) {
+    logger.warn('Failed to broadcast order status change via socket', { orderId: id, error: socketError });
+  }
+
   res.json({
     success: true,
     data: {
@@ -307,7 +328,10 @@ router.post('/:id/prep-time', asyncHandler(async (req: Request, res: Response) =
   }
 
   const db = DatabaseService.getInstance().getDatabase();
-  const order = await db.get<any>('SELECT * FROM orders WHERE id = ?', [id]);
+  const restaurantId = req.user?.restaurantId;
+  const order = restaurantId
+    ? await db.get<any>('SELECT * FROM orders WHERE id = ? AND restaurant_id = ?', [id, restaurantId])
+    : await db.get<any>('SELECT * FROM orders WHERE id = ?', [id]);
   if (!order) {
     return res.status(404).json({
       success: false,
@@ -479,7 +503,7 @@ router.get('/analytics', asyncHandler(async (req: Request, res: Response) => {
     // Recent orders (last 50)
     db.all('SELECT * FROM orders WHERE restaurant_id = ? ORDER BY created_at DESC LIMIT 50', [restaurantId]),
     // Hourly distribution (today)
-    db.all(`SELECT strftime('%H', created_at) as hour, COUNT(*) as count FROM orders WHERE restaurant_id = ? AND created_at >= ? GROUP BY hour ORDER BY hour`, [restaurantId, todayStr])
+    db.all(`SELECT EXTRACT(HOUR FROM created_at)::text as hour, COUNT(*) as count FROM orders WHERE restaurant_id = ? AND created_at >= ? GROUP BY hour ORDER BY hour`, [restaurantId, todayStr])
   ]);
   
   // Calculate top items from recent orders
@@ -963,7 +987,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
     'received'
   ]);
 
-  // Log the action
+  // Log the action (support both JWT and API key auth)
   await DatabaseService.getInstance().logAudit(
     restaurantId,
     req.user?.id ?? null,
@@ -976,7 +1000,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
   await eventBus.emit('order.created_web', {
     restaurantId,
     type: 'order.created_web',
-    actor: { actorType: req.user?.id ? 'user' : 'system', actorId: req.user?.id ?? 'api' },
+    actor: { actorType: req.user?.id ? 'user' : 'api', actorId: req.user?.id ?? 'api' },
     payload: {
       orderId,
       customerName,

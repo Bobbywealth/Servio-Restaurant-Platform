@@ -4,6 +4,17 @@ import { asyncHandler } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
 import { eventBus } from '../events/bus';
+import rateLimit from 'express-rate-limit';
+
+const pinRateLimiter = rateLimit({
+  // Only count failed attempts so active staff usage (status refresh, break checks) is not penalized.
+  windowMs: 5 * 60 * 1000,
+  max: 10,
+  skipSuccessfulRequests: true,
+  message: { success: false, error: { message: 'Too many invalid PIN attempts. Please try again in 5 minutes.' } },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 const router = Router();
 
@@ -17,7 +28,7 @@ const router = Router();
  * POST /api/staff/clock/pin-login
  * Authenticate staff by PIN for PWA clock-in (public - no auth required)
  */
-router.post('/pin-login', asyncHandler(async (req: Request, res: Response) => {
+router.post('/pin-login', pinRateLimiter, asyncHandler(async (req: Request, res: Response) => {
   logger.info('[staff-clock] pin-login request received');
   const { pin } = req.body;
 
@@ -30,7 +41,7 @@ router.post('/pin-login', asyncHandler(async (req: Request, res: Response) => {
 
   const db = DatabaseService.getInstance().getDatabase();
 
-  const user = await db.get(`
+  const matchingUsers = await db.all(`
     SELECT
       u.id,
       u.name,
@@ -42,7 +53,18 @@ router.post('/pin-login', asyncHandler(async (req: Request, res: Response) => {
     FROM users u
     JOIN restaurants r ON u.restaurant_id = r.id
     WHERE u.pin = ? AND u.is_active = TRUE AND r.is_active = TRUE
+    ORDER BY u.created_at ASC
   `, [pin]);
+
+  if (matchingUsers.length > 1) {
+    logger.warn('[staff-clock] pin-login failed: duplicate active PIN detected');
+    return res.status(409).json({
+      success: false,
+      error: { message: 'This PIN is assigned to multiple active staff accounts. Please contact your manager.' }
+    });
+  }
+
+  const user = matchingUsers[0];
 
   if (!user) {
     logger.info('[staff-clock] pin-login failed: invalid PIN');
@@ -125,9 +147,22 @@ router.post('/clock-in', asyncHandler(async (req: Request, res: Response) => {
 
   const db = DatabaseService.getInstance().getDatabase();
 
-  const user = await db.get(`
-    SELECT * FROM users WHERE pin = ? AND is_active = TRUE
+  const matchingUsers = await db.all(`
+    SELECT u.*
+    FROM users u
+    JOIN restaurants r ON u.restaurant_id = r.id
+    WHERE u.pin = ? AND u.is_active = TRUE AND r.is_active = TRUE
+    ORDER BY u.created_at ASC
   `, [pin]);
+
+  if (matchingUsers.length > 1) {
+    return res.status(409).json({
+      success: false,
+      error: { message: 'This PIN is assigned to multiple active staff accounts. Please contact your manager.' }
+    });
+  }
+
+  const user = matchingUsers[0];
 
   if (!user) {
     return res.status(404).json({
@@ -216,9 +251,22 @@ router.post('/clock-out', asyncHandler(async (req: Request, res: Response) => {
 
   const db = DatabaseService.getInstance().getDatabase();
 
-  const user = await db.get(`
-    SELECT * FROM users WHERE pin = ? AND is_active = TRUE
+  const matchingUsers = await db.all(`
+    SELECT u.*
+    FROM users u
+    JOIN restaurants r ON u.restaurant_id = r.id
+    WHERE u.pin = ? AND u.is_active = TRUE AND r.is_active = TRUE
+    ORDER BY u.created_at ASC
   `, [pin]);
+
+  if (matchingUsers.length > 1) {
+    return res.status(409).json({
+      success: false,
+      error: { message: 'This PIN is assigned to multiple active staff accounts. Please contact your manager.' }
+    });
+  }
+
+  const user = matchingUsers[0];
 
   if (!user) {
     return res.status(404).json({

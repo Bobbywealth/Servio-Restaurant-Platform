@@ -1,18 +1,21 @@
 import Head from 'next/head';
-import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback, KeyboardEvent } from 'react';
 import { useRouter } from 'next/router';
 import clsx from 'clsx';
 import {
-  Menu,
   Printer,
-  Clock3,
-  ShoppingBag,
-  UtensilsCrossed,
+  Search,
+  Filter,
+  X,
   AlertTriangle,
 } from 'lucide-react';
 import { useSocket } from '../../lib/socket';
 import { PrintReceipt } from '../../components/PrintReceipt';
+import { TabletSidebar } from '../../components/tablet/TabletSidebar';
+import { OrdersHeader } from '../../components/tablet/orders/OrdersHeader';
+import { OrderFiltersBar } from '../../components/tablet/orders/OrderFiltersBar';
 import { OrderDetailsModal } from '../../components/tablet/orders/OrderDetailsModal';
+import { useOrderAlerts } from '../../hooks/tablet/useOrderAlerts';
 import type { ReceiptPaperWidth, ReceiptOrder, ReceiptRestaurant } from '../../utils/receiptGenerator';
 import { generateReceiptHtml, generateStandaloneReceiptHtml, getReceiptItemModifiers } from '../../utils/receiptGenerator';
 import { api } from '../../lib/api'
@@ -60,6 +63,10 @@ type OrdersResponse = {
 
 type OrderFilter = {
   status: 'all' | 'received' | 'preparing' | 'ready';
+  channel: string;
+  orderType: string;
+  sortBy: 'newest' | 'oldest' | 'prep-time';
+  searchQuery: string;
 };
 
 type PendingAction =
@@ -138,6 +145,35 @@ function formatTimeAgo(iso: string | null | undefined, now: number | null) {
   return { text: `${hours}h ${remainingMinutes}m`, elapsedMinutes: mins };
 }
 
+type UrgencyLevel = 'normal' | 'warning' | 'critical';
+
+function getOrderUrgencyLevel(elapsedMinutes: number | null): UrgencyLevel {
+  if (elapsedMinutes === null || elapsedMinutes < 10) return 'normal';
+  if (elapsedMinutes <= 20) return 'warning';
+  return 'critical';
+}
+
+function getOrderUrgencyClass(level: UrgencyLevel): string {
+  switch (level) {
+    case 'critical':
+      return 'text-[var(--tablet-danger)]';
+    case 'warning':
+      return 'text-[var(--tablet-warning)]';
+    default:
+      return 'text-[var(--tablet-muted)]';
+  }
+}
+
+function getOrderUrgencyBadgeClass(level: UrgencyLevel): string {
+  switch (level) {
+    case 'critical':
+      return 'bg-[color-mix(in_srgb,var(--tablet-danger)_18%,transparent)] text-[var(--tablet-danger)]';
+    case 'warning':
+      return 'bg-[color-mix(in_srgb,var(--tablet-warning)_18%,transparent)] text-[var(--tablet-warning)]';
+    default:
+      return 'bg-[var(--tablet-surface-alt)] text-[var(--tablet-muted)]';
+  }
+}
 
 function normalizeStatus(s: string | null | undefined) {
   const v = (s || '').trim();
@@ -145,15 +181,6 @@ function normalizeStatus(s: string | null | undefined) {
   const lower = v.toLowerCase();
   if (lower === 'new') return 'received';
   return lower;
-}
-
-function statusLabel(status: string) {
-  if (status === 'received') return 'New';
-  if (status === 'preparing') return 'In progress';
-  if (status === 'ready') return 'Ready';
-  if (status === 'completed') return 'Completed';
-  if (status === 'cancelled') return 'Cancelled';
-  return status || 'Received';
 }
 
 function isArchivedOrder(order: Order, now: number | null): boolean {
@@ -225,6 +252,36 @@ function formatPrepTimeRemaining(
   };
 }
 
+function getPrepTimeWarningLevel(percentRemaining: number): 'normal' | 'warning' | 'critical' {
+  if (percentRemaining <= 25) return 'critical';
+  if (percentRemaining <= 50) return 'warning';
+  return 'normal';
+}
+
+function getPrepTimeColorClass(level: 'normal' | 'warning' | 'critical'): string {
+  switch (level) {
+    case 'critical':
+      return 'bg-[var(--tablet-danger)] text-[var(--tablet-text)]';
+    case 'warning':
+      return 'bg-[var(--tablet-warning)] text-[var(--tablet-text)]';
+    default:
+      return 'bg-[var(--tablet-success)] text-[var(--tablet-text)]';
+  }
+}
+
+function statusBadgeClassesForStatus(status: string): string {
+  switch (status) {
+    case 'received':
+      return 'bg-[var(--tablet-danger)] text-white';
+    case 'preparing':
+      return 'bg-[var(--tablet-warning)] text-[var(--tablet-text)]';
+    case 'ready':
+      return 'bg-[var(--tablet-success)] text-white';
+    default:
+      return 'bg-[var(--tablet-surface-alt)] text-[var(--tablet-text)]';
+  }
+}
+
 const STALE_ORDER_THRESHOLD_MINUTES = Number(process.env.NEXT_PUBLIC_TABLET_STALE_ORDER_MINUTES ?? 120);
 
 // Search/filter utilities
@@ -242,6 +299,19 @@ function matchesSearchQuery(order: Order, query: string): boolean {
   ].join(' ').toLowerCase();
 
   return searchTerms.every(term => searchableText.includes(term));
+}
+
+function getChannelIcon(channel: string | null | undefined): string {
+  const c = (channel || '').toLowerCase();
+  if (c.includes('doordash')) return '🚗';
+  if (c.includes('ubereats') || c.includes('uber')) return '🛵';
+  if (c.includes('grubhub')) return '🍔';
+  if (c.includes('toast')) return '🍞';
+  if (c.includes('pos') || c === 'in-store') return '🏪';
+  if (c.includes('online') || c.includes('web')) return '💻';
+  if (c.includes('phone') || c.includes('call')) return '📞';
+  if (c.includes('vapi') || c.includes('voice')) return '🎙️';
+  return '📋';
 }
 
 
@@ -327,12 +397,65 @@ export default function TabletOrdersPage() {
   const [pendingActions, setPendingActions] = useState<Set<string>>(() => new Set());
   const [isOnline, setIsOnline] = useState<boolean>(true);
   const [socketConnected, setSocketConnected] = useState<boolean>(false);
+  const [showUpdateBanner, setShowUpdateBanner] = useState(false);
   const [actionQueue, setActionQueue] = useState<PendingAction[]>(() => loadActionQueue());
   const [lastSuccessfulSyncAt, setLastSuccessfulSyncAt] = useState<number | null>(null);
   const [syncAttemptStatus, setSyncAttemptStatus] = useState<'idle' | 'syncing' | 'success' | 'error'>('idle');
   
+  // New feature toggles
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  // Search and filter state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<OrderFilter['status']>('all');
+  const [channelFilter, setChannelFilter] = useState('all');
+  const [sortBy, setSortBy] = useState<OrderFilter['sortBy']>('newest');
+  const [showFilters, setShowFilters] = useState(false);
+  const [showArchivedOrders, setShowArchivedOrders] = useState(false);
   const [orderDetailsOrder, setOrderDetailsOrder] = useState<Order | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleSearchToggle = useCallback(() => {
+    setIsSearchOpen(true);
+  }, []);
+
+  const handleSearchClear = useCallback(() => {
+    setSearchQuery('');
+    setIsSearchOpen(false);
+  }, []);
+
+  const handleSearchBlur = useCallback(() => {
+    if (!searchQuery.trim()) {
+      setIsSearchOpen(false);
+    }
+  }, [searchQuery]);
+
+  const handleSearchKeyDown = useCallback((event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      setSearchQuery('');
+      setIsSearchOpen(false);
+      searchInputRef.current?.blur();
+      return;
+    }
+
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      if (!searchQuery.trim()) {
+        setIsSearchOpen(false);
+      }
+      searchInputRef.current?.blur();
+    }
+  }, [searchQuery]);
+
+  // Get unique channels for filter dropdown
+  const channels = useMemo(() => {
+    const channelSet = new Set<string>();
+    orders.forEach(o => {
+      if (o.channel) channelSet.add(o.channel);
+    });
+    return Array.from(channelSet).sort();
+  }, [orders]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -368,6 +491,20 @@ export default function TabletOrdersPage() {
     return () => cleanup();
   }, [socket]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!('serviceWorker' in navigator)) return;
+    const handleMessage = (event: MessageEvent) => {
+      const data = event.data;
+      if (data?.type === 'SW_ACTIVATED') {
+        setShowUpdateBanner(true);
+      }
+    };
+    navigator.serviceWorker.addEventListener('message', handleMessage);
+    return () => {
+      navigator.serviceWorker.removeEventListener('message', handleMessage);
+    };
+  }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -454,6 +591,18 @@ export default function TabletOrdersPage() {
       }
     }
     
+  }, []);
+
+  // Fullscreen toggle effect
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
 
   useEffect(() => {
@@ -571,6 +720,12 @@ export default function TabletOrdersPage() {
     }
   };
 
+  const retryQueueNow = async () => {
+    if (!window.confirm('Retry all failed and queued sync actions now?')) return;
+    const resetQueue = loadActionQueue().map((action) => ({ ...action, permanentFailure: false }));
+    persistActionQueue(resetQueue);
+    await processActionQueue(true);
+  };
 
   const clearFailedActions = () => {
     if (!window.confirm('Clear failed actions that exceeded retry limits? This cannot be undone.')) return;
@@ -1033,11 +1188,53 @@ export default function TabletOrdersPage() {
       printTestReceipt();
     };
 
+    // Handle new orders from website/public ordering
+    const handleNewOrder = async (data: { orderId: string; totalAmount?: number }) => {
+      console.log('[tablet] New order received via socket:', data);
+      try {
+        // Fetch the full order details
+        const response = await api.get<{ success: boolean; data?: Order }>(`/api/orders/${encodeURIComponent(data.orderId)}`);
+        if (response?.data?.success && response?.data?.data) {
+          const newOrder = { ...response.data.data, items: normalizeOrderItems(response.data.data.items) };
+          setOrders(prev => {
+            // Don't add if already exists
+            if (prev.some(o => o.id === newOrder.id)) return prev;
+            return [newOrder, ...prev];
+          });
+        }
+      } catch (err) {
+        console.error('[tablet] Failed to fetch new order:', err);
+        // Fallback: just refresh all orders
+        refresh();
+      }
+    };
+
+    // Handle order status changes from other clients
+    const handleOrderStatusChanged = (data: { orderId: string; previousStatus?: string; status: string; timestamp?: Date }) => {
+      console.log('[tablet] Order status changed via socket:', data);
+      setOrders(prev => prev.map(o => {
+        if (o.id === data.orderId) {
+          return { ...o, status: data.status };
+        }
+        return o;
+      }));
+      setSelectedOrder(prev => {
+        if (prev?.id === data.orderId) {
+          return { ...prev, status: data.status };
+        }
+        return prev;
+      });
+    };
+
     socket.on('notifications.new', handleNewNotification);
     socket.on('printer.test', handlePrinterTest);
+    socket.on('new-order', handleNewOrder);
+    socket.on('order:status_changed', handleOrderStatusChanged);
     return () => {
       socket.off('notifications.new', handleNewNotification);
       socket.off('printer.test', handlePrinterTest);
+      socket.off('new-order', handleNewOrder);
+      socket.off('order:status_changed', handleOrderStatusChanged);
     };
   }, [socket]);
 
@@ -1049,28 +1246,66 @@ export default function TabletOrdersPage() {
 
   const activeOrders = useMemo(() => {
     const activeStatuses = new Set(['received', 'preparing', 'ready']);
-    return orders.filter((o) => activeStatuses.has(normalizeStatus(o.status)));
+    // Deduplicate by order ID to prevent the same order from appearing multiple times
+    const seen = new Set<string>();
+    return orders.filter((o) => {
+      if (seen.has(o.id)) return false;
+      seen.add(o.id);
+      return activeStatuses.has(normalizeStatus(o.status));
+    });
   }, [orders]);
 
   const filteredOrders = useMemo(() => {
-    const result = [...activeOrders];
+    let result = [...activeOrders];
 
+    // Apply status filter
     if (statusFilter !== 'all') {
-      return result
-        .filter((o) => normalizeStatus(o.status) === statusFilter)
-        .sort((a, b) => {
+      result = result.filter(o => normalizeStatus(o.status) === statusFilter);
+    }
+
+    // Apply channel filter
+    if (channelFilter !== 'all') {
+      result = result.filter(o => o.channel === channelFilter);
+    }
+
+    // Apply search query
+    if (searchQuery.trim()) {
+      result = result.filter(o => matchesSearchQuery(o, searchQuery));
+    }
+
+    // Apply sorting
+    switch (sortBy) {
+      case 'oldest':
+        result.sort((a, b) => {
+          const ta = a.created_at ? new Date(a.created_at).getTime() : 0;
+          const tb = b.created_at ? new Date(b.created_at).getTime() : 0;
+          return ta - tb;
+        });
+        break;
+      case 'prep-time':
+        result.sort((a, b) => {
+          // Put orders with prep time at top, sorted by remaining time
+          const pa = a.prep_minutes || 15;
+          const pb = b.prep_minutes || 15;
+          const hasA = a.created_at ? Date.now() - new Date(a.created_at).getTime() : 0;
+          const hasB = b.created_at ? Date.now() - new Date(b.created_at).getTime() : 0;
+          const ra = pa * 60000 - hasA;
+          const rb = pb * 60000 - hasB;
+          return ra - rb; // Orders closer to deadline first
+        });
+        break;
+      case 'newest':
+      default:
+        result.sort((a, b) => {
           const ta = a.created_at ? new Date(a.created_at).getTime() : 0;
           const tb = b.created_at ? new Date(b.created_at).getTime() : 0;
           return tb - ta;
         });
+        break;
     }
 
-    return result.sort((a, b) => {
-      const ta = a.created_at ? new Date(a.created_at).getTime() : 0;
-      const tb = b.created_at ? new Date(b.created_at).getTime() : 0;
-      return tb - ta;
-    });
-  }, [activeOrders, statusFilter]);
+    return result;
+  }, [activeOrders, statusFilter, channelFilter, searchQuery, sortBy]);
 
   useEffect(() => {
     if (filteredOrders.length === 0) {
@@ -1084,7 +1319,7 @@ export default function TabletOrdersPage() {
     }
   }, [filteredOrders, selectedOrder]);
 
-  const { activeQueueOrders } = useMemo(() => {
+  const { activeQueueOrders, archivedOrders } = useMemo(() => {
     const activeQueue: Order[] = [];
     const archived: Order[] = [];
 
@@ -1096,7 +1331,7 @@ export default function TabletOrdersPage() {
       activeQueue.push(order);
     });
 
-    return { activeQueueOrders: activeQueue };
+    return { activeQueueOrders: activeQueue, archivedOrders: archived };
   }, [filteredOrders, now]);
 
   const receivedOrders = useMemo(() => {
@@ -1111,33 +1346,49 @@ export default function TabletOrdersPage() {
     return activeQueueOrders.filter((o) => normalizeStatus(o.status) === 'ready');
   }, [activeQueueOrders]);
 
-  // Single unified list - all orders in one card
-  const allOrdersList = useMemo(() => {
-    return [...activeQueueOrders].sort((a, b) => {
-      const ta = a.created_at ? new Date(a.created_at).getTime() : 0;
-      const tb = b.created_at ? new Date(b.created_at).getTime() : 0;
-      return tb - ta;
-    });
-  }, [activeQueueOrders]);
+  const queueSections = useMemo(() => ([
+    { key: 'received' as const, label: 'New', orders: receivedOrders },
+    { key: 'preparing' as const, label: 'In Progress', orders: preparingOrders },
+    { key: 'ready' as const, label: 'Ready', orders: readyOrders },
+  ]), [receivedOrders, preparingOrders, readyOrders]);
 
-  const filtered = filteredOrders;
+  const visibleSections = useMemo(() => {
+    if (statusFilter === 'all') {
+      return queueSections;
+    }
 
+    return queueSections.filter((section) => section.key === statusFilter);
+  }, [queueSections, statusFilter]);
 
   const renderOrderCard = useCallback((o: Order, laneIndex: number, options?: { isArchived?: boolean }) => {
     const isArchived = Boolean(options?.isArchived);
     const status = normalizeStatus(o.status);
     const isNew = status === 'received';
     const isPreparing = status === 'preparing';
+    const isReady = status === 'ready';
     const timeAgo = formatTimeAgo(o.created_at, now);
+    const urgencyLevel = isArchived ? 'normal' : getOrderUrgencyLevel(timeAgo.elapsedMinutes);
+    const urgencyTextClass = getOrderUrgencyClass(urgencyLevel);
+    const urgencyBadgeClass = getOrderUrgencyBadgeClass(urgencyLevel);
     const itemCount = (o.items || []).reduce((sum, it) => sum + (it.quantity || 1), 0);
     const hasPendingAction = pendingActions.has(o.id);
     const isActionBusy = busyId === o.id || hasPendingAction || isArchived;
+    const isLatest = laneIndex === 0;
     const isSelected = selectedOrder?.id === o.id;
 
     const prepTimeData = isPreparing
       ? formatPrepTimeRemaining(o.prep_minutes || 15, o.created_at, now)
       : null;
-
+    const prepWarningLevel = prepTimeData && !isArchived
+      ? getPrepTimeWarningLevel(prepTimeData.percentRemaining)
+      : 'normal';
+    const prepTimeColorClass = getPrepTimeColorClass(prepWarningLevel);
+    const isOverdue = prepTimeData?.isOverdue;
+    const cardStatusBadgeClasses = isPreparing && !isArchived && (prepWarningLevel === 'critical' || prepWarningLevel === 'warning')
+      ? prepWarningLevel === 'critical'
+        ? 'bg-[var(--tablet-danger)] text-white'
+        : 'bg-[var(--tablet-warning)] text-[var(--tablet-text)]'
+      : statusBadgeClassesForStatus(status);
     const openOrderDetails = async () => {
       setSelectedOrder(o);
       setOrderDetailsOrder({ ...o, items: normalizeOrderItems(o.items) });
@@ -1166,57 +1417,132 @@ export default function TabletOrdersPage() {
           }
         }}
         className={clsx(
-          'w-full text-left rounded-[20px] border border-[var(--tablet-border)] shadow-sm transition touch-manipulation overflow-hidden bg-[var(--tablet-card)]',
+          'w-[340px] min-w-[340px] text-left rounded-xl border shadow-sm transition transform hover:brightness-105 hover:scale-[1.01] touch-manipulation overflow-hidden relative',
           isArchived && 'opacity-65 saturate-75',
-          isSelected && 'ring-2 ring-white/70'
+          isSelected
+            ? 'border-[var(--tablet-info)] shadow-[0_0_0_1px_var(--tablet-info)] bg-[color-mix(in_srgb,var(--tablet-info)_8%,var(--tablet-card))]'
+            : 'border-[var(--tablet-border)] bg-[var(--tablet-card)]',
         )}
+        style={{ animationDelay: `${laneIndex * 50}ms` }}
       >
+        {/* Status colored left border strip */}
         <div className={clsx(
-          'px-4 py-3 text-[var(--tablet-accent-contrast)]',
-          isNew ? 'bg-[var(--tablet-danger)]' : isPreparing ? 'bg-[var(--tablet-accent)]' : 'bg-[var(--tablet-success)]'
-        )}>
-          <div className="flex items-center justify-between text-sm font-semibold opacity-95">
-            <span>{statusLabel(status)}</span>
-            {prepTimeData ? (
-              <span className="inline-flex items-center gap-1">{prepTimeData.isOverdue && <AlertTriangle className="h-3 w-3" />}Ready in {prepTimeData.text}</span>
-            ) : (
-              <span>{timeAgo.text}</span>
-            )}
+          'absolute left-0 top-0 bottom-0 w-1',
+          isOverdue ? 'bg-[var(--tablet-danger)]' :
+          isNew ? 'bg-[var(--tablet-danger)]' :
+          isPreparing ? 'bg-[var(--tablet-warning)]' :
+          isReady ? 'bg-[var(--tablet-success)]' : 'bg-[var(--tablet-border)]'
+        )} />
+
+        <div className="pl-4 pr-4 pt-3.5 pb-3.5">
+          {/* Top row: time ago + order metadata */}
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className={clsx('text-xs font-semibold truncate', urgencyTextClass)}>
+                {timeAgo.text}
+              </span>
+              <span className={clsx('text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide', urgencyBadgeClass)}>
+                {urgencyLevel}
+              </span>
+              {isArchived && (
+                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-[var(--tablet-surface-alt)] text-[var(--tablet-muted)] uppercase tracking-wide">
+                  Archived
+                </span>
+              )}
+            </div>
+            <div className="flex flex-col items-end gap-1 pl-2">
+              <div className="flex items-center gap-1.5">
+                <span className="text-base font-bold text-[var(--tablet-text)] tabular-nums">
+                  {formatMoney(o.total_amount)}
+                </span>
+                {hasPendingAction && (
+                  <span className="text-[10px] text-[var(--tablet-accent)] font-semibold px-1.5 py-0.5 rounded bg-[color-mix(in_srgb,var(--tablet-accent)_14%,transparent)]">
+                    ↻
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                {isLatest && (
+                  <span className="text-xs font-semibold text-[var(--tablet-accent)] hidden sm:inline">Latest</span>
+                )}
+                {isPreparing && prepTimeData && (
+                  <span className={clsx(
+                    'text-xs font-bold px-2 py-0.5 rounded-md inline-flex items-center gap-1',
+                    prepTimeColorClass,
+                    prepWarningLevel === 'critical' && 'prep-time-critical'
+                  )}>
+                    {prepTimeData.isOverdue && <AlertTriangle className="h-3 w-3" aria-hidden="true" />}
+                    {prepTimeData.text}
+                  </span>
+                )}
+              </div>
+            </div>
           </div>
-          <div className="text-[2rem] leading-none font-extrabold tracking-tight mt-1 truncate">
+
+          {/* Customer name - prominent */}
+          <div className="text-[1.1rem] font-bold text-[var(--tablet-text)] truncate mb-1">
             {o.customer_name || 'Guest'}
           </div>
-        </div>
 
-        <div className="px-4 pt-3 pb-4">
-          <div className="space-y-1.5 text-[1rem] text-[var(--tablet-text)]">
-            <div className="flex items-center gap-2"><Clock3 className="h-4 w-4" />Pickup at {o.pickup_time || 'ASAP'}</div>
-            <div className="flex items-center gap-2"><ShoppingBag className="h-4 w-4" />{itemCount} items</div>
-            <div className="flex items-center gap-2"><UtensilsCrossed className="h-4 w-4" />{o.special_instructions ? 'Include utensils' : 'No utensils'}</div>
+          {/* Items + channel info */}
+          <div className="flex items-center gap-2 text-xs text-[var(--tablet-muted)] mb-3 flex-wrap">
+            <span>{itemCount} item{itemCount !== 1 ? 's' : ''}</span>
+            {o.channel && (
+              <>
+                <span>·</span>
+                <span>{getChannelIcon(o.channel)} {o.channel}</span>
+              </>
+            )}
+            {o.order_type && o.order_type.toLowerCase() !== (o.channel || '').toLowerCase() && (
+              <>
+                <span>·</span>
+                <span className="capitalize">{o.order_type}</span>
+              </>
+            )}
           </div>
 
-          <div className="mt-3 mb-3 space-y-2 text-[var(--tablet-text)]">
-            {(o.items || []).slice(0, 2).map((it, idx) => (
-              <div key={`${o.id}-item-${idx}`} className="text-base font-semibold flex justify-between gap-2">
-                <span className="truncate">{it.quantity || 1} {it.name || 'Item'}</span>
-                <span>{formatMoney((it.price ?? it.unit_price ?? 0) * (it.quantity || 1))}</span>
-              </div>
-            ))}
-          </div>
+          {/* Prep time progress bar (single, no duplicate) */}
+          {isPreparing && prepTimeData && (
+            <div className="h-1.5 rounded-full bg-[var(--tablet-border)] overflow-hidden mb-3">
+              <div
+                className={clsx(
+                  'h-full rounded-full prep-time-progress-bar transition-all duration-1000',
+                  (prepTimeData.isOverdue && !isArchived) ? 'bg-[var(--tablet-danger)] opacity-70' :
+                  prepWarningLevel === 'critical' ? 'bg-[var(--tablet-danger)]' :
+                  prepWarningLevel === 'warning' ? 'bg-[var(--tablet-warning)]' :
+                  'bg-[var(--tablet-success)]'
+                )}
+                style={{ width: `${prepTimeData.isOverdue ? 100 : prepTimeData.percentRemaining}%` }}
+              />
+            </div>
+          )}
 
           <div className="mt-3 pt-3 border-t border-[var(--tablet-border)] flex items-center gap-2">
             {status === 'received' && (
-              <button
-                type="button"
-                disabled={isActionBusy}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  openAcceptModal(o);
-                }}
-                className="w-full min-h-[44px] rounded-full px-3 py-2 text-base font-semibold text-[var(--tablet-text)] bg-[var(--tablet-surface-alt)] border border-[var(--tablet-border)] transition active:brightness-95 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Accept Order
-              </button>
+              <>
+                <button
+                  type="button"
+                  disabled={isActionBusy}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    openAcceptModal(o);
+                  }}
+                  className="flex-1 min-h-[44px] rounded-lg px-3 py-2 text-sm font-semibold text-[var(--tablet-accent-contrast)] bg-[var(--tablet-accent)] transition active:brightness-95 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:saturate-50"
+                >
+                  Accept
+                </button>
+                <button
+                  type="button"
+                  disabled={isActionBusy}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    declineOrder(o);
+                  }}
+                  className="flex-1 min-h-[44px] rounded-lg px-3 py-2 text-sm font-semibold border border-[var(--tablet-danger)] text-[var(--tablet-danger)] transition active:bg-[var(--tablet-danger)]/10 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Reject
+                </button>
+              </>
             )}
 
             {status === 'preparing' && (
@@ -1227,30 +1553,45 @@ export default function TabletOrdersPage() {
                   event.stopPropagation();
                   setStatus(o.id, 'ready');
                 }}
-                className="w-full min-h-[44px] rounded-full px-3 py-2 text-base font-semibold text-[var(--tablet-text)] bg-[var(--tablet-surface-alt)] border border-[var(--tablet-border)] transition active:brightness-95 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full min-h-[44px] rounded-lg px-3 py-2 text-sm font-semibold text-[var(--tablet-accent-contrast)] bg-[var(--tablet-success)] transition active:brightness-95 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:saturate-50"
               >
                 Mark Ready
               </button>
             )}
 
             {status === 'ready' && (
-              <button
-                type="button"
-                disabled={isActionBusy}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  setStatus(o.id, 'completed');
-                }}
-                className="w-full min-h-[44px] rounded-full px-3 py-2 text-base font-semibold text-[var(--tablet-text)] bg-[var(--tablet-surface-alt)] border border-[var(--tablet-border)] transition active:bg-[var(--tablet-border)] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Mark as Picked Up
-              </button>
+              <>
+                <button
+                  type="button"
+                  disabled={isActionBusy}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setStatus(o.id, 'completed');
+                  }}
+                  className="flex-1 min-h-[44px] rounded-lg px-3 py-2 text-sm font-semibold text-[var(--tablet-success-action-contrast)] bg-[var(--tablet-success-action)] transition active:bg-[var(--tablet-success-action-active)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tablet-success-action)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--tablet-card)] disabled:opacity-50 disabled:cursor-not-allowed disabled:saturate-50 disabled:active:scale-100"
+                >
+                  Complete
+                </button>
+                <button
+                  type="button"
+                  disabled={isActionBusy}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setStatus(o.id, 'picked_up');
+                  }}
+                  className="flex-1 min-h-[44px] rounded-lg px-3 py-2 text-sm font-semibold border border-[var(--tablet-border-strong)] text-[var(--tablet-text)] transition active:bg-[color-mix(in_srgb,var(--tablet-surface-alt)_65%,var(--tablet-border-strong)_35%)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tablet-border-strong)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--tablet-card)] disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100"
+                >
+                  Picked Up
+                </button>
+              </>
             )}
           </div>
         </div>
       </div>
     );
   }, [busyId, now, pendingActions, selectedOrder]);
+  const { soundEnabled, toggleSound } = useOrderAlerts(receivedOrders.length);
+
   const orderSyncIssues = useMemo(() => {
     const map = new Map<string, { retryCount: number; lastError: string | null; permanentFailure: boolean }>();
     actionQueue.forEach((action) => {
@@ -1272,7 +1613,7 @@ export default function TabletOrdersPage() {
     if (!hasInitializedPrintedRef.current) {
       if (!loading) {
         const initial = new Set<string>();
-        for (const o of filtered) initial.add(o.id);
+        for (const o of filteredOrders) initial.add(o.id);
         setPrintedOrders(initial);
         printedOrdersRef.current = initial;
         hasInitializedPrintedRef.current = true;
@@ -1282,7 +1623,7 @@ export default function TabletOrdersPage() {
 
     if (!autoPrintEnabled) return;
 
-    const toAutoPrint = filtered.filter(
+    const toAutoPrint = filteredOrders.filter(
       (o) => normalizeStatus(o.status) === 'received' && !printedOrdersRef.current.has(o.id)
     );
 
@@ -1292,8 +1633,14 @@ export default function TabletOrdersPage() {
     if (autoPrintPendingId || lastAutoPromptedId.current === newest.id) return;
     lastAutoPromptedId.current = newest.id;
     setAutoPrintPendingId(newest.id);
-  }, [autoPrintEnabled, filtered, loading, autoPrintPendingId]);
+  }, [autoPrintEnabled, filteredOrders, loading, autoPrintPendingId]);
 
+  const connectionText = isOnline ? (socketConnected ? 'Online' : 'Reconnecting') : 'Offline';
+  const connectionDotClasses = isOnline
+    ? socketConnected
+      ? 'bg-emerald-400'
+      : 'bg-amber-400'
+    : 'bg-red-400';
 
   if (authLoading || !user) {
     return (
@@ -1307,7 +1654,7 @@ export default function TabletOrdersPage() {
     <div className="tablet-theme tablet-orders-theme min-h-screen bg-[var(--tablet-bg)] text-[var(--tablet-text)] font-sans">
       <Head>
         <title>Orders • Servio</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=yes" />
         <link rel="manifest" href="/manifest-tablet.webmanifest" />
       </Head>
 
@@ -1316,47 +1663,385 @@ export default function TabletOrdersPage() {
         {receiptHtml ? <PrintReceipt receiptHtml={receiptHtml} copies={2} paperWidth={paperWidth} /> : null}
       </div>
 
-      <div className="no-print min-h-screen bg-[var(--tablet-bg)]">
-        <main className="mx-auto max-w-[1600px] px-4 py-4">
-          <div className="rounded-[26px] border border-[var(--tablet-border)] bg-[var(--tablet-surface)] p-4 shadow-sm">
-            <div className="flex items-center gap-3 rounded-2xl bg-[var(--tablet-bg)] px-3 py-3 mb-4 overflow-x-auto border border-[var(--tablet-border)]">
-              <button type="button" className="h-11 w-11 rounded-full bg-[var(--tablet-surface)] text-[var(--tablet-text)] grid place-items-center border border-[var(--tablet-border)]">
-                <Menu className="h-5 w-5" />
-              </button>
+      <div className="no-print flex min-h-screen flex-col md:flex-row">
+        <TabletSidebar statusDotClassName={isOnline && socketConnected ? 'bg-emerald-400' : 'bg-amber-400'} />
 
-              {[
-                { key: 'all', label: 'All Orders', count: activeOrders.length },
-              ].map((chip) => (
+        <main className="flex-1 bg-[var(--tablet-bg)] text-[var(--tablet-text)] px-4 py-4 sm:px-6 md:px-6 lg:px-8">
+          <div className="flex flex-col gap-5 lg:gap-6">
+            {/* Header with search and filters */}
+            <div className="flex flex-col gap-4">
+              <OrdersHeader
+                connectionDotClasses={connectionDotClasses}
+                connectionText={connectionText}
+                soundEnabled={soundEnabled}
+                toggleSound={toggleSound}
+                isFullscreen={isFullscreen}
+                onFullscreenToggle={() => {
+                  if (!document.fullscreenElement) {
+                    document.documentElement.requestFullscreen();
+                  } else {
+                    document.exitFullscreen();
+                  }
+                }}
+                now={now}
+                refresh={refresh}
+                loading={loading}
+                activeCount={activeOrders.length}
+              />
+
+              {/* Search and Filter Bar */}
+              <OrderFiltersBar>
+                {/* Search Input */}
+                <div className="relative">
+                  {isSearchOpen || searchQuery ? (
+                    <div className="relative min-w-[220px] sm:min-w-[260px]">
+                      <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-[var(--tablet-muted)]" />
+                      <input
+                        ref={searchInputRef}
+                        type="text"
+                        placeholder="Search orders..."
+                        value={searchQuery}
+                        autoFocus
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        onBlur={handleSearchBlur}
+                        onKeyDown={handleSearchKeyDown}
+                        className="w-full pl-11 pr-10 py-3.5 rounded-xl border border-[var(--tablet-border)] bg-[var(--tablet-surface)] text-[var(--tablet-text)] placeholder-[var(--tablet-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--tablet-accent)] focus:border-transparent transition-all text-base"
+                      />
+                      {searchQuery && (
+                        <button
+                          type="button"
+                          aria-label="Clear search"
+                          onClick={handleSearchClear}
+                          className="absolute right-3.5 top-1/2 -translate-y-1/2 p-1.5 rounded-full hover:bg-[var(--tablet-border)] transition touch-manipulation"
+                        >
+                          <X className="h-4 w-4 text-[var(--tablet-muted)]" />
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      aria-label="Open search"
+                      onClick={handleSearchToggle}
+                      className="flex items-center justify-center rounded-xl border border-[var(--tablet-border)] bg-[var(--tablet-surface)] p-3.5 text-[var(--tablet-text)] transition-all hover:bg-[var(--tablet-surface-alt)] focus:outline-none focus:ring-2 focus:ring-[var(--tablet-accent)]"
+                    >
+                      <Search className="h-5 w-5" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Filter Toggle */}
                 <button
-                  key={chip.key}
-                  type="button"
-                  onClick={() => setStatusFilter(chip.key as OrderFilter['status'])}
+                  onClick={() => setShowFilters(!showFilters)}
                   className={clsx(
-                    'shrink-0 rounded-full px-4 py-2 text-sm font-semibold border',
-                    statusFilter === chip.key
-                      ? 'bg-[var(--tablet-accent)] text-[var(--tablet-accent-contrast)] border-[var(--tablet-accent)]'
-                      : 'bg-transparent text-[var(--tablet-text)] border-[var(--tablet-border)]'
+                    'flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl border transition-all touch-manipulation min-h-[48px]',
+                    showFilters || statusFilter !== 'all' || channelFilter !== 'all'
+                      ? 'bg-[var(--tablet-accent)] border-[var(--tablet-accent)] text-[var(--tablet-accent-contrast)]'
+                      : 'bg-[var(--tablet-surface)] border-[var(--tablet-border)] text-[var(--tablet-text)]'
                   )}
                 >
-                  {chip.label} <span className="ml-1 rounded-full bg-[var(--tablet-surface-alt)] px-2 py-0.5 text-xs">{chip.count}</span>
+                  <Filter className="h-5 w-5" />
+                  <span className="font-semibold">Filters</span>
+                  {(statusFilter !== 'all' || channelFilter !== 'all') && (
+                    <span className="ml-1 px-2 py-0.5 rounded-full text-xs bg-[var(--tablet-accent-contrast)] text-[var(--tablet-accent)]">
+                      {[statusFilter !== 'all' && statusFilter, channelFilter !== 'all' && channelFilter].filter(Boolean).length}
+                    </span>
+                  )}
                 </button>
-              ))}
 
-              <button type="button" className="shrink-0 rounded-full px-4 py-2 text-sm font-semibold border border-[var(--tablet-border)] text-[var(--tablet-muted)]">
-                Scheduled <span className="ml-1 rounded-full bg-[var(--tablet-surface-alt)] px-2 py-0.5 text-xs">0</span>
-              </button>
-            </div>
+                {/* Sort Dropdown */}
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as OrderFilter['sortBy'])}
+                  className="px-4 py-3.5 rounded-xl border border-[var(--tablet-border)] bg-[var(--tablet-surface)] text-[var(--tablet-text)] focus:outline-none focus:ring-2 focus:ring-[var(--tablet-accent)] cursor-pointer min-h-[48px]"
+                >
+                  <option value="newest">Newest First</option>
+                  <option value="oldest">Oldest First</option>
+                  <option value="prep-time">Prep Time</option>
+                </select>
 
-            {/* Single unified order list */}
-            <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {allOrdersList.length === 0 ? (
-                <div className="col-span-full rounded-xl border border-dashed border-[var(--tablet-border)] py-16 text-center text-sm uppercase tracking-wide text-[var(--tablet-muted)]">
-                  No active orders
+                {actionQueue.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={retryQueueNow}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--tablet-warning)]/15 border border-[var(--tablet-warning)]/30 text-xs font-semibold text-[var(--tablet-warning)] touch-manipulation"
+                  >
+                    ↻ {actionQueue.length} Pending Sync
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => setShowArchivedOrders((prev) => !prev)}
+                  className={clsx(
+                    'flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold touch-manipulation',
+                    showArchivedOrders
+                      ? 'bg-[var(--tablet-surface-alt)] border-[var(--tablet-border-strong)] text-[var(--tablet-text)]'
+                      : 'bg-transparent border-[var(--tablet-border)] text-[var(--tablet-muted)]'
+                  )}
+                >
+                  Archived ({archivedOrders.length})
+                </button>
+              </OrderFiltersBar>
+
+              {/* Quick Filter Chips */}
+              <div className="flex flex-wrap gap-2 mt-1">
+                <button
+                  onClick={() => setStatusFilter('all')}
+                  className={clsx(
+                    'px-3 py-1.5 rounded-lg text-xs font-semibold transition touch-manipulation',
+                    statusFilter === 'all'
+                      ? 'bg-[var(--tablet-accent)] text-[var(--tablet-accent-contrast)]'
+                      : 'bg-[var(--tablet-surface)] border border-[var(--tablet-border)] text-[var(--tablet-text)] hover:bg-[var(--tablet-surface-alt)]'
+                  )}
+                >
+                  All ({activeOrders.length})
+                </button>
+
+                {[
+                  {
+                    key: 'received',
+                    label: 'New',
+                    count: receivedOrders.length,
+                    activeClass: 'bg-[var(--tablet-danger)] text-white'
+                  },
+                  {
+                    key: 'preparing',
+                    label: 'In Progress',
+                    count: preparingOrders.length,
+                    activeClass: 'bg-[var(--tablet-warning)] text-[var(--tablet-accent-contrast)]'
+                  },
+                  {
+                    key: 'ready',
+                    label: 'Ready',
+                    count: readyOrders.length,
+                    activeClass: 'bg-[var(--tablet-success)] text-white'
+                  }
+                ].map((chip) => {
+                  const isActive = statusFilter === chip.key;
+                  const isZeroCount = chip.count === 0;
+                  return (
+                    <button
+                      key={chip.key}
+                      onClick={() => setStatusFilter(chip.key as OrderFilter['status'])}
+                      disabled={!isActive && isZeroCount}
+                      className={clsx(
+                        'px-3 py-1.5 rounded-lg text-xs font-semibold transition touch-manipulation',
+                        isActive
+                          ? chip.activeClass
+                          : isZeroCount
+                            ? 'bg-[var(--tablet-surface-alt)] border border-[var(--tablet-border)] text-[var(--tablet-muted)] opacity-55 cursor-not-allowed'
+                            : 'bg-[var(--tablet-surface)] border border-[var(--tablet-border)] text-[var(--tablet-text)] hover:bg-[var(--tablet-surface-alt)]'
+                      )}
+                    >
+                      {chip.label} ({chip.count})
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Expanded Filters Panel */}
+              {showFilters && (
+                <div className="flex flex-wrap gap-4 p-4 rounded-xl bg-[var(--tablet-surface)] border border-[var(--tablet-border)] animate-fade-in">
+                  <div className="flex-1 min-w-[200px]">
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--tablet-muted)] mb-2">
+                      Status (from quick filters)
+                    </label>
+                    <select
+                      value={statusFilter}
+                      disabled
+                      aria-readonly="true"
+                      className="w-full px-3 py-2 rounded-lg border border-[var(--tablet-border)] bg-[var(--tablet-surface-alt)] text-[var(--tablet-muted)] cursor-not-allowed"
+                    >
+                      <option value="all">All Statuses</option>
+                      <option value="received">New Orders</option>
+                      <option value="preparing">In Progress</option>
+                      <option value="ready">Ready</option>
+                    </select>
+                    <p className="mt-1 text-[0.65rem] text-[var(--tablet-muted)]">Use the status chips above to change this filter.</p>
+                  </div>
+                  <div className="flex-1 min-w-[200px]">
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--tablet-muted)] mb-2">
+                      Channel
+                    </label>
+                    <select
+                      value={channelFilter}
+                      onChange={(e) => setChannelFilter(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg border border-[var(--tablet-border)] bg-[var(--tablet-bg)] text-[var(--tablet-text)] focus:outline-none focus:ring-2 focus:ring-[var(--tablet-accent)]"
+                    >
+                      <option value="all">All Channels</option>
+                      {channels.map(channel => (
+                        <option key={channel} value={channel}>{channel}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex items-end">
+                    <button
+                      onClick={() => {
+                        setStatusFilter('all');
+                        setChannelFilter('all');
+                        setSearchQuery('');
+                        setIsSearchOpen(false);
+                        setSortBy('newest');
+                      }}
+                      className="px-4 py-2 rounded-lg border border-[var(--tablet-border)] text-[var(--tablet-muted)] hover:text-[var(--tablet-text)] hover:bg-[var(--tablet-surface-alt)] transition"
+                    >
+                      Clear All
+                    </button>
+                  </div>
                 </div>
-              ) : (
-                allOrdersList.map((o, index) => renderOrderCard(o, index))
+              )}
+
+              {/* Active Filters Display */}
+              {(searchQuery || statusFilter !== 'all' || channelFilter !== 'all') && (
+                <div className="flex flex-wrap gap-2 items-center">
+                  <span className="text-xs text-[var(--tablet-muted)]">Showing:</span>
+                  {searchQuery && (
+                    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-[var(--tablet-info)]/25 text-[var(--tablet-text)] border border-[var(--tablet-border)]">
+                      Search: "{searchQuery}"
+                      <button onClick={handleSearchClear} className="ml-1">
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  )}
+                  {statusFilter !== 'all' && (
+                    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-[var(--tablet-accent)] text-[var(--tablet-accent-contrast)]">
+                      {statusFilter}
+                      <button onClick={() => setStatusFilter('all')} className="ml-1">
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  )}
+                  {channelFilter !== 'all' && (
+                    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-[var(--tablet-surface-alt)] border border-[var(--tablet-border)]">
+                      {channelFilter}
+                      <button onClick={() => setChannelFilter('all')} className="ml-1">
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  )}
+                </div>
               )}
             </div>
+
+            {showUpdateBanner && (
+              <div className="bg-[var(--tablet-surface-alt)] text-[var(--tablet-text)] px-4 py-3 flex items-center justify-between rounded-xl border border-[var(--tablet-border-strong)] shadow-[0_2px_8px_rgba(0,0,0,0.3)]">
+                <div className="font-semibold">Update available — refresh to get the latest tablet improvements.</div>
+                <button
+                  type="button"
+                  className="bg-[var(--tablet-accent)] text-[var(--tablet-accent-contrast)] px-3 py-1 rounded-lg font-semibold"
+                  onClick={() => window.location.reload()}
+                >
+                  Refresh
+                </button>
+              </div>
+            )}
+
+            {statusFilter === 'all' ? (
+              <div className="flex flex-row gap-4 overflow-x-auto pb-4 scrollbar-thin">
+                <section className="bg-[var(--tablet-surface)] rounded-2xl shadow-sm border border-[var(--tablet-border)] flex flex-col min-w-[380px] w-[380px] shrink-0 overflow-hidden">
+                  <div className="px-4 py-3.5 border-b border-[var(--tablet-border)] flex items-center justify-between">
+                    <h3 className="text-sm font-bold uppercase tracking-wider text-[var(--tablet-text)]">
+                      All Orders
+                    </h3>
+                    <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-[var(--tablet-surface-alt)] text-[var(--tablet-muted)]">
+                      {activeQueueOrders.length}
+                    </span>
+                  </div>
+                  <div className="flex-1 overflow-x-auto overflow-y-hidden p-3 scrollbar-thin">
+                    {activeQueueOrders.length === 0 ? (
+                      <div className="text-xs text-[var(--tablet-muted)] uppercase tracking-wide py-6 text-center border border-dashed border-[var(--tablet-border)] rounded-xl mt-1">
+                        No active orders
+                      </div>
+                    ) : (
+                      <div className="flex flex-row gap-3">
+                        {activeQueueOrders.map((o, index) => renderOrderCard(o, index))}
+                      </div>
+                    )}
+                  </div>
+                </section>
+              </div>
+            ) : (
+              <div className="flex flex-row gap-4 overflow-x-auto pb-4 scrollbar-thin">
+                {visibleSections.map((section) => {
+                  const columnAccentClass = {
+                    received: 'text-[var(--tablet-danger)]',
+                    preparing: 'text-[var(--tablet-warning)]',
+                    ready: 'text-[var(--tablet-success)]',
+                  } as const;
+
+                  const columnBadgeClass = {
+                    received: 'bg-[var(--tablet-danger)]/15 text-[var(--tablet-danger)]',
+                    preparing: 'bg-[var(--tablet-warning)]/15 text-[var(--tablet-warning)]',
+                    ready: 'bg-[var(--tablet-success)]/18 text-[var(--tablet-success)]',
+                  } as const;
+
+                  const columnBorderClass = {
+                    received: 'border-b-2 border-b-[var(--tablet-danger)]/35',
+                    preparing: 'border-b-2 border-b-[var(--tablet-warning)]/35',
+                    ready: 'border-b-2 border-b-[var(--tablet-success)]/35',
+                  } as const;
+
+                  const emptyStateByLane = {
+                    received: 'No new orders',
+                    preparing: 'No orders in progress',
+                    ready: 'No orders ready'
+                  } as const;
+
+                  return (
+                    <section
+                      key={section.key}
+                      className="bg-[var(--tablet-surface)] rounded-2xl shadow-sm border border-[var(--tablet-border)] flex flex-col min-w-[380px] w-[380px] shrink-0 overflow-hidden"
+                    >
+                      <div
+                        className={clsx(
+                          'px-4 py-3.5 border-b border-[var(--tablet-border)] flex items-center justify-between',
+                          columnBorderClass[section.key]
+                        )}
+                      >
+                        <h3 className={clsx('text-sm font-bold uppercase tracking-wider', columnAccentClass[section.key])}>
+                          {section.label}
+                        </h3>
+                        <span className={clsx('px-2.5 py-0.5 rounded-full text-xs font-bold', columnBadgeClass[section.key])}>
+                          {section.orders.length}
+                        </span>
+                      </div>
+                      <div className="flex-1 overflow-x-auto overflow-y-hidden p-3 scrollbar-thin">
+                        {section.orders.length === 0 ? (
+                          <div className="text-xs text-[var(--tablet-muted)] uppercase tracking-wide py-6 text-center border border-dashed border-[var(--tablet-border)] rounded-xl mt-1">
+                            {emptyStateByLane[section.key]}
+                          </div>
+                        ) : (
+                          <div className="flex flex-row gap-3">
+                            {section.orders.map((o, index) => renderOrderCard(o, index))}
+                          </div>
+                        )}
+                      </div>
+                    </section>
+                  );
+                })}
+              </div>
+            )}
+
+            {showArchivedOrders && (
+              <section className="bg-[var(--tablet-surface)] rounded-2xl border border-[var(--tablet-border)] p-3 sm:p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-[var(--tablet-muted)]">Archive</h3>
+                  <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-[var(--tablet-surface-alt)] text-[var(--tablet-muted)]">
+                    {archivedOrders.length}
+                  </span>
+                </div>
+                {archivedOrders.length === 0 ? (
+                  <div className="text-xs text-[var(--tablet-muted)] uppercase tracking-wide py-6 text-center border border-dashed border-[var(--tablet-border)] rounded-xl mt-1">
+                    No archived orders for current filters
+                  </div>
+                ) : (
+                  <div className="space-y-2.5">
+                    {archivedOrders.map((o, index) => renderOrderCard(o, index, { isArchived: true }))}
+                  </div>
+                )}
+              </section>
+            )}
           </div>
         </main>
       </div>

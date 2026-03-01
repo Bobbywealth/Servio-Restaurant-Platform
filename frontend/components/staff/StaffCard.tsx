@@ -25,6 +25,7 @@ interface StaffUser {
   id: string
   name: string
   email?: string | null
+  phone?: string | null
   role: 'staff' | 'manager' | 'owner' | 'admin' | 'platform-admin'
   pin?: string | null
   is_active: boolean
@@ -552,6 +553,11 @@ export function StaffCard({
           <Mail className="w-4 h-4" />
           <span>{member.email || '—'}</span>
         </div>
+        {member.phone && (
+          <div className="flex items-center space-x-2 text-sm text-surface-600 dark:text-surface-400">
+            <span>📱 {member.phone}</span>
+          </div>
+        )}
 
         {/* PIN and Clock In link */}
         {member.pin && (

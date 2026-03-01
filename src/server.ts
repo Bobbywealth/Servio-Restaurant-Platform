@@ -49,9 +49,9 @@ app.get('/health', (_req, res) => {
   res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Lightweight API docs endpoint (public)
+// Lightweight API docs health endpoint (public)
 // Keeps health checks and browser probes from hitting authenticated /api middleware.
-app.get('/api/docs', (_req, res) => {
+app.get('/api/docs/health', (_req, res) => {
   res.status(200).json({
     name: 'Servio Restaurant Platform API',
     version: process.env.npm_package_version || '1.1.0',
@@ -168,9 +168,11 @@ async function initializeServer() {
     const { default: docsRoutes } = await import('./routes/docs');
     const { default: bulkRoutes } = await import('./routes/bulk');
     const { default: v2Routes } = await import('./routes/v2');
+    const { default: checkoutRoutes } = await import('./routes/checkout');
 
     // API Routes
     app.use('/api/auth', authRoutes);
+    app.use('/api/checkout', checkoutRoutes);
     app.use('/api/bookings', bookingsRoutes);
     app.use('/api/public', publicRoutes);
     
@@ -324,6 +326,16 @@ async function initializeServer() {
   }
 }
 
+// Security headers
+app.use((req, res, next) => {
+  res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  next();
+});
+
 // AGGRESSIVE PERFORMANCE MIDDLEWARE
 app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" },
@@ -409,6 +421,9 @@ app.use(morgan(morganFormat, {
 }));
 
 // OPTIMIZED BODY PARSING
+// Stripe webhook needs raw body for signature verification — must be registered BEFORE json parser
+app.use('/api/checkout/webhook/stripe', express.raw({ type: 'application/json' }));
+
 app.use(express.json({
   limit: '10mb',
   strict: true,

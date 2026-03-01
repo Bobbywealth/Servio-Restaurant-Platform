@@ -6,6 +6,23 @@ import { DatabaseService } from '../services/DatabaseService';
 import { asyncHandler, ForbiddenError, UnauthorizedError } from '../middleware/errorHandler';
 import { issueAccessToken, requireAuth } from '../middleware/auth';
 import { logger } from '../utils/logger';
+import rateLimit from 'express-rate-limit';
+
+const authRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // 10 attempts per window
+  message: { success: false, error: { message: 'Too many login attempts. Please try again in 15 minutes.' } },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const pinRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5, // 5 PIN attempts per window (stricter)
+  message: { success: false, error: { message: 'Too many PIN attempts. Please try again in 15 minutes.' } },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 // Fast SHA-256 hash for token lookup (secure for high-entropy UUIDs)
 function hashTokenForLookup(token: string): string {
@@ -41,6 +58,7 @@ function safeUser(row: any) {
 
 router.post(
   '/signup',
+  authRateLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const { name, email, password, restaurantName } = req.body ?? {};
     if (!name || !email || !password || !restaurantName) {
@@ -77,9 +95,10 @@ router.post(
 
 router.post(
   '/login',
+  authRateLimiter,
   asyncHandler(async (req: Request, res: Response) => {
-    const requestId = getRequestId(req);
     const start = Date.now();
+    const requestId = getRequestId(req);
 
     const { email, password, stayLoggedIn } = req.body ?? {};
     const normalizedEmail = String(email ?? '').trim().toLowerCase();
@@ -295,87 +314,4 @@ router.get(
   })
 );
 
-// Account switching endpoint for testing
-router.post(
-  '/switch-account',
-  asyncHandler(async (req: Request, res: Response) => {
-    const { targetEmail } = req.body ?? {};
-    
-    if (!targetEmail) {
-      throw new UnauthorizedError('Target email is required');
-    }
-    
-    // In production, you'd want to add proper authorization checks here
-    // For testing purposes, we'll allow switching to any active account
-    const db = DatabaseService.getInstance().getDatabase();
-    const targetUser = await db.get<any>(
-      'SELECT * FROM users WHERE email = ? AND is_active = TRUE', 
-      [targetEmail]
-    );
-    
-    if (!targetUser) {
-      throw new UnauthorizedError('Target user not found or inactive');
-    }
-    
-    // Create new session for the target user
-    const sessionId = uuidv4();
-    const refreshToken = uuidv4();
-    const refreshTokenHash = await bcrypt.hash(refreshToken, 10);
-    const tokenHash = hashTokenForLookup(refreshToken);
-    const expiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000).toISOString();
-
-    await db.run(
-      'INSERT INTO auth_sessions (id, user_id, refresh_token_hash, expires_at, token_hash) VALUES (?, ?, ?, ?, ?)',
-      [sessionId, targetUser.id, refreshTokenHash, expiresAt, tokenHash]
-    );
-    
-    const accessToken = issueAccessToken({ 
-      sub: targetUser.id, 
-      restaurantId: targetUser.restaurant_id, 
-      sid: sessionId 
-    });
-    
-    res.json({
-      success: true,
-      data: {
-        user: safeUser(targetUser),
-        accessToken,
-        refreshToken,
-        message: `Switched to ${targetUser.name} (${targetUser.role})`
-      }
-    });
-  })
-);
-
-// Get all available accounts for switching (testing only)
-router.get(
-  '/available-accounts',
-  asyncHandler(async (req: Request, res: Response) => {
-    const db = DatabaseService.getInstance().getDatabase();
-    const users = await db.all<any>(
-      'SELECT id, email, name, role FROM users WHERE is_active = TRUE ORDER BY role DESC, name ASC'
-    );
-    
-    const accountsByRole = users.reduce((acc, user) => {
-      if (!acc[user.role]) acc[user.role] = [];
-      acc[user.role].push({
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        role: user.role
-      });
-      return acc;
-    }, {} as Record<string, any[]>);
-    
-    res.json({
-      success: true,
-      data: {
-        accounts: accountsByRole,
-        totalCount: users.length
-      }
-    });
-  })
-);
-
 export default router;
-

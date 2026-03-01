@@ -319,6 +319,21 @@ html {
   }
 }
 
+@keyframes slideInFromRight {
+  from {
+    transform: translateX(40px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-in-right {
+  animation: slideInFromRight 0.3s ease-out both;
+}
+
 @layer base {
   :root {
     /* Light mode surface colors */

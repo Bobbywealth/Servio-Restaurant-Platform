@@ -141,7 +141,7 @@ export default function TabletMenuPage() {
     <div className="tablet-theme min-h-screen bg-[var(--tablet-bg)] text-[var(--tablet-text)] font-sans">
       <Head>
         <title>Menu • Servio</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=yes" />
       </Head>
       <div className="no-print flex min-h-screen flex-col md:flex-row">
         <TabletSidebar />
@@ -264,3 +264,4 @@ export default function TabletMenuPage() {
     </div>
   );
 }
+
