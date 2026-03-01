@@ -27,5 +27,6 @@ ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS eighty_six_check_schedule TEXT 
 ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS eighty_six_check_phone TEXT;
 
 -- Log the migration
-INSERT OR IGNORE INTO migrations (id, name, applied_at) 
-VALUES (45, '045_add_86_check_system.sql', CURRENT_TIMESTAMP);
+INSERT INTO migrations (id, name, applied_at)
+VALUES (45, '045_add_86_check_system.sql', CURRENT_TIMESTAMP)
+ON CONFLICT (id) DO NOTHING;
