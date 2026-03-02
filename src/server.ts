@@ -292,7 +292,7 @@ async function initializeServer() {
 
     // Staff management routes
     app.use('/api/staff/scheduling', requireAuth, staffSchedulingRoutes);
-    app.use('/api/staff/analytics', requireAuth, staffAnalyticsRoutes);
+    app.use('/api/staff/analytics', authWithScopedApiKey('read:analytics'), staffAnalyticsRoutes);
     app.use('/api/staff/bulk', requireAuth, staffBulkRoutes);
     app.use('/api/admin', requireAuth, adminRoutes);
 

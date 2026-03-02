@@ -31,12 +31,16 @@ Authentication requirements vary by route group.
 - \`/api/orders/**\` (except \`/public/**\`, which is public)
 - \`/api/menu/**\` (except \`/public/**\`, which is public)
 - \`/api/inventory/**\`
-- \`/api/staff/**\` (base staff routes)
+- \`/api/staff/**\` (base staff routes only)
+- \`/api/staff/analytics/**\` (read-only analytics endpoints, requires \`read:analytics\`)
 
 ### JWT-only route groups
 - \`/api/admin/**\`
 - \`/api/company/**\`
 - \`/api/integrations/**\`
+- \`/api/staff/scheduling/**\`
+- \`/api/staff/bulk/**\`
+- \`/api/staff/clock/**\` uses PIN-based auth (not JWT/API key)
 - \`/api/api-keys/**\` (API key lifecycle management)
 - Other internal and privileged endpoints unless explicitly documented as API key-compatible
 
