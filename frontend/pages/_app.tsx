@@ -213,7 +213,17 @@ export default function App({ Component, pageProps }: AppProps) {
   // Push notification subscription
   const pushSubscription = usePushSubscription()
 
-  // Auto-subscribe to push notifications when user is authenticated
+
+  const {
+    isSupported: isPushSupported,
+    subscription: activePushSubscription,
+    permission: pushPermission,
+    isLoading: isPushLoading,
+    subscribe: subscribeToPush,
+  } = pushSubscription
+
+  // Auto-subscribe to push notifications when permission was already granted.
+  // Permission prompts must only happen on explicit user gesture (e.g. settings toggle).
   useEffect(() => {
     // Only try to subscribe if:
     // 1. Push is supported
@@ -222,27 +232,20 @@ export default function App({ Component, pageProps }: AppProps) {
     // 4. Permission not denied
     // 5. Not currently loading
     if (
-      pushSubscription.isSupported &&
-      !pushSubscription.subscription &&
-      pushSubscription.permission !== 'denied' &&
-      !pushSubscription.isLoading
+      isPushSupported &&
+      !activePushSubscription &&
+      pushPermission === 'granted' &&
+      !isPushLoading
     ) {
       // Check if user is authenticated
       const accessToken = safeLocalStorage.getItem('servio_access_token')
-      if (accessToken && typeof Notification !== 'undefined') {
-        // Request notification permission and subscribe
-        Notification.requestPermission().then(permission => {
-          if (permission === 'granted') {
-            pushSubscription.subscribe().catch(err => {
-              console.warn('[Push] Auto-subscribe failed:', err)
-            })
-          }
-        }).catch(err => {
-          console.warn('[Push] Permission request failed:', err)
+      if (accessToken) {
+        subscribeToPush().catch(err => {
+          console.warn('[Push] Auto-subscribe failed:', err)
         })
       }
     }
-  }, [pushSubscription.isSupported, pushSubscription.subscription, pushSubscription.permission, pushSubscription.isLoading])
+  }, [isPushSupported, activePushSubscription, pushPermission, isPushLoading, subscribeToPush])
 
   return (
     <>
@@ -291,15 +294,6 @@ export default function App({ Component, pageProps }: AppProps) {
         <link rel="preconnect" href="https://fonts.googleapis.com" crossOrigin="anonymous" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
 
-        {/* PRELOAD CRITICAL RESOURCES */}
-        {!isStaffRoute && (
-          <link
-            rel="preload"
-            as="manifest"
-            href={isTabletRoute ? '/manifest-tablet.webmanifest' : '/manifest.json'}
-            crossOrigin="anonymous"
-          />
-        )}
       </Head>
 
       <style jsx global>{`
