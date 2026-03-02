@@ -7,6 +7,7 @@ import { getEffectiveRestaurantId, requireApiKeyScopeByHttpMethod } from '../mid
 import { logger } from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
 import { eventBus } from '../events/bus';
+import { invalidateRestaurantOrderCache } from '../utils/serverCache';
 
 const router = Router();
 const num = (v: any) => (typeof v === 'number' ? v : Number(v ?? 0));
@@ -289,6 +290,8 @@ router.post('/:id/status', asyncHandler(async (req: Request, res: Response) => {
 
   logger.info(`Order ${id} status updated from ${order.status} to ${status}`);
 
+  invalidateRestaurantOrderCache(auditRestaurantId, id);
+
   // Broadcast status change via Socket.IO
   try {
     const io = req.app.get('socketio');
@@ -360,6 +363,8 @@ router.post('/:id/prep-time', asyncHandler(async (req: Request, res: Response) =
     id,
     { prepMinutes: minutes, pickupTime }
   );
+
+  invalidateRestaurantOrderCache(auditRestaurantId, id);
 
   res.json({
     success: true,
@@ -832,6 +837,8 @@ router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) =>
       })}`
     );
   }
+
+  invalidateRestaurantOrderCache(restaurantId, orderId);
 
   return res.status(201).json({
     success: true,

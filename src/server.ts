@@ -25,6 +25,7 @@ import { UPLOADS_DIR, checkUploadsHealth } from './utils/uploads';
 import { SocketService } from './services/SocketService';
 import { realtimeService } from './services/RealtimeService';
 import type { ApiKeyScope } from './types/apiKey';
+import { getCacheUrl, registerCacheInvalidator } from './utils/serverCache';
 
 const FRONTEND_ORIGIN = 'https://servio.solutions';
 
@@ -479,6 +480,20 @@ const cache = new Map<string, { data: any; timestamp: number; headers: Record<st
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 const MAX_CACHE_SIZE = 1000;
 
+registerCacheInvalidator((matcher) => {
+  let deletedCount = 0;
+  for (const key of cache.keys()) {
+    const url = getCacheUrl(key);
+    if (matcher(url)) {
+      cache.delete(key);
+      deletedCount += 1;
+    }
+  }
+
+  return deletedCount;
+});
+
+// Cache middleware for GET requests (excludes auth, timeclock, and real-time data)
 // Cache middleware for GET requests
 app.use((req, res, next) => {
   // Only cache GET requests

@@ -8,6 +8,7 @@ import { validateItemSelections } from './modifierValidation';
 
 import { eventBus } from '../events/bus';
 import { logger } from '../utils/logger';
+import { invalidateRestaurantOrderCache } from '../utils/serverCache';
 
 // Menu data path - corrected for production (no 'backend/' prefix)
 const MENU_DATA_PATH = path.join(process.cwd(), 'data/menu/sasheys_menu_vapi.json');
@@ -1536,6 +1537,8 @@ export class VoiceOrderingService {
       status: 'received'
     });
 
+    invalidateRestaurantOrderCache(restaurantId, orderId);
+
     try {
       const io = SocketService.getIO();
       if (io) {
@@ -1606,6 +1609,8 @@ export class VoiceOrderingService {
       INSERT INTO order_events (id, order_id, event, meta_json, created_at)
       VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
     `, [uuidv4(), orderId, 'preparing', JSON.stringify({ prepTimeMinutes, acceptedAt, userId })]);
+
+    invalidateRestaurantOrderCache(order.restaurant_id, orderId);
 
     return { success: true, smsSent: true };
   }
