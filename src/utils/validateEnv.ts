@@ -162,7 +162,21 @@ export function failFastIfInvalid(): void {
  */
 export function getCorsOrigins(defaultOrigin?: string): string[] {
   const origins = new Set<string>();
-  const normalizeOrigin = (origin: string) => origin.trim().replace(/\/+$/, '');
+  const normalizeOrigin = (origin: string) => {
+    const trimmed = origin.trim();
+    if (!trimmed) return '';
+
+    try {
+      // If a full URL is provided (including path/query), keep only the origin.
+      if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+        return new URL(trimmed).origin;
+      }
+    } catch {
+      // Fall back to legacy normalization for malformed URLs.
+    }
+
+    return trimmed.replace(/\/+$/, '');
+  };
 
   const addOriginWithVariants = (origin: string) => {
     const normalized = normalizeOrigin(origin);
