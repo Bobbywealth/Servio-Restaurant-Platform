@@ -2153,7 +2153,7 @@ export default function TabletOrdersPage() {
               <div className="min-w-0 flex-1">
                 {statusFilter === 'all' ? (
                   <div className="flex flex-row gap-4 overflow-x-auto pb-4 scrollbar-thin">
-                    <section className="bg-[var(--tablet-surface)] rounded-2xl shadow-sm border border-[var(--tablet-border)] flex flex-col min-w-[380px] w-[380px] shrink-0 overflow-hidden">
+                    <section className="bg-[var(--tablet-surface)] rounded-2xl shadow-sm border border-[var(--tablet-border)] flex flex-col min-w-[380px] w-[380px] min-h-[32rem] md:min-h-[40rem] shrink-0 overflow-hidden">
                       <div className="px-4 py-3.5 border-b border-[var(--tablet-border)] flex items-center justify-between">
                         <h3 className="text-sm font-bold uppercase tracking-wider text-[var(--tablet-text)]">
                           All Orders
@@ -2205,7 +2205,7 @@ export default function TabletOrdersPage() {
                       return (
                         <section
                           key={section.key}
-                          className="bg-[var(--tablet-surface)] rounded-2xl shadow-sm border border-[var(--tablet-border)] flex flex-col min-w-[380px] w-[380px] shrink-0 overflow-hidden"
+                          className="bg-[var(--tablet-surface)] rounded-2xl shadow-sm border border-[var(--tablet-border)] flex flex-col min-w-[380px] w-[380px] min-h-[32rem] md:min-h-[40rem] shrink-0 overflow-hidden"
                         >
                           <div
                             className={clsx(
