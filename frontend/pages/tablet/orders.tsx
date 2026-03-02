@@ -1492,7 +1492,7 @@ export default function TabletOrdersPage() {
   const renderOrderActions = useCallback((order: Order, options?: { stopPropagation?: boolean; className?: string; disabled?: boolean }) => {
     const status = normalizeStatus(order.status);
     const shouldStopPropagation = Boolean(options?.stopPropagation);
-    const isActionBusy = options?.disabled ?? busyId === order.id || pendingActions.has(order.id);
+    const isActionBusy = options?.disabled ?? (busyId === order.id || pendingActions.has(order.id));
 
     const stopIfNeeded = (event: MouseEvent<HTMLButtonElement>) => {
       if (shouldStopPropagation) event.stopPropagation();
@@ -1559,7 +1559,7 @@ export default function TabletOrdersPage() {
               disabled={isActionBusy}
               onClick={(event) => {
                 stopIfNeeded(event);
-                setStatus(order.id, 'picked_up');
+                setStatus(order.id, mapTabletStatusActionToOrderStatus(TABLET_STATUS_ACTION.PICKED_UP));
               }}
               className="flex-1 min-h-[44px] rounded-lg px-3 py-2 text-sm font-semibold border border-[var(--tablet-border-strong)] text-[var(--tablet-text)] transition active:bg-[color-mix(in_srgb,var(--tablet-surface-alt)_65%,var(--tablet-border-strong)_35%)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tablet-border-strong)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--tablet-card)] disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100"
             >
