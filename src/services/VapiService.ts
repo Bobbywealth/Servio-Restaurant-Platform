@@ -630,10 +630,15 @@ export class VapiService {
           result = lookupResult;
           break;
         }
-        case 'quoteOrder':
+        case 'quoteOrder': {
           normalizedParameters.restaurantId = restaurantId;
-          result = await VoiceOrderingService.getInstance().validateQuote(normalizedParameters);
+          const quoteRaw = await VoiceOrderingService.getInstance().validateQuote(normalizedParameters);
+          // Rename 'tax' → 'taxIncludedInTotal' so the model doesn't pattern-match
+          // "tax" as something to say "plus tax" about (the total already includes it)
+          const { tax: _taxField, ...quoteRest } = quoteRaw || {};
+          result = { ...quoteRest, taxIncludedInTotal: _taxField };
           break;
+        }
         case 'createOrder': {
           normalizedParameters.callId = normalizedParameters.callId || message.call?.id;
           normalizedParameters.source = normalizedParameters.source || 'vapi';

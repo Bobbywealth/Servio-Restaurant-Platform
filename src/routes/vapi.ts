@@ -301,7 +301,7 @@ router.get('/assistant-config', async (req: Request, res: Response) => {
         },
         {
           name: 'getItemModifiers',
-          description: 'Get all modifier questions for a menu item. Call this IMMEDIATELY after customer selects an item to get the list of modifier questions to ask IN ORDER. Each modifier includes a question prompt, whether it is required, and the available options.',
+          description: 'Get modifier questions for a menu item. Call ONCE per item immediately after searchMenu. NEVER call again after the customer makes modifier selections — doing so resets context and causes repeated questions.',
           parameters: {
             type: 'object',
             properties: {
