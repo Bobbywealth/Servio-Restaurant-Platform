@@ -104,7 +104,6 @@ export function useOrderAlerts(receivedOrdersCount: number) {
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    const hadReceivedOrders = previousReceivedOrdersCountRef.current > 0;
     const hasNewReceivedOrders = receivedOrdersCount > previousReceivedOrdersCountRef.current;
 
     if (!hasSeenInitialCountRef.current) {
@@ -121,7 +120,7 @@ export function useOrderAlerts(receivedOrdersCount: number) {
 
     previousReceivedOrdersCountRef.current = receivedOrdersCount;
 
-    if (soundEnabled && receivedOrdersCount > 0 && (hasNewReceivedOrders || hadReceivedOrders)) {
+    if (soundEnabled && receivedOrdersCount > 0 && hasNewReceivedOrders) {
       if (alarmIntervalRef.current === null) {
         playAlarmTone();
         alarmIntervalRef.current = window.setInterval(playAlarmTone, 2500);
