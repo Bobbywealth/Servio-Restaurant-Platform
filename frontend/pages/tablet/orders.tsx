@@ -22,6 +22,8 @@ import { api } from '../../lib/api'
 import { safeLocalStorage } from '../../lib/utils';
 import { generatePlainTextReceipt, printViaRawBT } from '../../utils/escpos';
 import { useUser } from '../../contexts/UserContext';
+import { ORDER_STATUS, TABLET_STATUS_ACTION, mapTabletStatusActionToOrderStatus, postOrderStatus } from '../../hooks/tablet/orderStatus';
+import type { OrderStatus } from '../../hooks/tablet/orderStatus';
 import { NotificationEventPayload, shouldRefreshForNotification } from '../../lib/tablet/orderNotifications';
 
 type OrderItem = {
@@ -75,7 +77,7 @@ type PendingAction =
       id: string;
       orderId: string;
       type: 'status';
-      payload: { status: string };
+      payload: { status: OrderStatus };
       queuedAt: number;
       idempotencyKey: string;
       retryCount: number;
@@ -1066,9 +1068,7 @@ export default function TabletOrdersPage() {
     }
   }
 
-  async function setStatus(orderId: string, nextStatus: string) {
-    let previousStatus: string | null | undefined;
-
+  async function setStatus(orderId: string, nextStatus: OrderStatus) {
     setBusyId(orderId);
     setOrders((prev) => prev.map((o) => {
       if (o.id === orderId) {
@@ -1094,7 +1094,7 @@ export default function TabletOrdersPage() {
           queuedAt: Date.now()
         });
       } else {
-        await apiPost(`/api/orders/${encodeURIComponent(orderId)}/status`, { status: nextStatus });
+        await postOrderStatus(api, orderId, nextStatus);
         if (socket) {
           socket.emit('order:status_changed', { orderId, status: nextStatus, timestamp: new Date() });
         }
@@ -1126,7 +1126,7 @@ export default function TabletOrdersPage() {
     try {
       await setPrepTime(order.id, minutes);
       if (socket) {
-        socket.emit('order:status_changed', { orderId: order.id, status: 'preparing', timestamp: new Date() });
+        socket.emit('order:status_changed', { orderId: order.id, status: ORDER_STATUS.PREPARING, timestamp: new Date() });
       }
       
       if (autoPrintEnabled) {
@@ -1154,22 +1154,22 @@ export default function TabletOrdersPage() {
           id: `${order.id}-${Date.now()}`,
           orderId: order.id,
           type: 'status',
-          payload: { status: 'cancelled' },
+          payload: { status: ORDER_STATUS.CANCELLED },
           queuedAt: Date.now()
         });
       } else {
-        await apiPost(`/api/orders/${encodeURIComponent(order.id)}/status`, { status: 'cancelled' });
+        await postOrderStatus(api, order.id, ORDER_STATUS.CANCELLED);
       }
-      setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, status: 'cancelled' } : o)));
+      setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, status: ORDER_STATUS.CANCELLED } : o)));
       if (socket) {
-        socket.emit('order:status_changed', { orderId: order.id, status: 'cancelled', timestamp: new Date() });
+        socket.emit('order:status_changed', { orderId: order.id, status: ORDER_STATUS.CANCELLED, timestamp: new Date() });
       }
     } catch (e) {
       enqueueAction({
         id: `${order.id}-${Date.now()}`,
         orderId: order.id,
         type: 'status',
-        payload: { status: 'cancelled' },
+        payload: { status: ORDER_STATUS.CANCELLED },
         queuedAt: Date.now()
       });
     } finally {
@@ -1197,13 +1197,13 @@ export default function TabletOrdersPage() {
         pickupTime = resp?.data?.pickupTime;
       }
       setOrders((prev) =>
-        prev.map((o) => (o.id === orderId ? { ...o, status: 'preparing', pickup_time: pickupTime, prep_minutes: minutes } : o))
+        prev.map((o) => (o.id === orderId ? { ...o, status: ORDER_STATUS.PREPARING, pickup_time: pickupTime, prep_minutes: minutes } : o))
       );
       setSelectedOrder((prev) =>
-        prev?.id === orderId ? { ...prev, status: 'preparing', pickup_time: pickupTime, prep_minutes: minutes } : prev
+        prev?.id === orderId ? { ...prev, status: ORDER_STATUS.PREPARING, pickup_time: pickupTime, prep_minutes: minutes } : prev
       );
       if (socket) {
-        socket.emit('order:status_changed', { orderId, status: 'preparing', timestamp: new Date() });
+        socket.emit('order:status_changed', { orderId, status: ORDER_STATUS.PREPARING, timestamp: new Date() });
       }
     } catch (e) {
       enqueueAction({
@@ -1662,7 +1662,7 @@ export default function TabletOrdersPage() {
                 disabled={isActionBusy}
                 onClick={(event) => {
                   event.stopPropagation();
-                  setStatus(o.id, 'ready');
+                  setStatus(o.id, ORDER_STATUS.READY);
                 }}
                 className="w-full min-h-[44px] rounded-lg px-3 py-2 text-sm font-semibold text-[var(--tablet-accent-contrast)] bg-[var(--tablet-success)] transition active:brightness-95 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:saturate-50"
               >
@@ -1677,7 +1677,7 @@ export default function TabletOrdersPage() {
                   disabled={isActionBusy}
                   onClick={(event) => {
                     event.stopPropagation();
-                    setStatus(o.id, 'completed');
+                    setStatus(o.id, ORDER_STATUS.COMPLETED);
                   }}
                   className="flex-1 min-h-[44px] rounded-lg px-3 py-2 text-sm font-semibold text-[var(--tablet-success-action-contrast)] bg-[var(--tablet-success-action)] transition active:bg-[var(--tablet-success-action-active)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tablet-success-action)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--tablet-card)] disabled:opacity-50 disabled:cursor-not-allowed disabled:saturate-50 disabled:active:scale-100"
                 >
@@ -1688,7 +1688,7 @@ export default function TabletOrdersPage() {
                   disabled={isActionBusy}
                   onClick={(event) => {
                     event.stopPropagation();
-                    setStatus(o.id, 'picked_up');
+                    setStatus(o.id, mapTabletStatusActionToOrderStatus(TABLET_STATUS_ACTION.PICKED_UP));
                   }}
                   className="flex-1 min-h-[44px] rounded-lg px-3 py-2 text-sm font-semibold border border-[var(--tablet-border-strong)] text-[var(--tablet-text)] transition active:bg-[color-mix(in_srgb,var(--tablet-surface-alt)_65%,var(--tablet-border-strong)_35%)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tablet-border-strong)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--tablet-card)] disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100"
                 >
@@ -2156,7 +2156,7 @@ export default function TabletOrdersPage() {
         }}
         onSetStatus={(orderId, status) => {
           setStatus(orderId, status);
-          if (status === 'completed') {
+          if (status === ORDER_STATUS.COMPLETED) {
             setOrderDetailsOrder(null);
           }
         }}
