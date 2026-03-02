@@ -36,6 +36,14 @@ describe('getCorsOrigins', () => {
     ]);
   });
 
+  it('normalizes FRONTEND_URL with path to origin only', () => {
+    process.env.FRONTEND_URL = 'https://servio-app.onrender.com/tablet/orders?foo=bar';
+    expect(getCorsOrigins()).toEqual([
+      'https://servio-app.onrender.com',
+      'http://servio-app.onrender.com'
+    ]);
+  });
+
   it('adds ALLOWED_ORIGINS (comma-separated)', () => {
     process.env.FRONTEND_URL = 'https://example.com';
     process.env.ALLOWED_ORIGINS = 'https://a.com, https://b.com';
