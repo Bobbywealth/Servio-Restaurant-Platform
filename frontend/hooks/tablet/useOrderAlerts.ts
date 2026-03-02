@@ -32,6 +32,8 @@ function unlockAudio() {
 }
 
 function beep() {
+  if (!audioUnlocked) return;
+
   try {
     const AudioContext = (window as any).AudioContext || (window as any).webkitAudioContext;
     if (!AudioContext) return;

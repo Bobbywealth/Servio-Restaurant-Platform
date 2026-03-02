@@ -19,24 +19,11 @@ export default function Document() {
         {/* DNS prefetch for API endpoints */}
         <link rel="dns-prefetch" href="https://servio-backend-zexb.onrender.com" />
         
-        {/* Preload critical fonts */}
-        <link 
-          rel="preload" 
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" 
-          as="style"
-          onLoad={(event) => {
-            event.currentTarget.onload = null
-            event.currentTarget.rel = 'stylesheet'
-          }}
+        {/* Load Inter font stylesheet */}
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
         />
-        
-        {/* Fallback for no-JS */}
-        <noscript>
-          <link 
-            rel="stylesheet" 
-            href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" 
-          />
-        </noscript>
 
         {/* Theme color for mobile browsers */}
         <meta name="theme-color" content="#14b8a6" />
