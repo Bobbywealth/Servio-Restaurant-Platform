@@ -67,6 +67,65 @@ function getChannelConfig(channel: string) {
   return channelConfig[channel.toLowerCase()] || { label: channel, color: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300', icon: <Globe className="w-3 h-3" /> }
 }
 
+function humanizeModifierText(value: string): string {
+  const normalized = value
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+
+  if (!normalized) return ''
+
+  return normalized.charAt(0).toUpperCase() + normalized.slice(1)
+}
+
+function looksLikeOpaqueId(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+    || /^[a-z0-9]{20,}$/i.test(value)
+}
+
+function extractModifierValues(value: unknown): string[] {
+  if (value == null) return []
+
+  if (Array.isArray(value)) {
+    return value.flatMap(extractModifierValues).filter(Boolean)
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (!trimmed || looksLikeOpaqueId(trimmed)) return []
+    return [humanizeModifierText(trimmed)]
+  }
+
+  if (typeof value === 'number') {
+    return [String(value)]
+  }
+
+  if (typeof value === 'boolean') {
+    return value ? ['Yes'] : ['No']
+  }
+
+  if (typeof value === 'object') {
+    const optionLikeValue = (value as any).optionName || (value as any).option_name || (value as any).name || (value as any).label || (value as any).value
+    if (typeof optionLikeValue === 'string') {
+      const parsedOption = extractModifierValues(optionLikeValue)
+      if (parsedOption.length > 0) return parsedOption
+    }
+
+    return Object.entries(value as Record<string, unknown>).flatMap(([key, nestedValue]) => {
+      if (typeof nestedValue === 'boolean') {
+        return nestedValue ? [humanizeModifierText(key)] : []
+      }
+
+      const nested = extractModifierValues(nestedValue)
+      if (nested.length === 0) return []
+
+      return nested.map(entry => `${humanizeModifierText(key)}: ${entry}`)
+    })
+  }
+
+  return [String(value)]
+}
+
 function formatElapsed(seconds: number): string {
   if (seconds < 60) return '<1m'
 
@@ -245,10 +304,20 @@ function OrderDetailModal({ order, onClose }: { order: Order | null; onClose: ()
                         <span className="text-gray-900 dark:text-white">{item.name}</span>
                       </div>
                       {item.modifiers && Object.keys(item.modifiers).length > 0 && (
-                        <div className="mt-1 ml-6 text-xs text-gray-500 dark:text-gray-400">
-                          {Object.entries(item.modifiers).map(([key, value]) => (
-                            <div key={key}>• {key}: {String(value)}</div>
-                          ))}
+                        <div className="mt-2 ml-6 space-y-1 text-xs text-gray-600 dark:text-gray-300">
+                          {Object.entries(item.modifiers).map(([key, value]) => {
+                            const modifierValues = extractModifierValues(value)
+                            const label = humanizeModifierText(key)
+
+                            return (
+                              <div key={key} className="leading-relaxed">
+                                <span className="text-gray-800 dark:text-gray-100">• {label}</span>
+                                {modifierValues.length > 0 && (
+                                  <span className="text-gray-500 dark:text-gray-400">: {modifierValues.join(', ')}</span>
+                                )}
+                              </div>
+                            )
+                          })}
                         </div>
                       )}
                     </div>
