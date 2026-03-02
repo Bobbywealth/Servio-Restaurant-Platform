@@ -1489,9 +1489,10 @@ export default function TabletOrdersPage() {
     return map;
   }, [actionQueue]);
 
-  const renderOrderActions = useCallback((order: Order, options?: { stopPropagation?: boolean; className?: string; disabled?: boolean }) => {
+  const renderOrderActions = useCallback((order: Order, options?: { stopPropagation?: boolean; className?: string; disabled?: boolean; showPickedUpAction?: boolean }) => {
     const status = normalizeStatus(order.status);
     const shouldStopPropagation = Boolean(options?.stopPropagation);
+    const showPickedUpAction = options?.showPickedUpAction ?? true;
     const isActionBusy = options?.disabled ?? (busyId === order.id || pendingActions.has(order.id));
 
     const stopIfNeeded = (event: MouseEvent<HTMLButtonElement>) => {
@@ -1554,17 +1555,19 @@ export default function TabletOrdersPage() {
             >
               Complete
             </button>
-            <button
-              type="button"
-              disabled={isActionBusy}
-              onClick={(event) => {
-                stopIfNeeded(event);
-                setStatus(order.id, mapTabletStatusActionToOrderStatus(TABLET_STATUS_ACTION.PICKED_UP));
-              }}
-              className="flex-1 min-h-[44px] rounded-lg px-3 py-2 text-sm font-semibold border border-[var(--tablet-border-strong)] text-[var(--tablet-text)] transition active:bg-[color-mix(in_srgb,var(--tablet-surface-alt)_65%,var(--tablet-border-strong)_35%)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tablet-border-strong)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--tablet-card)] disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100"
-            >
-              Picked Up
-            </button>
+            {showPickedUpAction && (
+              <button
+                type="button"
+                disabled={isActionBusy}
+                onClick={(event) => {
+                  stopIfNeeded(event);
+                  setStatus(order.id, mapTabletStatusActionToOrderStatus(TABLET_STATUS_ACTION.PICKED_UP));
+                }}
+                className="flex-1 min-h-[44px] rounded-lg px-3 py-2 text-sm font-semibold border border-[var(--tablet-border-strong)] text-[var(--tablet-text)] transition active:bg-[color-mix(in_srgb,var(--tablet-surface-alt)_65%,var(--tablet-border-strong)_35%)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tablet-border-strong)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--tablet-card)] disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100"
+              >
+                Picked Up
+              </button>
+            )}
           </>
         )}
       </div>
@@ -2150,7 +2153,7 @@ export default function TabletOrdersPage() {
               <div className="min-w-0 flex-1">
                 {statusFilter === 'all' ? (
                   <div className="flex flex-row gap-4 overflow-x-auto pb-4 scrollbar-thin">
-                    <section className="bg-[var(--tablet-surface)] rounded-2xl shadow-sm border border-[var(--tablet-border)] flex flex-col min-w-[380px] w-[380px] min-h-[32rem] md:min-h-[40rem] shrink-0 overflow-hidden">
+                    <section className="bg-[var(--tablet-surface)] rounded-2xl shadow-sm border border-[var(--tablet-border)] flex flex-col min-w-[460px] w-[460px] min-h-[32rem] md:min-h-[40rem] shrink-0 overflow-hidden">
                       <div className="px-4 py-3.5 border-b border-[var(--tablet-border)] flex items-center justify-between">
                         <h3 className="text-sm font-bold uppercase tracking-wider text-[var(--tablet-text)]">
                           All Orders
@@ -2293,7 +2296,7 @@ export default function TabletOrdersPage() {
                         </div>
                       </section>
 
-                      {renderOrderActions(selectedOrder, { className: 'flex items-center gap-2' })}
+                      {renderOrderActions(selectedOrder, { className: 'flex items-center gap-2', showPickedUpAction: false })}
                     </>
                   )}
                 </div>
