@@ -1969,7 +1969,7 @@ export default function TabletOrdersPage() {
 
               {/* Search and Filter Bar */}
               <OrderFiltersBar>
-                <div className="flex items-center gap-3 overflow-x-auto">
+                <div className="flex items-center gap-3 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                   {[
                     { key: 'all' as const, label: 'All', count: activeOrders.length },
                     { key: 'received' as const, label: 'New', count: receivedOrders.length },
@@ -1993,9 +1993,6 @@ export default function TabletOrdersPage() {
                       </button>
                     );
                   })}
-                </div>
-
-                <div className="flex items-center gap-3">
                   <button
                     type="button"
                     onClick={() => setNeedsAttentionOnly((prev) => !prev)}
