@@ -22,6 +22,7 @@ import { api } from '../../lib/api'
 import { safeLocalStorage } from '../../lib/utils';
 import { generatePlainTextReceipt, printViaRawBT } from '../../utils/escpos';
 import { useUser } from '../../contexts/UserContext';
+import { NotificationEventPayload, shouldRefreshForNotification } from '../../lib/tablet/orderNotifications';
 
 type OrderItem = {
   id?: string;
@@ -1176,10 +1177,8 @@ export default function TabletOrdersPage() {
   useEffect(() => {
     if (!socket) return;
 
-    const handleNewNotification = (data: any) => {
-      if (data.notification.type === 'order.created_web' || 
-          data.notification.type === 'order.created_vapi' ||
-          data.notification.type === 'order.status_changed') {
+    const handleNewNotification = (data: NotificationEventPayload | null | undefined) => {
+      if (shouldRefreshForNotification(data)) {
         refresh();
       }
     };
