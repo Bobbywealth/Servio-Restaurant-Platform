@@ -265,10 +265,14 @@ router.post('/:id/status', asyncHandler(async (req: Request, res: Response) => {
     [status, id]
   );
 
+  // Use order's restaurant_id for audit log (supports API key auth where req.user is null)
+  const auditRestaurantId = restaurantId || order.restaurant_id;
+  const actorId = req.user?.id ?? null;
+  
   // Log the action
   await DatabaseService.getInstance().logAudit(
-    req.user?.restaurantId!,
-    req.user?.id || 'system',
+    auditRestaurantId,
+    actorId,
     'update_order_status',
     'order',
     id,
@@ -276,9 +280,9 @@ router.post('/:id/status', asyncHandler(async (req: Request, res: Response) => {
   );
 
   await eventBus.emit('order.status_changed', {
-    restaurantId: req.user?.restaurantId!,
+    restaurantId: auditRestaurantId,
     type: 'order.status_changed',
-    actor: { actorType: 'user', actorId: req.user?.id },
+    actor: { actorType: actorId ? 'user' : 'api', actorId: actorId ?? 'api' },
     payload: { orderId: id, previousStatus: order.status, newStatus: status },
     occurredAt: new Date().toISOString()
   });
@@ -289,7 +293,7 @@ router.post('/:id/status', asyncHandler(async (req: Request, res: Response) => {
   try {
     const io = req.app.get('socketio');
     if (io) {
-      io.to(`restaurant-${req.user?.restaurantId}`).emit('order:status_changed', {
+      io.to(`restaurant-${auditRestaurantId}`).emit('order:status_changed', {
         orderId: id,
         previousStatus: order.status,
         status,
@@ -346,9 +350,11 @@ router.post('/:id/prep-time', asyncHandler(async (req: Request, res: Response) =
     ['preparing', pickupTime, id]
   );
 
+  // Use order's restaurant_id for audit log (supports API key auth where req.user is null)
+  const auditRestaurantId = restaurantId || order.restaurant_id;
   await DatabaseService.getInstance().logAudit(
-    req.user?.restaurantId!,
-    req.user?.id || 'system',
+    auditRestaurantId,
+    req.user?.id ?? null,
     'set_prep_time',
     'order',
     id,
