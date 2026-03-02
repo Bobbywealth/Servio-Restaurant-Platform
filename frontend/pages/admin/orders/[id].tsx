@@ -43,6 +43,7 @@ export default function AdminOrderDetailsPage() {
   const [prepTime, setPrepTime] = useState(30)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [resolutionNote, setResolutionNote] = useState('')
   const [actionReason, setActionReason] = useState('')
 
@@ -82,12 +83,21 @@ export default function AdminOrderDetailsPage() {
   }
 
   const handleAccept = async () => {
+    if (!id || !order) return
     setIsSubmitting(true)
+    setSuccessMessage(null)
+    setErrorMessage(null)
+
+    const previousOrder = order
+    setOrder((prev) => (prev ? { ...prev, status: 'preparing', prep_time_minutes: prepTime } : prev))
+
     try {
-      await api.post(`/api/voice/orders/${id}/accept`, { prepTimeMinutes: prepTime })
-      setSuccessMessage('Accepted + SMS sent')
-      fetchOrder()
+      await api.post(`/api/orders/${id}/prep-time`, { prepMinutes: prepTime })
+      setSuccessMessage('Order accepted and moved to preparing')
+      await fetchOrder()
     } catch (error) {
+      setOrder(previousOrder)
+      setErrorMessage('Failed to accept order. Please try again.')
       console.error('Failed to accept order:', error)
     } finally {
       setIsSubmitting(false)
@@ -121,6 +131,13 @@ export default function AdminOrderDetailsPage() {
           <div className="mb-6 p-4 bg-green-100 text-green-800 rounded-lg flex items-center">
             <CheckCircle className="w-5 h-5 mr-2" />
             {successMessage}
+          </div>
+        )}
+
+        {errorMessage && (
+          <div className="mb-6 p-4 bg-red-100 text-red-800 rounded-lg flex items-center">
+            <AlertTriangle className="w-5 h-5 mr-2" />
+            {errorMessage}
           </div>
         )}
 
@@ -197,7 +214,7 @@ export default function AdminOrderDetailsPage() {
           </div>
 
           <div className="space-y-6">
-            {order.status === 'pending' && (
+            {(order.status === 'pending' || order.status === 'received') && (
               <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6 border-t-4 border-yellow-400">
                 <h3 className="font-bold mb-4 flex items-center"><Clock className="w-4 h-4 mr-2" />Set Prep Time</h3>
                 <div className="space-y-4">
