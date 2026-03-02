@@ -412,6 +412,7 @@ export default function TabletOrdersPage() {
   const [channelFilter, setChannelFilter] = useState('all');
   const [sortBy, setSortBy] = useState<OrderFilter['sortBy']>('newest');
   const [showFilters, setShowFilters] = useState(false);
+  const [needsAttentionOnly, setNeedsAttentionOnly] = useState(false);
   const [showArchivedOrders, setShowArchivedOrders] = useState(false);
   const [orderDetailsOrder, setOrderDetailsOrder] = useState<Order | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
@@ -1316,6 +1317,20 @@ export default function TabletOrdersPage() {
     });
   }, [orders]);
 
+  const attentionOrdersCount = useMemo(() => {
+    return activeOrders.filter((order) => {
+      const { elapsedMinutes } = formatTimeAgo(order.created_at, now);
+      return getOrderUrgencyLevel(elapsedMinutes) !== 'normal';
+    }).length;
+  }, [activeOrders, now]);
+
+  const lateOrdersCount = useMemo(() => {
+    return activeOrders.filter((order) => {
+      const { elapsedMinutes } = formatTimeAgo(order.created_at, now);
+      return getOrderUrgencyLevel(elapsedMinutes) === 'critical';
+    }).length;
+  }, [activeOrders, now]);
+
   const filteredOrders = useMemo(() => {
     let result = [...activeOrders];
 
@@ -1332,6 +1347,13 @@ export default function TabletOrdersPage() {
     // Apply search query
     if (searchQuery.trim()) {
       result = result.filter(o => matchesSearchQuery(o, searchQuery));
+    }
+
+    if (needsAttentionOnly) {
+      result = result.filter((order) => {
+        const { elapsedMinutes } = formatTimeAgo(order.created_at, now);
+        return getOrderUrgencyLevel(elapsedMinutes) !== 'normal';
+      });
     }
 
     // Apply sorting
@@ -1366,7 +1388,7 @@ export default function TabletOrdersPage() {
     }
 
     return result;
-  }, [activeOrders, statusFilter, channelFilter, searchQuery, sortBy]);
+  }, [activeOrders, statusFilter, channelFilter, searchQuery, sortBy, needsAttentionOnly, now]);
 
   useEffect(() => {
     if (filteredOrders.length === 0) {
@@ -1738,6 +1760,48 @@ export default function TabletOrdersPage() {
       : 'bg-amber-400'
     : 'bg-red-400';
 
+  const activeFilterChips = useMemo(() => {
+    const chips: Array<{ key: string; label: string; onClear: () => void; tone: string }> = [];
+
+    if (searchQuery) {
+      chips.push({
+        key: 'search',
+        label: `Search: "${searchQuery}"`,
+        onClear: handleSearchClear,
+        tone: 'bg-[var(--tablet-info)]/25 border border-[var(--tablet-border)]'
+      });
+    }
+
+    if (statusFilter !== 'all') {
+      chips.push({
+        key: 'status',
+        label: statusFilter,
+        onClear: () => setStatusFilter('all'),
+        tone: 'bg-[var(--tablet-accent)] text-[var(--tablet-accent-contrast)]'
+      });
+    }
+
+    if (channelFilter !== 'all') {
+      chips.push({
+        key: 'channel',
+        label: channelFilter,
+        onClear: () => setChannelFilter('all'),
+        tone: 'bg-[var(--tablet-surface-alt)] border border-[var(--tablet-border)]'
+      });
+    }
+
+    if (needsAttentionOnly) {
+      chips.push({
+        key: 'attention',
+        label: 'Needs attention',
+        onClear: () => setNeedsAttentionOnly(false),
+        tone: 'bg-[color-mix(in_srgb,var(--tablet-danger)_16%,transparent)] border border-[var(--tablet-danger)]/40 text-[var(--tablet-danger)]'
+      });
+    }
+
+    return chips;
+  }, [searchQuery, statusFilter, channelFilter, needsAttentionOnly, handleSearchClear]);
+
   if (authLoading || !user) {
     return (
       <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
@@ -1783,158 +1847,103 @@ export default function TabletOrdersPage() {
                 refresh={refresh}
                 loading={loading}
                 activeCount={activeOrders.length}
+                lateCount={lateOrdersCount}
               />
 
               {/* Search and Filter Bar */}
               <OrderFiltersBar>
-                {/* Search Input */}
-                <div className="relative">
-                  {isSearchOpen || searchQuery ? (
-                    <div className="relative min-w-[220px] sm:min-w-[260px]">
-                      <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-[var(--tablet-muted)]" />
-                      <input
-                        ref={searchInputRef}
-                        type="text"
-                        placeholder="Search orders..."
-                        value={searchQuery}
-                        autoFocus
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        onBlur={handleSearchBlur}
-                        onKeyDown={handleSearchKeyDown}
-                        className="w-full pl-11 pr-10 py-3.5 rounded-xl border border-[var(--tablet-border)] bg-[var(--tablet-surface)] text-[var(--tablet-text)] placeholder-[var(--tablet-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--tablet-accent)] focus:border-transparent transition-all text-base"
-                      />
-                      {searchQuery && (
-                        <button
-                          type="button"
-                          aria-label="Clear search"
-                          onClick={handleSearchClear}
-                          className="absolute right-3.5 top-1/2 -translate-y-1/2 p-1.5 rounded-full hover:bg-[var(--tablet-border)] transition touch-manipulation"
-                        >
-                          <X className="h-4 w-4 text-[var(--tablet-muted)]" />
-                        </button>
-                      )}
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      aria-label="Open search"
-                      onClick={handleSearchToggle}
-                      className="flex items-center justify-center rounded-xl border border-[var(--tablet-border)] bg-[var(--tablet-surface)] p-3.5 text-[var(--tablet-text)] transition-all hover:bg-[var(--tablet-surface-alt)] focus:outline-none focus:ring-2 focus:ring-[var(--tablet-accent)]"
-                    >
-                      <Search className="h-5 w-5" />
-                    </button>
-                  )}
+                <div className="flex items-center gap-3 overflow-x-auto">
+                  {[
+                    { key: 'all' as const, label: 'All', count: activeOrders.length },
+                    { key: 'received' as const, label: 'New', count: receivedOrders.length },
+                    { key: 'preparing' as const, label: 'Preparing', count: preparingOrders.length },
+                    { key: 'ready' as const, label: 'Ready', count: readyOrders.length }
+                  ].map((segment) => {
+                    const isActive = statusFilter === segment.key;
+                    return (
+                      <button
+                        key={segment.key}
+                        type="button"
+                        onClick={() => setStatusFilter(segment.key)}
+                        className={clsx(
+                          'min-h-[48px] min-w-[104px] rounded-xl border px-4 text-sm font-semibold transition touch-manipulation',
+                          isActive
+                            ? 'border-[var(--tablet-accent)] bg-[var(--tablet-accent)] text-[var(--tablet-accent-contrast)]'
+                            : 'border-[var(--tablet-border)] bg-[var(--tablet-surface)] text-[var(--tablet-text)] hover:bg-[var(--tablet-surface-alt)]'
+                        )}
+                      >
+                        {segment.label} <span className="opacity-80">({segment.count})</span>
+                      </button>
+                    );
+                  })}
                 </div>
 
-                {/* Filter Toggle */}
-                <button
-                  onClick={() => setShowFilters(!showFilters)}
-                  className={clsx(
-                    'flex items-center justify-center gap-2 px-4 py-3.5 rounded-xl border transition-all touch-manipulation min-h-[48px]',
-                    showFilters || statusFilter !== 'all' || channelFilter !== 'all'
-                      ? 'bg-[var(--tablet-accent)] border-[var(--tablet-accent)] text-[var(--tablet-accent-contrast)]'
-                      : 'bg-[var(--tablet-surface)] border-[var(--tablet-border)] text-[var(--tablet-text)]'
-                  )}
-                >
-                  <Filter className="h-5 w-5" />
-                  <span className="font-semibold">Filters</span>
-                  {(statusFilter !== 'all' || channelFilter !== 'all') && (
-                    <span className="ml-1 px-2 py-0.5 rounded-full text-xs bg-[var(--tablet-accent-contrast)] text-[var(--tablet-accent)]">
-                      {[statusFilter !== 'all' && statusFilter, channelFilter !== 'all' && channelFilter].filter(Boolean).length}
-                    </span>
-                  )}
-                </button>
-
-                {/* Sort Dropdown */}
-                <select
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value as OrderFilter['sortBy'])}
-                  className="px-4 py-3.5 rounded-xl border border-[var(--tablet-border)] bg-[var(--tablet-surface)] text-[var(--tablet-text)] focus:outline-none focus:ring-2 focus:ring-[var(--tablet-accent)] cursor-pointer min-h-[48px]"
-                >
-                  <option value="newest">Newest First</option>
-                  <option value="oldest">Oldest First</option>
-                  <option value="prep-time">Prep Time</option>
-                </select>
-
-                {actionQueue.length > 0 && (
+                <div className="flex items-center gap-3">
                   <button
                     type="button"
-                    onClick={retryQueueNow}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--tablet-warning)]/15 border border-[var(--tablet-warning)]/30 text-xs font-semibold text-[var(--tablet-warning)] touch-manipulation"
+                    onClick={() => setNeedsAttentionOnly((prev) => !prev)}
+                    className={clsx(
+                      'min-h-[48px] rounded-xl border px-4 text-sm font-semibold transition touch-manipulation whitespace-nowrap',
+                      needsAttentionOnly
+                        ? 'border-[var(--tablet-danger)] bg-[color-mix(in_srgb,var(--tablet-danger)_16%,transparent)] text-[var(--tablet-danger)]'
+                        : 'border-[var(--tablet-border)] bg-[var(--tablet-surface)] text-[var(--tablet-text)] hover:bg-[var(--tablet-surface-alt)]'
+                    )}
                   >
-                    ↻ {actionQueue.length} Pending Sync
+                    Needs attention ({attentionOrdersCount})
                   </button>
-                )}
 
-                <button
-                  type="button"
-                  onClick={() => setShowArchivedOrders((prev) => !prev)}
-                  className={clsx(
-                    'flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold touch-manipulation',
-                    showArchivedOrders
-                      ? 'bg-[var(--tablet-surface-alt)] border-[var(--tablet-border-strong)] text-[var(--tablet-text)]'
-                      : 'bg-transparent border-[var(--tablet-border)] text-[var(--tablet-muted)]'
-                  )}
-                >
-                  Archived ({archivedOrders.length})
-                </button>
+                  <div className="relative">
+                    {isSearchOpen || searchQuery ? (
+                      <div className="relative min-w-[240px] max-w-[320px]">
+                        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-[var(--tablet-muted)]" />
+                        <input
+                          ref={searchInputRef}
+                          type="text"
+                          placeholder="Search orders..."
+                          value={searchQuery}
+                          autoFocus
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          onBlur={handleSearchBlur}
+                          onKeyDown={handleSearchKeyDown}
+                          className="w-full pl-11 pr-10 py-3 rounded-xl border border-[var(--tablet-border)] bg-[var(--tablet-surface)] text-[var(--tablet-text)] placeholder-[var(--tablet-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--tablet-accent)] focus:border-transparent transition-all text-base"
+                        />
+                        {searchQuery && (
+                          <button
+                            type="button"
+                            aria-label="Clear search"
+                            onClick={handleSearchClear}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-full hover:bg-[var(--tablet-border)] transition touch-manipulation"
+                          >
+                            <X className="h-4 w-4 text-[var(--tablet-muted)]" />
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        aria-label="Open search"
+                        onClick={handleSearchToggle}
+                        className="flex min-h-[48px] min-w-[48px] items-center justify-center rounded-xl border border-[var(--tablet-border)] bg-[var(--tablet-surface)] p-3 text-[var(--tablet-text)] transition-all hover:bg-[var(--tablet-surface-alt)] focus:outline-none focus:ring-2 focus:ring-[var(--tablet-accent)]"
+                      >
+                        <Search className="h-5 w-5" />
+                      </button>
+                    )}
+                  </div>
+
+                  <button
+                    onClick={() => setShowFilters(!showFilters)}
+                    className={clsx(
+                      'flex min-h-[48px] items-center justify-center gap-2 rounded-xl border px-4 text-sm font-semibold transition-all touch-manipulation',
+                      showFilters || channelFilter !== 'all' || sortBy !== 'newest'
+                        ? 'bg-[var(--tablet-accent)] border-[var(--tablet-accent)] text-[var(--tablet-accent-contrast)]'
+                        : 'bg-[var(--tablet-surface)] border-[var(--tablet-border)] text-[var(--tablet-text)]'
+                    )}
+                  >
+                    <Filter className="h-5 w-5" />
+                    More filters
+                  </button>
+                </div>
               </OrderFiltersBar>
-
-              {/* Quick Filter Chips */}
-              <div className="flex flex-wrap gap-2 mt-1">
-                <button
-                  onClick={() => setStatusFilter('all')}
-                  className={clsx(
-                    'px-3 py-1.5 rounded-lg text-xs font-semibold transition touch-manipulation',
-                    statusFilter === 'all'
-                      ? 'bg-[var(--tablet-accent)] text-[var(--tablet-accent-contrast)]'
-                      : 'bg-[var(--tablet-surface)] border border-[var(--tablet-border)] text-[var(--tablet-text)] hover:bg-[var(--tablet-surface-alt)]'
-                  )}
-                >
-                  All ({activeOrders.length})
-                </button>
-
-                {[
-                  {
-                    key: 'received',
-                    label: 'New',
-                    count: receivedOrders.length,
-                    activeClass: 'bg-[var(--tablet-danger)] text-white'
-                  },
-                  {
-                    key: 'preparing',
-                    label: 'In Progress',
-                    count: preparingOrders.length,
-                    activeClass: 'bg-[var(--tablet-warning)] text-[var(--tablet-accent-contrast)]'
-                  },
-                  {
-                    key: 'ready',
-                    label: 'Ready',
-                    count: readyOrders.length,
-                    activeClass: 'bg-[var(--tablet-success)] text-white'
-                  }
-                ].map((chip) => {
-                  const isActive = statusFilter === chip.key;
-                  const isZeroCount = chip.count === 0;
-                  return (
-                    <button
-                      key={chip.key}
-                      onClick={() => setStatusFilter(chip.key as OrderFilter['status'])}
-                      disabled={!isActive && isZeroCount}
-                      className={clsx(
-                        'px-3 py-1.5 rounded-lg text-xs font-semibold transition touch-manipulation',
-                        isActive
-                          ? chip.activeClass
-                          : isZeroCount
-                            ? 'bg-[var(--tablet-surface-alt)] border border-[var(--tablet-border)] text-[var(--tablet-muted)] opacity-55 cursor-not-allowed'
-                            : 'bg-[var(--tablet-surface)] border border-[var(--tablet-border)] text-[var(--tablet-text)] hover:bg-[var(--tablet-surface-alt)]'
-                      )}
-                    >
-                      {chip.label} ({chip.count})
-                    </button>
-                  );
-                })}
-              </div>
 
               {/* Expanded Filters Panel */}
               {showFilters && (
@@ -1979,6 +1988,7 @@ export default function TabletOrdersPage() {
                         setSearchQuery('');
                         setIsSearchOpen(false);
                         setSortBy('newest');
+                        setNeedsAttentionOnly(false);
                       }}
                       className="px-4 py-2 rounded-lg border border-[var(--tablet-border)] text-[var(--tablet-muted)] hover:text-[var(--tablet-text)] hover:bg-[var(--tablet-surface-alt)] transition"
                     >
@@ -1989,31 +1999,20 @@ export default function TabletOrdersPage() {
               )}
 
               {/* Active Filters Display */}
-              {(searchQuery || statusFilter !== 'all' || channelFilter !== 'all') && (
+              {activeFilterChips.length > 0 && (
                 <div className="flex flex-wrap gap-2 items-center">
                   <span className="text-xs text-[var(--tablet-muted)]">Showing:</span>
-                  {searchQuery && (
-                    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-[var(--tablet-info)]/25 text-[var(--tablet-text)] border border-[var(--tablet-border)]">
-                      Search: "{searchQuery}"
-                      <button onClick={handleSearchClear} className="ml-1">
+                  {activeFilterChips.slice(0, 2).map((chip) => (
+                    <span key={chip.key} className={clsx('inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium', chip.tone)}>
+                      {chip.label}
+                      <button onClick={chip.onClear} className="ml-1" aria-label={`Clear ${chip.label} filter`}>
                         <X className="h-3 w-3" />
                       </button>
                     </span>
-                  )}
-                  {statusFilter !== 'all' && (
-                    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-[var(--tablet-accent)] text-[var(--tablet-accent-contrast)]">
-                      {statusFilter}
-                      <button onClick={() => setStatusFilter('all')} className="ml-1">
-                        <X className="h-3 w-3" />
-                      </button>
-                    </span>
-                  )}
-                  {channelFilter !== 'all' && (
-                    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium bg-[var(--tablet-surface-alt)] border border-[var(--tablet-border)]">
-                      {channelFilter}
-                      <button onClick={() => setChannelFilter('all')} className="ml-1">
-                        <X className="h-3 w-3" />
-                      </button>
+                  ))}
+                  {activeFilterChips.length > 2 && (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-[var(--tablet-surface-alt)] border border-[var(--tablet-border)] text-[var(--tablet-muted)]">
+                      +{activeFilterChips.length - 2}
                     </span>
                   )}
                 </div>

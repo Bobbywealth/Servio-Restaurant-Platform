@@ -12,6 +12,7 @@ type Props = {
   refresh: () => void;
   loading: boolean;
   activeCount: number;
+  lateCount: number;
 };
 
 export function OrdersHeader(props: Props) {
@@ -25,7 +26,8 @@ export function OrdersHeader(props: Props) {
     now,
     refresh,
     loading,
-    activeCount
+    activeCount,
+    lateCount
   } = props;
 
   const timeStr = now
@@ -39,33 +41,27 @@ export function OrdersHeader(props: Props) {
         <div className="text-[0.65rem] uppercase tracking-[0.2em] text-[var(--tablet-muted)] leading-tight">Order Management</div>
         <div className="flex items-center gap-2">
           <div className="text-xl md:text-2xl font-bold leading-tight truncate">Live Orders</div>
-          <div className="inline-flex items-center px-2 py-0.5 rounded-md bg-[var(--tablet-accent)] text-[var(--tablet-accent-contrast)] text-[0.65rem] font-bold uppercase tracking-wide">
-            {activeCount} Active
-          </div>
         </div>
       </div>
 
-      {/* Right: Controls */}
-      <div className="flex items-center gap-2 shrink-0">
-        {/* Compact connection indicator */}
-        <div className="flex items-center gap-1.5 px-1.5">
-          <span className={clsx('h-2.5 w-2.5 rounded-full', connectionDotClasses)} aria-hidden="true" />
-          {connectionText ? (
-            <span className="hidden md:inline text-[0.65rem] font-bold uppercase tracking-wide text-[var(--tablet-muted)]">
-              {connectionText}
-            </span>
-          ) : null}
-        </div>
+      {/* Right: KPI badges + controls */}
+      <div className="flex items-center gap-3 shrink-0">
+        <div className="flex items-center gap-2">
+          <div className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--tablet-border)] bg-[var(--tablet-surface-alt)] px-2.5 py-1.5 text-[0.7rem] font-semibold uppercase tracking-wide text-[var(--tablet-muted)]">
+            Active
+            <span className="text-[var(--tablet-text)]">{activeCount}</span>
+          </div>
 
-        {/* Fullscreen toggle */}
-        <button
-          type="button"
-          onClick={onFullscreenToggle}
-          className="bg-[var(--tablet-surface-alt)] border border-[var(--tablet-border)] hover:brightness-110 p-2 rounded-xl transition touch-manipulation"
-          aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
-        >
-          {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-        </button>
+          <div className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--tablet-border)] bg-[var(--tablet-surface-alt)] px-2.5 py-1.5 text-[0.7rem] font-semibold uppercase tracking-wide text-[var(--tablet-muted)]">
+            Late
+            <span className={clsx(lateCount > 0 ? 'text-[var(--tablet-danger)]' : 'text-[var(--tablet-text)]')}>{lateCount}</span>
+          </div>
+
+          <div className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--tablet-border)] bg-[var(--tablet-surface-alt)] px-2.5 py-1.5 text-[0.7rem] font-semibold uppercase tracking-wide text-[var(--tablet-muted)]">
+            <span className={clsx('h-2.5 w-2.5 rounded-full', connectionDotClasses)} aria-hidden="true" />
+            {connectionText || 'Offline'}
+          </div>
+        </div>
 
         {/* Clock */}
         <div className="text-lg md:text-xl font-bold tabular-nums text-[var(--tablet-text)] px-1">
@@ -78,6 +74,14 @@ export function OrdersHeader(props: Props) {
             <MoreVertical className="h-4 w-4" />
           </summary>
           <div className="absolute right-0 mt-2 w-44 rounded-xl border border-[var(--tablet-border)] bg-[var(--tablet-surface)] p-1 shadow-lg z-20">
+            <button
+              type="button"
+              onClick={onFullscreenToggle}
+              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm hover:bg-[var(--tablet-surface-alt)] transition"
+            >
+              {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+              {isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+            </button>
             <button
               type="button"
               onClick={toggleSound}
