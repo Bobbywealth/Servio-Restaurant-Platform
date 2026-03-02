@@ -894,7 +894,10 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
     customerName,
     customerPhone,
     totalAmount,
-    restaurantId: bodyRestaurantId
+    restaurantId: bodyRestaurantId,
+    orderType,
+    pickupTime,
+    notes
   } = req.body;
 
   if (!externalId || !channel || !items || !totalAmount) {
@@ -918,22 +921,61 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
   const orderId = `order_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
   // Validate modifiers (new schema) per item if selections provided
-  const normalizedItems = [];
+  const normalizedItems: any[] = [];
   const isTestOrder = String(channel || '').toLowerCase() === 'test';
+  
+  // Helper to fetch item details for display formatting
+  const getMenuItem = async (itemId: string) => {
+    return db.get('SELECT name, base_price FROM menu_items WHERE id = ? AND restaurant_id = ?', [itemId, restaurantId]);
+  };
+  
+  // Helper to get modifier group names for display
+  const getModifierGroupName = async (groupId: string) => {
+    const row = await db.get('SELECT name FROM modifier_groups WHERE id = ? AND restaurant_id = ?', [groupId, restaurantId]);
+    return row?.name || groupId;
+  };
+  
+  // Helper to get modifier option name
+  const getModifierOptionName = async (optionId: string) => {
+    const row = await db.get('SELECT name FROM modifier_options WHERE id = ?', [optionId]);
+    return row?.name || optionId;
+  };
+  
+  // Helper to get size details
+  const getSizeDetails = async (sizeId: string) => {
+    return db.get('SELECT size_name, price FROM item_sizes WHERE id = ?', [sizeId]);
+  };
+
   if (Array.isArray(items)) {
     let idx = 0;
     for (const line of items) {
       const lineItemId = line?.itemId || line?.id;
       const selections = Array.isArray(line?.selections) ? line.selections : [];
+      const providedModifiers = line?.modifiers || line?.modifierSelections || {};
+      const sizeId = line?.sizeId || line?.selectedSize?.id || line?.size?.id;
 
       // For dashboard "Create Test Order", allow orders without menu item IDs or modifier selections.
-      // This keeps the demo button working even when menu items have required modifier groups.
       if (isTestOrder) {
+        // Format modifiers for display if provided
+        let displayModifiers: Record<string, string> = {};
+        if (providedModifiers && typeof providedModifiers === 'object') {
+          displayModifiers = providedModifiers;
+        }
+        
         normalizedItems.push({
-          ...line,
+          item_id: lineItemId || `test_item_${idx}`,
           itemId: lineItemId || `test_item_${idx}`,
+          name: line?.name || 'Test Item',
+          quantity: line?.quantity || line?.qty || 1,
+          qty: line?.quantity || line?.qty || 1,
+          unit_price: line?.price || line?.unitPrice || 0,
+          price: line?.price || line?.unitPrice || 0,
+          size: line?.size?.sizeName || line?.sizeName || line?.selectedSize?.sizeName || null,
+          sizeId: sizeId || null,
+          modifiers: displayModifiers,
           modifiersSnapshot: [],
-          modifiersPriceDelta: 0
+          modifiersPriceDelta: 0,
+          notes: line?.specialInstructions || line?.notes || null
         });
         idx += 1;
         continue;
@@ -960,11 +1002,64 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
           }
         });
       }
+      
+      // Build display-friendly modifiers object { groupName: optionName }
+      const displayModifiers: Record<string, string> = {};
+      let sizeName: string | null = null;
+      let effectivePrice = line?.price || line?.unitPrice || 0;
+      
+      // Handle size information
+      if (sizeId) {
+        const sizeDetails = await getSizeDetails(sizeId);
+        if (sizeDetails) {
+          sizeName = sizeDetails.size_name;
+          effectivePrice = sizeDetails.price; // Size price overrides base price
+        }
+      }
+      
+      // Process modifier selections for display
+      if (validation.snapshot && validation.snapshot.length > 0) {
+        for (const groupSelection of validation.snapshot) {
+          const groupName = await getModifierGroupName(groupSelection.groupId);
+          const optionNames: string[] = [];
+          for (const opt of groupSelection.options || []) {
+            const optName = await getModifierOptionName(opt.optionId);
+            optionNames.push(optName);
+          }
+          displayModifiers[groupName] = optionNames.join(', ');
+        }
+      }
+      
+      // Also process any provided modifiers object
+      if (providedModifiers && typeof providedModifiers === 'object' && !Array.isArray(providedModifiers)) {
+        for (const [key, value] of Object.entries(providedModifiers)) {
+          if (!displayModifiers[key]) {
+            displayModifiers[key] = String(value);
+          }
+        }
+      }
+      
+      // Get menu item name if not provided
+      let itemName = line?.name;
+      if (!itemName) {
+        const menuItem = await getMenuItem(lineItemId);
+        itemName = menuItem?.name || lineItemId;
+      }
+      
       normalizedItems.push({
-        ...line,
+        item_id: lineItemId,
         itemId: lineItemId,
+        name: itemName,
+        quantity: line?.quantity || line?.qty || 1,
+        qty: line?.quantity || line?.qty || 1,
+        unit_price: effectivePrice,
+        price: effectivePrice,
+        size: sizeName,
+        sizeId: sizeId || null,
+        modifiers: displayModifiers,
         modifiersSnapshot: validation.snapshot || [],
-        modifiersPriceDelta: validation.priceDeltaTotal || 0
+        modifiersPriceDelta: validation.priceDeltaTotal || 0,
+        notes: line?.specialInstructions || line?.notes || null
       });
       idx += 1;
     }
@@ -973,8 +1068,8 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
   await db.run(`
     INSERT INTO orders (
       id, restaurant_id, external_id, channel, items, customer_name,
-      customer_phone, total_amount, status, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      customer_phone, total_amount, status, order_type, pickup_time, notes, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
   `, [
     orderId,
     restaurantId,
@@ -984,8 +1079,32 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
     customerName || null,
     customerPhone || null,
     totalAmount,
-    'received'
+    'received',
+    orderType || 'pickup',
+    pickupTime || null,
+    notes || null
   ]);
+  
+  // Create order_items records for admin page compatibility
+  for (const item of normalizedItems) {
+    await db.run(`
+      INSERT INTO order_items (
+        id, order_id, item_id, item_name_snapshot, qty, quantity, unit_price, price, 
+        modifiers_json, notes, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    `, [
+      `oi_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      orderId,
+      item.item_id || item.itemId,
+      item.name,
+      item.qty || item.quantity || 1,
+      item.quantity || item.qty || 1,
+      item.unit_price || item.price || 0,
+      item.price || item.unit_price || 0,
+      JSON.stringify(item.modifiers || {}),
+      item.notes || null
+    ]);
+  }
 
   // Log the action (support both JWT and API key auth)
   await DatabaseService.getInstance().logAudit(
