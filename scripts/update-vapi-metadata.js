@@ -3,13 +3,21 @@
 /**
  * Update Vapi Assistant Metadata
  * Adds restaurantId to assistant metadata for proper menu scoping
+ * 
+ * Usage: VAPI_API_KEY=your_key node scripts/update-vapi-metadata.js [ASSISTANT_ID]
  */
 
 const https = require('https');
 
-const ASSISTANT_ID = 'c70c1a5d-0972-452a-b999-c9c6274744f8';
-const API_KEY = 'd83d2720-ecb7-4976-8c9c-2084203fdb07';
-const RESTAURANT_ID = 'sasheys-kitchen-union';
+const ASSISTANT_ID = process.argv[2] || process.env.VAPI_ASSISTANT_ID || '5bcdc172-aa46-44c7-a512-c82dbc7325ce';
+const API_KEY = process.env.VAPI_API_KEY;
+const RESTAURANT_ID = process.env.VAPI_RESTAURANT_ID || 'sasheys-kitchen-union';
+
+if (!API_KEY) {
+  console.error('❌ ERROR: VAPI_API_KEY environment variable is required');
+  console.error('   Usage: VAPI_API_KEY=your_key node scripts/update-vapi-metadata.js');
+  process.exit(1);
+}
 
 const data = JSON.stringify({
   metadata: {
