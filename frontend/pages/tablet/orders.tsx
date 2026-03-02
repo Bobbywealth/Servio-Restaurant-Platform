@@ -670,6 +670,36 @@ export default function TabletOrdersPage() {
     persistActionQueue(next);
   };
 
+  const upsertStatusSyncFailure = useCallback((params: {
+    orderId: string;
+    status: string;
+    message: string;
+    permanentFailure: boolean;
+  }) => {
+    const { orderId, status, message, permanentFailure } = params;
+    const current = loadActionQueue();
+    const idempotencyKey = `status:${orderId}:${status.toLowerCase()}`;
+    const existing = current.find((action) => action.type === 'status' && action.idempotencyKey === idempotencyKey);
+    const nextRetryCount = (existing?.retryCount || 0) + 1;
+    const failedAction: PendingAction = {
+      id: existing?.id || `${orderId}-${Date.now()}`,
+      orderId,
+      type: 'status',
+      payload: { status },
+      queuedAt: existing?.queuedAt || Date.now(),
+      idempotencyKey,
+      retryCount: nextRetryCount,
+      lastError: message,
+      lastAttemptAt: Date.now(),
+      permanentFailure
+    };
+    const next = [
+      ...current.filter((action) => !(action.type === 'status' && action.idempotencyKey === idempotencyKey)),
+      failedAction
+    ];
+    persistActionQueue(next);
+  }, [persistActionQueue]);
+
   const processActionQueue = async (force = false) => {
     if (typeof window === 'undefined') return;
     if (!navigator.onLine) return;
@@ -735,6 +765,20 @@ export default function TabletOrdersPage() {
     const next = loadActionQueue().filter((action) => !action.permanentFailure && action.retryCount < ACTION_RETRY_THRESHOLD);
     persistActionQueue(next);
   };
+
+  async function retryOrderSync(orderId: string) {
+    const queue = loadActionQueue();
+    if (!queue.some((action) => action.orderId === orderId)) return;
+
+    const resetQueue = queue.map((action) => (
+      action.orderId === orderId
+        ? { ...action, retryCount: 0, permanentFailure: false, lastError: null }
+        : action
+    ));
+
+    persistActionQueue(resetQueue);
+    await processActionQueue(true);
+  }
 
   async function refresh() {
     try {
@@ -1026,8 +1070,20 @@ export default function TabletOrdersPage() {
 
   async function setStatus(orderId: string, nextStatus: OrderStatus) {
     setBusyId(orderId);
-    setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, status: nextStatus } : o)));
+    setOrders((prev) => prev.map((o) => {
+      if (o.id === orderId) {
+        previousStatus = o.status;
+        return { ...o, status: nextStatus };
+      }
+      return o;
+    }));
     setSelectedOrder((prev) => (prev?.id === orderId ? { ...prev, status: nextStatus } : prev));
+
+    const rollbackToPreviousStatus = () => {
+      setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, status: previousStatus } : o)));
+      setSelectedOrder((prev) => (prev?.id === orderId ? { ...prev, status: previousStatus } : prev));
+    };
+
     try {
       if (!navigator.onLine) {
         enqueueAction({
@@ -1043,13 +1099,17 @@ export default function TabletOrdersPage() {
           socket.emit('order:status_changed', { orderId, status: nextStatus, timestamp: new Date() });
         }
       }
-    } catch (e) {
-      enqueueAction({
-        id: `${orderId}-${Date.now()}`,
+    } catch (error: any) {
+      rollbackToPreviousStatus();
+      const statusCode = error?.response?.status;
+      const permanentFailure = statusCode === 400 || statusCode === 404 || statusCode === 409 || statusCode === 422;
+      const message = error?.response?.data?.error?.message || error?.message || 'Sync failed';
+
+      upsertStatusSyncFailure({
         orderId,
-        type: 'status',
-        payload: { status: nextStatus },
-        queuedAt: Date.now()
+        status: nextStatus,
+        message: String(message),
+        permanentFailure
       });
     } finally {
       setBusyId(null);
@@ -1361,6 +1421,21 @@ export default function TabletOrdersPage() {
     return queueSections.filter((section) => section.key === statusFilter);
   }, [queueSections, statusFilter]);
 
+  const orderSyncIssues = useMemo(() => {
+    const map = new Map<string, { retryCount: number; lastError: string | null; permanentFailure: boolean }>();
+    actionQueue.forEach((action) => {
+      const existing = map.get(action.orderId);
+      if (!existing || action.retryCount > existing.retryCount) {
+        map.set(action.orderId, {
+          retryCount: action.retryCount,
+          lastError: action.lastError,
+          permanentFailure: Boolean(action.permanentFailure)
+        });
+      }
+    });
+    return map;
+  }, [actionQueue]);
+
   const renderOrderCard = useCallback((o: Order, laneIndex: number, options?: { isArchived?: boolean }) => {
     const isArchived = Boolean(options?.isArchived);
     const status = normalizeStatus(o.status);
@@ -1373,6 +1448,8 @@ export default function TabletOrdersPage() {
     const urgencyBadgeClass = getOrderUrgencyBadgeClass(urgencyLevel);
     const itemCount = (o.items || []).reduce((sum, it) => sum + (it.quantity || 1), 0);
     const hasPendingAction = pendingActions.has(o.id);
+    const syncIssue = orderSyncIssues.get(o.id);
+    const hasSyncFailure = Boolean(syncIssue && (syncIssue.permanentFailure || syncIssue.retryCount > 0));
     const isActionBusy = busyId === o.id || hasPendingAction || isArchived;
     const isLatest = laneIndex === 0;
     const isSelected = selectedOrder?.id === o.id;
@@ -1466,6 +1543,16 @@ export default function TabletOrdersPage() {
                 {isLatest && (
                   <span className="text-xs font-semibold text-[var(--tablet-accent)] hidden sm:inline">Latest</span>
                 )}
+                {hasSyncFailure && (
+                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-[color-mix(in_srgb,var(--tablet-danger)_16%,transparent)] text-[var(--tablet-danger)]">
+                    Sync failed
+                  </span>
+                )}
+                {!hasSyncFailure && hasPendingAction && (
+                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-[color-mix(in_srgb,var(--tablet-accent)_16%,transparent)] text-[var(--tablet-accent)]">
+                    Sync pending
+                  </span>
+                )}
                 {isPreparing && prepTimeData && (
                   <span className={clsx(
                     'text-xs font-bold px-2 py-0.5 rounded-md inline-flex items-center gap-1',
@@ -1515,6 +1602,29 @@ export default function TabletOrdersPage() {
                 )}
                 style={{ width: `${prepTimeData.isOverdue ? 100 : prepTimeData.percentRemaining}%` }}
               />
+            </div>
+          )}
+
+          {hasSyncFailure && syncIssue && (
+            <div className="mb-3 rounded-md border border-[color-mix(in_srgb,var(--tablet-danger)_30%,transparent)] bg-[color-mix(in_srgb,var(--tablet-danger)_10%,transparent)] px-2.5 py-2">
+              <p className="text-[11px] font-semibold text-[var(--tablet-danger)]">
+                Status sync failed{syncIssue.permanentFailure ? ' (needs review)' : ''}
+              </p>
+              {syncIssue.lastError && (
+                <p className="mt-1 text-[11px] text-[var(--tablet-muted)] line-clamp-2">
+                  {syncIssue.lastError}
+                </p>
+              )}
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  retryOrderSync(o.id);
+                }}
+                className="mt-2 inline-flex min-h-[32px] items-center rounded-md border border-[var(--tablet-danger)] px-2.5 py-1 text-xs font-semibold text-[var(--tablet-danger)] hover:bg-[color-mix(in_srgb,var(--tablet-danger)_8%,transparent)]"
+              >
+                Retry sync
+              </button>
             </div>
           )}
 
@@ -1590,23 +1700,8 @@ export default function TabletOrdersPage() {
         </div>
       </div>
     );
-  }, [busyId, now, pendingActions, selectedOrder]);
+  }, [busyId, now, orderSyncIssues, pendingActions, selectedOrder]);
   const { soundEnabled, toggleSound } = useOrderAlerts(receivedOrders.length);
-
-  const orderSyncIssues = useMemo(() => {
-    const map = new Map<string, { retryCount: number; lastError: string | null; permanentFailure: boolean }>();
-    actionQueue.forEach((action) => {
-      const existing = map.get(action.orderId);
-      if (!existing || action.retryCount > existing.retryCount) {
-        map.set(action.orderId, {
-          retryCount: action.retryCount,
-          lastError: action.lastError,
-          permanentFailure: Boolean(action.permanentFailure)
-        });
-      }
-    });
-    return map;
-  }, [actionQueue]);
 
 
   useEffect(() => {

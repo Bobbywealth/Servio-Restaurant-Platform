@@ -1303,10 +1303,43 @@ export default function SettingsPage() {
                     <Key className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
                   </div>
                   <div>
-                    <h4 className="font-semibold text-indigo-900 dark:text-indigo-100">API Keys</h4>
+                    <h4 className="font-semibold text-indigo-900 dark:text-indigo-100">Security & Credentials</h4>
                     <p className="text-sm text-indigo-700 dark:text-indigo-300 mt-1">
-                      Manage API keys for programmatic access to your restaurant data.
+                      Keep Servio platform keys separate from third-party integration secrets to reduce misconfiguration risk.
                     </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white dark:bg-surface-800 rounded-xl border border-surface-200 dark:border-surface-700 p-6">
+              <h5 className="font-medium text-surface-900 dark:text-surface-100 mb-4">Credential Types</h5>
+              <div className="space-y-4">
+                <div className="rounded-lg border border-indigo-200 dark:border-indigo-800 bg-indigo-50/80 dark:bg-indigo-900/20 p-4">
+                  <div className="flex items-start gap-3">
+                    <Key className="w-5 h-5 text-indigo-600 dark:text-indigo-400 mt-0.5" />
+                    <div>
+                      <h6 className="font-medium text-indigo-900 dark:text-indigo-100">1) Servio API Keys ({`/dashboard/api-keys`})</h6>
+                      <p className="text-sm text-indigo-700 dark:text-indigo-300 mt-1">
+                        Use these keys for direct access to Servio APIs from your own backend systems and automations.
+                        Keys are shown once at creation, then stored hashed/obscured for security, so capture them securely.
+                        Rotate on a regular cadence and immediately if any key is exposed.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-purple-200 dark:border-purple-800 bg-purple-50/80 dark:bg-purple-900/20 p-4">
+                  <div className="flex items-start gap-3">
+                    <Shield className="w-5 h-5 text-purple-600 dark:text-purple-400 mt-0.5" />
+                    <div>
+                      <h6 className="font-medium text-purple-900 dark:text-purple-100">2) Third-Party Integration Secrets (e.g., Vapi)</h6>
+                      <p className="text-sm text-purple-700 dark:text-purple-300 mt-1">
+                        Configure vendor credentials (API keys, webhooks, assistant IDs) inside each integration settings page,
+                        such as Phone System settings for Vapi. These secrets are service-specific and should never be reused
+                        as Servio API keys. Rotate them based on each provider&apos;s policy and re-test the integration after updates.
+                      </p>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1342,6 +1375,20 @@ export default function SettingsPage() {
                   </div>
                   <ExternalLink className="w-4 h-4 text-surface-400 group-hover:text-purple-600 dark:group-hover:text-purple-400" />
                 </a>
+
+                <a
+                  href="/dashboard/settings?tab=phone"
+                  className="flex items-center gap-3 p-4 rounded-lg border border-surface-200 dark:border-surface-700 hover:border-purple-300 dark:hover:border-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors group"
+                >
+                  <div className="p-2 bg-purple-100 dark:bg-purple-800 rounded-lg group-hover:bg-purple-200 dark:group-hover:bg-purple-700 transition-colors">
+                    <Phone className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                  </div>
+                  <div className="flex-1">
+                    <h6 className="font-medium text-surface-900 dark:text-surface-100">Manage Integration Secrets</h6>
+                    <p className="text-sm text-surface-500 dark:text-surface-400">Open provider-specific credential settings (Vapi, webhooks, etc.)</p>
+                  </div>
+                  <ExternalLink className="w-4 h-4 text-surface-400 group-hover:text-purple-600 dark:group-hover:text-purple-400" />
+                </a>
               </div>
             </div>
 
@@ -1351,8 +1398,8 @@ export default function SettingsPage() {
                 <div>
                   <h6 className="font-medium text-yellow-800 dark:text-yellow-200">Security Notice</h6>
                   <p className="text-sm text-yellow-700 dark:text-yellow-300 mt-1">
-                    Keep your API keys secure. Never share them publicly or commit them to version control.
-                    Rotate keys periodically for better security.
+                    Keep credentials secure: never share keys publicly, commit them to version control, or reuse credentials
+                    across Servio and third-party systems. Follow least privilege and rotate all secrets periodically.
                   </p>
                 </div>
               </div>
