@@ -605,6 +605,7 @@ export class VoiceOrderingService {
       rowsBeforeFiltering: number;
       rowsAfterFiltering: number;
       wouldFilterUnavailable: number;
+      browsingQuery?: boolean;
     };
   }> {
     const resolvedRestaurantId = this.resolveRestaurantId(restaurantId);
@@ -615,7 +616,8 @@ export class VoiceOrderingService {
       query: trimmedQuery,
       rowsBeforeFiltering: 0,
       rowsAfterFiltering: 0,
-      wouldFilterUnavailable: 0
+      wouldFilterUnavailable: 0,
+      browsingQuery: false
     };
 
     if (!resolvedRestaurantId) {
