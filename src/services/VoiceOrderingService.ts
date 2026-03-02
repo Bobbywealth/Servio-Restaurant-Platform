@@ -366,23 +366,28 @@ export class VoiceOrderingService {
       const defaultOption = group.options.find((opt: any) => opt.isPreselected && !opt.isSoldOut);
 
       // Determine if this modifier should be asked or auto-applied
-      // Auto-apply (don't ask) if:
-      // 1. It's NOT required AND
-      // 2. It HAS a default option AND
-      // 3. It's a "gravy type" modifier (customers usually want same gravy as their meat)
+      // Auto-apply gravy TYPE (not amount) — customers almost always want "same as meat"
+      // Apply when: it's a gravy type/style/kind modifier AND has a default OR first option is "same as meat"
       const isGravyType = groupNameLower.includes('gravy') &&
                           (groupNameLower.includes('type') || groupNameLower.includes('style') || groupNameLower.includes('kind'));
 
-      const shouldAutoApply = !group.required && defaultOption && isGravyType;
+      // For gravy type: use preselected default, or fall back to "same as meat" option
+      const gravyTypeDefault = isGravyType
+        ? (defaultOption || group.options.find((opt: any) =>
+            !opt.isSoldOut && (opt.name.toLowerCase().includes('same as meat') || opt.id === 'same_as_meat')
+          ))
+        : null;
+
+      const shouldAutoApply = isGravyType && gravyTypeDefault;
 
       if (shouldAutoApply) {
-        // Don't ask - auto-apply the default
+        // Don't ask - auto-apply the default (gravy type → "same as meat")
         autoAppliedDefaults.push({
           groupId: group.id,
           groupName: group.name,
-          defaultOptionId: defaultOption.id,
-          defaultOptionName: defaultOption.name,
-          priceDelta: defaultOption.priceDelta || 0
+          defaultOptionId: gravyTypeDefault.id,
+          defaultOptionName: gravyTypeDefault.name,
+          priceDelta: gravyTypeDefault.priceDelta || 0
         });
         return; // Skip adding to questions
       }
@@ -481,17 +486,23 @@ export class VoiceOrderingService {
       const groupNameLower = group.name.toLowerCase();
       const defaultOption = group.options.find((opt: any) => opt.isPreselected && !opt.isSoldOut);
 
-      // Auto-apply gravy type modifiers that have a default
+      // Auto-apply gravy type modifiers — use preselected default or "same as meat" fallback
       const isGravyType = groupNameLower.includes('gravy') &&
                           (groupNameLower.includes('type') || groupNameLower.includes('style') || groupNameLower.includes('kind'));
 
-      if (!group.required && defaultOption && isGravyType) {
+      const gravyTypeDefault = isGravyType
+        ? (defaultOption || group.options.find((opt: any) =>
+            !opt.isSoldOut && (opt.name.toLowerCase().includes('same as meat') || opt.id === 'same_as_meat')
+          ))
+        : null;
+
+      if (isGravyType && gravyTypeDefault) {
         autoApplied.push({
           groupId: group.id,
           groupName: group.name,
-          optionId: defaultOption.id,
-          optionName: defaultOption.name,
-          priceDelta: defaultOption.priceDelta || 0
+          optionId: gravyTypeDefault.id,
+          optionName: gravyTypeDefault.name,
+          priceDelta: gravyTypeDefault.priceDelta || 0
         });
       }
     });
@@ -615,6 +626,40 @@ export class VoiceOrderingService {
     if (!trimmedQuery) {
       logger.warn('[menu.search] empty query', { restaurantId: resolvedRestaurantId });
       return { items: [], debug: debugBase };
+    }
+
+    // Detect general browsing queries like "what do you have", "menu", "everything", etc.
+    // These shouldn't be fuzzy-matched token by token — return all available items instead.
+    const browsingPatterns = /^(what('?s| do| is)? (you|ya|y'?all) (have|got|serving|offer)|menu|everything|all items|what'?s available|what can i get|show me|popular|specials?|recommendations?)$/i;
+    const normalizedForBrowsing = trimmedQuery.replace(/[?.!,]+$/g, '').trim();
+    if (browsingPatterns.test(normalizedForBrowsing)) {
+      logger.info('[menu.search] browsing_query_detected', { restaurantId: resolvedRestaurantId, query: trimmedQuery });
+      try {
+        const db = DatabaseService.getInstance().getDatabase();
+        const rows = await db.all(
+          `SELECT mi.id, mi.name, mi.description, mi.price, mi.is_available, mc.name as category
+           FROM menu_items mi
+           LEFT JOIN menu_categories mc ON mc.id = mi.category_id
+           WHERE mi.restaurant_id = ? AND mi.is_available = TRUE
+           ORDER BY mc.display_order ASC, mi.name ASC
+           LIMIT 50`,
+          [resolvedRestaurantId]
+        );
+        const items = (rows || []).map((r: any) => ({
+          id: r.id,
+          name: r.name,
+          price: Number(r.price || 0),
+          category: r.category || 'Menu',
+          is_available: r.is_available
+        }));
+        return {
+          items,
+          debug: { ...debugBase, rowsBeforeFiltering: items.length, rowsAfterFiltering: items.length, browsingQuery: true }
+        };
+      } catch (err) {
+        logger.error('[menu.search] browsing query failed', { error: err instanceof Error ? err.message : String(err) });
+        return { items: [], debug: debugBase };
+      }
     }
 
     // Fuzzy token matching: "curry chicken" -> match rows containing both tokens.
