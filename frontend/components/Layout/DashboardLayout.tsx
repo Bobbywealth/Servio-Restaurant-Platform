@@ -26,6 +26,7 @@ import {
   Mail,
   Store,
   Wifi,
+  Key,
   FileText,
   CheckCircle
 } from 'lucide-react';
@@ -322,7 +323,16 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       icon: Settings,
       description: 'System settings',
       color: 'text-surface-500',
-      roles: ['manager', 'owner'],
+      roles: ['manager', 'owner', 'admin'],
+      section: 'admin'
+    },
+    {
+      name: 'API Keys',
+      href: '/dashboard/api-keys',
+      icon: Key,
+      description: 'Manage API access keys',
+      color: 'text-yellow-500',
+      roles: ['manager', 'owner', 'admin'],
       section: 'admin'
     },
   ];
