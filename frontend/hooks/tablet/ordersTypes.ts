@@ -1,3 +1,5 @@
+import type { OrderStatus } from './orderStatus';
+
 export type OrderItem = {
   id?: string;
   name?: string;
@@ -37,5 +39,5 @@ export type OrdersResponse = {
 };
 
 export type PendingAction =
-  | { id: string; orderId: string; type: 'status'; payload: { status: string }; queuedAt: number }
+  | { id: string; orderId: string; type: 'status'; payload: { status: OrderStatus }; queuedAt: number }
   | { id: string; orderId: string; type: 'prep-time'; payload: { prepMinutes: number }; queuedAt: number };

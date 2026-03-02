@@ -1,13 +1,15 @@
 import { AlertTriangle, Printer, X } from 'lucide-react';
 import clsx from 'clsx';
 import type { Order } from '../../../hooks/tablet/ordersTypes';
+import type { OrderStatus } from '../../../hooks/tablet/orderStatus';
+import { ORDER_STATUS } from '../../../hooks/tablet/orderStatus';
 
 type Props = {
   order: Order | null;
   onClose: () => void;
   onConfirmOrder: (order: Order) => void;
   onDeclineOrder: (order: Order) => void;
-  onSetStatus: (orderId: string, status: string) => void;
+  onSetStatus: (orderId: string, status: OrderStatus) => void;
   onPrintOrder: (orderId: string) => void;
   busyOrderId: string | null;
   printingOrderId: string | null;
@@ -199,7 +201,7 @@ export function OrderDetailsModal({
           {status === 'preparing' && (
             <>
               <button
-                onClick={() => onSetStatus(order.id, 'ready')}
+                onClick={() => onSetStatus(order.id, ORDER_STATUS.READY)}
                 disabled={isBusy}
                 className="flex-1 min-w-[140px] py-3 rounded-xl bg-[var(--tablet-success)] text-[var(--tablet-text)] font-semibold uppercase disabled:opacity-60"
               >
@@ -218,7 +220,7 @@ export function OrderDetailsModal({
 
           {status === 'ready' && (
             <button
-              onClick={() => onSetStatus(order.id, 'completed')}
+              onClick={() => onSetStatus(order.id, ORDER_STATUS.COMPLETED)}
               disabled={isBusy}
               className="flex-1 min-w-[140px] py-3 rounded-xl bg-[var(--tablet-success)] text-[var(--tablet-text)] font-semibold uppercase disabled:opacity-60"
             >

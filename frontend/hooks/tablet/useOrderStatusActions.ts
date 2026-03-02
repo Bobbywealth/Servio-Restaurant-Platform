@@ -3,6 +3,8 @@ import type { Dispatch, SetStateAction } from 'react';
 import { api } from '../../lib/api';
 import { safeLocalStorage } from '../../lib/utils';
 import type { Order, PendingAction } from './ordersTypes';
+import { ORDER_STATUS, postOrderStatus } from './orderStatus';
+import type { OrderStatus } from './orderStatus';
 
 const ACTION_QUEUE_KEY = 'servio_tablet_action_queue';
 
@@ -31,12 +33,12 @@ export function useOrderStatusActions(setOrders: Dispatch<SetStateAction<Order[]
     setPendingActions((prev) => new Set(prev).add(action.orderId));
   };
 
-  const setStatus = async (orderId: string, status: string) => {
+  const setStatus = async (orderId: string, status: OrderStatus) => {
     setBusyId(orderId);
     setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, status } : o)));
     try {
       if (!navigator.onLine) throw new Error('offline');
-      await api.post(`/api/orders/${encodeURIComponent(orderId)}/status`, { status });
+      await postOrderStatus(api, orderId, status);
       setPendingActions((prev) => {
         const next = new Set(prev);
         next.delete(orderId);
@@ -55,8 +57,8 @@ export function useOrderStatusActions(setOrders: Dispatch<SetStateAction<Order[]
     }
   };
 
-  const acceptOrder = async (order: Order) => setStatus(order.id, 'preparing');
-  const declineOrder = async (order: Order) => setStatus(order.id, 'declined');
+  const acceptOrder = async (order: Order) => setStatus(order.id, ORDER_STATUS.PREPARING);
+  const declineOrder = async (order: Order) => setStatus(order.id, ORDER_STATUS.CANCELLED);
 
   const setPrepTime = async (orderId: string, prepMinutes: number) => {
     setBusyId(orderId);
