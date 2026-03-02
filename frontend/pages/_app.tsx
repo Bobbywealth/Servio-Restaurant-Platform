@@ -253,11 +253,25 @@ export default function App({ Component, pageProps }: AppProps) {
         {/* PWA META TAGS */}
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-        <meta name="apple-mobile-web-app-title" content={isStaffRoute ? 'Servio Staff' : 'Servio'} />
+        <meta
+          name="apple-mobile-web-app-title"
+          content={isStaffRoute ? 'Servio Staff' : isTabletRoute ? 'Servio Orders' : 'Servio'}
+        />
+        <meta
+          name="application-name"
+          content={isStaffRoute ? 'Servio Staff' : isTabletRoute ? 'Servio Tablet Orders' : 'Servio'}
+        />
         <meta name="format-detection" content="telephone=no" />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="msapplication-tap-highlight" content="no" />
-        <meta name="theme-color" content={isStaffRoute ? '#ff6b35' : '#14B8A6'} />
+        <meta
+          name="theme-color"
+          content={isStaffRoute ? '#ff6b35' : isTabletRoute ? '#111827' : '#14B8A6'}
+        />
+        <meta
+          name="msapplication-TileColor"
+          content={isStaffRoute ? '#ff6b35' : isTabletRoute ? '#111827' : '#14B8A6'}
+        />
         <link
           rel="manifest"
           href={
