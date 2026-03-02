@@ -673,7 +673,7 @@ export default function TabletOrdersPage() {
 
   const upsertStatusSyncFailure = useCallback((params: {
     orderId: string;
-    status: string;
+    status: OrderStatus;
     message: string;
     permanentFailure: boolean;
   }) => {
@@ -1070,6 +1070,7 @@ export default function TabletOrdersPage() {
   }
 
   async function setStatus(orderId: string, nextStatus: OrderStatus) {
+    let previousStatus: string | null | undefined;
     setBusyId(orderId);
     setOrders((prev) => prev.map((o) => {
       if (o.id === orderId) {
