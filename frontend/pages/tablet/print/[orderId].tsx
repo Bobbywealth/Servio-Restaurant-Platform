@@ -141,11 +141,49 @@ export default function TabletPrintPage() {
     if (printWindow) {
       printWindow.document.write(standaloneHtml);
       printWindow.document.close();
-      printWindow.onload = () => {
+      
+      // Wait for images (logo) to load before printing
+      const images = printWindow.document.querySelectorAll('img');
+      if (images.length === 0) {
+        // No images, print immediately
         printWindow.focus();
         printWindow.print();
-        printWindow.close();
-      };
+        setTimeout(() => printWindow.close(), 500);
+      } else {
+        // Wait for all images to load
+        let loadedCount = 0;
+        const totalImages = images.length;
+        
+        const checkAllLoaded = () => {
+          loadedCount++;
+          if (loadedCount >= totalImages) {
+            // All images loaded, now print
+            setTimeout(() => {
+              printWindow.focus();
+              printWindow.print();
+              setTimeout(() => printWindow.close(), 500);
+            }, 300); // Extra delay to ensure rendering
+          }
+        };
+        
+        images.forEach((img) => {
+          if (img.complete) {
+            checkAllLoaded();
+          } else {
+            img.onload = checkAllLoaded;
+            img.onerror = checkAllLoaded; // Continue even if image fails
+          }
+        });
+        
+        // Fallback: print after 3 seconds even if images didn't load
+        setTimeout(() => {
+          if (loadedCount < totalImages) {
+            printWindow.focus();
+            printWindow.print();
+            setTimeout(() => printWindow.close(), 500);
+          }
+        }, 3000);
+      }
     } else {
       // Fallback if popup blocked
       window.print();

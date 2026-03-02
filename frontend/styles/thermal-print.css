@@ -44,6 +44,20 @@
     width: 58mm;
   }
 
+  /* Ensure images print */
+  .receipt-logo {
+    display: block !important;
+    visibility: visible !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Force background graphics */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
   .receipt-copy {
     page-break-after: always;
   }
