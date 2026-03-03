@@ -147,6 +147,7 @@ async function initializeServer() {
     const { default: restaurantRoutes } = await import('./routes/restaurant');
     const { default: restaurantsRoutes } = await import('./routes/restaurants');
     const { default: integrationsRoutes } = await import('./routes/integrations');
+    const { default: twilioSmsRoutes } = await import('./routes/twilio-sms');
     const { default: vapiRoutes } = await import('./routes/vapi');
     const { default: voiceRoutes } = await import('./routes/voice');
     const { default: voiceHubRoutes } = await import('./routes/voice-hub');
@@ -186,6 +187,9 @@ async function initializeServer() {
     
     // V2 API Routes with enhanced pagination and filtering
     app.use('/api/v2', requireAuth, v2Routes);
+
+    // Public Twilio inbound SMS webhook (no auth)
+    app.use('/api/twilio/sms', twilioSmsRoutes);
 
     // Vapi and Voice routes MUST be before the catch-all /api route (no auth)
     app.use('/api/vapi', vapiRoutes);
