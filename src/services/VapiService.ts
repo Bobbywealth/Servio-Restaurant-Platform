@@ -618,8 +618,19 @@ export class VapiService {
             break;
           }
 
+          const selectedModifiers =
+            normalizedParameters?.modifiers ??
+            normalizedParameters?.selectedModifiers ??
+            normalizedParameters?.currentModifiers ??
+            normalizedParameters?.item?.modifiers ??
+            null;
+
           const voiceService = VoiceOrderingService.getInstance();
-          const modifiers = await voiceService.getItemModifiersForVapi(String(itemId), restaurantId);
+          const modifiers = await voiceService.getItemModifiersForVapi(
+            String(itemId),
+            restaurantId,
+            selectedModifiers
+          );
           const autoApplied = await voiceService.getAutoAppliedModifiers(String(itemId), restaurantId);
 
           result = {
@@ -1356,21 +1367,25 @@ export class VapiService {
     - Ackee & Saltfish → Standard (don't ask about callaloo unless they bring it up)
     - Oxtail → Gravy ON the food (don't ask about side gravy unless they request it)
 
+    REQUIRED TOOL SEQUENCE (DO NOT SKIP OR REORDER):
+    For each item in the order, call tools in this exact sequence:
+    searchMenu -> getMenuItem -> getItemModifiers -> quoteOrder -> createOrder
+
     ORDER FLOW:
     1. Greet customer (by name if recognized): "Hi [Name]! What can I get for you?"
-    2. Take order items ONE BY ONE. After each item, confirm briefly and ask "Anything else?"
-       - Example: "One large Jerk Chicken dinner, got it. Anything else?"
-    3. When they say that's everything:
+    2. For each requested item, follow the required tool sequence above.
+       - In getItemModifiers results, ask ONLY unresolved required modifier questions.
+       - Do NOT ask optional modifier groups unless the customer asks to customize them.
+    3. After all items are collected and they say that's everything:
        - "Perfect. Is this for pickup or delivery?"
        - For new customers OR if you don't have their name: "Can I get your name for the order?"
        - You MUST have a name before placing the order - do not skip this step
-    4. CONFIRM BEFORE PLACING: "Thanks [Name]. Your total is $47.50 for pickup. Ready in 20-25 minutes. Placing your order now."
-    5. Call quoteOrder first to validate modifiers/totals and resolve any errors with the customer.
-    6. Place order using createOrder - ONLY after identity is complete:
-       - customer.name is always required
-       - customer.phone is required unless customerId already exists
-    7. After order is placed: "Order confirmed! Your number is [last 4 digits of order ID]. Would you like a drink with that?"
-    8. Close: "Thanks [Name]! See you soon."
+    4. Call quoteOrder and read the quote summary.
+    5. REQUIRED CONFIRMATION BEFORE createOrder:
+       - Ask: "Your total is $X for [pickup/delivery]. Should I place the order?"
+       - Only call createOrder after an explicit yes/confirm from customer.
+    6. After order is placed: "Order confirmed! Your number is [last 4 digits of order ID]. Would you like a drink with that?"
+    7. Close: "Thanks [Name]! See you soon."
 
     EXAMPLE CONVERSATION:
     Customer: "I want two Jerk Chickens and an Oxtail"
@@ -1392,6 +1407,7 @@ export class VapiService {
     - NEVER ask "What sides would you like?" - use the default, let them correct you
     - If they say "no cabbage" or "extra gravy" - note it, but don't make them repeat everything
     - Keep the conversation moving. Speed matters on phone orders.
+    - Never call createOrder until quoteOrder has succeeded and customer explicitly confirms the quote.
     - If store is closed, apologize and give hours.
     `;
   }

@@ -344,7 +344,11 @@ export class VoiceOrderingService {
    * will be auto-applied silently (not asked). This is useful for gravy type where
    * "same as meat" is the default and we only ask if customer wants something different.
    */
-  public async getItemModifiersForVapi(itemId: string, restaurantId: string): Promise<any[]> {
+  public async getItemModifiersForVapi(
+    itemId: string,
+    restaurantId: string,
+    providedModifiers?: Record<string, any> | Array<any> | null
+  ): Promise<any[]> {
     const groups = await this.getModifierGroupsForItem(itemId, restaurantId);
     const itemSizes = await this.getItemSizes(itemId);
 
@@ -356,44 +360,24 @@ export class VoiceOrderingService {
       String(group.name || '').toLowerCase().includes('size')
     );
 
+    const autoAppliedDefaults = await this.getAutoAppliedModifiers(itemId, restaurantId);
+    const effectiveModifiers = this.withAutoAppliedDefaults(providedModifiers, autoAppliedDefaults);
+    const requiredValidation = await this.validateItemModifiers(itemId, restaurantId, effectiveModifiers);
+    const unresolvedRequiredGroupIds = new Set(
+      (requiredValidation.missingModifiers || []).map((modifier) => modifier.groupId)
+    );
+
     const questionsToAsk: any[] = [];
-    const autoAppliedDefaults: any[] = [];
 
     // Process each modifier group
     groups.forEach((group: any, index: number) => {
       const groupNameLower = group.name.toLowerCase();
 
-      // Check if this group has a preselected default option
-      const defaultOption = group.options.find((opt: any) => opt.isPreselected && !opt.isSoldOut);
-
-      // Determine if this modifier should be asked or auto-applied
-      // Auto-apply gravy TYPE (not amount) — customers almost always want "same as meat"
-      // Apply when: it's a gravy type/style/kind modifier AND has a default OR first option is "same as meat"
-      const isGravyType = groupNameLower.includes('gravy') &&
-                          (groupNameLower.includes('type') || groupNameLower.includes('style') || groupNameLower.includes('kind'));
-
-      // For gravy type: use preselected default, or fall back to "same as meat" option
-      const gravyTypeDefault = isGravyType
-        ? (defaultOption || group.options.find((opt: any) =>
-            !opt.isSoldOut && (opt.name.toLowerCase().includes('same as meat') || opt.id === 'same_as_meat')
-          ))
-        : null;
-
-      const shouldAutoApply = isGravyType && gravyTypeDefault;
-
-      if (shouldAutoApply) {
-        // Don't ask - auto-apply the default (gravy type → "same as meat")
-        autoAppliedDefaults.push({
-          groupId: group.id,
-          groupName: group.name,
-          defaultOptionId: gravyTypeDefault.id,
-          defaultOptionName: gravyTypeDefault.name,
-          priceDelta: gravyTypeDefault.priceDelta || 0
-        });
-        return; // Skip adding to questions
+      // Ask ONLY unresolved required modifiers.
+      if (!group.required || !unresolvedRequiredGroupIds.has(group.id)) {
+        return;
       }
 
-      // This modifier needs to be asked
       const availableOptions = group.options.filter((opt: any) => !opt.isSoldOut);
       const optionNames = availableOptions.map((opt: any) => {
         if (opt.priceDelta > 0) {
@@ -442,7 +426,16 @@ export class VoiceOrderingService {
       });
     });
 
-    if (!hasSizeGroup && itemSizes.length > 0) {
+    const hasLegacySizeSelection = Boolean(
+      effectiveModifiers.__legacy_item_sizes__ ||
+      effectiveModifiers.size ||
+      effectiveModifiers.sizeName ||
+      effectiveModifiers.size_name ||
+      effectiveModifiers.selectedSize ||
+      effectiveModifiers.selected_size
+    );
+
+    if (!hasSizeGroup && itemSizes.length > 0 && !hasLegacySizeSelection) {
       const sizeOptions = itemSizes.map((size) => ({
         id: size.id,
         name: size.sizeName,
@@ -465,8 +458,6 @@ export class VoiceOrderingService {
       });
     }
 
-    // Return questions to ask, plus info about auto-applied defaults
-    // The AI should include autoAppliedDefaults in the order without asking
     return questionsToAsk.map((q, idx) => ({ ...q, displayOrder: idx + 1 }));
   }
 
@@ -509,6 +500,36 @@ export class VoiceOrderingService {
     });
 
     return autoApplied;
+  }
+
+  private withAutoAppliedDefaults(
+    providedModifiers: Record<string, any> | Array<any> | null | undefined,
+    autoAppliedDefaults: Array<{ groupId: string; optionId?: string; defaultOptionId?: string }>
+  ): Record<string, any> {
+    const merged: Record<string, any> = {};
+
+    if (Array.isArray(providedModifiers)) {
+      providedModifiers.forEach((entry: any) => {
+        if (!entry || typeof entry !== 'object') return;
+        const groupId = entry.groupId || entry.id;
+        const optionId = entry.optionId || entry.option_id || entry.value;
+        if (groupId && optionId) {
+          merged[String(groupId)] = String(optionId);
+        }
+      });
+    } else if (providedModifiers && typeof providedModifiers === 'object') {
+      Object.entries(providedModifiers).forEach(([groupId, value]) => {
+        merged[String(groupId)] = value;
+      });
+    }
+
+    autoAppliedDefaults.forEach((entry) => {
+      if (!merged[entry.groupId]) {
+        merged[entry.groupId] = entry.optionId || entry.defaultOptionId;
+      }
+    });
+
+    return merged;
   }
 
   private resolveRestaurantId(input?: string | null) {
