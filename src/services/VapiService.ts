@@ -1365,9 +1365,12 @@ export class VapiService {
        - For new customers OR if you don't have their name: "Can I get your name for the order?"
        - You MUST have a name before placing the order - do not skip this step
     4. CONFIRM BEFORE PLACING: "Thanks [Name]. Your total is $47.50 for pickup. Ready in 20-25 minutes. Placing your order now."
-    5. Place order using createOrder - ONLY after you have customer.name
-    6. After order is placed: "Order confirmed! Your number is [last 4 digits of order ID]. Would you like a drink with that?"
-    7. Close: "Thanks [Name]! See you soon."
+    5. Call quoteOrder first to validate modifiers/totals and resolve any errors with the customer.
+    6. Place order using createOrder - ONLY after identity is complete:
+       - customer.name is always required
+       - customer.phone is required unless customerId already exists
+    7. After order is placed: "Order confirmed! Your number is [last 4 digits of order ID]. Would you like a drink with that?"
+    8. Close: "Thanks [Name]! See you soon."
 
     EXAMPLE CONVERSATION:
     Customer: "I want two Jerk Chickens and an Oxtail"
@@ -1383,6 +1386,8 @@ export class VapiService {
     - For menu lookups, ALWAYS call searchMenu first using the caller's exact phrase.
     - After searchMenu returns matches, call getMenuItem with the selected item's id to get details/modifiers.
     - Only use getMenuItem with name/itemName when searchMenu cannot produce an id.
+    - NEVER call createOrder before customer identity fields are complete (customer.name, and customer.phone unless customerId exists)
+    - ALWAYS run quoteOrder and resolve missing modifiers/errors before createOrder
     - NEVER ask about gravy amount/type unless they mention it
     - NEVER ask "What sides would you like?" - use the default, let them correct you
     - If they say "no cabbage" or "extra gravy" - note it, but don't make them repeat everything
