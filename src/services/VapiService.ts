@@ -243,7 +243,9 @@ export class VapiService {
       return { results: [] };
     }
 
-    const results: Array<{ name: string; toolCallId?: string; result: string; error?: string }> = [];
+    // Vapi expects exactly: { results: [{ toolCallId, result: "..." }] } (or { toolCallId, error: "..." })
+    // Keep result/error as single-line strings.
+    const results: Array<{ toolCallId?: string; result?: string; error?: string }> = [];
 
     for (const tc of toolCallList) {
       const name = String(tc?.name || '').trim();
@@ -253,14 +255,19 @@ export class VapiService {
         ? await this.executeToolCall(name, params, message)
         : { error: 'Missing tool name' };
 
-      // Vapi expects `result` to be a string (often JSON-stringified).
       const payload = exec.error ? { ok: false, error: exec.error } : exec.result ?? { ok: true };
-      results.push({
-        name: name || 'unknown',
-        toolCallId,
-        result: JSON.stringify(payload),
-        ...(exec.error ? { error: exec.error } : {})
-      });
+
+      if (exec.error) {
+        results.push({
+          toolCallId,
+          error: String(exec.error)
+        });
+      } else {
+        results.push({
+          toolCallId,
+          result: JSON.stringify(payload)
+        });
+      }
     }
 
     return { results };
