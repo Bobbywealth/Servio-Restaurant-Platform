@@ -1338,11 +1338,11 @@ export class VapiService {
        - Example: "One large Jerk Chicken dinner, got it. Anything else?"
     3. When they say that's everything:
        - "Perfect. Is this for pickup or delivery?"
-       - For new customers: "Can I get your name for the order?"
-       - For returning customers: Skip name/phone, they already confirmed at start
-    4. Give total and confirm: "Your total is $47.50 for pickup. We'll have it ready in 20-25 minutes."
-    5. Place order using createOrder
-    6. Quick upsell: "Would you like a drink with that? We've got Jamaican ginger beer and sorrel."
+       - For new customers OR if you don't have their name: "Can I get your name for the order?"
+       - You MUST have a name before placing the order - do not skip this step
+    4. CONFIRM BEFORE PLACING: "Thanks [Name]. Your total is $47.50 for pickup. Ready in 20-25 minutes. Placing your order now."
+    5. Place order using createOrder - ONLY after you have customer.name
+    6. After order is placed: "Order confirmed! Your number is [last 4 digits of order ID]. Would you like a drink with that?"
     7. Close: "Thanks [Name]! See you soon."
 
     EXAMPLE CONVERSATION:

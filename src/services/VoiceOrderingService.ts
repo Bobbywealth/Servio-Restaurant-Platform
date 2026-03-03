@@ -1259,17 +1259,27 @@ export class VoiceOrderingService {
       return { success: false, errors: ['Missing items'] };
     }
 
-    // Customer info is optional if customerId is provided (recognized customer)
+    // Customer name is REQUIRED for all orders - even recognized customers must confirm name
     const hasCustomerId = input?.customerId || input?.customer?.customerId;
-    const hasCustomerInfo = input?.customer?.name && input?.customer?.phone;
+    const hasCustomerName = input?.customer?.name && String(input?.customer?.name).trim().length > 0;
+    const hasCustomerPhone = input?.customer?.phone && String(input?.customer?.phone).trim().length > 0;
 
-    if (!hasCustomerId && !hasCustomerInfo) {
-      logger.warn('createOrder missing customer details', {
+    if (!hasCustomerName) {
+      logger.warn('createOrder missing customer name', {
         callId: input?.callId,
         hasCustomerId: Boolean(hasCustomerId),
-        hasCustomerInfo: Boolean(hasCustomerInfo)
+        hasCustomerName: Boolean(hasCustomerName)
       });
-      return { success: false, errors: ['Missing customer information'] };
+      return { success: false, errors: ['Customer name is required. Please ask the customer for their name before placing the order.'] };
+    }
+
+    if (!hasCustomerPhone && !hasCustomerId) {
+      logger.warn('createOrder missing customer phone', {
+        callId: input?.callId,
+        hasCustomerId: Boolean(hasCustomerId),
+        hasCustomerPhone: Boolean(hasCustomerPhone)
+      });
+      return { success: false, errors: ['Customer phone number is required for new customers.'] };
     }
 
     const quote = await this.validateQuote(input);

@@ -30,7 +30,7 @@ export class OrderNotificationService {
   }
 
   /**
-   * Send order confirmation to customer
+   * Send order confirmation to customer AND notify staff
    */
   public async sendOrderConfirmation(orderId: string, restaurantId: string) {
     try {
@@ -71,8 +71,55 @@ export class OrderNotificationService {
         await this.sendOrderEmail(customer, order, settings);
       }
 
+      // ALWAYS notify staff about new phone orders
+      await this.notifyStaffOfNewOrder(order, restaurantId);
+
     } catch (error) {
       logger.error('Error sending order confirmation:', error);
+    }
+  }
+
+  /**
+   * Notify staff about new order via SMS
+   */
+  private async notifyStaffOfNewOrder(order: any, restaurantId: string) {
+    try {
+      const db = DatabaseService.getInstance().getDatabase();
+      
+      // Get all staff with phone numbers
+      const staffMembers = await db.all(`
+        SELECT * FROM staff 
+        WHERE restaurant_id = ? 
+        AND phone IS NOT NULL 
+        AND phone != ''
+        AND (role = 'manager' OR role = 'owner' OR role = 'admin')
+      `, [restaurantId]);
+
+      if (staffMembers.length === 0) {
+        logger.info(`No staff found to notify for order ${order.id}`);
+        return;
+      }
+
+      const orderShortId = order.id.substring(0, 8).toUpperCase();
+      const customerName = order.customer_name || 'Unknown';
+      const total = Number(order.total_amount).toFixed(2);
+      const itemCount = order.items ? JSON.parse(order.items).length : 0;
+      const source = order.source === 'vapi' ? '📞 PHONE' : '💻 ONLINE';
+
+      const message = `${source} ORDER #${orderShortId}\n${customerName} - $${total}\n${itemCount} items\nCheck dashboard to accept`;
+
+      // Send SMS to all managers/owners
+      for (const staff of staffMembers) {
+        try {
+          await this.smsService.sendSms(staff.phone, message);
+          logger.info(`Notified staff ${staff.name} about order ${order.id}`);
+        } catch (err) {
+          logger.warn(`Failed to notify staff ${staff.id}:`, err);
+        }
+      }
+
+    } catch (error) {
+      logger.error('Error notifying staff of new order:', error);
     }
   }
 
