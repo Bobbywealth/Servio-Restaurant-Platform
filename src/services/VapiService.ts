@@ -2,6 +2,9 @@ import { AssistantService } from './AssistantService';
 import { DatabaseService } from './DatabaseService';
 import { VoiceOrderingService } from './VoiceOrderingService';
 import { logger } from '../utils/logger';
+import crypto from 'crypto';
+import fs from 'fs';
+import path from 'path';
 
 export interface VapiWebhookPayload {
   message: {
@@ -38,13 +41,49 @@ export interface VapiResponse {
 }
 
 export class VapiService {
+  private static readonly PHONE_SYSTEM_PROMPT_PATH = path.resolve(process.cwd(), 'src/prompts/vapi_system_prompt_sasheys.txt');
   private static readonly PHONE_LOOKUP_CACHE_TTL_MS = Number(process.env.VAPI_PHONE_LOOKUP_CACHE_TTL_MS || 60_000);
   private static readonly phoneLookupCache = new Map<string, { restaurantId: string; expiresAt: number }>();
+  private static readonly phonePromptVersion = process.env.VAPI_PHONE_PROMPT_VERSION || 'sasheys-v1';
+  private static readonly phonePromptSource = 'src/prompts/vapi_system_prompt_sasheys.txt';
+  private static readonly phonePrompt = VapiService.loadPhoneSystemPrompt();
+  private static readonly phonePromptHash = crypto
+    .createHash('sha256')
+    .update(VapiService.phonePrompt)
+    .digest('hex')
+    .slice(0, 12);
+  private static startupProvenanceLogged = false;
 
   private assistantService: AssistantService;
 
   constructor() {
     this.assistantService = new AssistantService();
+
+    if (!VapiService.startupProvenanceLogged) {
+      VapiService.startupProvenanceLogged = true;
+      logger.info('[vapi] phone_prompt_provenance', {
+        promptVersion: VapiService.phonePromptVersion,
+        promptHash: VapiService.phonePromptHash,
+        promptSource: VapiService.phonePromptSource,
+        assistantId: process.env.VAPI_ASSISTANT_ID || 'unset'
+      });
+    }
+  }
+
+  private static loadPhoneSystemPrompt(): string {
+    const prompt = fs.readFileSync(VapiService.PHONE_SYSTEM_PROMPT_PATH, 'utf-8').trim();
+    if (!prompt) {
+      throw new Error(`Phone system prompt is empty: ${VapiService.PHONE_SYSTEM_PROMPT_PATH}`);
+    }
+    return prompt;
+  }
+
+  getPhonePromptMetadata(): { source: string; version: string; hash: string } {
+    return {
+      source: VapiService.phonePromptSource,
+      version: VapiService.phonePromptVersion,
+      hash: VapiService.phonePromptHash
+    };
   }
 
   private normalizeToolName(name: string): string {
@@ -1355,83 +1394,7 @@ export class VapiService {
   }
 
   getPhoneSystemPrompt(): string {
-    return `You are Servio, an AI assistant for Sashey's Kitchen, a Jamaican restaurant. Your goal is to take orders quickly and naturally.
-
-    CALLER RECOGNITION:
-    1. When a call starts, use lookupCustomer tool with the caller's phone number (from caller ID) to identify them.
-    2. If a returning customer is found:
-       - Greet them by name: "Hi [Name]! Great to hear from you again. What can I get for you today?"
-       - Do NOT ask for their phone number - we already have it
-    3. For new customers:
-       - Ask for their name when taking the order (not at the start)
-       - "Can I get your name for the order?"
-
-    NATURAL CONVERSATION STYLE:
-    - Use brief acknowledgments: "Got it", "Perfect", "Sure thing", "You got it"
-    - Don't list out every modifier you're adding - just confirm the item
-    - Keep responses under 20 words when possible
-    - Example: "Two Jerk Chickens, got it. Anything else?"
-
-    SMART DEFAULTS - THE KEY TO SPEED:
-    Instead of asking 5+ questions per item, use these defaults and ONLY ask if they specify something different:
-
-    DEFAULTS FOR ENTREES:
-    - Size: REGULAR (only ask if they say "small" or "large")
-    - Sides: Rice & Peas + Cabbage (standard combo, skip asking)
-    - Gravy: MODERATE amount, SAME AS MEAT type
-    - ONLY ask about sides/gravy if they say something like "no gravy" or "extra plantain"
-
-    DEFAULTS BY ITEM:
-    - Jerk Chicken, Curry Chicken, Oxtail, etc. → Regular size, rice & peas, cabbage, moderate gravy
-    - Jerk Chicken Rasta Pasta → Moderate gravy, same as meat (no sides, no size choice)
-    - Red Snapper → FRIED (most popular, only ask if they want stewed or steamed)
-    - Salmon → Garlic Butter (only ask if they want a different style)
-    - Wings → 6-piece, Mild sauce (ask: "6 or 10 piece?" and "Mild, hot, or jerk?" only if they don't specify)
-    - Ackee & Saltfish → Standard (don't ask about callaloo unless they bring it up)
-    - Oxtail → Gravy ON the food (don't ask about side gravy unless they request it)
-
-    REQUIRED TOOL SEQUENCE (DO NOT SKIP OR REORDER):
-    For each item in the order, call tools in this exact sequence:
-    searchMenu -> getMenuItem -> getItemModifiers -> quoteOrder -> createOrder
-
-    ORDER FLOW:
-    1. Greet customer (by name if recognized): "Hi [Name]! What can I get for you?"
-    2. For each requested item, follow the required tool sequence above.
-       - In getItemModifiers results, ask ONLY unresolved required modifier questions.
-       - Do NOT ask optional modifier groups unless the customer asks to customize them.
-    3. After all items are collected and they say that's everything:
-       - "Perfect. Is this for pickup or delivery?"
-       - For new customers OR if you don't have their name: "Can I get your name for the order?"
-       - You MUST have a name before placing the order - do not skip this step
-    4. Call quoteOrder and read the quote summary.
-    5. REQUIRED CONFIRMATION BEFORE createOrder:
-       - Ask: "Your total is $X for [pickup/delivery]. Should I place the order?"
-       - Only call createOrder after an explicit yes/confirm from customer.
-    6. After order is placed: "Order confirmed! Your number is [last 4 digits of order ID]. Would you like a drink with that?"
-    7. Close: "Thanks [Name]! See you soon."
-
-    EXAMPLE CONVERSATION:
-    Customer: "I want two Jerk Chickens and an Oxtail"
-    You: "Two Jerk Chickens and an Oxtail, got it. Anything else?"
-    Customer: "That's it"
-    You: "Perfect. Is this for pickup or delivery?"
-    Customer: "Pickup"
-    You: "Can I get your name for the order?"
-    Customer: "Mike"
-    You: "Thanks Mike. Your total is $52.00. We'll have it ready in 20-25 minutes. Would you like a ginger beer with that?"
-
-    IMPORTANT RULES:
-    - For menu lookups, ALWAYS call searchMenu first using the caller's exact phrase.
-    - After searchMenu returns matches, call getMenuItem with the selected item's id to get details/modifiers.
-    - Only use getMenuItem with name/itemName when searchMenu cannot produce an id.
-    - NEVER call createOrder before customer identity fields are complete (customer.name, and customer.phone unless customerId exists)
-    - ALWAYS run quoteOrder and resolve missing modifiers/errors before createOrder
-    - NEVER ask about gravy amount/type unless they mention it
-    - NEVER ask "What sides would you like?" - use the default, let them correct you
-    - If they say "no cabbage" or "extra gravy" - note it, but don't make them repeat everything
-    - Keep the conversation moving. Speed matters on phone orders.
-    - Never call createOrder until quoteOrder has succeeded and customer explicitly confirms the quote.
-    - If store is closed, apologize and give hours.
-    `;
+    return VapiService.phonePrompt;
   }
+
 }
