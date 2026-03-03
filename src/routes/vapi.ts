@@ -138,12 +138,16 @@ router.post('/tool/:toolName', requireVapiWebhookAuth, async (req: Request, res:
       ...(exec.error ? { error: exec.error } : {})
     });
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
     logger.error('[vapi:tool] handler_error', {
       toolName,
       callId,
-      error: error instanceof Error ? error.message : String(error)
+      error: errorMessage
     });
-    return res.status(200).json({ error: 'Internal server error' });
+    return res.status(200).json({
+      result: JSON.stringify({ ok: false, error: 'Internal server error' }),
+      error: 'Internal server error'
+    });
   }
 });
 
@@ -207,12 +211,16 @@ router.get('/tool/:toolName', requireVapiWebhookAuth, async (req: Request, res: 
       ...(exec.error ? { error: exec.error } : {})
     });
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
     logger.error('[vapi:tool] handler_error', {
       toolName,
       callId,
-      error: error instanceof Error ? error.message : String(error)
+      error: errorMessage
     });
-    return res.status(200).json({ error: 'Internal server error' });
+    return res.status(200).json({
+      result: JSON.stringify({ ok: false, error: 'Internal server error' }),
+      error: 'Internal server error'
+    });
   }
 });
 
@@ -304,7 +312,7 @@ router.get('/assistant-config', async (req: Request, res: Response) => {
         },
         {
           name: 'getMenuItem',
-          description: 'Step 2 of order flow: get full details for a specific menu item by ID returned from searchMenu',
+          description: 'Step 2 of order flow: get full details for a specific menu item. Prefer id from searchMenu. Fallback to name or itemName when id is unavailable.',
           parameters: {
             type: 'object',
             properties: {
@@ -314,11 +322,7 @@ router.get('/assistant-config', async (req: Request, res: Response) => {
               restaurantId: { type: 'string', description: 'Restaurant ID (optional if provided via metadata)' },
               restaurantSlug: { type: 'string', description: 'Restaurant slug (optional fallback)' }
             },
-            anyOf: [
-              { required: ['id'] },
-              { required: ['name'] },
-              { required: ['itemName'] }
-            ]
+            required: ['name']
           }
         },
         {

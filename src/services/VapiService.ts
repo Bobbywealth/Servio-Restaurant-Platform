@@ -567,6 +567,29 @@ export class VapiService {
           break;
         }
         case 'getMenuItem': {
+          const hasIdentifier = [
+            normalizedParameters?.id,
+            normalizedParameters?.itemId,
+            normalizedParameters?.menuItemId,
+            normalizedParameters?.name,
+            normalizedParameters?.itemName,
+            normalizedParameters?.input?.id,
+            normalizedParameters?.input?.itemId,
+            normalizedParameters?.input?.menuItemId,
+            normalizedParameters?.input?.name,
+            normalizedParameters?.input?.itemName
+          ].some((value) => String(value || '').trim().length > 0);
+
+          if (!hasIdentifier) {
+            result = {
+              ok: false,
+              reason: 'missing_identifier',
+              message: 'Provide at least one identifier: prefer id from searchMenu; fallback to name or itemName.',
+              expected: ['id', 'itemId', 'menuItemId', 'name', 'itemName']
+            };
+            break;
+          }
+
           const idOrName =
             normalizedParameters?.id ??
             normalizedParameters?.itemId ??
