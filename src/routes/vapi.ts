@@ -219,14 +219,22 @@ router.get('/tool/:toolName', requireVapiWebhookAuth, async (req: Request, res: 
 // Get Vapi assistant configuration
 router.get('/assistant-config', async (req: Request, res: Response) => {
   try {
+    const fallbackRestaurantId =
+      typeof process.env.VAPI_RESTAURANT_ID === 'string' && process.env.VAPI_RESTAURANT_ID.trim().length > 0
+        ? process.env.VAPI_RESTAURANT_ID.trim()
+        : undefined;
+
     // Return the assistant configuration that Vapi will use
     const config = {
+      metadata: {
+        ...(fallbackRestaurantId ? { restaurantId: fallbackRestaurantId } : {})
+      },
       model: {
         provider: 'openai',
         model: 'gpt-4-turbo-preview',
         temperature: 0.3,
         maxTokens: 150,
-        systemMessage: vapiService.getPhoneSystemPrompt()
+        systemMessage: `${vapiService.getPhoneSystemPrompt()}\n\nTool-calling rule: include restaurantId on every menu/order/customer tool call whenever it is available from assistant metadata or call context.`
       },
       voice: {
         provider: 'openai',
@@ -288,7 +296,7 @@ router.get('/assistant-config', async (req: Request, res: Response) => {
             type: 'object',
             properties: {
               q: { type: 'string', description: 'Search query' },
-              restaurantId: { type: 'string', description: 'Restaurant ID (optional if provided via metadata)' },
+              restaurantId: { type: 'string', description: 'Restaurant ID (optional). Always pass this when available from assistant metadata or call context.' },
               restaurantSlug: { type: 'string', description: 'Restaurant slug (optional fallback)' }
             },
             required: ['q']
@@ -301,7 +309,7 @@ router.get('/assistant-config', async (req: Request, res: Response) => {
             type: 'object',
             properties: {
               id: { type: 'string', description: 'The item ID' },
-              restaurantId: { type: 'string', description: 'Restaurant ID (optional if provided via metadata)' },
+              restaurantId: { type: 'string', description: 'Restaurant ID (optional). Always pass this when available from assistant metadata or call context.' },
               restaurantSlug: { type: 'string', description: 'Restaurant slug (optional fallback)' }
             },
             required: ['id']
@@ -314,9 +322,9 @@ router.get('/assistant-config', async (req: Request, res: Response) => {
             type: 'object',
             properties: {
               itemId: { type: 'string', description: 'The menu item ID from searchMenu results' },
-              restaurantId: { type: 'string', description: 'Restaurant ID - always use sasheys-kitchen-union' }
+              restaurantId: { type: 'string', description: 'Restaurant ID (optional). Always pass this when available from assistant metadata or call context.' }
             },
-            required: ['itemId', 'restaurantId']
+            required: ['itemId']
           }
         },
         {
@@ -338,7 +346,7 @@ router.get('/assistant-config', async (req: Request, res: Response) => {
                 }
               },
               orderType: { type: 'string', enum: ['pickup', 'delivery', 'dine-in'] },
-              restaurantId: { type: 'string', description: 'Restaurant ID (optional if provided via metadata)' },
+              restaurantId: { type: 'string', description: 'Restaurant ID (optional). Always pass this when available from assistant metadata or call context.' },
               restaurantSlug: { type: 'string', description: 'Restaurant slug (optional fallback)' }
             },
             required: ['items', 'orderType']
@@ -351,7 +359,7 @@ router.get('/assistant-config', async (req: Request, res: Response) => {
             type: 'object',
             properties: {
               phone: { type: 'string', description: 'Customer phone number to look up' },
-              restaurantId: { type: 'string', description: 'Restaurant ID (optional if provided via metadata)' },
+              restaurantId: { type: 'string', description: 'Restaurant ID (optional). Always pass this when available from assistant metadata or call context.' },
               restaurantSlug: { type: 'string', description: 'Restaurant slug (optional fallback)' }
             },
             required: ['phone']
@@ -397,7 +405,7 @@ router.get('/assistant-config', async (req: Request, res: Response) => {
               orderType: { type: 'string', enum: ['pickup', 'delivery', 'dine-in'] },
               pickupTime: { type: 'string', description: 'Preferred pickup time for pickup orders (ISO format)' },
               callId: { type: 'string', description: 'Call ID from Vapi' },
-              restaurantId: { type: 'string', description: 'Restaurant ID (optional if provided via metadata)' },
+              restaurantId: { type: 'string', description: 'Restaurant ID (optional). Always pass this when available from assistant metadata or call context.' },
               restaurantSlug: { type: 'string', description: 'Restaurant slug (optional fallback)' }
             },
             required: ['items', 'orderType']
