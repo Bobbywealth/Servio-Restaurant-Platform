@@ -47,11 +47,12 @@ export const requireVapiWebhookAuth = (req: Request, _res: Response, next: NextF
   };
 
   // In dev, allow webhooks even without a configured secret (but warn).
-  if (!secret) {
+  // In production, require at least one credential (webhook secret or API key).
+  if (!secret && !apiKey) {
     if (process.env.NODE_ENV === 'production') {
-      return next(new UnauthorizedError('Vapi webhook secret not configured'));
+      return next(new UnauthorizedError('Vapi webhook credentials not configured'));
     }
-    console.warn('VAPI_WEBHOOK_SECRET not configured in environment variables');
+    console.warn('VAPI_WEBHOOK_SECRET and VAPI_API_KEY are not configured in environment variables');
     return next();
   }
 
@@ -72,8 +73,8 @@ export const requireVapiWebhookAuth = (req: Request, _res: Response, next: NextF
   const bearer = normalizeSecret(authHeader);
 
   // Accept either the dedicated webhook secret OR the Vapi API key.
-  // (Some Vapi integrations send the API key as the Bearer token for server/tool callbacks.)
-  if (provided === secret || bearer === secret) return next();
+  // (Some Vapi integrations send only the API key as Bearer token for callbacks.)
+  if (secret && (provided === secret || bearer === secret)) return next();
   if (apiKey && (provided === apiKey || bearer === apiKey)) return next();
 
   return next(new UnauthorizedError('Invalid Vapi webhook secret'));
