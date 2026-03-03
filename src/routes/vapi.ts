@@ -223,37 +223,45 @@ router.get('/assistant-config', async (req: Request, res: Response) => {
     const config = {
       model: {
         provider: 'openai',
-        model: 'gpt-4',
+        model: 'gpt-4-turbo-preview',
         temperature: 0.3,
-        maxTokens: 1000,
+        maxTokens: 150,
         systemMessage: vapiService.getPhoneSystemPrompt()
       },
       voice: {
         provider: 'openai',
-        voiceId: 'alloy', // Can be changed to other voices: echo, fable, onyx, nova, shimmer
-        speed: 1.0,
+        voiceId: 'nova',
+        speed: 1.1,
         chunkPlan: {
           enabled: true,
-          minCharacters: 30,
-          punctuationBoundaries: ['.', '!', '?', ';', ':', '\n'],
+          minCharacters: 20,
+          punctuationBoundaries: ['.', '!', '?', ';', ':', '\n', ','],
           formatPlan: {
             enabled: true,
             numberToDigitsCutoff: 2025
           }
         }
       },
-      firstMessage: "Hi! Welcome to our restaurant. I'm Servio, your AI assistant. I can help you place an order, check our menu, or answer questions about our food. What would you like today?",
-      endCallMessage: "Thank you for calling! Your order has been placed and you'll receive a confirmation shortly. Have a great day!",
-      endCallPhrases: ["goodbye", "bye", "that's all", "hang up", "end call"],
+      transcriber: {
+        provider: 'deepgram',
+        model: 'nova-2',
+        language: 'en-US',
+        smartFormat: true,
+        utteranceEndMs: 800,
+        keyterm: ['jerk chicken', 'oxtail', 'ackee', 'saltfish', 'curry goat', 'rice and peas', 'plantain', 'festival', 'callaloo', 'sorrel', 'ginger beer', 'pickup', 'delivery']
+      },
+      firstMessage: "Hi! Welcome to Sashey's Kitchen. I'm Servio. What can I get for you today?",
+      endCallMessage: "Thanks for calling! Your order's in. Have a great day!",
+      endCallPhrases: ["goodbye", "bye", "that's all", "hang up", "end call", "that's it"],
       recordingEnabled: true,
-      maxDurationSeconds: 600, // 10 minutes max call duration
-      silenceTimeoutSeconds: 30,
-      responseDelaySeconds: 1,
-      llmRequestDelaySeconds: 0.1,
-      numWordsToInterruptAssistant: 2,
-      maxTokens: 1000,
+      maxDurationSeconds: 600,
+      silenceTimeoutSeconds: 10,
+      responseDelaySeconds: 0,
+      llmRequestDelaySeconds: 0,
+      numWordsToInterruptAssistant: 1,
+      maxTokens: 150,
       emotionRecognitionEnabled: false,
-      backchannelingEnabled: false,
+      backchannelingEnabled: true,
       backgroundDenoisingEnabled: true,
       modelOutputInMessagesEnabled: false,
       transportConfigurations: [{
