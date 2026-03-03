@@ -495,13 +495,28 @@ export class VapiService {
             normalizedParameters?.input?.query ??
             normalizedParameters?.input?.text ??
             '';
-          const query = String(q || '').trim();
+          const rawQuery = String(q || '').trim();
+
+          // Normalize common STT mis-hearings (Deepgram often hears "jerk" as "dark"/"jerky").
+          // Keep this conservative: only replace when it clearly refers to chicken.
+          const normalizeSearchQuery = (input: string) => {
+            const s = input.trim();
+            const lower = s.toLowerCase();
+            if (/(dark|jerky)\s+chicken/.test(lower)) {
+              return lower.replace(/\b(dark|jerky)\s+chicken\b/g, 'jerk chicken');
+            }
+            return s;
+          };
+
+          const query = normalizeSearchQuery(rawQuery);
+
           logger.info('[vapi] searchMenu', {
             requestId,
             callId,
             restaurantId,
             restaurantIdSource: resolvedRestaurantIdSource,
             restaurantSlug,
+            rawQuery,
             query
           });
 
