@@ -37,6 +37,7 @@ export const requireVapiAuth = (req: Request, res: Response, next: NextFunction)
  */
 export const requireVapiWebhookAuth = (req: Request, _res: Response, next: NextFunction) => {
   const secret = process.env.VAPI_WEBHOOK_SECRET?.trim();
+  const apiKey = process.env.VAPI_API_KEY?.trim();
 
   const normalizeSecret = (value?: string | null) => {
     if (!value) return undefined;
@@ -70,6 +71,10 @@ export const requireVapiWebhookAuth = (req: Request, _res: Response, next: NextF
   const authHeader = req.headers.authorization;
   const bearer = normalizeSecret(authHeader);
 
+  // Accept either the dedicated webhook secret OR the Vapi API key.
+  // (Some Vapi integrations send the API key as the Bearer token for server/tool callbacks.)
   if (provided === secret || bearer === secret) return next();
+  if (apiKey && (provided === apiKey || bearer === apiKey)) return next();
+
   return next(new UnauthorizedError('Invalid Vapi webhook secret'));
 };
