@@ -139,12 +139,16 @@ router.post('/tool/:toolName', requireVapiWebhookAuth, async (req: Request, res:
       ...(exec.error ? { error: exec.error } : {})
     });
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
     logger.error('[vapi:tool] handler_error', {
       toolName,
       callId,
-      error: error instanceof Error ? error.message : String(error)
+      error: errorMessage
     });
-    return res.status(200).json({ error: 'Internal server error' });
+    return res.status(200).json({
+      result: JSON.stringify({ ok: false, error: 'Internal server error' }),
+      error: 'Internal server error'
+    });
   }
 });
 
@@ -208,12 +212,16 @@ router.get('/tool/:toolName', requireVapiWebhookAuth, async (req: Request, res: 
       ...(exec.error ? { error: exec.error } : {})
     });
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
     logger.error('[vapi:tool] handler_error', {
       toolName,
       callId,
-      error: error instanceof Error ? error.message : String(error)
+      error: errorMessage
     });
-    return res.status(200).json({ error: 'Internal server error' });
+    return res.status(200).json({
+      result: JSON.stringify({ ok: false, error: 'Internal server error' }),
+      error: 'Internal server error'
+    });
   }
 });
 
