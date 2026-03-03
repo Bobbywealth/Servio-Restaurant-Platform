@@ -359,7 +359,7 @@ router.get('/assistant-config', async (req: Request, res: Response) => {
         },
         {
           name: 'createOrder',
-          description: 'Place the final order in the system. For returning customers (recognized by phone), customer fields are optional - we already have their information.',
+          description: 'Place the final order in the system. Always provide customer.name. Provide customer.phone unless customerId is already known. Always call quoteOrder successfully before calling createOrder so missing modifiers and pricing issues are surfaced first.',
           parameters: {
             type: 'object',
             properties: {
@@ -379,8 +379,8 @@ router.get('/assistant-config', async (req: Request, res: Response) => {
               customer: {
                 type: 'object',
                 properties: {
-                  name: { type: 'string', description: 'Customer name (optional if recognized by phone)' },
-                  phone: { type: 'string', description: 'Phone number (optional if recognized by phone)' },
+                  name: { type: 'string', description: 'Customer name (required for all createOrder calls)' },
+                  phone: { type: 'string', description: 'Phone number (required unless customerId is provided)' },
                   email: { type: 'string', description: 'Email address (optional)' },
                   lastInitial: { type: 'string', description: 'Last initial (optional, auto-derived from name)' }
                 }
