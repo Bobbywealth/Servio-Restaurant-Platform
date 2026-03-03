@@ -574,7 +574,9 @@ export class VapiService {
             normalizedParameters?.name ??
             normalizedParameters?.itemName ??
             normalizedParameters?.input?.id ??
+            normalizedParameters?.input?.itemId ??
             normalizedParameters?.input?.name ??
+            normalizedParameters?.input?.itemName ??
             '';
           const item = await VoiceOrderingService.getInstance().getMenuItemLive(String(idOrName || ''), restaurantId);
           // Always return an object so Vapi never reports "No result returned".
@@ -1396,6 +1398,11 @@ export class VapiService {
     You: "Thanks Mike. Your total is $52.00. We'll have it ready in 20-25 minutes. Would you like a ginger beer with that?"
 
     IMPORTANT RULES:
+    - For menu lookups, ALWAYS call searchMenu first using the caller's exact phrase.
+    - After searchMenu returns matches, call getMenuItem with the selected item's id to get details/modifiers.
+    - Only use getMenuItem with name/itemName when searchMenu cannot produce an id.
+    - NEVER call createOrder before customer identity fields are complete (customer.name, and customer.phone unless customerId exists)
+    - ALWAYS run quoteOrder and resolve missing modifiers/errors before createOrder
     - NEVER ask about gravy amount/type unless they mention it
     - NEVER ask "What sides would you like?" - use the default, let them correct you
     - If they say "no cabbage" or "extra gravy" - note it, but don't make them repeat everything
