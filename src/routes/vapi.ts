@@ -304,15 +304,21 @@ router.get('/assistant-config', async (req: Request, res: Response) => {
         },
         {
           name: 'getMenuItem',
-          description: 'Get full details for a specific menu item by ID',
+          description: 'Get full details for a specific menu item. First call searchMenu with the caller\'s phrase, then call getMenuItem with the returned item ID for details and modifiers. Name-based lookup is supported as a fallback.',
           parameters: {
             type: 'object',
             properties: {
-              id: { type: 'string', description: 'The item ID' },
-              restaurantId: { type: 'string', description: 'Restaurant ID (optional). Always pass this when available from assistant metadata or call context.' },
+              id: { type: 'string', description: 'Preferred: item ID returned by searchMenu' },
+              name: { type: 'string', description: 'Fallback: item name when no ID is available' },
+              itemName: { type: 'string', description: 'Alias for name' },
+              restaurantId: { type: 'string', description: 'Restaurant ID (optional if provided via metadata)' },
               restaurantSlug: { type: 'string', description: 'Restaurant slug (optional fallback)' }
             },
-            required: ['id']
+            anyOf: [
+              { required: ['id'] },
+              { required: ['name'] },
+              { required: ['itemName'] }
+            ]
           }
         },
         {
