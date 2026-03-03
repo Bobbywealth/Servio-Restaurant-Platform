@@ -32,6 +32,8 @@ function unlockAudio() {
 }
 
 function beep() {
+  if (!audioUnlocked) return;
+
   try {
     const AudioContext = (window as any).AudioContext || (window as any).webkitAudioContext;
     if (!AudioContext) return;
@@ -75,8 +77,14 @@ function stopAlarmTone() {
 }
 
 export function useOrderAlerts(receivedOrdersCount: number) {
-  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [soundEnabled, setSoundEnabled] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    const storedSound = safeLocalStorage.getItem('servio_sound_enabled');
+    return storedSound === null ? true : storedSound === 'true';
+  });
   const alarmIntervalRef = useRef<number | null>(null);
+  const hasSeenInitialCountRef = useRef(false);
+  const previousReceivedOrdersCountRef = useRef(0);
 
   useEffect(() => {
     initAudio();
@@ -94,16 +102,25 @@ export function useOrderAlerts(receivedOrdersCount: number) {
   }, []);
 
   useEffect(() => {
-    const storedSound = safeLocalStorage.getItem('servio_sound_enabled');
-    if (storedSound !== null) {
-      setSoundEnabled(storedSound === 'true');
-    }
-  }, []);
-
-  useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    if (receivedOrdersCount > 0 && soundEnabled) {
+    const hasNewReceivedOrders = receivedOrdersCount > previousReceivedOrdersCountRef.current;
+
+    if (!hasSeenInitialCountRef.current) {
+      hasSeenInitialCountRef.current = true;
+      previousReceivedOrdersCountRef.current = receivedOrdersCount;
+
+      if (!soundEnabled || receivedOrdersCount === 0) {
+        stopAlarmTone();
+        return;
+      }
+
+      return;
+    }
+
+    previousReceivedOrdersCountRef.current = receivedOrdersCount;
+
+    if (soundEnabled && receivedOrdersCount > 0 && hasNewReceivedOrders) {
       if (alarmIntervalRef.current === null) {
         playAlarmTone();
         alarmIntervalRef.current = window.setInterval(playAlarmTone, 2500);

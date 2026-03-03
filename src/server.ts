@@ -25,6 +25,7 @@ import { UPLOADS_DIR, checkUploadsHealth } from './utils/uploads';
 import { SocketService } from './services/SocketService';
 import { realtimeService } from './services/RealtimeService';
 import type { ApiKeyScope } from './types/apiKey';
+import { getCacheUrl, registerCacheInvalidator } from './utils/serverCache';
 
 const FRONTEND_ORIGIN = 'https://servio.solutions';
 
@@ -479,22 +480,54 @@ const cache = new Map<string, { data: any; timestamp: number; headers: Record<st
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 const MAX_CACHE_SIZE = 1000;
 
+registerCacheInvalidator((matcher) => {
+  let deletedCount = 0;
+  for (const key of cache.keys()) {
+    const url = getCacheUrl(key);
+    if (matcher(url)) {
+      cache.delete(key);
+      deletedCount += 1;
+    }
+  }
+
+  return deletedCount;
+});
+
 // Cache middleware for GET requests (excludes auth, timeclock, and real-time data)
+// Cache middleware for GET requests
 app.use((req, res, next) => {
   // Only cache GET requests
   if (req.method !== 'GET') return next();
 
-  // Skip caching for auth, timeclock, and other real-time endpoints
+  const requestPath = req.path;
+  const isApiRequest = requestPath.startsWith('/api');
+  const hasAuthHeader = Boolean(req.headers.authorization);
+
+  // Operational or real-time endpoints should always bypass cache.
   const skipCachePatterns = [
-    '/auth',
-    '/timeclock',
+    '/api/auth',
+    '/api/orders',
+    '/api/timeclock',
+    '/api/notifications',
+    '/api/push',
     '/socket.io',
-    '/health',
-    '/notifications',
-    '/push',
-    '/menu/public'
+    '/health'
   ];
-  if (skipCachePatterns.some(pattern => req.url.includes(pattern))) {
+  if (skipCachePatterns.some(pattern => requestPath.startsWith(pattern))) {
+    return next();
+  }
+
+  // Authenticated API requests are uncached by default.
+  // Only allowlist low-volatility/public reads for cache.
+  const cacheAllowlistPatterns = [
+    '/api/menu/public',
+    '/api/public'
+  ];
+  if (
+    isApiRequest
+    && hasAuthHeader
+    && !cacheAllowlistPatterns.some(pattern => requestPath.startsWith(pattern))
+  ) {
     return next();
   }
 

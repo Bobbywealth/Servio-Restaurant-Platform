@@ -1,5 +1,5 @@
 import Head from 'next/head';
-import { useEffect, useMemo, useRef, useState, useCallback, KeyboardEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback, KeyboardEvent, MouseEvent } from 'react';
 import { useRouter } from 'next/router';
 import clsx from 'clsx';
 import {
@@ -417,7 +417,19 @@ export default function TabletOrdersPage() {
   const [needsAttentionOnly, setNeedsAttentionOnly] = useState(false);
   const [showArchivedOrders, setShowArchivedOrders] = useState(false);
   const [orderDetailsOrder, setOrderDetailsOrder] = useState<Order | null>(null);
+  const [isDesktopLayout, setIsDesktopLayout] = useState(false);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const mediaQuery = window.matchMedia('(min-width: 1024px)');
+    const updateLayout = () => setIsDesktopLayout(mediaQuery.matches);
+    updateLayout();
+
+    mediaQuery.addEventListener('change', updateLayout);
+    return () => mediaQuery.removeEventListener('change', updateLayout);
+  }, []);
 
   const handleSearchToggle = useCallback(() => {
     setIsSearchOpen(true);
@@ -673,7 +685,7 @@ export default function TabletOrdersPage() {
 
   const upsertStatusSyncFailure = useCallback((params: {
     orderId: string;
-    status: string;
+    status: OrderStatus;
     message: string;
     permanentFailure: boolean;
   }) => {
@@ -1070,6 +1082,7 @@ export default function TabletOrdersPage() {
   }
 
   async function setStatus(orderId: string, nextStatus: OrderStatus) {
+    let previousStatus: string | null | undefined;
     setBusyId(orderId);
     setOrders((prev) => prev.map((o) => {
       if (o.id === orderId) {
@@ -1402,6 +1415,24 @@ export default function TabletOrdersPage() {
     }
   }, [filteredOrders, selectedOrder]);
 
+  useEffect(() => {
+    if (!selectedOrder) return;
+    const nextSelectedOrder = orders.find((order) => order.id === selectedOrder.id);
+    if (!nextSelectedOrder) {
+      setSelectedOrder(null);
+      return;
+    }
+
+    if (nextSelectedOrder !== selectedOrder) {
+      setSelectedOrder(nextSelectedOrder);
+    }
+  }, [orders, selectedOrder]);
+
+  useEffect(() => {
+    if (!isDesktopLayout) return;
+    setOrderDetailsOrder(null);
+  }, [isDesktopLayout]);
+
   const { activeQueueOrders, archivedOrders } = useMemo(() => {
     const activeQueue: Order[] = [];
     const archived: Order[] = [];
@@ -1458,6 +1489,91 @@ export default function TabletOrdersPage() {
     return map;
   }, [actionQueue]);
 
+  const renderOrderActions = useCallback((order: Order, options?: { stopPropagation?: boolean; className?: string; disabled?: boolean; showPickedUpAction?: boolean }) => {
+    const status = normalizeStatus(order.status);
+    const shouldStopPropagation = Boolean(options?.stopPropagation);
+    const showPickedUpAction = options?.showPickedUpAction ?? true;
+    const isActionBusy = options?.disabled ?? (busyId === order.id || pendingActions.has(order.id));
+
+    const stopIfNeeded = (event: MouseEvent<HTMLButtonElement>) => {
+      if (shouldStopPropagation) event.stopPropagation();
+    };
+
+    return (
+      <div className={clsx(options?.className ?? 'mt-3 pt-3 border-t border-[var(--tablet-border)] flex items-center gap-2')}>
+        {status === 'received' && (
+          <>
+            <button
+              type="button"
+              disabled={isActionBusy}
+              onClick={(event) => {
+                stopIfNeeded(event);
+                openAcceptModal(order);
+              }}
+              className="flex-1 min-h-[44px] rounded-lg px-3 py-2 text-sm font-semibold text-[var(--tablet-accent-contrast)] bg-[var(--tablet-accent)] transition active:brightness-95 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:saturate-50"
+            >
+              Accept
+            </button>
+            <button
+              type="button"
+              disabled={isActionBusy}
+              onClick={(event) => {
+                stopIfNeeded(event);
+                declineOrder(order);
+              }}
+              className="flex-1 min-h-[44px] rounded-lg px-3 py-2 text-sm font-semibold border border-[var(--tablet-danger)] text-[var(--tablet-danger)] transition active:bg-[var(--tablet-danger)]/10 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Reject
+            </button>
+          </>
+        )}
+
+        {status === 'preparing' && (
+          <button
+            type="button"
+            disabled={isActionBusy}
+            onClick={(event) => {
+              stopIfNeeded(event);
+              setStatus(order.id, 'ready');
+            }}
+            className="w-full min-h-[44px] rounded-lg px-3 py-2 text-sm font-semibold text-[var(--tablet-accent-contrast)] bg-[var(--tablet-success)] transition active:brightness-95 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:saturate-50"
+          >
+            Mark Ready
+          </button>
+        )}
+
+        {status === 'ready' && (
+          <>
+            <button
+              type="button"
+              disabled={isActionBusy}
+              onClick={(event) => {
+                stopIfNeeded(event);
+                setStatus(order.id, 'completed');
+              }}
+              className="flex-1 min-h-[44px] rounded-lg px-3 py-2 text-sm font-semibold text-[var(--tablet-success-action-contrast)] bg-[var(--tablet-success-action)] transition active:bg-[var(--tablet-success-action-active)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tablet-success-action)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--tablet-card)] disabled:opacity-50 disabled:cursor-not-allowed disabled:saturate-50 disabled:active:scale-100"
+            >
+              Complete
+            </button>
+            {showPickedUpAction && (
+              <button
+                type="button"
+                disabled={isActionBusy}
+                onClick={(event) => {
+                  stopIfNeeded(event);
+                  setStatus(order.id, mapTabletStatusActionToOrderStatus(TABLET_STATUS_ACTION.PICKED_UP));
+                }}
+                className="flex-1 min-h-[44px] rounded-lg px-3 py-2 text-sm font-semibold border border-[var(--tablet-border-strong)] text-[var(--tablet-text)] transition active:bg-[color-mix(in_srgb,var(--tablet-surface-alt)_65%,var(--tablet-border-strong)_35%)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tablet-border-strong)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--tablet-card)] disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100"
+              >
+                Picked Up
+              </button>
+            )}
+          </>
+        )}
+      </div>
+    );
+  }, [busyId, pendingActions]);
+
   const renderOrderCard = useCallback((o: Order, laneIndex: number, options?: { isArchived?: boolean }) => {
     const isArchived = Boolean(options?.isArchived);
     const status = normalizeStatus(o.status);
@@ -1491,13 +1607,17 @@ export default function TabletOrdersPage() {
       : statusBadgeClassesForStatus(status);
     const openOrderDetails = async () => {
       setSelectedOrder(o);
-      setOrderDetailsOrder({ ...o, items: normalizeOrderItems(o.items) });
+      if (!isDesktopLayout) {
+        setOrderDetailsOrder({ ...o, items: normalizeOrderItems(o.items) });
+      }
 
       try {
         const response = await apiGet<{ success: boolean; data?: Order }>(`/api/orders/${encodeURIComponent(o.id)}`);
         if (!response?.success || !response.data) return;
         const detailedOrder = { ...response.data, items: normalizeOrderItems(response.data.items) };
-        setOrderDetailsOrder(detailedOrder);
+        if (!isDesktopLayout) {
+          setOrderDetailsOrder(detailedOrder);
+        }
         setSelectedOrder((prev) => (prev?.id === detailedOrder.id ? detailedOrder : prev));
       } catch (error) {
         console.warn('Failed to load full order details', error);
@@ -1722,7 +1842,7 @@ export default function TabletOrdersPage() {
         </div>
       </div>
     );
-  }, [busyId, now, orderSyncIssues, pendingActions, selectedOrder]);
+  }, [isDesktopLayout, now, orderSyncIssues, pendingActions, renderOrderActions, selectedOrder]);
   const { soundEnabled, toggleSound } = useOrderAlerts(receivedOrders.length);
 
 
@@ -1852,7 +1972,7 @@ export default function TabletOrdersPage() {
 
               {/* Search and Filter Bar */}
               <OrderFiltersBar>
-                <div className="flex items-center gap-3 overflow-x-auto">
+                <div className="flex items-center gap-3 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                   {[
                     { key: 'all' as const, label: 'All', count: activeOrders.length },
                     { key: 'received' as const, label: 'New', count: receivedOrders.length },
@@ -1876,9 +1996,6 @@ export default function TabletOrdersPage() {
                       </button>
                     );
                   })}
-                </div>
-
-                <div className="flex items-center gap-3">
                   <button
                     type="button"
                     onClick={() => setNeedsAttentionOnly((prev) => !prev)}
@@ -2032,118 +2149,166 @@ export default function TabletOrdersPage() {
               </div>
             )}
 
-            {statusFilter === 'all' ? (
-              <div className="flex flex-row gap-4 overflow-x-auto pb-4 scrollbar-thin">
-                <section className="bg-[var(--tablet-surface)] rounded-2xl shadow-sm border border-[var(--tablet-border)] flex flex-col min-w-[380px] w-[380px] shrink-0 overflow-hidden">
-                  <div className="px-4 py-3.5 border-b border-[var(--tablet-border)] flex items-center justify-between">
-                    <h3 className="text-sm font-bold uppercase tracking-wider text-[var(--tablet-text)]">
-                      All Orders
-                    </h3>
-                    <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-[var(--tablet-surface-alt)] text-[var(--tablet-muted)]">
-                      {activeQueueOrders.length}
-                    </span>
-                  </div>
-                  <div className="flex-1 overflow-x-auto overflow-y-hidden p-3 scrollbar-thin">
-                    {activeQueueOrders.length === 0 ? (
-                      <div className="text-xs text-[var(--tablet-muted)] uppercase tracking-wide py-6 text-center border border-dashed border-[var(--tablet-border)] rounded-xl mt-1">
-                        No active orders
-                      </div>
-                    ) : (
-                      <div className="flex flex-row gap-3">
-                        {activeQueueOrders.map((o, index) => renderOrderCard(o, index))}
-                      </div>
-                    )}
-                  </div>
-                </section>
-              </div>
-            ) : (
-              <div className="flex flex-row gap-4 overflow-x-auto pb-4 scrollbar-thin">
-                {visibleSections.map((section) => {
-                  const columnAccentClass = {
-                    received: 'text-[var(--tablet-danger)]',
-                    preparing: 'text-[var(--tablet-warning)]',
-                    ready: 'text-[var(--tablet-success)]',
-                  } as const;
-
-                  const columnBadgeClass = {
-                    received: 'bg-[var(--tablet-danger)]/15 text-[var(--tablet-danger)]',
-                    preparing: 'bg-[var(--tablet-warning)]/15 text-[var(--tablet-warning)]',
-                    ready: 'bg-[var(--tablet-success)]/18 text-[var(--tablet-success)]',
-                  } as const;
-
-                  const columnBorderClass = {
-                    received: 'border-b-2 border-b-[var(--tablet-danger)]/35',
-                    preparing: 'border-b-2 border-b-[var(--tablet-warning)]/35',
-                    ready: 'border-b-2 border-b-[var(--tablet-success)]/35',
-                  } as const;
-
-                  const emptyStateByLane = {
-                    received: 'No new orders',
-                    preparing: 'No orders in progress',
-                    ready: 'No orders ready'
-                  } as const;
-
-                  return (
-                    <section
-                      key={section.key}
-                      className="bg-[var(--tablet-surface)] rounded-2xl shadow-sm border border-[var(--tablet-border)] flex flex-col min-w-[380px] w-[380px] shrink-0 overflow-hidden"
-                    >
-                      <div
-                        className={clsx(
-                          'px-4 py-3.5 border-b border-[var(--tablet-border)] flex items-center justify-between',
-                          columnBorderClass[section.key]
-                        )}
-                      >
-                        <h3 className={clsx('text-sm font-bold uppercase tracking-wider', columnAccentClass[section.key])}>
-                          {section.label}
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+              <div className="min-w-0 flex-1">
+                {statusFilter === 'all' ? (
+                  <div className="flex flex-row gap-4 overflow-x-auto pb-4 scrollbar-thin">
+                    <section className="bg-[var(--tablet-surface)] rounded-2xl shadow-sm border border-[var(--tablet-border)] flex flex-col min-w-[460px] w-[460px] min-h-[32rem] md:min-h-[40rem] shrink-0 overflow-hidden">
+                      <div className="px-4 py-3.5 border-b border-[var(--tablet-border)] flex items-center justify-between">
+                        <h3 className="text-sm font-bold uppercase tracking-wider text-[var(--tablet-text)]">
+                          All Orders
                         </h3>
-                        <span className={clsx('px-2.5 py-0.5 rounded-full text-xs font-bold', columnBadgeClass[section.key])}>
-                          {section.orders.length}
+                        <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-[var(--tablet-surface-alt)] text-[var(--tablet-muted)]">
+                          {activeQueueOrders.length}
                         </span>
                       </div>
                       <div className="flex-1 overflow-x-auto overflow-y-hidden p-3 scrollbar-thin">
-                        {section.orders.length === 0 ? (
+                        {activeQueueOrders.length === 0 ? (
                           <div className="text-xs text-[var(--tablet-muted)] uppercase tracking-wide py-6 text-center border border-dashed border-[var(--tablet-border)] rounded-xl mt-1">
-                            {emptyStateByLane[section.key]}
+                            No active orders
                           </div>
                         ) : (
                           <div className="flex flex-row gap-3">
-                            {section.orders.map((o, index) => renderOrderCard(o, index))}
+                            {activeQueueOrders.map((o, index) => renderOrderCard(o, index))}
                           </div>
                         )}
                       </div>
                     </section>
-                  );
-                })}
-              </div>
-            )}
-
-            {showArchivedOrders && (
-              <section className="bg-[var(--tablet-surface)] rounded-2xl border border-[var(--tablet-border)] p-3 sm:p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-bold uppercase tracking-wider text-[var(--tablet-muted)]">Archive</h3>
-                  <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-[var(--tablet-surface-alt)] text-[var(--tablet-muted)]">
-                    {archivedOrders.length}
-                  </span>
-                </div>
-                {archivedOrders.length === 0 ? (
-                  <div className="text-xs text-[var(--tablet-muted)] uppercase tracking-wide py-6 text-center border border-dashed border-[var(--tablet-border)] rounded-xl mt-1">
-                    No archived orders for current filters
                   </div>
                 ) : (
-                  <div className="space-y-2.5">
-                    {archivedOrders.map((o, index) => renderOrderCard(o, index, { isArchived: true }))}
+                  <div className="flex flex-row gap-4 overflow-x-auto pb-4 scrollbar-thin">
+                    {visibleSections.map((section) => {
+                      const columnAccentClass = {
+                        received: 'text-[var(--tablet-danger)]',
+                        preparing: 'text-[var(--tablet-warning)]',
+                        ready: 'text-[var(--tablet-success)]',
+                      } as const;
+
+                      const columnBadgeClass = {
+                        received: 'bg-[var(--tablet-danger)]/15 text-[var(--tablet-danger)]',
+                        preparing: 'bg-[var(--tablet-warning)]/15 text-[var(--tablet-warning)]',
+                        ready: 'bg-[var(--tablet-success)]/18 text-[var(--tablet-success)]',
+                      } as const;
+
+                      const columnBorderClass = {
+                        received: 'border-b-2 border-b-[var(--tablet-danger)]/35',
+                        preparing: 'border-b-2 border-b-[var(--tablet-warning)]/35',
+                        ready: 'border-b-2 border-b-[var(--tablet-success)]/35',
+                      } as const;
+
+                      const emptyStateByLane = {
+                        received: 'No new orders',
+                        preparing: 'No orders in progress',
+                        ready: 'No orders ready'
+                      } as const;
+
+                      return (
+                        <section
+                          key={section.key}
+                          className="bg-[var(--tablet-surface)] rounded-2xl shadow-sm border border-[var(--tablet-border)] flex flex-col min-w-[380px] w-[380px] min-h-[32rem] md:min-h-[40rem] shrink-0 overflow-hidden"
+                        >
+                          <div
+                            className={clsx(
+                              'px-4 py-3.5 border-b border-[var(--tablet-border)] flex items-center justify-between',
+                              columnBorderClass[section.key]
+                            )}
+                          >
+                            <h3 className={clsx('text-sm font-bold uppercase tracking-wider', columnAccentClass[section.key])}>
+                              {section.label}
+                            </h3>
+                            <span className={clsx('px-2.5 py-0.5 rounded-full text-xs font-bold', columnBadgeClass[section.key])}>
+                              {section.orders.length}
+                            </span>
+                          </div>
+                          <div className="flex-1 overflow-x-auto overflow-y-hidden p-3 scrollbar-thin">
+                            {section.orders.length === 0 ? (
+                              <div className="text-xs text-[var(--tablet-muted)] uppercase tracking-wide py-6 text-center border border-dashed border-[var(--tablet-border)] rounded-xl mt-1">
+                                {emptyStateByLane[section.key]}
+                              </div>
+                            ) : (
+                              <div className="flex flex-row gap-3">
+                                {section.orders.map((o, index) => renderOrderCard(o, index))}
+                              </div>
+                            )}
+                          </div>
+                        </section>
+                      );
+                    })}
                   </div>
                 )}
-              </section>
-            )}
+
+                {showArchivedOrders && (
+                  <section className="bg-[var(--tablet-surface)] rounded-2xl border border-[var(--tablet-border)] p-3 sm:p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-sm font-bold uppercase tracking-wider text-[var(--tablet-muted)]">Archive</h3>
+                      <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-[var(--tablet-surface-alt)] text-[var(--tablet-muted)]">
+                        {archivedOrders.length}
+                      </span>
+                    </div>
+                    {archivedOrders.length === 0 ? (
+                      <div className="text-xs text-[var(--tablet-muted)] uppercase tracking-wide py-6 text-center border border-dashed border-[var(--tablet-border)] rounded-xl mt-1">
+                        No archived orders for current filters
+                      </div>
+                    ) : (
+                      <div className="space-y-2.5">
+                        {archivedOrders.map((o, index) => renderOrderCard(o, index, { isArchived: true }))}
+                      </div>
+                    )}
+                  </section>
+                )}
+              </div>
+
+              <aside className="hidden lg:block lg:w-[360px] xl:w-[420px] lg:shrink-0">
+                <div className="sticky top-4 space-y-4 rounded-2xl border border-[var(--tablet-border)] bg-[var(--tablet-surface)] p-4">
+                  {!selectedOrder ? (
+                    <div className="rounded-xl border border-dashed border-[var(--tablet-border)] px-4 py-10 text-center text-sm text-[var(--tablet-muted)]">
+                      Select an order to view details
+                    </div>
+                  ) : (
+                    <>
+                      <section className="rounded-xl border border-[var(--tablet-border)] bg-[var(--tablet-card)] p-4">
+                        <div className="flex items-center justify-between gap-3">
+                          <h3 className="text-base font-semibold">Order #{shortId(selectedOrder.external_id || selectedOrder.id)}</h3>
+                          <span className={clsx('rounded-full px-2.5 py-1 text-xs font-semibold uppercase', statusBadgeClassesForStatus(normalizeStatus(selectedOrder.status)))}>{normalizeStatus(selectedOrder.status)}</span>
+                        </div>
+                        <div className="mt-3 space-y-1 text-sm">
+                          <div className="text-[var(--tablet-muted)]">{selectedOrder.customer_name || 'Guest'} • {selectedOrder.order_type || 'Pickup'}</div>
+                          <div className="text-[var(--tablet-muted)]">{selectedOrder.channel || 'POS'}</div>
+                          <div className="font-semibold">{formatMoney(selectedOrder.total_amount)}</div>
+                        </div>
+                      </section>
+
+                      <section className="rounded-xl border border-[var(--tablet-border)] bg-[var(--tablet-card)] p-4">
+                        <div className="mb-2 text-sm font-semibold">Items</div>
+                        <div className="max-h-[42vh] space-y-2 overflow-y-auto pr-1">
+                          {(selectedOrder.items || []).map((item, idx) => {
+                            const quantity = item.quantity || item.qty || 1;
+                            const linePrice = (item.unit_price || item.price || 0) * quantity;
+                            return (
+                              <div key={`${selectedOrder.id}-${idx}`} className="rounded-lg border border-[var(--tablet-border)]/50 px-3 py-2 text-sm">
+                                <div className="flex items-center justify-between">
+                                  <span className="font-medium">{quantity}× {item.name || 'Item'}</span>
+                                  <span>{formatMoney(linePrice)}</span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </section>
+
+                      {renderOrderActions(selectedOrder, { className: 'flex items-center gap-2', showPickedUpAction: false })}
+                    </>
+                  )}
+                </div>
+              </aside>
+            </div>
           </div>
         </main>
       </div>
 
       {/* Order Details Modal */}
       <OrderDetailsModal
-        order={orderDetailsOrder}
+        order={isDesktopLayout ? null : orderDetailsOrder}
         onClose={() => setOrderDetailsOrder(null)}
         onConfirmOrder={(order) => {
           openAcceptModal(order);

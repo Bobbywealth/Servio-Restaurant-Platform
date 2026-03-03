@@ -366,7 +366,7 @@ export default function EditStaffHoursModal({
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:items-center">
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -378,9 +378,9 @@ export default function EditStaffHoursModal({
           initial={{ opacity: 0, scale: 0.95, y: 20 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 20 }}
-          className="relative bg-white dark:bg-surface-800 rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col"
+          className="relative my-4 bg-white dark:bg-surface-800 rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col"
         >
-          <div className="flex flex-col h-full">
+          <div className="flex min-h-0 flex-col h-full">
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-surface-700 flex-shrink-0">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-primary-100 dark:bg-primary-900/30 rounded-lg">
@@ -452,7 +452,7 @@ export default function EditStaffHoursModal({
               </div>
             )}
 
-            <div className="flex-1 overflow-y-auto p-6">
+            <div className="min-h-0 flex-1 overflow-y-auto p-6">
               {error && (
                 <div className="mb-4 flex items-center gap-2 text-red-600 text-sm bg-red-50 dark:bg-red-900/20 px-4 py-3 rounded-xl">
                   <AlertCircle className="w-5 h-5" />
