@@ -283,7 +283,7 @@ router.get('/assistant-config', async (req: Request, res: Response) => {
         },
         {
           name: 'searchMenu',
-          description: 'Search for items on the menu by name or category',
+          description: 'Step 1 of order flow: search for items on the menu by name or category before selecting a specific item',
           parameters: {
             type: 'object',
             properties: {
@@ -296,7 +296,7 @@ router.get('/assistant-config', async (req: Request, res: Response) => {
         },
         {
           name: 'getMenuItem',
-          description: 'Get full details for a specific menu item by ID',
+          description: 'Step 2 of order flow: get full details for a specific menu item by ID returned from searchMenu',
           parameters: {
             type: 'object',
             properties: {
@@ -309,7 +309,7 @@ router.get('/assistant-config', async (req: Request, res: Response) => {
         },
         {
           name: 'getItemModifiers',
-          description: 'Get all modifier questions for a menu item. Call this IMMEDIATELY after customer selects an item to get the list of modifier questions to ask IN ORDER. Each modifier includes a question prompt, whether it is required, and the available options.',
+          description: 'Step 3 of order flow: get ONLY unresolved required modifier questions for a selected menu item. Ask required unresolved questions only; do not ask optional groups unless customer requests changes.',
           parameters: {
             type: 'object',
             properties: {
@@ -321,7 +321,7 @@ router.get('/assistant-config', async (req: Request, res: Response) => {
         },
         {
           name: 'quoteOrder',
-          description: 'Validate an order and get the subtotal, tax, and total before placing it',
+          description: 'Step 4 of order flow: validate order and compute subtotal/tax/total. You must confirm this quote with customer before createOrder.',
           parameters: {
             type: 'object',
             properties: {
@@ -359,7 +359,7 @@ router.get('/assistant-config', async (req: Request, res: Response) => {
         },
         {
           name: 'createOrder',
-          description: 'Place the final order in the system. For returning customers (recognized by phone), customer fields are optional - we already have their information.',
+          description: 'Step 5 of order flow: place the final order only after quoteOrder succeeds and customer explicitly confirms the quote. For returning customers (recognized by phone), customer fields are optional.',
           parameters: {
             type: 'object',
             properties: {
