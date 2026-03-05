@@ -163,6 +163,7 @@ async function initializeServer() {
     const { default: staffBulkRoutes } = await import('./routes/staff-bulk');
     const { default: adminRoutes } = await import('./routes/admin');
     const { default: voiceConversationsRoutes } = await import('./routes/voice-conversations');
+    const { default: kitchenAssistantRoutes } = await import('./routes/kitchen-assistant');
     const { default: conversationsRoutes } = await import('./routes/conversations');
     const { default: companyRoutes } = await import('./routes/company');
     const { default: bookingsRoutes } = await import('./routes/bookings');
@@ -204,6 +205,7 @@ async function initializeServer() {
     
     // Protected routes
     app.use('/api/assistant', requireAuth, assistantRoutes);
+    app.use('/api/kitchen-assistant', requireAuth, kitchenAssistantRoutes);
 
     // Import combined auth middleware for API key support
     const { requireAuthOrApiKey } = await import('./middleware/apiKeyAuth');

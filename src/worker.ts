@@ -4,6 +4,7 @@ dotenv.config();
 import { DatabaseService } from './services/DatabaseService';
 import { JobRunnerService } from './services/JobRunnerService';
 import { ConversationService } from './services/ConversationService';
+import KitchenAssistantService from './services/KitchenAssistantService';
 import { logger } from './utils/logger';
 
 async function startWorker() {
@@ -59,11 +60,35 @@ async function startWorker() {
       return result;
     });
 
+    // Kitchen Timer Tick Handler
+    jobRunner.registerHandler('kitchen_timer_tick', async (job) => {
+      logger.info(`[worker] Processing kitchen timer tick`);
+      const completedTimers = await KitchenAssistantService.tickTimers();
+      logger.info(`[worker] Timer tick completed, ${completedTimers.length} timers processed`);
+      return { processed: completedTimers.length };
+    });
+
     // 4. Start polling
     const pollInterval = parseInt(process.env.WORKER_POLL_INTERVAL || '5000');
     jobRunner.start(pollInterval);
 
     logger.info('Worker is now polling for jobs');
+
+    // 5. Start kitchen timer tick scheduler
+    // Enqueue a timer tick job every second
+    const timerTickInterval = parseInt(process.env.KITCHEN_TIMER_INTERVAL || '1000');
+    setInterval(async () => {
+      try {
+        await jobRunner.enqueue('kitchen_timer_tick', {
+          type: 'kitchen_timer_tick',
+          priority: 'high'
+        }, {});
+      } catch (error) {
+        logger.error('Failed to enqueue kitchen timer tick:', error);
+      }
+    }, timerTickInterval);
+
+    logger.info(`Kitchen timer tick scheduled every ${timerTickInterval}ms`);
 
     // Handle graceful shutdown
     process.on('SIGTERM', () => {
