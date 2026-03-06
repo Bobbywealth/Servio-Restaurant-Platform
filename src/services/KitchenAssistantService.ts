@@ -2,7 +2,7 @@
 // Handles voice AI interactions, cooking sessions, and timer management
 
 import { Pool } from 'pg';
-import RecipeService, { RecipeWithDetails, CookingSession, RecipeIngredient } from './RecipeService';
+import RecipeService, { RecipeWithDetails, CookingSession, RecipeIngredient, CookingTimer } from './RecipeService';
 import { SocketService } from './SocketService';
 
 const pool = new Pool({
@@ -215,6 +215,10 @@ class KitchenAssistantService {
     
     const prevStepNumber = current.session.current_step - 1;
     const prevStep = current.recipe.steps.find(s => s.step_number === prevStepNumber);
+    
+    if (!prevStep) {
+      return { command: 'previous_step', success: false, response: 'Previous step not found.' };
+    }
     
     await pool.query(
       `UPDATE cooking_sessions SET current_step = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`,
@@ -496,7 +500,7 @@ class KitchenAssistantService {
           recipeName: dish_name,
           stepNumber: timer.step_number,
           remainingSeconds: timer.remaining_seconds,
-          status: type === 'halfway' ? 'halfway' : (type === 'complete' ? 'completed' : 'running')
+          status: type === 'halfway' ? 'halfway' as const : (type === 'complete' ? 'completed' as const : 'running' as const)
         };
         
         if (type === 'halfway') {

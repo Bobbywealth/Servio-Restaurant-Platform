@@ -78,6 +78,48 @@ export interface CookingTimer {
   completed_at: Date | null;
 }
 
+export interface RecipeStep {
+  id: number;
+  recipe_id: number;
+  step_number: number;
+  instruction: string;
+  timer_seconds: number | null;
+  halfway_reminder: boolean;
+  temperature: string | null;
+  notes: string | null;
+}
+
+export interface RecipeWithDetails extends Recipe {
+  ingredients: RecipeIngredient[];
+  steps: RecipeStep[];
+}
+
+export interface CookingSession {
+  id: number;
+  recipe_id: number;
+  company_id: number | null;
+  device_id: string | null;
+  current_step: number;
+  status: string;
+  scaled_servings: number | null;
+  started_at: Date;
+  updated_at: Date;
+  completed_at: Date | null;
+}
+
+export interface CookingTimer {
+  id: number;
+  session_id: number;
+  recipe_id: number;
+  step_number: number;
+  duration_seconds: number;
+  remaining_seconds: number;
+  status: string;
+  halfway_completed: boolean;
+  started_at: Date;
+  completed_at: Date | null;
+}
+
 class RecipeService {
   // Get all recipes for a company
   async getRecipes(companyId: number, categoryId?: number): Promise<Recipe[]> {

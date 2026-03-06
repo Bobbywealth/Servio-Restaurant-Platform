@@ -1,6 +1,7 @@
 // Kitchen Assistant API Routes - Servio AI Kitchen Assistant
 // Handles voice commands, cooking sessions, and recipe management
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { Router, Request, Response } from 'express';
 import { requireAuthOrApiKey } from '../middleware/apiKeyAuth';
 import { asyncHandler } from '../middleware/errorHandler';
@@ -10,34 +11,47 @@ import KitchenAssistantService from '../services/KitchenAssistantService';
 
 const router = Router();
 
+// Helper to get company ID with fallback
+async function getCompanyId(req: Request): Promise<number> {
+  const queryCompanyId = req.query.companyId ? parseInt(req.query.companyId as string) : null;
+  if (queryCompanyId) return queryCompanyId;
+  const restaurantId = await getEffectiveRestaurantId(req);
+  if (restaurantId) return restaurantId as number;
+  throw new Error('Company ID not found');
+}
+
 // All routes require authentication
 router.use(requireAuthOrApiKey({ requiredScopes: ['read:menu', 'write:menu'] }));
 
 // Get all recipes for a restaurant
 router.get('/recipes', asyncHandler(async (req: Request, res: Response) => {
-  const companyId = parseInt(req.query.companyId as string) || await getEffectiveRestaurantId(req);
+  const companyId = await getCompanyId(req);
   const categoryId = req.query.categoryId ? parseInt(req.query.categoryId as string) : undefined;
   
-  const recipes = await RecipeService.getRecipes(companyId, categoryId);
+  const recipes = await RecipeService.getRecipes(companyId as number, categoryId);
   res.json({ recipes });
 }));
 
 // Search recipes
 router.get('/recipes/search', asyncHandler(async (req: Request, res: Response) => {
-  const companyId = parseInt(req.query.companyId as string) || await getEffectiveRestaurantId(req);
+  const companyId = await getCompanyId(req);
   const searchTerm = req.query.q as string;
   
   if (!searchTerm) {
     return res.status(400).json({ error: 'Search term required' });
   }
   
-  const recipes = await RecipeService.searchRecipes(companyId, searchTerm);
+  const recipes = await RecipeService.searchRecipes(companyId as number, searchTerm);
   res.json({ recipes });
 }));
 
 // Get single recipe with all details
 router.get('/recipes/:id', asyncHandler(async (req: Request, res: Response) => {
-  const recipeId = parseInt(req.params.id);
+  const recipeId = parseInt(req.params.id as string);
+  
+  if (isNaN(recipeId)) {
+    return res.status(400).json({ error: 'Invalid recipe ID' });
+  }
   
   const recipe = await RecipeService.getRecipeById(recipeId);
   
@@ -52,13 +66,13 @@ router.get('/recipes/:id', asyncHandler(async (req: Request, res: Response) => {
 router.get('/categories', asyncHandler(async (req: Request, res: Response) => {
   const companyId = req.query.companyId ? parseInt(req.query.companyId as string) : await getEffectiveRestaurantId(req);
   
-  const categories = await RecipeService.getCategories(companyId);
+  const categories = await RecipeService.getCategories(companyId as number | undefined);
   res.json({ categories });
 }));
 
 // Start a cooking session
 router.post('/sessions', asyncHandler(async (req: Request, res: Response) => {
-  const companyId = await getEffectiveRestaurantId(req);
+  const companyId = await getCompanyId(req);
   const { recipeId, deviceId, scaledServings } = req.body;
   
   if (!recipeId) {
@@ -66,14 +80,14 @@ router.post('/sessions', asyncHandler(async (req: Request, res: Response) => {
   }
   
   const session = await KitchenAssistantService.startCookingSession(
-    recipeId, 
-    companyId, 
+    recipeId as number, 
+    companyId as number, 
     deviceId, 
     scaledServings
   );
   
   // Get recipe details for response
-  const recipe = await RecipeService.getRecipeById(recipeId);
+  const recipe = await RecipeService.getRecipeById(recipeId as number);
   const response = await KitchenAssistantService.generateStartResponse(recipe!, scaledServings);
   
   res.json({ 
@@ -85,15 +99,15 @@ router.post('/sessions', asyncHandler(async (req: Request, res: Response) => {
 
 // Get active cooking sessions
 router.get('/sessions', asyncHandler(async (req: Request, res: Response) => {
-  const companyId = await getEffectiveRestaurantId(req);
+  const companyId = await getCompanyId(req);
   
-  const sessions = await KitchenAssistantService.getActiveSessions(companyId);
+  const sessions = await KitchenAssistantService.getActiveSessions(companyId as number);
   res.json({ sessions });
 }));
 
 // Get single session details
 router.get('/sessions/:id', asyncHandler(async (req: Request, res: Response) => {
-  const sessionId = parseInt(req.params.id);
+  const sessionId = parseInt(req.params.id as string);
   
   const current = await KitchenAssistantService.getCurrentStep(sessionId);
   
@@ -113,7 +127,7 @@ router.post('/command', asyncHandler(async (req: Request, res: Response) => {
   }
   
   // Parse the command
-  const { command, params } = KitchenAssistantService.parseCommand(text);
+  const { command, params } = KitchenAssistantService.parseCommand(text as string);
   const effectiveCompanyId = companyId || await getEffectiveRestaurantId(req);
   
   let result: any;
@@ -121,7 +135,7 @@ router.post('/command', asyncHandler(async (req: Request, res: Response) => {
   switch (command) {
     case 'start_recipe': {
       // Find recipe by name
-      const recipes = await RecipeService.searchRecipes(effectiveCompanyId, params.recipeName);
+      const recipes = await RecipeService.searchRecipes(effectiveCompanyId as number, params.recipeName);
       if (recipes.length === 0) {
         return res.json({
           command,
@@ -133,7 +147,7 @@ router.post('/command', asyncHandler(async (req: Request, res: Response) => {
       const recipe = await RecipeService.getRecipeById(recipes[0].id);
       const session = await KitchenAssistantService.startCookingSession(
         recipes[0].id,
-        effectiveCompanyId,
+        effectiveCompanyId as number,
         req.body.deviceId
       );
       
@@ -149,7 +163,7 @@ router.post('/command', asyncHandler(async (req: Request, res: Response) => {
     }
     
     case 'training_mode': {
-      const recipes = await RecipeService.searchRecipes(effectiveCompanyId, params.recipeName);
+      const recipes = await RecipeService.searchRecipes(effectiveCompanyId as number, params.recipeName);
       if (recipes.length === 0) {
         return res.json({
           command,
@@ -161,11 +175,11 @@ router.post('/command', asyncHandler(async (req: Request, res: Response) => {
       const recipe = await RecipeService.getRecipeById(recipes[0].id);
       const session = await KitchenAssistantService.startCookingSession(
         recipes[0].id,
-        effectiveCompanyId,
+        effectiveCompanyId as number,
         req.body.deviceId
       );
       
-      const firstStep = recipe!.steps[0];
+      const firstStep = recipe!.steps![0];
       const response = `Training mode enabled for ${recipe!.dish_name}. Step 1: ${firstStep.instruction}. ${firstStep.notes || 'This step requires careful attention.'} Tell me when you're ready for the next step.`;
       
       result = {
@@ -185,7 +199,7 @@ router.post('/command', asyncHandler(async (req: Request, res: Response) => {
           response: 'Which recipe would you like to continue? Please start a recipe first.'
         });
       }
-      result = await KitchenAssistantService.nextStep(sessionId);
+      result = await KitchenAssistantService.nextStep(sessionId as number);
       break;
     }
     
@@ -197,7 +211,7 @@ router.post('/command', asyncHandler(async (req: Request, res: Response) => {
           response: 'Which recipe are you working on?'
         });
       }
-      result = await KitchenAssistantService.previousStep(sessionId);
+      result = await KitchenAssistantService.previousStep(sessionId as number);
       break;
     }
     
@@ -209,7 +223,7 @@ router.post('/command', asyncHandler(async (req: Request, res: Response) => {
           response: 'No active cooking session.'
         });
       }
-      const current = await KitchenAssistantService.getCurrentStep(sessionId);
+      const current = await KitchenAssistantService.getCurrentStep(sessionId as number);
       if (!current) {
         return res.json({
           command,
@@ -238,7 +252,7 @@ router.post('/command', asyncHandler(async (req: Request, res: Response) => {
         });
       }
       
-      const recipe = await RecipeService.getRecipeById(recipeId);
+      const recipe = await RecipeService.getRecipeById(recipeId as number);
       if (!recipe) {
         return res.json({
           command,
@@ -247,8 +261,8 @@ router.post('/command', asyncHandler(async (req: Request, res: Response) => {
         });
       }
       
-      const ingredientsList = recipe.ingredients
-        .map(i => `${i.amount || ''} ${i.unit || ''} ${i.name}`.trim())
+      const ingredientsList = recipe.ingredients!
+        .map((i: any) => `${i.amount || ''} ${i.unit || ''} ${i.name}`.trim())
         .join(', ');
       
       result = {
@@ -268,7 +282,7 @@ router.post('/command', asyncHandler(async (req: Request, res: Response) => {
           response: 'Please specify the number of servings. For example: "Scale to 40 servings."'
         });
       }
-      result = await KitchenAssistantService.scaleSession(sessionId, params.servings);
+      result = await KitchenAssistantService.scaleSession(sessionId as number, params.servings);
       break;
     }
     
@@ -280,7 +294,7 @@ router.post('/command', asyncHandler(async (req: Request, res: Response) => {
           response: 'No active cooking session to pause.'
         });
       }
-      await KitchenAssistantService.pauseSession(sessionId);
+      await KitchenAssistantService.pauseSession(sessionId as number);
       result = {
         command,
         success: true,
@@ -297,7 +311,7 @@ router.post('/command', asyncHandler(async (req: Request, res: Response) => {
           response: 'No paused cooking session to resume.'
         });
       }
-      await KitchenAssistantService.resumeSession(sessionId);
+      await KitchenAssistantService.resumeSession(sessionId as number);
       result = {
         command,
         success: true,
@@ -314,7 +328,7 @@ router.post('/command', asyncHandler(async (req: Request, res: Response) => {
           response: 'No active cooking session to stop.'
         });
       }
-      await KitchenAssistantService.stopSession(sessionId);
+      await KitchenAssistantService.stopSession(sessionId as number);
       result = {
         command,
         success: true,
@@ -332,7 +346,7 @@ router.post('/command', asyncHandler(async (req: Request, res: Response) => {
         });
       }
       
-      const response = await KitchenAssistantService.getIngredientResponse(recipeId, params.ingredientName);
+      const response = await KitchenAssistantService.getIngredientResponse(recipeId as number, params.ingredientName);
       result = {
         command,
         success: true,
@@ -354,7 +368,7 @@ router.post('/command', asyncHandler(async (req: Request, res: Response) => {
 
 // Get timers for a session
 router.get('/sessions/:id/timers', asyncHandler(async (req: Request, res: Response) => {
-  const sessionId = parseInt(req.params.id);
+  const sessionId = parseInt(req.params.id as string);
   
   const timers = await KitchenAssistantService.getActiveTimers(sessionId);
   res.json({ timers });
@@ -362,9 +376,9 @@ router.get('/sessions/:id/timers', asyncHandler(async (req: Request, res: Respon
 
 // Get all active timers for a company
 router.get('/timers', asyncHandler(async (req: Request, res: Response) => {
-  const companyId = await getEffectiveRestaurantId(req);
+  const companyId = await getCompanyId(req);
   
-  const timers = await KitchenAssistantService.getAllActiveTimers(companyId);
+  const timers = await KitchenAssistantService.getAllActiveTimers(companyId as number);
   res.json({ timers });
 }));
 
@@ -377,7 +391,7 @@ router.post('/timers', asyncHandler(async (req: Request, res: Response) => {
   }
   
   const timer = await KitchenAssistantService.startTimer(
-    sessionId,
+    sessionId as number,
     recipeId,
     stepNumber,
     durationSeconds

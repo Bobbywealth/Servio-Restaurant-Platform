@@ -1,7 +1,7 @@
 // Voice Integration Service for Kitchen Assistant
 // Handles speech-to-text and text-to-speech for the AI Kitchen Assistant
 
-import fetch from 'node-fetch';
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
 // Voice provider types
 export type SpeechToTextProvider = 'deepgram' | 'whisper';
@@ -66,7 +66,7 @@ class VoiceKitchenService {
         'Authorization': `Token ${this.deepgramApiKey}`,
         'Content-Type': 'audio/wav'
       },
-      body: audioBuffer
+      body: audioBuffer as any
     });
 
     if (!response.ok) {
@@ -90,7 +90,8 @@ class VoiceKitchenService {
     }
 
     const formData = new FormData();
-    formData.append('file', new Blob([audioBuffer]), 'audio.wav');
+    const blob = new Blob([audioBuffer]);
+    formData.append('file', blob, 'audio.wav');
     formData.append('model', 'whisper-1');
     formData.append('language', 'en');
 
@@ -169,8 +170,15 @@ class VoiceKitchenService {
       throw new Error(`ElevenLabs synthesis failed: ${error}`);
     }
 
-    const audioBuffer = await response.buffer();
-    const base64 = audioBuffer.toString('base64');
+    // Convert response to base64
+    const arrayBuffer = await response.arrayBuffer();
+    // Convert ArrayBuffer to base64 string
+    const bytes = new Uint8Array(arrayBuffer);
+    let binary = '';
+    for (let i = 0; i < bytes.byteLength; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    const base64 = Buffer.from(binary, 'binary').toString('base64');
     
     return {
       audioBase64: base64,
@@ -181,7 +189,7 @@ class VoiceKitchenService {
   // AWS Polly text-to-speech (fallback)
   private async synthesizeWithPolly(
     text: string,
-    options: SpeechSynthesisOptions
+    _options: SpeechSynthesisOptions
   ): Promise<SpeechSynthesisResult> {
     // AWS Polly would require AWS SDK setup
     // This is a placeholder for the implementation
@@ -193,29 +201,25 @@ class VoiceKitchenService {
   }
 
   // Get available voices for TTS
-  async getAvailableVoices(provider: TextToSpeechProvider = 'elevenlabs'): Promise<any[]> {
-    if (provider === 'elevenlabs') {
-      if (!this.elevenlabsApiKey) {
-        return [];
-      }
-
-      const response = await fetch('https://api.elevenlabs.io/v1/voices', {
-        headers: {
-          'Accept': 'application/json',
-          'xi-api-key': this.elevenlabsApiKey
-        }
-      });
-
-      if (!response.ok) {
-        const error = await response.text();
-        throw new Error(`Failed to get voices: ${error}`);
-      }
-
-      const data = await response.json() as any;
-      return data.voices;
+  async getAvailableVoices(_provider: TextToSpeechProvider = 'elevenlabs'): Promise<any[]> {
+    if (!this.elevenlabsApiKey) {
+      return [];
     }
 
-    return [];
+    const response = await fetch('https://api.elevenlabs.io/v1/voices', {
+      headers: {
+        'Accept': 'application/json',
+        'xi-api-key': this.elevenlabsApiKey
+      }
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Failed to get voices: ${error}`);
+    }
+
+    const data = await response.json() as any;
+    return data.voices;
   }
 
   // Process voice command end-to-end

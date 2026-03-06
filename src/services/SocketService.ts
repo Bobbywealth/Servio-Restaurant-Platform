@@ -25,13 +25,13 @@ export class SocketService {
   // Kitchen Assistant room management
   public static joinKitchenRoom(companyId: number, socketId: string) {
     const room = `kitchen:${companyId}`;
-    SocketService.getIO()?.in(socketId).sjoin(room);
+    SocketService.getIO()?.sockets.sockets.get(socketId)?.join(room);
     logger.info(`[socket] Socket ${socketId} joined kitchen room ${room}`);
   }
 
   public static leaveKitchenRoom(companyId: number, socketId: string) {
     const room = `kitchen:${companyId}`;
-    SocketService.getIO()?.in(socketId).sleave(room);
+    SocketService.getIO()?.sockets.sockets.get(socketId)?.leave(room);
     logger.info(`[socket] Socket ${socketId} left kitchen room ${room}`);
   }
 

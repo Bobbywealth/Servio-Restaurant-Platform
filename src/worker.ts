@@ -60,14 +60,6 @@ async function startWorker() {
       return result;
     });
 
-    // Kitchen Timer Tick Handler
-    jobRunner.registerHandler('kitchen_timer_tick', async (job) => {
-      logger.info(`[worker] Processing kitchen timer tick`);
-      const completedTimers = await KitchenAssistantService.tickTimers();
-      logger.info(`[worker] Timer tick completed, ${completedTimers.length} timers processed`);
-      return { processed: completedTimers.length };
-    });
-
     // 4. Start polling
     const pollInterval = parseInt(process.env.WORKER_POLL_INTERVAL || '5000');
     jobRunner.start(pollInterval);
@@ -75,16 +67,13 @@ async function startWorker() {
     logger.info('Worker is now polling for jobs');
 
     // 5. Start kitchen timer tick scheduler
-    // Enqueue a timer tick job every second
+    // Process timer ticks every second directly
     const timerTickInterval = parseInt(process.env.KITCHEN_TIMER_INTERVAL || '1000');
     setInterval(async () => {
       try {
-        await jobRunner.enqueue('kitchen_timer_tick', {
-          type: 'kitchen_timer_tick',
-          priority: 'high'
-        }, {});
+        await KitchenAssistantService.tickTimers();
       } catch (error) {
-        logger.error('Failed to enqueue kitchen timer tick:', error);
+        logger.error('Failed to process kitchen timer tick:', error);
       }
     }, timerTickInterval);
 
