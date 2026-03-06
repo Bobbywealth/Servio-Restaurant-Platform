@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS recipe_categories (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
     description TEXT,
-    company_id INTEGER REFERENCES companies(id) ON DELETE CASCADE,
+    company_id TEXT REFERENCES companies(id) ON DELETE CASCADE,
     is_default BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS recipes (
     dish_name VARCHAR(255) NOT NULL,
     description TEXT,
     category_id INTEGER REFERENCES recipe_categories(id) ON DELETE SET NULL,
-    company_id INTEGER REFERENCES companies(id) ON DELETE CASCADE,
+    company_id TEXT REFERENCES companies(id) ON DELETE CASCADE,
     batch_size INTEGER DEFAULT 1,
     prep_time_minutes INTEGER,
     cook_time_minutes INTEGER,
