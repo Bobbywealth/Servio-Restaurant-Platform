@@ -225,7 +225,7 @@ export default function KitchenAssistantDemo() {
             timerRunning: false
           });
           response = trainingMode 
-            ? `Step ${nextStepNum}: ${nextStep.instruction}. ${nextStep.notes || 'This step is important for the final dish quality.'} Tell me when ready for next step.`
+            ? `Step ${nextStepNum}: ${nextStep.instruction}. ${(nextStep as any).notes || 'This step is important for the final dish quality.'} Tell me when ready for next step.`
             : `Step ${nextStepNum}: ${nextStep.instruction}${nextStep.timer ? `. This step takes ${Math.floor(nextStep.timer / 60)} minutes.` : ''}`;
         }
       }
@@ -286,7 +286,7 @@ export default function KitchenAssistantDemo() {
       setTrainingMode(true);
       if (activeSession) {
         const currentStep = activeSession.recipe.steps[activeSession.currentStep - 1];
-        response = `Training mode enabled. Step ${activeSession.currentStep}: ${currentStep.instruction}. ${currentStep.notes || 'Pay close attention to this step as it affects the final dish quality.'}`;
+        response = `Training mode enabled. Step ${activeSession.currentStep}: ${currentStep.instruction}. ${(currentStep as any).notes || 'Pay close attention to this step as it affects the final dish quality.'}`;
       } else {
         response = 'Training mode enabled. Start a recipe to begin training.';
       }

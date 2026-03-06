@@ -2,8 +2,8 @@
 // Servio AI Kitchen Assistant
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { useTheme } from '../../ui/ThemeToggle';
-import VoiceInput from '../Assistant/VoiceInput';
+import { useTheme } from '../../../contexts/ThemeContext';
+import VoiceInput from '@/components/Assistant/VoiceInput';
 import { KitchenSession, CookingTimer, Recipe } from './types';
 
 interface KitchenAssistantPanelProps {
@@ -90,7 +90,7 @@ export default function KitchenAssistantPanel({ companyId, deviceId }: KitchenAs
         },
         body: JSON.stringify({
           text,
-          sessionId: selectedSession?.id,
+          sessionId: selectedSession?.session?.id,
           recipeId: selectedSession?.recipe?.id,
           companyId,
           deviceId
@@ -262,19 +262,19 @@ export default function KitchenAssistantPanel({ companyId, deviceId }: KitchenAs
               <div className={`flex-1 p-6 ${theme === 'dark' ? 'bg-gray-900' : 'bg-white'}`}>
                 <div className="max-w-2xl mx-auto">
                   <div className={`text-sm font-medium mb-2 ${theme === 'dark' ? 'text-green-400' : 'text-green-600'}`}>
-                    {selectedSession.recipe.dish_name} • Step {selectedSession.session.current_step} of {selectedSession.recipe.steps.length}
+                    {selectedSession.recipe.dish_name} • Step {selectedSession.session.current_step} of {selectedSession.recipe.steps?.length || 0}
                   </div>
                   
                   <h2 className={`text-3xl font-bold mb-6 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
                     {selectedSession.currentStepInstruction}
                   </h2>
 
-                  {selectedSession.recipe.steps[selectedSession.session.current_step - 1]?.notes && (
+                  {selectedSession.recipe.steps?.[selectedSession.session.current_step - 1]?.notes && (
                     <div className={`p-4 rounded-lg mb-6 ${
                       theme === 'dark' ? 'bg-yellow-900/30 border border-yellow-700' : 'bg-yellow-50 border border-yellow-200'
                     }`}>
                       <p className={`text-sm ${theme === 'dark' ? 'text-yellow-200' : 'text-yellow-800'}`}>
-                        <strong>Note:</strong> {selectedSession.recipe.steps[selectedSession.session.current_step - 1].notes}
+                        <strong>Note:</strong> {selectedSession.recipe.steps?.[selectedSession.session.current_step - 1]?.notes}
                       </p>
                     </div>
                   )}
@@ -353,13 +353,30 @@ export default function KitchenAssistantPanel({ companyId, deviceId }: KitchenAs
 
           {/* Voice Input Area */}
           <div className={`p-4 border-t ${theme === 'dark' ? 'border-gray-700 bg-gray-800' : 'border-gray-200 bg-white'}`}>
-            <VoiceInput
-              onTranscriptChange={setTranscript}
-              onTranscriptComplete={handleVoiceCommand}
-              isListening={isListening}
-              setIsListening={setIsListening}
-              placeholder="Say a command... (e.g., 'Start jerk chicken')"
-            />
+            <div className="flex items-center space-x-2">
+              <input
+                type="text"
+                value={transcript}
+                onChange={(e) => setTranscript(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleVoiceCommand(transcript)}
+                placeholder="Type a command... (e.g., 'Start jerk chicken')"
+                className={`flex-1 px-4 py-2 rounded-lg border ${
+                  theme === 'dark' 
+                    ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' 
+                    : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500'
+                }`}
+              />
+              <button
+                onClick={() => handleVoiceCommand(transcript)}
+                className={`px-4 py-2 rounded-lg font-medium ${
+                  theme === 'dark'
+                    ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                    : 'bg-blue-600 hover:bg-blue-700 text-white'
+                }`}
+              >
+                Send
+              </button>
+            </div>
 
             {(transcript || aiResponse) && (
               <div className="mt-4 space-y-2">
@@ -416,7 +433,7 @@ export default function KitchenAssistantPanel({ companyId, deviceId }: KitchenAs
                       {recipe.dish_name}
                     </h3>
                     <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
-                      {recipe.prep_time_minutes + recipe.cook_time_minutes} min • {recipe.difficulty}
+                      {(recipe.prep_time_minutes || 0) + (recipe.cook_time_minutes || 0)} min • {recipe.difficulty}
                     </p>
                     <p className={`text-xs mt-2 ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`}>
                       {recipe.servings} servings
