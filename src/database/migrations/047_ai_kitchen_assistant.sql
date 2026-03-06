@@ -100,7 +100,7 @@ CREATE TABLE IF NOT EXISTS training_sessions (
     id SERIAL PRIMARY KEY,
     recipe_id INTEGER REFERENCES recipes(id) ON DELETE CASCADE NOT NULL,
     company_id INTEGER REFERENCES companies(id) ON DELETE CASCADE,
-    staff_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    staff_id TEXT REFERENCES users(id) ON DELETE SET NULL,
     current_step INTEGER DEFAULT 1,
     status VARCHAR(50) DEFAULT 'active',
     started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
