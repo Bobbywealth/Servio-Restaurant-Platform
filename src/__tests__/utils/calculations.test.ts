@@ -7,7 +7,7 @@
 describe('Calculation Utilities', () => {
   describe('Order Total Calculations', () => {
     it('should calculate order subtotal', async () => {
-      const { calculateOrderSubtotal } = await import('./utils/calculations.ts');
+      const { calculateOrderSubtotal } = await import('./calculations.ts');
       
       const items = [
         { name: 'Burger', quantity: 2, price: 9.99 },
@@ -19,7 +19,7 @@ describe('Calculation Utilities', () => {
     });
 
     it('should calculate tax', async () => {
-      const { calculateTax } = await import('./utils/calculations.ts');
+      const { calculateTax } = await import('./calculations.ts');
       
       const subtotal = 25.00;
       const taxRate = 0.0825; // 8.25%
@@ -29,7 +29,7 @@ describe('Calculation Utilities', () => {
     });
 
     it('should calculate order total with tax', async () => {
-      const { calculateOrderTotal } = await import('./utils/calculations.ts');
+      const { calculateOrderTotal } = await import('./calculations.ts');
       
       const items = [
         { quantity: 1, price: 10.00 },
@@ -44,7 +44,7 @@ describe('Calculation Utilities', () => {
 
   describe('Time Entry Calculations', () => {
     it('should calculate hours worked from clock in/out', async () => {
-      const { calculateHoursWorked } = await import('./utils/calculations.ts');
+      const { calculateHoursWorked } = await import('./calculations.ts');
       
       const clockIn = new Date('2024-01-15T09:00:00Z');
       const clockOut = new Date('2024-01-15T17:00:00Z');
@@ -54,7 +54,7 @@ describe('Calculation Utilities', () => {
     });
 
     it('should account for break time', async () => {
-      const { calculateHoursWorked } = await import('./utils/calculations.ts');
+      const { calculateHoursWorked } = await import('./calculations.ts');
       
       const clockIn = new Date('2024-01-15T09:00:00Z');
       const clockOut = new Date('2024-01-15T17:30:00Z');
@@ -65,7 +65,7 @@ describe('Calculation Utilities', () => {
     });
 
     it('should calculate weekly hours', async () => {
-      const { calculateWeeklyHours } = await import('./utils/calculations.ts');
+      const { calculateWeeklyHours } = await import('./calculations.ts');
       
       const timeEntries = [
         { clockIn: new Date('2024-01-15T09:00:00Z'), clockOut: new Date('2024-01-15T17:00:00Z'), breakMinutes: 30 },
@@ -74,13 +74,13 @@ describe('Calculation Utilities', () => {
       ];
       
       const weeklyHours = calculateWeeklyHours(timeEntries);
-      expect(weeklyHours).toBe(24);
+      expect(weeklyHours).toBe(22.5); // 24 hours - 1.5 hours breaks = 22.5
     });
   });
 
   describe('Inventory Calculations', () => {
     it('should calculate stock value', async () => {
-      const { calculateStockValue } = await import('./utils/calculations.ts');
+      const { calculateStockValue } = await import('./calculations.ts');
       
       const items = [
         { name: 'Tomatoes', quantity: 10, unitCost: 2.00 },
@@ -92,7 +92,7 @@ describe('Calculation Utilities', () => {
     });
 
     it('should determine reorder needed', async () => {
-      const { needsReorder } = await import('./utils/calculations.ts');
+      const { needsReorder } = await import('./calculations.ts');
       
       expect(needsReorder(5, 10)).toBe(true);
       expect(needsReorder(10, 10)).toBe(true);
@@ -100,7 +100,7 @@ describe('Calculation Utilities', () => {
     });
 
     it('should calculate reorder quantity', async () => {
-      const { calculateReorderQuantity } = await import('./utils/calculations.ts');
+      const { calculateReorderQuantity } = await import('./calculations.ts');
       
       const quantity = calculateReorderQuantity(5, 20, 50);
       expect(quantity).toBe(45);
@@ -109,7 +109,7 @@ describe('Calculation Utilities', () => {
 
   describe('Order Status Calculations', () => {
     it('should determine if order can be cancelled', async () => {
-      const { canCancelOrder } = await import('./utils/calculations.ts');
+      const { canCancelOrder } = await import('./calculations.ts');
       
       expect(canCancelOrder('pending')).toBe(true);
       expect(canCancelOrder('preparing')).toBe(false);
@@ -118,7 +118,7 @@ describe('Calculation Utilities', () => {
     });
 
     it('should calculate order progress', async () => {
-      const { calculateOrderProgress } = await import('./utils/calculations.ts');
+      const { calculateOrderProgress } = await import('./calculations.ts');
       
       const status = 'preparing';
       const statusOrder = ['pending', 'preparing', 'ready', 'completed'];

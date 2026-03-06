@@ -90,7 +90,7 @@ class VoiceKitchenService {
     }
 
     const formData = new FormData();
-    const blob = new Blob([audioBuffer]);
+    const blob = new Blob([audioBuffer as any]);
     formData.append('file', blob, 'audio.wav');
     formData.append('model', 'whisper-1');
     formData.append('language', 'en');

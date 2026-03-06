@@ -10,6 +10,10 @@ module.exports = {
   transform: {
     '^.+\\.(t|j)sx?$': ['@swc/jest'],
   },
+  // Transform ESM modules in node_modules that cause issues
+  transformIgnorePatterns: [
+    '/node_modules/(?!(uuid|pretty-format)/)',
+  ],
   testPathIgnorePatterns: [
     '/node_modules/',
     '/dist/',

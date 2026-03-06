@@ -8,7 +8,7 @@ describe('Validation Utilities', () => {
   describe('Environment Variable Validation', () => {
     it('should validate required environment variables', async () => {
       // Import validation function
-      const { validateEnv } = await import('./utils/validation.ts');
+      const { validateEnv } = await import('./validation.ts');
       
       // Set required environment variables
       const originalEnv = process.env;
@@ -28,7 +28,7 @@ describe('Validation Utilities', () => {
     });
 
     it('should return errors for missing required variables', async () => {
-      const { validateEnv } = await import('./utils/validation.ts');
+      const { validateEnv } = await import('./validation.ts');
       
       const originalEnv = process.env;
       process.env = {
@@ -47,7 +47,7 @@ describe('Validation Utilities', () => {
 
   describe('Input Validation', () => {
     it('should validate email format', async () => {
-      const { isValidEmail } = await import('./utils/validation.ts');
+      const { isValidEmail } = await import('./validation.ts');
       
       expect(isValidEmail('test@example.com')).toBe(true);
       expect(isValidEmail('invalid-email')).toBe(false);
@@ -55,7 +55,7 @@ describe('Validation Utilities', () => {
     });
 
     it('should validate phone number format', async () => {
-      const { isValidPhone } = await import('./utils/validation.ts');
+      const { isValidPhone } = await import('./validation.ts');
       
       expect(isValidPhone('+1234567890')).toBe(true);
       expect(isValidPhone('1234567890')).toBe(true);
@@ -63,7 +63,7 @@ describe('Validation Utilities', () => {
     });
 
     it('should validate PIN format (4 digits)', async () => {
-      const { isValidPin } = await import('./utils/validation.ts');
+      const { isValidPin } = await import('./validation.ts');
       
       expect(isValidPin('1234')).toBe(true);
       expect(isValidPin('0000')).toBe(true);
@@ -73,7 +73,7 @@ describe('Validation Utilities', () => {
     });
 
     it('should validate order status', async () => {
-      const { isValidOrderStatus } = await import('./utils/validation.ts');
+      const { isValidOrderStatus } = await import('./validation.ts');
       
       const validStatuses = ['pending', 'preparing', 'ready', 'completed', 'cancelled'];
       
