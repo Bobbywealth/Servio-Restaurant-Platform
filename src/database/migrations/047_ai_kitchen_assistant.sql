@@ -61,7 +61,7 @@ CREATE TABLE IF NOT EXISTS recipe_steps (
 CREATE TABLE IF NOT EXISTS cooking_sessions (
     id SERIAL PRIMARY KEY,
     recipe_id INTEGER REFERENCES recipes(id) ON DELETE CASCADE NOT NULL,
-    company_id INTEGER REFERENCES companies(id) ON DELETE CASCADE,
+    company_id TEXT REFERENCES companies(id) ON DELETE CASCADE,
     device_id VARCHAR(255),
     current_step INTEGER DEFAULT 1,
     status VARCHAR(50) DEFAULT 'active',
@@ -89,7 +89,7 @@ CREATE TABLE IF NOT EXISTS cooking_timers (
 CREATE TABLE IF NOT EXISTS recipe_scaling_log (
     id SERIAL PRIMARY KEY,
     recipe_id INTEGER REFERENCES recipes(id) ON DELETE CASCADE NOT NULL,
-    company_id INTEGER REFERENCES companies(id) ON DELETE CASCADE,
+    company_id TEXT REFERENCES companies(id) ON DELETE CASCADE,
     original_servings INTEGER NOT NULL,
     new_servings INTEGER NOT NULL,
     scaled_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -99,7 +99,7 @@ CREATE TABLE IF NOT EXISTS recipe_scaling_log (
 CREATE TABLE IF NOT EXISTS training_sessions (
     id SERIAL PRIMARY KEY,
     recipe_id INTEGER REFERENCES recipes(id) ON DELETE CASCADE NOT NULL,
-    company_id INTEGER REFERENCES companies(id) ON DELETE CASCADE,
+    company_id TEXT REFERENCES companies(id) ON DELETE CASCADE,
     staff_id TEXT REFERENCES users(id) ON DELETE SET NULL,
     current_step INTEGER DEFAULT 1,
     status VARCHAR(50) DEFAULT 'active',
@@ -110,7 +110,7 @@ CREATE TABLE IF NOT EXISTS training_sessions (
 -- AI Kitchen Assistant settings per company
 CREATE TABLE IF NOT EXISTS ai_kitchen_settings (
     id SERIAL PRIMARY KEY,
-    company_id INTEGER REFERENCES companies(id) ON DELETE CASCADE UNIQUE,
+    company_id TEXT REFERENCES companies(id) ON DELETE CASCADE UNIQUE,
     voice_enabled BOOLEAN DEFAULT TRUE,
     continuous_listening BOOLEAN DEFAULT FALSE,
     push_to_talk BOOLEAN DEFAULT TRUE,
