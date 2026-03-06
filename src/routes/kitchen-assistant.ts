@@ -16,7 +16,7 @@ async function getCompanyId(req: Request): Promise<number> {
   const queryCompanyId = req.query.companyId ? parseInt(req.query.companyId as string) : null;
   if (queryCompanyId) return queryCompanyId;
   const restaurantId = await getEffectiveRestaurantId(req);
-  if (restaurantId) return restaurantId as number;
+  if (restaurantId) return restaurantId as unknown as number;
   throw new Error('Company ID not found');
 }
 

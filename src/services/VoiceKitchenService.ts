@@ -178,7 +178,7 @@ class VoiceKitchenService {
     for (let i = 0; i < bytes.byteLength; i++) {
       binary += String.fromCharCode(bytes[i]);
     }
-    const base64 = Buffer.from(binary, 'binary').toString('base64');
+    const base64 = Buffer.from(binary, 'binary').toString('base64') as unknown as string;
     
     return {
       audioBase64: base64,
