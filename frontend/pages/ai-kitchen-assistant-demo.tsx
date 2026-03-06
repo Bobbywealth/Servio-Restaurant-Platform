@@ -34,6 +34,14 @@ import {
   Headphones
 } from 'lucide-react';
 
+// Recipe categories
+const RECIPE_CATEGORIES = [
+  { id: 'all', name: 'All Recipes', emoji: '🍽️' },
+  { id: 'main', name: 'Main Dishes', emoji: '🍖' },
+  { id: 'sides', name: 'Sides', emoji: '🍚' },
+  { id: 'desserts', name: 'Desserts', emoji: '🍰' },
+];
+
 // Demo recipes with more details
 const DEMO_RECIPES = [
   {
@@ -46,6 +54,7 @@ const DEMO_RECIPES = [
     totalTime: 75,
     servings: 20,
     cuisine: 'Jamaican',
+    category: 'main',
     image: '🍗',
     color: 'from-orange-500 to-red-600',
     steps: [
@@ -86,6 +95,7 @@ const DEMO_RECIPES = [
     totalTime: 50,
     servings: 20,
     cuisine: 'Jamaican',
+    category: 'sides',
     image: '🍚',
     color: 'from-green-500 to-emerald-700',
     steps: [
@@ -119,6 +129,7 @@ const DEMO_RECIPES = [
     totalTime: 165,
     servings: 15,
     cuisine: 'Jamaican',
+    category: 'main',
     image: '🍖',
     color: 'from-yellow-500 to-amber-700',
     steps: [
@@ -160,6 +171,7 @@ const DEMO_RECIPES = [
     totalTime: 35,
     servings: 10,
     cuisine: 'Asian',
+    category: 'main',
     image: '🍳',
     color: 'from-yellow-400 to-orange-500',
     steps: [
@@ -209,6 +221,7 @@ export default function KitchenAssistantDemo() {
   const [transcript, setTranscript] = useState('');
   const [aiResponse, setAiResponse] = useState('');
   const [showRecipeSelector, setShowRecipeSelector] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [activeSession, setActiveSession] = useState<ActiveSession | null>(null);
   const [showIngredients, setShowIngredients] = useState(false);
   const [showTips, setShowTips] = useState(true);
@@ -218,6 +231,11 @@ export default function KitchenAssistantDemo() {
   const [speechSupported, setSpeechSupported] = useState(true);
   const [recognition, setRecognition] = useState<any>(null);
   const [audioLevel, setAudioLevel] = useState(0);
+
+  // Filter recipes by category
+  const filteredRecipes = selectedCategory === 'all' 
+    ? DEMO_RECIPES 
+    : DEMO_RECIPES.filter(r => r.category === selectedCategory);
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const audioLevelRef = useRef<NodeJS.Timeout | null>(null);
@@ -579,12 +597,11 @@ export default function KitchenAssistantDemo() {
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center space-x-4">
             <Link href="/" className="flex items-center space-x-2">
-              <div className="w-10 h-10 bg-gradient-to-br from-green-400 to-emerald-600 rounded-xl flex items-center justify-center">
-                <UtensilsCrossed className="w-6 h-6 text-white" />
-              </div>
-              <span className="text-xl font-bold bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent">
-                Servio
-              </span>
+              <img 
+                src="/images/servio_logo_transparent_tight.png" 
+                alt="Servio Logo" 
+                className="h-10 w-auto"
+              />
             </Link>
             <div className="flex items-center space-x-2 px-3 py-1.5 bg-green-600/20 border border-green-500/30 rounded-full">
               <Sparkles className="w-4 h-4 text-green-400" />
@@ -619,9 +636,33 @@ export default function KitchenAssistantDemo() {
             <p className="text-sm text-gray-400">Select a recipe to begin</p>
           </div>
           
+          {/* Category Tabs */}
+          <div className="p-3 border-b border-gray-700/50">
+            <div className="flex flex-wrap gap-2">
+              {RECIPE_CATEGORIES.map((category) => (
+                <button
+                  key={category.id}
+                  onClick={() => setSelectedCategory(category.id)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                    selectedCategory === category.id
+                      ? 'bg-green-600 text-white'
+                      : 'bg-gray-700/50 text-gray-400 hover:bg-gray-700'
+                  }`}
+                >
+                  {category.emoji} {category.name}
+                </button>
+              ))}
+            </div>
+          </div>
+          
           {/* Recipe List */}
           <div className="flex-1 overflow-y-auto p-4 space-y-3">
-            {DEMO_RECIPES.map((recipe) => (
+            {filteredRecipes.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                <p>No recipes in this category</p>
+              </div>
+            ) : (
+            filteredRecipes.map((recipe) => (
               <button
                 key={recipe.id}
                 onClick={() => {
@@ -659,7 +700,8 @@ export default function KitchenAssistantDemo() {
                   </div>
                 </div>
               </button>
-            ))}
+            ))
+            )}
           </div>
 
           {/* Quick Commands */}
