@@ -222,6 +222,8 @@ export default function KitchenAssistantDemo() {
   const [aiResponse, setAiResponse] = useState('');
   const [showRecipeSelector, setShowRecipeSelector] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [showBatchSizePrompt, setShowBatchSizePrompt] = useState(false);
+  const [pendingRecipe, setPendingRecipe] = useState<typeof DEMO_RECIPES[0] | null>(null);
   const [activeSession, setActiveSession] = useState<ActiveSession | null>(null);
   const [showIngredients, setShowIngredients] = useState(false);
   const [showTips, setShowTips] = useState(true);
@@ -289,6 +291,26 @@ export default function KitchenAssistantDemo() {
       return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
     }
     return `${minutes}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // Start recipe with batch size
+  const startRecipeWithBatchSize = (servings: number) => {
+    if (!pendingRecipe) return;
+    
+    const step = pendingRecipe.steps[0];
+    setActiveSession({
+      recipe: pendingRecipe,
+      currentStep: 1,
+      status: 'active',
+      timer: step.timer,
+      timerRunning: false,
+      scaledServings: servings,
+      completedSteps: []
+    });
+    processCommand(`start ${pendingRecipe.name} for ${servings} servings`);
+    setShowBatchSizePrompt(false);
+    setPendingRecipe(null);
+    speak(`Great! I'll walk you through making ${pendingRecipe.name} for ${servings} people. Let's get started!`);
   };
 
   // Text-to-Speech
@@ -666,17 +688,9 @@ export default function KitchenAssistantDemo() {
               <button
                 key={recipe.id}
                 onClick={() => {
-                  const step = recipe.steps[0];
-                  setActiveSession({
-                    recipe,
-                    currentStep: 1,
-                    status: 'active',
-                    timer: step.timer,
-                    timerRunning: false,
-                    scaledServings: recipe.servings,
-                    completedSteps: []
-                  });
-                  processCommand(`start ${recipe.name}`);
+                  // Ask about batch size first
+                  setPendingRecipe(recipe);
+                  setShowBatchSizePrompt(true);
                   setShowRecipeSelector(false);
                 }}
                 className={`w-full p-4 rounded-xl text-left transition-all hover:scale-[1.02] ${
@@ -1066,6 +1080,89 @@ export default function KitchenAssistantDemo() {
           </div>
         </div>
       </div>
+
+      {/* Batch Size Prompt Modal */}
+      {showBatchSizePrompt && pendingRecipe && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-gray-800 rounded-2xl p-6 max-w-md w-full border border-gray-700"
+          >
+            <div className="text-center mb-6">
+              <div className={`w-16 h-16 mx-auto mb-4 rounded-full bg-gradient-to-br ${pendingRecipe.color} flex items-center justify-center text-4xl`}>
+                {pendingRecipe.image}
+              </div>
+              <h2 className="text-2xl font-bold text-white mb-2">
+                {pendingRecipe.name}
+              </h2>
+              <p className="text-gray-400">
+                How many people are you feeding?
+              </p>
+            </div>
+
+            {/* Batch Size Options */}
+            <div className="grid grid-cols-3 gap-3 mb-4">
+              {[10, 20, 50].map((size) => (
+                <button
+                  key={size}
+                  onClick={() => startRecipeWithBatchSize(size)}
+                  className="p-4 bg-gray-700 hover:bg-green-600 rounded-xl transition-colors text-center"
+                >
+                  <div className="text-2xl font-bold text-white">{size}</div>
+                  <div className="text-sm text-gray-400">people</div>
+                </button>
+              ))}
+            </div>
+
+            {/* Custom Input */}
+            <div className="mb-6">
+              <label className="block text-sm text-gray-400 mb-2">Or enter custom amount:</label>
+              <div className="flex space-x-2">
+                <input
+                  type="number"
+                  id="customServings"
+                  min="1"
+                  max="500"
+                  placeholder="e.g., 75"
+                  className="flex-1 px-4 py-3 bg-gray-700 border border-gray-600 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      const value = parseInt((e.target as HTMLInputElement).value);
+                      if (value > 0) {
+                        startRecipeWithBatchSize(value);
+                      }
+                    }
+                  }}
+                />
+                <button
+                  onClick={() => {
+                    const input = document.getElementById('customServings') as HTMLInputElement;
+                    const value = parseInt(input.value);
+                    if (value > 0) {
+                      startRecipeWithBatchSize(value);
+                    }
+                  }}
+                  className="px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-medium transition-colors"
+                >
+                  Start
+                </button>
+              </div>
+            </div>
+
+            {/* Cancel Button */}
+            <button
+              onClick={() => {
+                setShowBatchSizePrompt(false);
+                setPendingRecipe(null);
+              }}
+              className="w-full py-3 text-gray-400 hover:text-white transition-colors"
+            >
+              Cancel
+            </button>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 }
