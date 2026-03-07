@@ -281,6 +281,8 @@ interface ActiveSession {
   startedAt: number;
 }
 
+const MAX_CONCURRENT_SESSIONS = 6;
+
 // Sample commands for quick actions
 const QUICK_COMMANDS = [
   { label: 'Next Step', command: 'next', icon: SkipForward },
@@ -402,6 +404,16 @@ export default function KitchenAssistantDemo() {
       return;
     }
 
+    // Enforce concurrent session cap
+    if (activeSessions.filter(s => s.status !== 'completed').length >= MAX_CONCURRENT_SESSIONS) {
+      setShowBatchSizePrompt(false);
+      setPendingRecipe(null);
+      const msg = `You're already cooking ${MAX_CONCURRENT_SESSIONS} dishes at once. Stop one before adding more.`;
+      setAiResponse(msg);
+      speak(msg);
+      return;
+    }
+
     const step = pendingRecipe.steps[0];
     const newSession: ActiveSession = {
       id: `session_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
@@ -468,20 +480,27 @@ export default function KitchenAssistantDemo() {
 
   // Restore sessions from localStorage on mount (timers paused since time has elapsed)
   useEffect(() => {
+    const TWELVE_HOURS = 12 * 60 * 60 * 1000;
     try {
       const saved = localStorage.getItem('servio_kitchen_sessions');
       if (saved) {
         const sessions = JSON.parse(saved) as ActiveSession[];
         const restored = sessions
           .filter(s => s.status !== 'completed')
+          // Discard sessions older than 12 hours
+          .filter(s => Date.now() - s.startedAt < TWELVE_HOURS)
           .map(s => ({ ...s, timerRunning: false }));
         if (restored.length > 0) {
           setActiveSessions(restored);
           setFocusedSessionId(restored[0].id);
+        } else if (sessions.length > 0) {
+          // All sessions were stale — clear storage
+          localStorage.removeItem('servio_kitchen_sessions');
         }
       }
     } catch {
       // ignore invalid localStorage data
+      localStorage.removeItem('servio_kitchen_sessions');
     }
   }, []);
 
@@ -489,6 +508,12 @@ export default function KitchenAssistantDemo() {
   useEffect(() => {
     localStorage.setItem('servio_kitchen_sessions', JSON.stringify(activeSessions));
   }, [activeSessions]);
+
+  // Reset panel state when switching focus to a different session
+  useEffect(() => {
+    setShowIngredients(false);
+    setShowTips(true);
+  }, [focusedSessionId]);
 
   // Process voice command — always operates on the focused session
   const processCommand = (text: string) => {
@@ -523,6 +548,8 @@ export default function KitchenAssistantDemo() {
         if (existing) {
           setFocusedSessionId(existing.id);
           response = `${found.name} is already being cooked! Switched focus to it. Currently on step ${existing.currentStep}.`;
+        } else if (activeSessions.filter(s => s.status !== 'completed').length >= MAX_CONCURRENT_SESSIONS) {
+          response = `You're already cooking ${MAX_CONCURRENT_SESSIONS} dishes at once. Stop one first before adding more.`;
         } else {
           const step = found.steps[0];
           const newSession: ActiveSession = {
