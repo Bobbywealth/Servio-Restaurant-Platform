@@ -418,17 +418,29 @@ export default function TabletOrdersPage() {
   const [showArchivedOrders, setShowArchivedOrders] = useState(false);
   const [orderDetailsOrder, setOrderDetailsOrder] = useState<Order | null>(null);
   const [isDesktopLayout, setIsDesktopLayout] = useState(false);
+  const [isTabletLayout, setIsTabletLayout] = useState(false);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    const mediaQuery = window.matchMedia('(min-width: 1024px)');
-    const updateLayout = () => setIsDesktopLayout(mediaQuery.matches);
+    // Desktop: 1024px+
+    const desktopQuery = window.matchMedia('(min-width: 1024px)');
+    // Tablet: 768px - 1023px
+    const tabletQuery = window.matchMedia('(min-width: 768px) and (max-width: 1023px)');
+    
+    const updateLayout = () => {
+      setIsDesktopLayout(desktopQuery.matches);
+      setIsTabletLayout(tabletQuery.matches);
+    };
     updateLayout();
 
-    mediaQuery.addEventListener('change', updateLayout);
-    return () => mediaQuery.removeEventListener('change', updateLayout);
+    desktopQuery.addEventListener('change', updateLayout);
+    tabletQuery.addEventListener('change', updateLayout);
+    return () => {
+      desktopQuery.removeEventListener('change', updateLayout);
+      tabletQuery.removeEventListener('change', updateLayout);
+    };
   }, []);
 
   const handleSearchToggle = useCallback(() => {
@@ -1842,7 +1854,7 @@ export default function TabletOrdersPage() {
         </div>
       </div>
     );
-  }, [isDesktopLayout, now, orderSyncIssues, pendingActions, renderOrderActions, selectedOrder]);
+  }, [isDesktopLayout, isTabletLayout, now, orderSyncIssues, pendingActions, renderOrderActions, selectedOrder]);
   const { soundEnabled, toggleSound } = useOrderAlerts(receivedOrders.length);
 
 
@@ -1943,10 +1955,10 @@ export default function TabletOrdersPage() {
         {receiptHtml ? <PrintReceipt receiptHtml={receiptHtml} copies={2} paperWidth={paperWidth} /> : null}
       </div>
 
-      <div className="no-print flex min-h-screen flex-col md:flex-row">
+      <div className="no-print flex min-h-screen flex-col lg:flex-row">
         <TabletSidebar statusDotClassName={isOnline && socketConnected ? 'bg-emerald-400' : 'bg-amber-400'} />
 
-        <main className="flex-1 bg-[var(--tablet-bg)] text-[var(--tablet-text)] px-4 py-4 sm:px-6 md:px-6 lg:px-8">
+        <main className="flex-1 bg-[var(--tablet-bg)] text-[var(--tablet-text)] px-3 py-3 sm:px-4 sm:py-4 md:px-5 md:py-5 lg:px-6 lg:py-6">
           <div className="flex flex-col gap-5 lg:gap-6">
             {/* Header with search and filters */}
             <div className="flex flex-col gap-4">
@@ -2152,8 +2164,8 @@ export default function TabletOrdersPage() {
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
               <div className="min-w-0 flex-1">
                 {statusFilter === 'all' ? (
-                  <div className="flex flex-row gap-4 overflow-x-auto pb-4 scrollbar-thin">
-                    <section className="bg-[var(--tablet-surface)] rounded-2xl shadow-sm border border-[var(--tablet-border)] flex flex-col min-w-[460px] w-[460px] min-h-[32rem] md:min-h-[40rem] shrink-0 overflow-hidden">
+                  <div className="flex flex-row gap-3 sm:gap-4 overflow-x-auto pb-4 scrollbar-thin">
+                    <section className="bg-[var(--tablet-surface)] rounded-2xl shadow-sm border border-[var(--tablet-border)] flex flex-col w-[320px] sm:w-[380px] md:w-[420px] lg:w-[460px] min-h-[28rem] sm:min-h-[32rem] md:min-h-[40rem] shrink-0 overflow-hidden">
                       <div className="px-4 py-3.5 border-b border-[var(--tablet-border)] flex items-center justify-between">
                         <h3 className="text-sm font-bold uppercase tracking-wider text-[var(--tablet-text)]">
                           All Orders
@@ -2205,7 +2217,7 @@ export default function TabletOrdersPage() {
                       return (
                         <section
                           key={section.key}
-                          className="bg-[var(--tablet-surface)] rounded-2xl shadow-sm border border-[var(--tablet-border)] flex flex-col min-w-[380px] w-[380px] min-h-[32rem] md:min-h-[40rem] shrink-0 overflow-hidden"
+                          className="bg-[var(--tablet-surface)] rounded-2xl shadow-sm border border-[var(--tablet-border)] flex flex-col w-[280px] sm:w-[340px] md:w-[380px] min-h-[28rem] sm:min-h-[32rem] md:min-h-[40rem] shrink-0 overflow-hidden"
                         >
                           <div
                             className={clsx(
@@ -2400,13 +2412,22 @@ export default function TabletOrdersPage() {
         /* Mobile-first responsive adjustments */
         @media (max-width: 639px) {
           .tablet-theme main {
-            padding: 0.75rem;
+            padding: 0.5rem;
           }
           .tablet-theme .text-3xl {
             font-size: 1.5rem;
           }
           .tablet-theme .text-2xl {
             font-size: 1.25rem;
+          }
+        }
+        /* 7-inch tablets */
+        @media (min-width: 640px) and (max-width: 767px) {
+          .tablet-theme .text-3xl {
+            font-size: 1.75rem;
+          }
+          .tablet-theme .text-2xl {
+            font-size: 1.35rem;
           }
         }
         /* 8-inch+ tablets */
@@ -2416,6 +2437,12 @@ export default function TabletOrdersPage() {
           }
           .tablet-theme .text-2xl {
             font-size: 1.45rem;
+          }
+        }
+        /* Desktop */
+        @media (min-width: 1024px) {
+          .tablet-theme .text-3xl {
+            font-size: 2rem;
           }
         }
         /* Ensure touch targets are large enough */
