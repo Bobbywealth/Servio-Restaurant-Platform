@@ -105,10 +105,12 @@ class SocketManager {
     }
 
     if (typeof window !== 'undefined') {
-      return `${window.location.protocol}//${rawBackendUrl}`
+      const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:'
+      return `${protocol}//${rawBackendUrl}`
     }
 
-    return `http://${rawBackendUrl}`
+    // Default to https in production-like environments
+    return `https://${rawBackendUrl}`
   }
 
   connect(): void {
