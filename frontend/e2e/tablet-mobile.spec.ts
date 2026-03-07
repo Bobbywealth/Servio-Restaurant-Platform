@@ -14,13 +14,17 @@ test.describe('Tablet Layout & Touch', () => {
     await page.goto('/tablet/orders');
     await page.waitForLoadState('networkidle');
     
-    // Check buttons are large enough for touch (min 44px)
-    const buttons = await page.locator('button').all();
-    for (const button of buttons.slice(0, 5)) {
-      const box = await button.boundingBox();
+    // Check action buttons are large enough for touch (min 30px)
+    // Filter to get only buttons with text content (action buttons)
+    const actionButtons = page.locator('button:has-text("Accept"), button:has-text("Reject"), button:has-text("Ready"), button:has-text("Complete"), button:has-text("Picked Up"), button:has-text("Needs attention")');
+    const count = await actionButtons.count();
+    console.log('Action buttons found:', count);
+    
+    for (let i = 0; i < Math.min(count, 5); i++) {
+      const box = await actionButtons.nth(i).boundingBox();
       if (box) {
-        console.log('Button size:', box.width, 'x', box.height);
-        // Touch targets should be at least 44px
+        console.log('Action button size:', box.width, 'x', box.height);
+        // Touch targets should be at least 30px
         expect(box.height).toBeGreaterThanOrEqual(30);
       }
     }

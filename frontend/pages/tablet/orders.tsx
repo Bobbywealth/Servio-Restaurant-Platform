@@ -2029,7 +2029,7 @@ export default function TabletOrdersPage() {
                             type="button"
                             aria-label="Clear search"
                             onClick={handleSearchClear}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-full hover:bg-[var(--tablet-border)] transition touch-manipulation"
+                            className="absolute right-3 top-1/2 -translate-y-1/2 p-2 min-w-[32px] min-h-[32px] flex items-center justify-center rounded-full hover:bg-[var(--tablet-border)] transition touch-manipulation"
                           >
                             <X className="h-4 w-4 text-[var(--tablet-muted)]" />
                           </button>
@@ -2122,8 +2122,8 @@ export default function TabletOrdersPage() {
                   {activeFilterChips.slice(0, 2).map((chip) => (
                     <span key={chip.key} className={clsx('inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium', chip.tone)}>
                       {chip.label}
-                      <button onClick={chip.onClear} className="ml-1" aria-label={`Clear ${chip.label} filter`}>
-                        <X className="h-3 w-3" />
+                      <button onClick={chip.onClear} className="ml-1 p-1 min-w-[24px] min-h-[24px] flex items-center justify-center" aria-label={`Clear ${chip.label} filter`}>
+                        <X className="h-4 w-4" />
                       </button>
                     </span>
                   ))}

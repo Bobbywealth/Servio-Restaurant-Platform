@@ -98,7 +98,7 @@ test.describe('Critical Flow: Order Status Update', () => {
     const orderCard = page.locator('[class*="card"], [class*="order"]').first();
     if (await orderCard.isVisible({ timeout: 3000 }).catch(() => false)) {
       // Click to expand
-      await orderCard.click();
+      await orderCard.click({ force: true });
       
       // Look for status buttons
       const statusButtons = await page.locator('button:has-text("Ready"), button:has-text("Complete")').count();

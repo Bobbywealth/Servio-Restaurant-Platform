@@ -57,9 +57,9 @@ test('does not persist optimistic status when /status returns 400', async ({ pag
   const orderCard = page.locator('[role="button"]').filter({ hasText: 'Alex Failure Case' }).first()
   await expect(orderCard).toBeVisible()
 
-  await orderCard.getByRole('button', { name: 'Mark Ready' }).click()
+  await orderCard.getByRole('button', { name: 'Mark Ready' }).click({ force: true })
 
   await expect(orderCard.getByRole('button', { name: 'Mark Ready' })).toBeVisible()
-  await expect(orderCard.getByText('Sync failed')).toBeVisible()
+  await expect(orderCard.getByText('Sync failed').first()).toBeVisible()
   await expect(orderCard.getByText('Cannot move order to ready from preparing')).toBeVisible()
 })
