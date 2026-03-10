@@ -1589,47 +1589,34 @@ export default function TabletOrdersPage() {
   const renderOrderCard = useCallback((o: Order, laneIndex: number, options?: { isArchived?: boolean }) => {
     const isArchived = Boolean(options?.isArchived);
     const status = normalizeStatus(o.status);
-    const isNew = status === 'received';
     const isPreparing = status === 'preparing';
-    const isReady = status === 'ready';
     const timeAgo = formatTimeAgo(o.created_at, now);
-    const urgencyLevel = isArchived ? 'normal' : getOrderUrgencyLevel(timeAgo.elapsedMinutes);
-    const urgencyTextClass = getOrderUrgencyClass(urgencyLevel);
-    const urgencyBadgeClass = getOrderUrgencyBadgeClass(urgencyLevel);
     const itemCount = (o.items || []).reduce((sum, it) => sum + (it.quantity || 1), 0);
     const hasPendingAction = pendingActions.has(o.id);
-    const syncIssue = orderSyncIssues.get(o.id);
-    const hasSyncFailure = Boolean(syncIssue && (syncIssue.permanentFailure || syncIssue.retryCount > 0));
     const isActionBusy = busyId === o.id || hasPendingAction || isArchived;
-    const isLatest = laneIndex === 0;
     const isSelected = selectedOrder?.id === o.id;
+    const prepTimeData = isPreparing ? formatPrepTimeRemaining(o.prep_minutes || 15, o.created_at, now) : null;
 
-    const prepTimeData = isPreparing
-      ? formatPrepTimeRemaining(o.prep_minutes || 15, o.created_at, now)
-      : null;
-    const prepWarningLevel = prepTimeData && !isArchived
-      ? getPrepTimeWarningLevel(prepTimeData.percentRemaining)
-      : 'normal';
-    const prepTimeColorClass = getPrepTimeColorClass(prepWarningLevel);
-    const isOverdue = prepTimeData?.isOverdue;
-    const cardStatusBadgeClasses = isPreparing && !isArchived && (prepWarningLevel === 'critical' || prepWarningLevel === 'warning')
-      ? prepWarningLevel === 'critical'
-        ? 'bg-[var(--tablet-danger)] text-white'
-        : 'bg-[var(--tablet-warning)] text-[var(--tablet-text)]'
-      : statusBadgeClassesForStatus(status);
+    const statusLabel = status === 'received' ? 'Needs action' : status === 'preparing' ? 'In progress' : status === 'ready' ? 'Ready' : 'Scheduled';
+    const statusStyles = {
+      received: { rail: 'bg-amber-500', badge: 'border-amber-300 bg-amber-50 text-amber-700', timer: 'text-amber-600' },
+      preparing: { rail: 'bg-blue-500', badge: 'border-blue-300 bg-blue-50 text-blue-700', timer: 'text-blue-600' },
+      ready: { rail: 'bg-emerald-500', badge: 'border-emerald-300 bg-emerald-50 text-emerald-700', timer: 'text-emerald-600' },
+      default: { rail: 'bg-violet-500', badge: 'border-violet-300 bg-violet-50 text-violet-700', timer: 'text-violet-600' }
+    } as const;
+
+    const style = statusStyles[status as keyof typeof statusStyles] || statusStyles.default;
+
     const openOrderDetails = async () => {
       setSelectedOrder(o);
       if (!isDesktopLayout) {
         setOrderDetailsOrder({ ...o, items: normalizeOrderItems(o.items) });
       }
-
       try {
         const response = await apiGet<{ success: boolean; data?: Order }>(`/api/orders/${encodeURIComponent(o.id)}`);
         if (!response?.success || !response.data) return;
         const detailedOrder = { ...response.data, items: normalizeOrderItems(response.data.items) };
-        if (!isDesktopLayout) {
-          setOrderDetailsOrder(detailedOrder);
-        }
+        if (!isDesktopLayout) setOrderDetailsOrder(detailedOrder);
         setSelectedOrder((prev) => (prev?.id === detailedOrder.id ? detailedOrder : prev));
       } catch (error) {
         console.warn('Failed to load full order details', error);
@@ -1648,213 +1635,51 @@ export default function TabletOrdersPage() {
             openOrderDetails();
           }
         }}
-        className={clsx(
-          'w-[340px] min-w-[340px] text-left rounded-xl border shadow-sm transition transform hover:brightness-105 hover:scale-[1.01] touch-manipulation overflow-hidden relative',
-          isArchived && 'opacity-65 saturate-75',
-          isSelected
-            ? 'border-[var(--tablet-info)] shadow-[0_0_0_1px_var(--tablet-info)] bg-[color-mix(in_srgb,var(--tablet-info)_8%,var(--tablet-card))]'
-            : 'border-[var(--tablet-border)] bg-[var(--tablet-card)]',
-        )}
-        style={{ animationDelay: `${laneIndex * 50}ms` }}
+        className={clsx('relative w-[320px] shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm', isSelected && 'ring-2 ring-blue-300', isArchived && 'opacity-60')}
       >
-        {/* Status colored left border strip */}
-        <div className={clsx(
-          'absolute left-0 top-0 bottom-0 w-1',
-          isOverdue ? 'bg-[var(--tablet-danger)]' :
-          isNew ? 'bg-[var(--tablet-danger)]' :
-          isPreparing ? 'bg-[var(--tablet-warning)]' :
-          isReady ? 'bg-[var(--tablet-success)]' : 'bg-[var(--tablet-border)]'
-        )} />
-
-        <div className="pl-4 pr-4 pt-3.5 pb-3.5">
-          {/* Top row: time ago + order metadata */}
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2 min-w-0">
-              <span className={clsx('text-xs font-semibold truncate', urgencyTextClass)}>
-                {timeAgo.text}
-              </span>
-              <span className={clsx('text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide', urgencyBadgeClass)}>
-                {urgencyLevel}
-              </span>
-              {isArchived && (
-                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-[var(--tablet-surface-alt)] text-[var(--tablet-muted)] uppercase tracking-wide">
-                  Archived
-                </span>
-              )}
+        <div className={clsx('absolute left-0 top-0 h-full w-1', style.rail)} />
+        <div className="border-b border-slate-200 px-5 py-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{statusLabel}</div>
+              <div className="text-2xl font-semibold text-slate-900">{o.customer_name || 'Guest'}</div>
             </div>
-            <div className="flex flex-col items-end gap-1 pl-2">
-              <div className="flex items-center gap-1.5">
-                <span className="text-base font-bold text-[var(--tablet-text)] tabular-nums">
-                  {formatMoney(o.total_amount)}
-                </span>
-                {hasPendingAction && (
-                  <span className="text-[10px] text-[var(--tablet-accent)] font-semibold px-1.5 py-0.5 rounded bg-[color-mix(in_srgb,var(--tablet-accent)_14%,transparent)]">
-                    ↻
-                  </span>
-                )}
+            {prepTimeData ? (
+              <div className="text-right">
+                <div className="text-xs text-slate-500">Ready in</div>
+                <div className={clsx('text-2xl font-semibold', style.timer)}>{prepTimeData.text.replace('Overdue by ', '-')}</div>
               </div>
-              <div className="flex items-center gap-2">
-                {isLatest && (
-                  <span className="text-xs font-semibold text-[var(--tablet-accent)] hidden sm:inline">Latest</span>
-                )}
-                {hasSyncFailure && (
-                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-[color-mix(in_srgb,var(--tablet-danger)_16%,transparent)] text-[var(--tablet-danger)]">
-                    Sync failed
-                  </span>
-                )}
-                {!hasSyncFailure && hasPendingAction && (
-                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-[color-mix(in_srgb,var(--tablet-accent)_16%,transparent)] text-[var(--tablet-accent)]">
-                    Sync pending
-                  </span>
-                )}
-                {isPreparing && prepTimeData && (
-                  <span className={clsx(
-                    'text-xs font-bold px-2 py-0.5 rounded-md inline-flex items-center gap-1',
-                    prepTimeColorClass,
-                    prepWarningLevel === 'critical' && 'prep-time-critical'
-                  )}>
-                    {prepTimeData.isOverdue && <AlertTriangle className="h-3 w-3" aria-hidden="true" />}
-                    {prepTimeData.text}
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Customer name - prominent */}
-          <div className="text-[1.1rem] font-bold text-[var(--tablet-text)] truncate mb-1">
-            {o.customer_name || 'Guest'}
-          </div>
-
-          {/* Items + channel info */}
-          <div className="flex items-center gap-2 text-xs text-[var(--tablet-muted)] mb-3 flex-wrap">
-            <span>{itemCount} item{itemCount !== 1 ? 's' : ''}</span>
-            {o.channel && (
-              <>
-                <span>·</span>
-                <span>{getChannelIcon(o.channel)} {o.channel}</span>
-              </>
-            )}
-            {o.order_type && o.order_type.toLowerCase() !== (o.channel || '').toLowerCase() && (
-              <>
-                <span>·</span>
-                <span className="capitalize">{o.order_type}</span>
-              </>
-            )}
-          </div>
-
-          {/* Prep time progress bar (single, no duplicate) */}
-          {isPreparing && prepTimeData && (
-            <div className="h-1.5 rounded-full bg-[var(--tablet-border)] overflow-hidden mb-3">
-              <div
-                className={clsx(
-                  'h-full rounded-full prep-time-progress-bar transition-all duration-1000',
-                  (prepTimeData.isOverdue && !isArchived) ? 'bg-[var(--tablet-danger)] opacity-70' :
-                  prepWarningLevel === 'critical' ? 'bg-[var(--tablet-danger)]' :
-                  prepWarningLevel === 'warning' ? 'bg-[var(--tablet-warning)]' :
-                  'bg-[var(--tablet-success)]'
-                )}
-                style={{ width: `${prepTimeData.isOverdue ? 100 : prepTimeData.percentRemaining}%` }}
-              />
-            </div>
-          )}
-
-          {hasSyncFailure && syncIssue && (
-            <div className="mb-3 rounded-md border border-[color-mix(in_srgb,var(--tablet-danger)_30%,transparent)] bg-[color-mix(in_srgb,var(--tablet-danger)_10%,transparent)] px-2.5 py-2">
-              <p className="text-[11px] font-semibold text-[var(--tablet-danger)]">
-                Status sync failed{syncIssue.permanentFailure ? ' (needs review)' : ''}
-              </p>
-              {syncIssue.lastError && (
-                <p className="mt-1 text-[11px] text-[var(--tablet-muted)] line-clamp-2">
-                  {syncIssue.lastError}
-                </p>
-              )}
-              <button
-                type="button"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  retryOrderSync(o.id);
-                }}
-                className="mt-2 inline-flex min-h-[32px] items-center rounded-md border border-[var(--tablet-danger)] px-2.5 py-1 text-xs font-semibold text-[var(--tablet-danger)] hover:bg-[color-mix(in_srgb,var(--tablet-danger)_8%,transparent)]"
-              >
-                Retry sync
-              </button>
-            </div>
-          )}
-
-          <div className="mt-3 pt-3 border-t border-[var(--tablet-border)] flex items-center gap-2">
-            {status === 'received' && (
-              <>
-                <button
-                  type="button"
-                  disabled={isActionBusy}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    openAcceptModal(o);
-                  }}
-                  className="flex-1 min-h-[44px] rounded-lg px-3 py-2 text-sm font-semibold text-[var(--tablet-accent-contrast)] bg-[var(--tablet-accent)] transition active:brightness-95 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:saturate-50"
-                >
-                  Accept
-                </button>
-                <button
-                  type="button"
-                  disabled={isActionBusy}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    declineOrder(o);
-                  }}
-                  className="flex-1 min-h-[44px] rounded-lg px-3 py-2 text-sm font-semibold border border-[var(--tablet-danger)] text-[var(--tablet-danger)] transition active:bg-[var(--tablet-danger)]/10 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Reject
-                </button>
-              </>
-            )}
-
-            {status === 'preparing' && (
-              <button
-                type="button"
-                disabled={isActionBusy}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  setStatus(o.id, ORDER_STATUS.READY);
-                }}
-                className="w-full min-h-[44px] rounded-lg px-3 py-2 text-sm font-semibold text-[var(--tablet-accent-contrast)] bg-[var(--tablet-success)] transition active:brightness-95 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:saturate-50"
-              >
-                Mark Ready
-              </button>
-            )}
-
-            {status === 'ready' && (
-              <>
-                <button
-                  type="button"
-                  disabled={isActionBusy}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    setStatus(o.id, ORDER_STATUS.COMPLETED);
-                  }}
-                  className="flex-1 min-h-[44px] rounded-lg px-3 py-2 text-sm font-semibold text-[var(--tablet-success-action-contrast)] bg-[var(--tablet-success-action)] transition active:bg-[var(--tablet-success-action-active)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tablet-success-action)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--tablet-card)] disabled:opacity-50 disabled:cursor-not-allowed disabled:saturate-50 disabled:active:scale-100"
-                >
-                  Complete
-                </button>
-                <button
-                  type="button"
-                  disabled={isActionBusy}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    setStatus(o.id, mapTabletStatusActionToOrderStatus(TABLET_STATUS_ACTION.PICKED_UP));
-                  }}
-                  className="flex-1 min-h-[44px] rounded-lg px-3 py-2 text-sm font-semibold border border-[var(--tablet-border-strong)] text-[var(--tablet-text)] transition active:bg-[color-mix(in_srgb,var(--tablet-surface-alt)_65%,var(--tablet-border-strong)_35%)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tablet-border-strong)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--tablet-card)] disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100"
-                >
-                  Picked Up
-                </button>
-              </>
+            ) : (
+              <div className={clsx('rounded border px-2 py-1 text-xs font-semibold', style.badge)}>{statusLabel}</div>
             )}
           </div>
         </div>
+        <div className="space-y-4 px-5 py-4">
+          <div className="font-medium text-slate-700">{o.channel || o.order_type || 'Order'}</div>
+          <div className="space-y-2 text-sm text-slate-600">
+            <div>🕒 {o.pickup_time ? `Pickup at ${new Date(o.pickup_time).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : 'Pickup time pending'}</div>
+            <div>👜 {itemCount} items</div>
+            <div>⏱️ {timeAgo.text} ago</div>
+          </div>
+          <div className="border-t border-slate-200 pt-3" />
+          {(o.items || []).slice(0, 3).map((item, index) => (
+            <div key={`${o.id}-${index}`} className="flex justify-between gap-3 text-sm">
+              <div className="flex gap-2">
+                <span className="font-semibold text-blue-600">{item.quantity || 1}</span>
+                <span className="font-medium text-slate-800">{item.name || 'Item'}</span>
+              </div>
+              <div className="font-semibold text-slate-900">{formatMoney(item.unit_price ?? item.price)}</div>
+            </div>
+          ))}
+          {o.special_instructions && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">{o.special_instructions}</div>
+          )}
+          {renderOrderActions(o, { stopPropagation: true, disabled: isActionBusy, className: 'pt-2' })}
+        </div>
       </div>
     );
-  }, [isDesktopLayout, isTabletLayout, now, orderSyncIssues, pendingActions, renderOrderActions, selectedOrder]);
+  }, [busyId, isDesktopLayout, now, pendingActions, renderOrderActions, selectedOrder]);
+
   const { soundEnabled, toggleSound } = useOrderAlerts(receivedOrders.length);
 
 
@@ -1987,16 +1812,17 @@ export default function TabletOrdersPage() {
                 <div className="flex items-center gap-3 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                   {[
                     { key: 'all' as const, label: 'All', count: activeOrders.length },
-                    { key: 'received' as const, label: 'New', count: receivedOrders.length },
-                    { key: 'preparing' as const, label: 'Preparing', count: preparingOrders.length },
-                    { key: 'ready' as const, label: 'Ready', count: readyOrders.length }
+                    { key: 'received' as const, label: 'Needs action', count: receivedOrders.length },
+                    { key: 'preparing' as const, label: 'In progress', count: preparingOrders.length },
+                    { key: 'ready' as const, label: 'Ready', count: readyOrders.length },
+                    { key: 'scheduled' as const, label: 'Scheduled', count: 0 }
                   ].map((segment) => {
-                    const isActive = statusFilter === segment.key;
+                    const isActive = segment.key !== 'scheduled' && statusFilter === segment.key;
                     return (
                       <button
                         key={segment.key}
                         type="button"
-                        onClick={() => setStatusFilter(segment.key)}
+                        onClick={() => segment.key !== 'scheduled' && setStatusFilter(segment.key as OrderFilter['status'])}
                         className={clsx(
                           'min-h-[48px] min-w-[104px] rounded-xl border px-4 text-sm font-semibold transition touch-manipulation',
                           isActive
