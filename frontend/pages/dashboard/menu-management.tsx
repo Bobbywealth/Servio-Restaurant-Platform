@@ -206,6 +206,9 @@ const MenuManagement: React.FC = () => {
     selectionType: 'single' as 'single' | 'multiple' | 'quantity'
   });
   const [newModifierOptionDrafts, setNewModifierOptionDrafts] = useState<Record<string, { name: string; description: string; priceModifier: string }>>({});
+  const [activeTab, setActiveTab] = useState<'overview' | 'modifiers'>('overview');
+  const [filterType, setFilterType] = useState<'all' | 'available' | 'unavailable'>('all');
+  const [addDropdownOpen, setAddDropdownOpen] = useState(false);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -1598,13 +1601,13 @@ const MenuManagement: React.FC = () => {
     return categories.filter(category => {
       // Show all categories in the management view (including inactive ones)
       // so staff can add/edit items in any category. is_active only controls public visibility.
-      if (selectedCategory !== 'all' && category.id !== selectedCategory) return false;
-
-      // Don't filter categories by search term - only filter items within categories
-      // This allows searching for items even if the category name doesn't match
-      return true;
+      if (filterType === 'all') return true;
+      // When filtering by availability, only show categories that have matching items
+      return category.items.some(item =>
+        filterType === 'available' ? item.is_available : !item.is_available
+      );
     });
-  }, [categories, selectedCategory]);
+  }, [categories, filterType]);
 
   const totalItems = useMemo(() =>
     categories.reduce((sum, cat) => sum + (cat.item_count || 0), 0),
@@ -1624,942 +1627,282 @@ const MenuManagement: React.FC = () => {
         <title>Menu Management - Servio</title>
       </Head>
 
-      <div className="min-h-screen bg-surface-50 dark:bg-surface-900">
-        {/* Header - Mobile Optimized */}
-        <div className="bg-white dark:bg-surface-800 border-b border-surface-200 dark:border-surface-700">
-          <div className="px-4 sm:px-6 py-4">
-            {/* Title and Primary Action Row */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-              <div className="min-w-0">
-                <h1 className="text-xl sm:text-2xl font-bold text-surface-900 dark:text-white">
-                  Menu Manager
-                </h1>
-                <p className="text-xs sm:text-sm text-surface-600 dark:text-surface-400 mt-1">
-                  {user?.name}&apos;s Restaurant • {totalItems} items • {availableItems} available
-                </p>
-              </div>
-
-              {/* Primary action - always visible */}
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+        {/* ── TOP HEADER: Title + Tabs ── */}
+        <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+          <div className="px-4 sm:px-6">
+            {/* Title */}
+            <h1 className="pt-5 text-2xl font-bold text-gray-900 dark:text-white">Menu Manager</h1>
+            {/* Overview / Modifiers tabs */}
+            <div className="flex mt-3">
               <button
-                onClick={() => openAddItemModal()}
-                className="flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 bg-servio-red-600 hover:bg-servio-red-700 active:bg-servio-red-800 text-white rounded-lg transition-colors min-h-[44px] touch-manipulation font-medium sm:shrink-0"
+                className={`pb-3 px-1 mr-6 text-sm font-medium border-b-2 transition-colors ${
+                  activeTab === 'overview'
+                    ? 'border-gray-900 dark:border-white text-gray-900 dark:text-white'
+                    : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                }`}
+                onClick={() => setActiveTab('overview')}
               >
-                <Plus className="w-4 h-4" />
-                Add Item
+                Overview
+              </button>
+              <button
+                className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors ${
+                  activeTab === 'modifiers'
+                    ? 'border-gray-900 dark:border-white text-gray-900 dark:text-white'
+                    : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                }`}
+                onClick={() => setActiveTab('modifiers')}
+              >
+                Modifiers
               </button>
             </div>
 
-            {/* Secondary Actions - Scrollable on Mobile */}
-            <div className="mt-3 -mx-4 sm:mx-0 px-4 sm:px-0 overflow-x-auto scrollbar-hide">
-              <div className="flex items-center gap-2 sm:gap-3 min-w-max sm:min-w-0 sm:flex-wrap">
-                <button
-                  onClick={handlePreviewMenu}
-                  className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-surface-100 hover:bg-surface-200 active:bg-surface-300 dark:bg-surface-700 dark:hover:bg-surface-600 rounded-lg transition-colors min-h-[40px] touch-manipulation text-sm whitespace-nowrap"
-                >
-                  <Eye className="w-4 h-4 shrink-0" />
-                  <span className="hidden xs:inline">Preview</span>
-                  <span className="xs:hidden">Preview</span>
-                </button>
-
-                <button
-                  onClick={openAddCategoryModal}
-                  className="flex items-center gap-2 px-3 sm:px-4 py-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 active:bg-gray-200 dark:text-gray-400 dark:hover:text-white dark:hover:bg-gray-700 rounded-lg transition-colors min-h-[40px] touch-manipulation text-sm whitespace-nowrap"
-                >
-                  <Settings className="w-4 h-4 shrink-0" />
-                  <span className="hidden sm:inline">Add Category</span>
-                  <span className="sm:hidden">Category</span>
-                </button>
-
-                <button
-                  onClick={() => setShowModifierManager(true)}
-                  className="flex items-center gap-2 px-3 sm:px-4 py-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 active:bg-gray-200 dark:text-gray-400 dark:hover:text-white dark:hover:bg-gray-700 rounded-lg transition-colors min-h-[40px] touch-manipulation text-sm whitespace-nowrap"
-                >
-                  <Tag className="w-4 h-4 shrink-0" />
-                  <span className="hidden sm:inline">Manage Modifiers</span>
-                  <span className="sm:hidden">Modifiers</span>
-                </button>
-
-                {/* Import button with dropdown indicator */}
-                <div className="flex items-center gap-1">
-                  <label className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg transition-colors cursor-pointer min-h-[40px] touch-manipulation text-sm whitespace-nowrap ${
-                    isImporting
-                      ? 'bg-gray-200 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
-                      : 'bg-gray-100 hover:bg-gray-200 active:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200'
-                  }`}>
-                    <Upload className="w-4 h-4 shrink-0" />
-                    <span className="hidden sm:inline">{isImporting ? 'Importing…' : 'Import'}</span>
-                    <span className="sm:hidden">{isImporting ? '...' : 'Import'}</span>
-                    <input
-                      type="file"
-                      accept=".csv,.xls,.xlsx,.pdf,.docx"
-                      className="hidden"
-                      disabled={isImporting}
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          handleImportFile(file);
-                        }
-                        e.currentTarget.value = '';
-                      }}
-                    />
-                  </label>
-                </div>
-
-                {/* AI checkbox - hidden on smallest screens */}
-                <label className="hidden sm:flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200 whitespace-nowrap min-h-[40px]">
-                  <input
-                    type="checkbox"
-                    checked={useAiImport}
-                    onChange={(e) => setUseAiImport(e.target.checked)}
-                    disabled={isImporting}
-                    className="w-4 h-4"
-                  />
-                  AI Import
-                </label>
-              </div>
-            </div>
-
-            {/* Public ordering link (shareable) */}
-            <div className="mt-4">
-              <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
-                <div className="min-w-0">
-                  <div className="text-xs font-semibold tracking-widest uppercase text-gray-500 dark:text-gray-400">
-                    Public ordering link
-                  </div>
-                  <div className="mt-2 flex items-center gap-2">
-                    <input
-                      id="public-order-url"
-                      readOnly
-                      value={publicOrderUrl || (restaurantSlug ? `/r/${restaurantSlug}` : '')}
-                      placeholder="No restaurant slug found"
-                      className="w-full lg:w-[520px] px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 font-mono text-sm"
-                    />
-                  </div>
-                  <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                    {restaurantSlug ? 'Share this link with customers to place orders for your menu.' : 'Set your public ordering slug in Restaurant Profile first.'}
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <button
-                    onClick={() => window.location.href = '/dashboard/restaurant-profile'}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white border border-gray-200 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-700 dark:hover:bg-gray-700 transition-colors"
-                  >
-                    Edit slug
-                  </button>
-                  <button
-                    onClick={copyPublicLink}
-                    disabled={!publicOrderUrl}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    title={publicOrderUrl ? 'Copy link' : 'Link unavailable'}
-                  >
-                    <Copy className="w-4 h-4" />
-                    Copy
-                  </button>
-                  <a
-                    href={publicOrderUrl || '#'}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={(e) => {
-                      if (!publicOrderUrl) e.preventDefault();
-                    }}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors ${!publicOrderUrl ? 'opacity-50 pointer-events-none' : ''}`}
-                    title="Open public menu"
-                  >
-                    <ExternalLink className="w-4 h-4" />
-                    Open
-                  </a>
-                </div>
-              </div>
-            </div>
-
-            {/* Search and Filters */}
-            <div className="flex items-center gap-4 mt-6">
-              <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-                <input
-                  type="text"
-                  placeholder="Search for an item"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                />
-              </div>
-              
-              <div className="hidden md:block text-sm text-gray-500 dark:text-gray-400">
-                Use the category sidebar to manage hierarchy.
-              </div>
-            </div>
           </div>
         </div>
 
-        {/* Main Content - Mobile Optimized */}
-        <div className="p-3 sm:p-6">
-          {loading ? (
-            <div className="text-center py-12">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600 mx-auto"></div>
-              <p className="text-gray-500 mt-2">Loading menu...</p>
-            </div>
-          ) : (
-            <div className="flex flex-col md:flex-row gap-3 lg:gap-4 xl:gap-6 h-full">
-              {/* Category Sidebar - Collapsible on mobile */}
-              {(!isMobileMode || mobileStep === 1) && (
-                <CategorySidebar
-                  categories={categories.map((c) => ({
-                    id: c.id,
-                    name: c.name,
-                    description: c.description,
-                    sort_order: c.sort_order,
-                    is_active: c.is_active,
-                    is_hidden: Boolean((c as any).is_hidden),
-                    item_count: c.item_count
-                  }))}
-                  selectedCategoryId={activeCategoryId}
-                  onSelectCategory={(id) => {
-                    requestSelectCategory(id);
-                  }}
-                  onAddCategory={() => setShowAddCategoryModal(true)}
-                  onToggleHidden={handleToggleCategoryHidden}
-                  onReorderCategories={handleReorderCategories}
-                  onDeleteCategory={handleDeleteCategory}
-                />
-              )}
-
-              {/* Middle pane: Items */}
-              {(!isMobileMode || mobileStep === 1) && (
-                <div className="flex-1 min-w-0 lg:min-w-[280px] bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 flex flex-col">
-                <div className="p-3 sm:p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between gap-2 sm:gap-3 shrink-0">
-                  <div className="min-w-0 flex-1">
-                    <div className="text-base sm:text-sm font-bold text-gray-900 dark:text-white truncate">
-                      {activeCategory ? activeCategory.name : 'Items'}
-                    </div>
-                    <div className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
-                      {activeCategory ? `${activeCategory.items?.length || 0} items` : 'Select a category to view items.'}
-                    </div>
-                  </div>
+        {activeTab === 'overview' ? (
+          <>
+            {/* ── SUB-HEADER: Restaurant name + action buttons ── */}
+            <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+              <div className="px-4 sm:px-6 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <button className="inline-flex items-center gap-2 font-bold text-base sm:text-lg text-gray-900 dark:text-white text-left">
+                  {(user as any)?.restaurant?.name || user?.name || 'My Restaurant'}
+                  <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" />
+                </button>
+                <div className="flex items-center gap-2">
                   <button
-                    type="button"
-                    className="inline-flex items-center justify-center gap-1 sm:gap-2 rounded-lg bg-red-600 hover:bg-red-700 active:bg-red-800 text-white px-4 py-2.5 sm:px-3 sm:py-2 text-sm font-bold disabled:opacity-50 min-h-[44px] touch-manipulation"
-                    disabled={!activeCategoryId}
-                    onClick={() => openAddItemModal(activeCategoryId || undefined)}
+                    onClick={openAddCategoryModal}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
                   >
-                    <Plus className="w-5 h-5 sm:w-4 sm:h-4" />
-                    <span className="hidden sm:inline">Add Item</span>
+                    <Settings className="w-4 h-4" />
+                    <span>Menu Settings</span>
+                  </button>
+                  <button
+                    onClick={handlePreviewMenu}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                  >
+                    <Eye className="w-4 h-4" />
+                    <span>Preview Menu</span>
                   </button>
                 </div>
+              </div>
+            </div>
 
-                {!activeCategory ? (
-                  <div className="p-8 text-center text-gray-500 dark:text-gray-400">
-                    No category selected.
+            {/* ── TOOLBAR: Search + Filter + Add ── */}
+            <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+              <div className="px-4 sm:px-6 py-3 flex items-center gap-3">
+                <div className="flex-1 relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4 pointer-events-none" />
+                  <input
+                    type="text"
+                    placeholder="Search for an item"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full pl-9 pr-4 py-2 border border-gray-200 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-red-500"
+                  />
+                </div>
+                <div className="relative">
+                  <select
+                    value={filterType}
+                    onChange={(e) => setFilterType(e.target.value as 'all' | 'available' | 'unavailable')}
+                    className="appearance-none border border-gray-200 dark:border-gray-600 rounded-lg pl-3 pr-8 py-2 text-sm bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-red-500 cursor-pointer"
+                  >
+                    <option value="all">All items</option>
+                    <option value="available">In stock</option>
+                    <option value="unavailable">Out of stock</option>
+                  </select>
+                  <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                </div>
+                <div className="relative">
+                  <button
+                    onClick={() => setAddDropdownOpen((v) => !v)}
+                    className="inline-flex items-center gap-1.5 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white text-sm font-semibold px-4 py-2 rounded-full transition-colors"
+                  >
+                    Add
+                    <ChevronDown className="w-4 h-4" />
+                  </button>
+                  {addDropdownOpen && (
+                    <>
+                      <div className="fixed inset-0 z-30" onClick={() => setAddDropdownOpen(false)} />
+                      <div className="absolute right-0 top-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-lg rounded-lg py-1 z-40 min-w-[160px]">
+                        <button
+                          className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
+                          onClick={() => { openAddItemModal(); setAddDropdownOpen(false); }}
+                        >
+                          Add Item
+                        </button>
+                        <button
+                          className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
+                          onClick={() => { openAddCategoryModal(); setAddDropdownOpen(false); }}
+                        >
+                          Add Category
+                        </button>
+                        <label className={`w-full flex items-center gap-2 px-4 py-2 text-sm cursor-pointer ${isImporting ? 'text-gray-400' : 'text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700'}`}>
+                          <Upload className="w-3.5 h-3.5" />
+                          {isImporting ? 'Importing...' : 'Import File'}
+                          <input
+                            type="file"
+                            accept=".csv,.xls,.xlsx,.pdf,.docx"
+                            className="hidden"
+                            disabled={isImporting}
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) { handleImportFile(file); }
+                              e.currentTarget.value = '';
+                              setAddDropdownOpen(false);
+                            }}
+                          />
+                        </label>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* ── MAIN CONTENT: Category Accordion List ── */}
+            <div className="px-4 sm:px-6 py-4 space-y-2">
+              {loading ? (
+                <div className="text-center py-12">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600 mx-auto" />
+                  <p className="text-gray-500 dark:text-gray-400 mt-2 text-sm">Loading menu...</p>
+                </div>
+              ) : filteredCategories.length === 0 ? (
+                <div className="text-center py-16">
+                  <p className="text-gray-500 dark:text-gray-400 font-medium">No categories yet.</p>
+                  <button
+                    onClick={openAddCategoryModal}
+                    className="mt-3 inline-flex items-center gap-2 text-sm text-red-600 hover:text-red-700 font-semibold"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add your first category
+                  </button>
+                </div>
+              ) : (
+                filteredCategories.map((category) => (
+                  <CategorySection
+                    key={category.id}
+                    category={category}
+                    isExpanded={expandedCategories.has(category.id)}
+                    onToggle={() => setExpandedCategories((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(category.id)) next.delete(category.id);
+                      else next.add(category.id);
+                      return next;
+                    })}
+                    searchTerm={searchTerm}
+                    filterType={filterType}
+                    onAddItem={openAddItemModal}
+                    onEditItem={openEditItemModal}
+                    onToggleAvailability={handleToggleAvailability}
+                    onDeleteItem={handleDeleteItem}
+                    deletingItemId={deletingItemId}
+                    onReorderItems={handleReorderItems}
+                  />
+                ))
+              )}
+            </div>
+          </>
+        ) : (
+          /* ── MODIFIERS TAB ── */
+          <div>
+            <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+              <div className="px-4 sm:px-6 py-3 flex items-center gap-3">
+                <div className="flex-1 relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4 pointer-events-none" />
+                  <input
+                    type="text"
+                    placeholder="Search for a modifier"
+                    className="w-full pl-9 pr-4 py-2 border border-gray-200 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-red-500"
+                    readOnly
+                  />
+                </div>
+                <button
+                  onClick={() => setShowModifierManager(true)}
+                  className="inline-flex items-center gap-1.5 bg-red-600 hover:bg-red-700 text-white text-sm font-semibold px-4 py-2 rounded-full transition-colors"
+                >
+                  <Plus className="w-4 h-4" />
+                  New Modifier
+                </button>
+              </div>
+            </div>
+
+            <div className="px-4 sm:px-6 py-4">
+              {modifierGroups.length === 0 ? (
+                <div className="text-center py-16">
+                  <p className="text-gray-500 dark:text-gray-400 font-medium">No modifier groups yet.</p>
+                  <button
+                    onClick={() => setShowModifierManager(true)}
+                    className="mt-3 inline-flex items-center gap-2 text-sm text-red-600 hover:text-red-700 font-semibold"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Create your first modifier
+                  </button>
+                </div>
+              ) : (
+                <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+                  <div className="grid grid-cols-12 px-4 py-3 border-b border-gray-100 dark:border-gray-700 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+                    <div className="col-span-4">Name</div>
+                    <div className="col-span-4 hidden sm:block">Options</div>
+                    <div className="col-span-2 hidden lg:block">Used In</div>
+                    <div className="col-span-8 sm:col-span-4 lg:col-span-2 text-right">Actions</div>
                   </div>
-                ) : (
-                  (() => {
-                    const items =
-                      (activeCategory.items || []).filter((item) => {
-                        if (!searchTerm.trim()) return true;
-                        const q = searchTerm.toLowerCase();
-                        return (
-                          item.name.toLowerCase().includes(q) ||
-                          (item.description || '').toLowerCase().includes(q)
-                        );
-                      }) || [];
-                    if (items.length === 0) {
-                      return (
-                        <div className="p-8 text-center">
-                          <div className="text-gray-600 dark:text-gray-300 font-semibold">This category has no items.</div>
+                  {modifierGroups.map((group) => {
+                    const options = (modifierOptions[group.id] || group.options || []) as ModifierOption[];
+                    const optionNames = options.slice(0, 3).map((o) => o.name).join(', ');
+                    const optionSuffix = options.length > 3 ? ` +${options.length - 3} more` : '';
+                    return (
+                      <div
+                        key={group.id}
+                        className="grid grid-cols-12 px-4 py-3 border-b border-gray-100 dark:border-gray-700 last:border-b-0 hover:bg-gray-50 dark:hover:bg-gray-700/50 items-center"
+                      >
+                        <div className="col-span-4 flex items-center gap-2 min-w-0">
+                          <span className="w-2 h-2 rounded-full bg-green-500 shrink-0" />
+                          <span className="font-medium text-gray-900 dark:text-white text-sm truncate">{group.name}</span>
+                        </div>
+                        <div className="col-span-4 hidden sm:block text-sm text-gray-500 dark:text-gray-400 truncate">
+                          {optionNames}{optionSuffix}
+                        </div>
+                        <div className="col-span-2 hidden lg:block text-sm text-gray-500 dark:text-gray-400 truncate">
+                          —
+                        </div>
+                        <div className="col-span-8 sm:col-span-4 lg:col-span-2 flex items-center justify-end gap-1">
                           <button
-                            type="button"
-                            className="mt-2 text-sm font-bold text-red-600 hover:text-red-700"
-                            onClick={() => openAddItemModal(activeCategory.id)}
+                            onClick={() => { setEditingModifierGroup(group); setShowModifierManager(true); }}
+                            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
+                            title="Edit modifier"
                           >
-                            Add your first item
+                            <Edit3 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={async () => {
+                              if (!confirm('Delete this modifier group?')) return;
+                              try {
+                                await api.delete(`/api/restaurants/${(user as any)?.restaurantId}/modifier-groups/${group.id}`);
+                                toast.success('Modifier group deleted');
+                                loadModifierGroups();
+                              } catch {
+                                toast.error('Failed to delete modifier group');
+                              }
+                            }}
+                            className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
+                            title="Delete modifier"
+                          >
+                            <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
-                      );
-                    }
-                    const orderedItems = items
-                      .slice()
-                      .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
-
-                    return (
-                      <div className="flex-1 overflow-auto -mx-3 sm:mx-0 max-h-[calc(100vh-320px)] sm:max-h-[calc(100vh-300px)]">
-                        {isMobileMode ? (
-                          <div className="space-y-2 p-3">
-                            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-900/20 dark:text-amber-200">
-                              Desktop drag-and-drop is disabled on touch devices. Use the move up/down actions in each card.
-                            </div>
-                            {orderedItems.map((item, index) => {
-                              const expanded = expandedMobileItems.has(item.id);
-                              const itemPrice = Number(item.fromPrice ?? item.price ?? 0);
-                              return (
-                                <div key={item.id} className="rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
-                                  <button
-                                    type="button"
-                                    className="w-full p-3 flex items-start justify-between gap-3 text-left"
-                                    onClick={() => {
-                                      setExpandedMobileItems((prev) => {
-                                        const next = new Set(prev);
-                                        if (next.has(item.id)) next.delete(item.id);
-                                        else next.add(item.id);
-                                        return next;
-                                      });
-                                    }}
-                                  >
-                                    <div className="min-w-0">
-                                      <div className="font-semibold text-gray-900 dark:text-white truncate">{item.name}</div>
-                                      <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                                        {Array.isArray(item.sizes) && item.sizes.length > 0 ? `From ${formatMoney(itemPrice)}` : formatMoney(itemPrice)}
-                                      </div>
-                                    </div>
-                                    {expanded ? <ChevronUp className="h-4 w-4 text-gray-500" /> : <ChevronDown className="h-4 w-4 text-gray-500" />}
-                                  </button>
-
-                                  {expanded ? (
-                                    <div className="px-3 pb-3 space-y-2">
-                                      <div className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2">
-                                        {item.description || 'No description'}
-                                      </div>
-                                      <div className="text-xs font-medium text-gray-600 dark:text-gray-300">
-                                        {modifierSummaryForItem(item)}
-                                      </div>
-                                      <div className="flex items-center gap-2">
-                                        <button
-                                          type="button"
-                                          className="px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-semibold disabled:opacity-40 dark:border-gray-600"
-                                          disabled={index === 0 || Boolean(searchTerm.trim())}
-                                          onClick={() => handleMoveItem(activeCategory.id, item.id, 'up')}
-                                        >
-                                          Move up
-                                        </button>
-                                        <button
-                                          type="button"
-                                          className="px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-semibold disabled:opacity-40 dark:border-gray-600"
-                                          disabled={index === orderedItems.length - 1 || Boolean(searchTerm.trim())}
-                                          onClick={() => handleMoveItem(activeCategory.id, item.id, 'down')}
-                                        >
-                                          Move down
-                                        </button>
-                                        <button
-                                          type="button"
-                                          className="ml-auto px-3 py-1.5 rounded-lg bg-red-600 text-white text-xs font-semibold"
-                                          onClick={() => requestSelectItem(item)}
-                                        >
-                                          Edit
-                                        </button>
-                                      </div>
-                                    </div>
-                                  ) : null}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        ) : (
-                          <table className="w-full text-sm min-w-[400px] sm:min-w-0 table-fixed">
-                            <thead className="sticky top-0 bg-gray-50 dark:bg-gray-900/40 z-10">
-                              <tr className="text-left text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                                <th className="px-3 sm:px-4 py-3">Item</th>
-                                <th className="hidden sm:table-cell px-4 py-3">Price</th>
-                                <th className="px-3 sm:px-4 py-3">Status</th>
-                                <th className="hidden md:table-cell px-4 py-3">Modifiers</th>
-                                <th className="px-3 sm:px-4 py-3 text-right">Actions</th>
-                              </tr>
-                            </thead>
-                            <DndContext
-                              sensors={itemTableSensors}
-                              onDragEnd={(event) => {
-                                if (searchTerm.trim()) return;
-                                const { active, over } = event;
-                                if (!over) return;
-                                const activeId = String(active.id);
-                                const overId = String(over.id);
-                                if (activeId === overId) return;
-                                const ids = orderedItems.map((i) => String(i.id));
-                                const oldIndex = ids.indexOf(activeId);
-                                const newIndex = ids.indexOf(overId);
-                                if (oldIndex === -1 || newIndex === -1) return;
-                                const next = arrayMove(ids, oldIndex, newIndex);
-                                handleReorderItems(activeCategory.id, next);
-                              }}
-                            >
-                              <SortableContext
-                                items={orderedItems.map((i) => String(i.id))}
-                                strategy={verticalListSortingStrategy}
-                              >
-                                <tbody>
-                                  {orderedItems.map((item, index) => (
-                                    <SortableItemTableRow
-                                      key={item.id}
-                                      item={item}
-                                      selected={selectedItemId === item.id}
-                                      disableDrag={Boolean(searchTerm.trim())}
-                                      onSelect={() => requestSelectItem(item)}
-                                      onToggleAvailability={() => handleToggleAvailability(item)}
-                                      onDelete={() => handleDeleteItem(item)}
-                                      isDeleting={deletingItemId === item.id}
-                                      modifierSummary={modifierSummaryForItem(item)}
-                                      formatMoney={formatMoney}
-                                      showExplicitReorder={false}
-                                      canMoveUp={index > 0}
-                                      canMoveDown={index < orderedItems.length - 1}
-                                      onMoveUp={() => handleMoveItem(activeCategory.id, item.id, 'up')}
-                                      onMoveDown={() => handleMoveItem(activeCategory.id, item.id, 'down')}
-                                    />
-                                  ))}
-                                </tbody>
-                              </SortableContext>
-                            </DndContext>
-                          </table>
-                        )}
-                        {searchTerm.trim() ? (
-                          <div className="px-4 py-2 text-xs text-gray-500 dark:text-gray-400">
-                            Reordering is disabled while searching.
-                          </div>
-                        ) : null}
                       </div>
                     );
-                  })()
-                )}
+                  })}
                 </div>
               )}
-
-              {/* Right pane: Item editor - Only shows when item selected */}
-              <AnimatePresence>
-                {editingItem && selectedItemId && (!isMobileMode || mobileStep > 1) && (
-                  <motion.div
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: 20 }}
-                    transition={{ duration: 0.2 }}
-                    className="w-full lg:w-[340px] xl:w-[400px] shrink-0 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 lg:max-h-[calc(100vh-200px)] lg:sticky lg:top-4"
-                  >
-                    <div className="flex flex-col h-full max-h-[70vh] lg:max-h-none">
-                      {/* Editor Header */}
-                      <div className="p-3 sm:p-4 border-b border-gray-200 dark:border-gray-700 sticky top-0 bg-white dark:bg-gray-800 z-10">
-                        <div className="flex items-start justify-between gap-2 sm:gap-3">
-                          <div className="min-w-0 flex-1">
-                            <div className="text-base sm:text-lg font-black text-gray-900 dark:text-white truncate">{editingItem.name}</div>
-                            <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                              {activeCategory?.name ? `Category: ${activeCategory.name}` : ''}
-                            </div>
-                            {isMobileMode ? (
-                              <div className="mt-2 flex items-center gap-2">
-                                <button
-                                  type="button"
-                                  className="px-2 py-1 rounded-md border border-gray-200 text-xs font-semibold dark:border-gray-600"
-                                  onClick={() => setMobileStep(1)}
-                                >
-                                  Back to list
-                                </button>
-                                {mobileStep === 2 ? (
-                                  <button
-                                    type="button"
-                                    className="px-2 py-1 rounded-md bg-red-600 text-white text-xs font-semibold"
-                                    onClick={() => {
-                                      setEditorTab('modifiers');
-                                      setMobileStep(3);
-                                    }}
-                                  >
-                                    Modifiers & options
-                                  </button>
-                                ) : (
-                                  <button
-                                    type="button"
-                                    className="px-2 py-1 rounded-md border border-gray-200 text-xs font-semibold dark:border-gray-600"
-                                    onClick={() => setMobileStep(2)}
-                                  >
-                                    Item details
-                                  </button>
-                                )}
-                              </div>
-                            ) : null}
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <button
-                              type="button"
-                              className="inline-flex shrink-0 items-center justify-center gap-1 sm:gap-2 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 active:bg-red-100 px-2 sm:px-3 py-2 text-xs sm:text-sm font-bold disabled:opacity-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-900/20 min-h-[40px] touch-manipulation"
-                              onClick={() => handleDeleteItem(editingItem)}
-                              disabled={deletingItemId === editingItem.id}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                              <span className="hidden sm:inline">{deletingItemId === editingItem.id ? 'Deleting…' : 'Delete'}</span>
-                            </button>
-                            <button
-                              type="button"
-                              className="inline-flex shrink-0 items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 active:bg-gray-200 p-2 dark:hover:text-gray-200 dark:hover:bg-gray-700 min-h-[40px] min-w-[40px] touch-manipulation"
-                              onClick={() => {
-                                editorClosedByUserRef.current = true;
-                                setSelectedItemId(null);
-                                setEditingItem(null);
-                                setMobileStep(1);
-                              }}
-                              title="Close editor"
-                            >
-                              <X className="h-5 w-5" />
-                            </button>
-                          </div>
-                        </div>
-
-                      {isMobileMode ? (
-                        <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800 dark:border-blue-900/50 dark:bg-blue-900/20 dark:text-blue-200">
-                          Step {mobileStep} of 3 · Use simplified mobile actions for item details and modifiers.
-                        </div>
-                      ) : (
-                        <div className="mt-3 -mx-3 sm:mx-0 px-3 sm:px-0 overflow-x-auto scrollbar-hide">
-                          <div className="flex items-center gap-1.5 sm:gap-2 min-w-max sm:min-w-0">
-                            {(['basics', 'availability', 'modifiers', 'preview'] as const).map((tab) => (
-                              <button
-                                key={tab}
-                                type="button"
-                                className={clsx(
-                                  'rounded-lg px-2.5 sm:px-3 py-2 text-xs sm:text-sm font-bold whitespace-nowrap min-h-[36px] sm:min-h-[40px] touch-manipulation',
-                                  effectiveEditorTab === tab
-                                    ? 'bg-red-600 text-white'
-                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200 active:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600'
-                                )}
-                                onClick={() => setEditorTab(tab)}
-                              >
-                                {tab === 'basics'
-                                  ? 'Basics'
-                                  : tab === 'availability'
-                                    ? 'Avail.'
-                                    : tab === 'modifiers'
-                                      ? 'Mods'
-                                      : 'Preview'}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Editor Content - Scrollable */}
-                    <div className="p-3 sm:p-4 overflow-auto flex-1">
-                      {effectiveEditorTab === 'basics' ? (
-                        <div className="space-y-4">
-                          <div>
-                            <label className="block text-sm font-bold text-gray-700 dark:text-gray-300">Name</label>
-                            <input
-                              type="text"
-                              value={editItem.name}
-                              onChange={(e) => {
-                                setBasicsDirty(true);
-                                setEditItem((prev) => ({ ...prev, name: e.target.value }));
-                              }}
-                              className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                            />
-                          </div>
-
-                          <div>
-                            <div className="flex items-center justify-between">
-                              <label className="block text-sm font-bold text-gray-700 dark:text-gray-300">Description</label>
-                              <button
-                                type="button"
-                                onClick={handleGenerateEditDescription}
-                                disabled={isGeneratingEditDescription}
-                                className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 hover:text-red-700 disabled:text-gray-400"
-                              >
-                                <Sparkles className="w-3 h-3" />
-                                {isGeneratingEditDescription ? 'Generating...' : 'Generate'}
-                              </button>
-                            </div>
-                            <textarea
-                              value={editItem.description}
-                              onChange={(e) => {
-                                setBasicsDirty(true);
-                                setEditItem((prev) => ({ ...prev, description: e.target.value }));
-                              }}
-                              className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                              rows={3}
-                            />
-                          </div>
-
-                          <div className="grid grid-cols-2 gap-3">
-                            <div>
-                              <label className="block text-sm font-bold text-gray-700 dark:text-gray-300">
-                                Base Price
-                                {editItemSizes.length > 0 && (
-                                  <span className="block text-xs font-normal text-amber-600 dark:text-amber-400">
-                                    (Not used - sizes override)
-                                  </span>
-                                )}
-                              </label>
-                              <input
-                                type="number"
-                                step="0.01"
-                                value={editItem.price}
-                                onChange={(e) => {
-                                  setBasicsDirty(true);
-                                  setEditItem((prev) => ({ ...prev, price: e.target.value }));
-                                }}
-                                className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                              />
-                              {editItemSizes.length === 0 && (
-                                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                                  Price customers pay.
-                                </p>
-                              )}
-                            </div>
-                            <div>
-                              <label className="block text-sm font-bold text-gray-700 dark:text-gray-300">Prep time (mins)</label>
-                              <input
-                                type="number"
-                                value={editItem.preparationTime}
-                                onChange={(e) => {
-                                  setBasicsDirty(true);
-                                  setEditItem((prev) => ({ ...prev, preparationTime: e.target.value }));
-                                }}
-                                className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                              />
-                            </div>
-                          </div>
-
-                          <div>
-                            <label className="block text-sm font-bold text-gray-700 dark:text-gray-300">Category</label>
-                            <select
-                              value={editItem.categoryId}
-                              onChange={(e) => {
-                                setBasicsDirty(true);
-                                setEditItem((prev) => ({ ...prev, categoryId: e.target.value }));
-                              }}
-                              className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                            >
-                              <option value="">Select category</option>
-                              {categories.map((category) => (
-                                <option key={category.id} value={category.id}>
-                                  {category.name}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-
-                          <ItemSizeEditor
-                            sizes={editItemSizes}
-                            onCreate={async (input) => {
-                              await api.post(`/api/menu/items/${encodeURIComponent(editItem.id)}/sizes`, {
-                                sizeName: input.sizeName,
-                                price: input.price,
-                                isPreselected: input.isPreselected,
-                                displayOrder: input.displayOrder
-                              });
-                              await reloadEditItemSizes(editItem.id);
-                            }}
-                            onUpdate={async (sizeId, patch) => {
-                              await api.put(`/api/menu/items/${encodeURIComponent(editItem.id)}/sizes/${encodeURIComponent(sizeId)}`, patch);
-                              await reloadEditItemSizes(editItem.id);
-                            }}
-                            onDelete={async (sizeId) => {
-                              await api.delete(`/api/menu/items/${encodeURIComponent(editItem.id)}/sizes/${encodeURIComponent(sizeId)}`);
-                              await reloadEditItemSizes(editItem.id);
-                            }}
-                          />
-
-                          <div>
-                            <label className="block text-sm font-bold text-gray-700 dark:text-gray-300">Images</label>
-                            <div className="mt-1 flex flex-col gap-2">
-                              {editItemExistingImages.length > 0 && (
-                                <div className="grid grid-cols-3 gap-2">
-                                  {editItemExistingImages.map((img, idx) => (
-                                    <div key={img} className="relative group rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600">
-                                      <img
-                                        src={resolveMediaUrl(img)}
-                                        alt={`Image ${idx + 1}`}
-                                        className="w-full h-20 object-cover"
-                                      />
-                                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1">
-                                        <label className="p-1 bg-white/90 rounded cursor-pointer hover:bg-white" title="Replace image">
-                                          <Upload className="w-3.5 h-3.5 text-gray-700" />
-                                          <input
-                                            type="file"
-                                            accept="image/*"
-                                            className="hidden"
-                                            onChange={(e) => {
-                                              const file = e.target.files?.[0];
-                                              if (!file) return;
-                                              const valid = filterImageFiles([file]);
-                                              if (valid.length === 0) return;
-                                              setBasicsDirty(true);
-                                              setEditItemExistingImages((prev) => prev.filter((_, i) => i !== idx));
-                                              setEditItemImages((prev) => [...prev, valid[0]]);
-                                            }}
-                                          />
-                                        </label>
-                                        <button
-                                          type="button"
-                                          className="p-1 bg-white/90 rounded hover:bg-white"
-                                          title="Remove image"
-                                          onClick={() => {
-                                            setBasicsDirty(true);
-                                            setEditItemExistingImages((prev) => prev.filter((_, i) => i !== idx));
-                                          }}
-                                        >
-                                          <X className="w-3.5 h-3.5 text-red-600" />
-                                        </button>
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                              {editItemImages.length > 0 && (
-                                <div className="grid grid-cols-3 gap-2">
-                                  {editItemImages.map((file, idx) => (
-                                    <div key={file.name + idx} className="relative group rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600">
-                                      <img
-                                        src={URL.createObjectURL(file)}
-                                        alt={file.name}
-                                        className="w-full h-20 object-cover"
-                                      />
-                                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                        <button
-                                          type="button"
-                                          className="p-1 bg-white/90 rounded hover:bg-white"
-                                          title="Remove image"
-                                          onClick={() => {
-                                            setBasicsDirty(true);
-                                            setEditItemImages((prev) => prev.filter((_, i) => i !== idx));
-                                          }}
-                                        >
-                                          <X className="w-3.5 h-3.5 text-red-600" />
-                                        </button>
-                                      </div>
-                                      <div className="absolute top-1 left-1 bg-blue-500 text-white text-[10px] px-1 rounded">New</div>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                              {(editItemExistingImages.length + editItemImages.length) < 5 && (
-                                <label className="inline-flex items-center gap-2 px-3 py-2 border border-dashed border-gray-300 rounded-lg text-sm text-gray-600 hover:text-gray-900 hover:border-gray-400 cursor-pointer dark:border-gray-600 dark:text-gray-300 dark:hover:text-white">
-                                  <Upload className="w-4 h-4" />
-                                  Add images (up to {5 - editItemExistingImages.length - editItemImages.length} more)
-                                  <input
-                                    type="file"
-                                    accept="image/*"
-                                    multiple
-                                    className="hidden"
-                                    onChange={(e) => {
-                                      const files = Array.from(e.target.files || []);
-                                      const remaining = 5 - editItemExistingImages.length - editItemImages.length;
-                                      const validFiles = filterImageFiles(files).slice(0, remaining);
-                                      if (validFiles.length > 0) {
-                                        setBasicsDirty(true);
-                                        setEditItemImages((prev) => [...prev, ...validFiles]);
-                                      }
-                                    }}
-                                  />
-                                </label>
-                              )}
-                            </div>
-                          </div>
-
-                          <div className="flex items-center justify-end gap-3 pt-2">
-                            <button
-                              type="button"
-                              className="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700 disabled:opacity-50"
-                              disabled={!basicsDirty || isSaving}
-                              onClick={() => cancelBasicsChanges()}
-                            >
-                              Cancel
-                            </button>
-                            <button
-                              type="button"
-                              className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold disabled:opacity-50"
-                              disabled={isSaving || !basicsDirty}
-                              onClick={handleUpdateItem}
-                            >
-                              {isSaving ? 'Saving...' : 'Save'}
-                            </button>
-                          </div>
-                        </div>
-                      ) : effectiveEditorTab === 'availability' ? (
-                        <div className="space-y-4">
-                          <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
-                            <div className="flex items-center justify-between">
-                              <div>
-                                <div className="font-bold text-gray-900 dark:text-white">Availability</div>
-                                <div className="text-xs text-gray-500 dark:text-gray-400">Quick toggle for daily ops.</div>
-                              </div>
-                              <button
-                                type="button"
-                                className={clsx(
-                                  'inline-flex items-center gap-2 rounded-lg px-3 py-2 font-bold',
-                                  editingItem.is_available
-                                    ? 'bg-teal-100 text-teal-700 hover:bg-teal-200'
-                                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200'
-                                )}
-                                onClick={() => handleToggleAvailability(editingItem)}
-                              >
-                                {editingItem.is_available ? 'Available' : '86'}
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      ) : effectiveEditorTab === 'modifiers' ? (
-                        <div className="space-y-6">
-                          {isMobileMode ? (
-                            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-900/20 dark:text-amber-200">
-                              Drag-to-sort controls are desktop only in this section. Use the simplified add/remove and save actions below.
-                            </div>
-                          ) : null}
-                          {/* Create Item-Specific Modifier Section */}
-                          <div className="card border-l-4 border-l-primary-500">
-                            <div className="flex items-center justify-between mb-4">
-                              <div>
-                                <h3 className="font-semibold text-gray-900 dark:text-white">Add Item-Specific Modifier</h3>
-                                <p className="text-sm text-gray-500 dark:text-gray-400">Create a modifier just for this item</p>
-                              </div>
-                            </div>
-
-                            <div className="space-y-3 mb-4">
-                              <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                  Modifier Name *
-                                </label>
-                                <input
-                                  type="text"
-                                  placeholder="e.g., Spice Level, Add Cheese"
-                                  className="input-field w-full"
-                                  value={itemNewModifierGroup.name}
-                                  onChange={(e) => setItemNewModifierGroup((prev) => ({ ...prev, name: e.target.value }))}
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                  Selection Type
-                                </label>
-                                <select
-                                  className="input-field w-full"
-                                  value={itemNewModifierGroup.selectionType}
-                                  onChange={(e) => setItemNewModifierGroup((prev) => ({ ...prev, selectionType: e.target.value as 'single' | 'multiple' }))}
-                                >
-                                  <option value="single">Single Choice (radio)</option>
-                                  <option value="multiple">Multiple Choice (checkboxes)</option>
-                                </select>
-                              </div>
-                            </div>
-
-                            <div className="mb-4">
-                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                Options
-                              </label>
-                              {itemNewModifierGroup.options.map((opt, idx) => (
-                                <div key={idx} className="flex items-center gap-2 mb-2">
-                                  <input
-                                    type="text"
-                                    placeholder="Option name"
-                                    className="input-field flex-1"
-                                    value={opt.name}
-                                    onChange={(e) => {
-                                      const newOpts = [...itemNewModifierGroup.options];
-                                      newOpts[idx] = { ...newOpts[idx], name: e.target.value };
-                                      setItemNewModifierGroup((prev) => ({ ...prev, options: newOpts }));
-                                    }}
-                                  />
-                                  <input
-                                    type="number"
-                                    placeholder="+$0.00"
-                                    className="input-field w-28"
-                                    value={opt.priceDelta || ''}
-                                    onChange={(e) => {
-                                      const newOpts = [...itemNewModifierGroup.options];
-                                      newOpts[idx] = { ...newOpts[idx], priceDelta: parseFloat(e.target.value) || 0 };
-                                      setItemNewModifierGroup((prev) => ({ ...prev, options: newOpts }));
-                                    }}
-                                  />
-                                  <button
-                                    type="button"
-                                    className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
-                                    onClick={() => {
-                                      const newOpts = itemNewModifierGroup.options.filter((_, i) => i !== idx);
-                                      setItemNewModifierGroup((prev) => ({ ...prev, options: newOpts }));
-                                    }}
-                                  >
-                                    ✕
-                                  </button>
-                                </div>
-                              ))}
-                              <button
-                                type="button"
-                                className="text-sm text-primary-600 hover:text-primary-700 font-medium"
-                                onClick={() => setItemNewModifierGroup((prev) => ({
-                                  ...prev,
-                                  options: [...prev.options, { name: '', priceDelta: 0 }]
-                                }))}
-                              >
-                                + Add Option
-                              </button>
-                            </div>
-
-                            <button
-                              type="button"
-                              className="btn-primary w-full"
-                              disabled={isCreatingItemModifier || !itemNewModifierGroup.name.trim() || itemNewModifierGroup.options.length === 0}
-                              onClick={handleCreateItemSpecificModifier}
-                            >
-                              {isCreatingItemModifier ? 'Creating...' : 'Create & Attach Modifier'}
-                            </button>
-                          </div>
-
-                          <hr className="border-gray-200 dark:border-gray-700" />
-
-                          {/* Existing Modifier Groups */}
-                          <ChoiceGroupAssignment
-                            availableGroups={modifierGroups.map((g: any) => toChoiceGroup(g))}
-                            inheritedGroups={editItemInheritedGroups}
-                            attachedGroups={editItemAttachedGroups}
-                            onAddAttachedGroup={(groupId) => {
-                              setEditItemAttachedGroups((prev) => {
-                                if (prev.some((p) => p.groupId === groupId)) return prev;
-                                const found = modifierGroups.find((g) => g.id === groupId);
-                                return [
-                                  ...prev,
-                                  {
-                                    groupId,
-                                    name: found?.name,
-                                    displayOrder: prev.length
-                                  }
-                                ];
-                              });
-                            }}
-                            onRemoveAttachedGroup={(groupId) => setEditItemAttachedGroups((prev) => prev.filter((p) => p.groupId !== groupId))}
-                            onUpdateAttachedGroup={(groupId, patch) =>
-                              setEditItemAttachedGroups((prev) => prev.map((p) => (p.groupId === groupId ? { ...p, ...patch } : p)))
-                            }
-                          />
-
-                          <div className="flex justify-end gap-3">
-                            <button
-                              type="button"
-                              className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold disabled:opacity-50"
-                              disabled={isSaving}
-                              onClick={async () => {
-                                try {
-                                  setIsSaving(true);
-                                  await syncItemModifierGroups(editItem.id, editItemAttachedGroups, editItemExistingAttachedGroups);
-                                  await loadMenuData();
-                                  toast.success('Modifiers updated');
-                                } catch (e) {
-                                  toast.error('Failed to update modifiers');
-                                } finally {
-                                  setIsSaving(false);
-                                }
-                              }}
-                            >
-                              {isSaving ? 'Saving...' : 'Save modifiers'}
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <ItemPreviewPanel item={editingItem} sizes={editItemSizes} />
-                      )}
-                    </div>
-                  </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
-      {/* Unsaved changes guard */}
+
+            {/* Unsaved changes guard */}
       <AnimatePresence>
         {showDiscardConfirm && (
           <motion.div
@@ -4209,6 +3552,7 @@ interface CategorySectionProps {
   isExpanded: boolean;
   onToggle: () => void;
   searchTerm: string;
+  filterType: 'all' | 'available' | 'unavailable';
   onAddItem: (categoryId: string) => void;
   onEditItem: (item: MenuItem) => void;
   onToggleAvailability: (item: MenuItem) => void;
@@ -4267,6 +3611,7 @@ const CategorySection: React.FC<CategorySectionProps> = ({
   isExpanded,
   onToggle,
   searchTerm,
+  filterType,
   onAddItem,
   onEditItem,
   onToggleAvailability,
@@ -4274,16 +3619,24 @@ const CategorySection: React.FC<CategorySectionProps> = ({
   deletingItemId,
   onReorderItems
 }) => {
-  const filteredItems = category.items?.filter(item =>
-    searchTerm === '' ||
-    item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.description.toLowerCase().includes(searchTerm.toLowerCase())
-  ) || [];
+  const outOfStock = (category.items || []).filter(i => !i.is_available).length;
+
+  const filteredItems = (category.items || [])
+    .filter(item => {
+      const matchSearch = !searchTerm ||
+        item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (item.description || '').toLowerCase().includes(searchTerm.toLowerCase());
+      const matchFilter = filterType === 'all' ||
+        (filterType === 'available' ? item.is_available : !item.is_available);
+      return matchSearch && matchFilter;
+    })
+    .slice()
+    .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
   const itemIds = filteredItems.map((i) => i.id);
-
   const disableDrag = searchTerm.trim() !== '';
+
   const handleDragEnd = (event: DragEndEvent) => {
     if (disableDrag) return;
     const { active, over } = event;
@@ -4294,96 +3647,99 @@ const CategorySection: React.FC<CategorySectionProps> = ({
     const oldIndex = itemIds.indexOf(activeId);
     const newIndex = itemIds.indexOf(overId);
     if (oldIndex === -1 || newIndex === -1) return;
-    const nextIds = arrayMove(itemIds, oldIndex, newIndex);
-    onReorderItems(category.id, nextIds);
+    onReorderItems(category.id, arrayMove(itemIds, oldIndex, newIndex));
   };
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+    <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
       {/* Category Header */}
       <div
-        className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors"
+        className="flex items-center px-4 py-4 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-colors"
         onClick={onToggle}
       >
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            {isExpanded ? (
-              <ChevronDown className="w-5 h-5 text-gray-400" />
-            ) : (
-              <ChevronRight className="w-5 h-5 text-gray-400" />
-            )}
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-              {category.name}
-            </h3>
-          </div>
-          
-          <div className="flex items-center gap-2">
-            <span className="px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 text-sm rounded-full">
-              {category.item_count || 0} items
-            </span>
-            {!category.is_active && (
-              <span className="px-2 py-1 bg-red-100 text-red-700 text-sm rounded-full">
-                Inactive
-              </span>
-            )}
-          </div>
+        {/* Left: name + stats */}
+        <div className="flex-1 min-w-0">
+          <h3 className="font-bold text-gray-900 dark:text-white">{category.name}</h3>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Available Category{' '}·{' '}{category.items?.length || 0} items
+            {outOfStock > 0 && ` (${outOfStock} out of stock)`}
+          </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          <button 
+        {/* Column labels — only shown when expanded, hidden on small screens */}
+        {isExpanded && (
+          <div className="hidden lg:flex items-center mr-6 text-xs text-gray-400 dark:text-gray-500">
+            <span className="w-24 text-center">Pickup price</span>
+            <span className="w-24 text-center">Delivery price</span>
+            <span className="w-32 text-center">Item status</span>
+            {/* spacer for edit+delete buttons */}
+            <span className="w-20" />
+          </div>
+        )}
+
+        {/* Right: actions + chevron */}
+        <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+          <button
             className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-            onClick={(e) => {
-              e.stopPropagation();
-              // Handle edit category
-            }}
+            title="Category options"
           >
-            <Edit3 className="w-4 h-4" />
-          </button>
-          <button className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
             <MoreHorizontal className="w-4 h-4" />
+          </button>
+          <button
+            className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+            onClick={(e) => { e.stopPropagation(); onToggle(); }}
+          >
+            {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           </button>
         </div>
       </div>
 
-      {/* Category Items */}
+      {/* Items list */}
       <AnimatePresence>
         {isExpanded && (
           <motion.div
             initial={{ height: 0 }}
-            animate={{ height: "auto" }}
+            animate={{ height: 'auto' }}
             exit={{ height: 0 }}
-            transition={{ duration: 0.2 }}
+            transition={{ duration: 0.18 }}
             className="overflow-hidden"
           >
-            <div className="px-4 pb-4 border-t border-gray-100 dark:border-gray-700">
-              {filteredItems.length > 0 ? (
-                <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-                  <SortableContext items={itemIds} strategy={verticalListSortingStrategy}>
-                    <div className="space-y-2 pt-3">
-                      {filteredItems.map((item) => (
-                        <SortableMenuItemRow
-                          key={item.id}
-                          item={item}
-                          onEdit={onEditItem}
-                          onToggleAvailability={onToggleAvailability}
-                          onDelete={onDeleteItem}
-                          isDeleting={deletingItemId === item.id}
-                        />
-                      ))}
-                    </div>
-                  </SortableContext>
-                </DndContext>
-              ) : (
+            <div className="border-t border-gray-100 dark:border-gray-700">
+              {filteredItems.length === 0 ? (
                 <div className="text-center py-8">
-                  <p className="text-gray-500">No items in this category</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">No items match this filter.</p>
                   <button
                     onClick={() => onAddItem(category.id)}
-                    className="text-red-600 hover:text-red-700 text-sm mt-1"
+                    className="mt-2 inline-flex items-center gap-1 text-sm text-red-600 hover:text-red-700 font-medium"
                   >
-                    Add your first item
+                    <Plus className="w-4 h-4" />
+                    Add an item
                   </button>
                 </div>
+              ) : (
+                <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+                  <SortableContext items={itemIds} strategy={verticalListSortingStrategy}>
+                    {filteredItems.map((item) => (
+                      <SortableMenuItemRow
+                        key={item.id}
+                        item={item}
+                        onEdit={onEditItem}
+                        onToggleAvailability={onToggleAvailability}
+                        onDelete={onDeleteItem}
+                        isDeleting={deletingItemId === item.id}
+                      />
+                    ))}
+                  </SortableContext>
+                </DndContext>
               )}
+              {/* Add Item row */}
+              <button
+                onClick={() => onAddItem(category.id)}
+                className="w-full flex items-center gap-2 px-4 py-3 text-sm text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/50 hover:text-gray-700 dark:hover:text-gray-200 transition-colors border-t border-gray-100 dark:border-gray-700"
+              >
+                <Plus className="w-4 h-4" />
+                Add Item
+              </button>
             </div>
           </motion.div>
         )}
@@ -4443,86 +3799,99 @@ interface MenuItemCardProps {
 }
 
 const MenuItemCard: React.FC<MenuItemCardProps> = ({ item, onEdit, onToggleAvailability, onDelete, isDeleting }) => {
+  const price = Number(item.fromPrice ?? item.price ?? 0);
+  const formattedPrice = `$${price.toFixed(2)}`;
+  const hasMultipleSizes = Array.isArray(item.sizes) && item.sizes.length > 1;
+
   return (
-    <div className="flex items-center gap-4 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors">
-      {/* Item Image */}
-      <div className="w-12 h-12 bg-gray-200 dark:bg-gray-600 rounded-lg flex-shrink-0 overflow-hidden">
+    <div className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-colors group">
+      {/* Thumbnail */}
+      <div className="w-10 h-10 rounded-lg bg-gray-100 dark:bg-gray-600 overflow-hidden flex-shrink-0">
         {item.image ? (
-          <img 
-            src={resolveMediaUrl(item.image)} 
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={resolveMediaUrl(item.image)}
             alt={item.name}
             className="w-full h-full object-cover"
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center text-gray-400">
-            <Tag className="w-5 h-5" />
+          <div className="w-full h-full flex items-center justify-center">
+            <Tag className="w-4 h-4 text-gray-400" />
           </div>
         )}
       </div>
 
-      {/* Item Info */}
+      {/* Item Name — flex-1 */}
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <h4 className="font-medium text-gray-900 dark:text-white truncate">
-            {item.name}
-          </h4>
-          {item.is_featured && (
-            <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 text-xs rounded-full">
-              Featured
-            </span>
+        <span className="font-medium text-sm text-gray-900 dark:text-white truncate block">
+          {item.name}
+          {hasMultipleSizes && (
+            <span className="ml-1 text-xs text-gray-400 font-normal">from</span>
           )}
-        </div>
-        <p className="text-sm text-gray-600 dark:text-gray-400 truncate mt-0.5">
-          {item.description}
-        </p>
-        <div className="flex items-center gap-3 mt-1">
-          <span className="text-sm font-medium text-gray-900 dark:text-white">
-            {(item.sizes && item.sizes.length > 0 ? 'From ' : '')}${(Number(item.fromPrice ?? item.price) || 0).toFixed(2)}
-          </span>
-          {item.preparation_time && (
-            <span className="flex items-center gap-1 text-xs text-gray-500">
-              <Clock className="w-3 h-3" />
-              {item.preparation_time}m
-            </span>
-          )}
-        </div>
+        </span>
       </div>
 
-      {/* Item Actions */}
-      <div className="flex items-center gap-2">
-        <button 
-          onClick={() => onToggleAvailability(item)}
-          className="flex items-center"
-          title={item.is_available ? 'Mark as unavailable' : 'Mark as available'}
-        >
-          {item.is_available ? (
-            <CheckCircle className="w-5 h-5 text-green-500 hover:text-green-600" />
-          ) : (
-            <XCircle className="w-5 h-5 text-red-500 hover:text-red-600" />
-          )}
-        </button>
-        
-        <button 
-          onClick={() => onEdit(item)}
-          className="p-2 text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 rounded-lg hover:bg-white dark:hover:bg-gray-800 transition-colors"
-          title="Edit item"
-        >
-          <Edit3 className="w-4 h-4" />
-        </button>
+      {/* Pickup Price */}
+      <div className="hidden sm:block w-24 text-sm text-gray-600 dark:text-gray-300 text-center shrink-0">
+        {formattedPrice}
+      </div>
 
+      {/* Delivery Price */}
+      <div className="hidden lg:block w-24 text-sm text-gray-600 dark:text-gray-300 text-center shrink-0">
+        {formattedPrice}
+      </div>
+
+      {/* Status Badge */}
+      <div className="hidden sm:block w-32 shrink-0">
         <button
-          onClick={() => onDelete(item)}
-          disabled={isDeleting}
-          className="p-2 text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300 rounded-lg hover:bg-white dark:hover:bg-gray-800 transition-colors disabled:opacity-50"
-          title="Delete item"
+          onClick={() => onToggleAvailability(item)}
+          className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full border text-xs font-medium transition-colors w-full justify-between ${
+            item.is_available
+              ? 'border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700'
+              : 'border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'
+          }`}
         >
-          <Trash2 className="w-4 h-4" />
-        </button>
-        
-        <button className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg hover:bg-white dark:hover:bg-gray-800 transition-colors">
-          <MoreHorizontal className="w-4 h-4" />
+          <span className="inline-flex items-center gap-1.5">
+            {item.is_available ? (
+              <span className="w-2 h-2 rounded-full bg-green-500 shrink-0" />
+            ) : (
+              <span className="w-2 h-2 rounded-full bg-gray-400 shrink-0" />
+            )}
+            {item.is_available ? 'In stock' : 'Out of stock'}
+          </span>
+          <ChevronDown className="w-3 h-3 shrink-0" />
         </button>
       </div>
+
+      {/* Mobile: availability icon */}
+      <button
+        className="sm:hidden p-1.5 rounded-lg"
+        onClick={() => onToggleAvailability(item)}
+        title={item.is_available ? 'Mark unavailable' : 'Mark available'}
+      >
+        {item.is_available
+          ? <CheckCircle className="w-5 h-5 text-green-500" />
+          : <XCircle className="w-5 h-5 text-gray-400" />}
+      </button>
+
+      {/* Edit */}
+      <button
+        onClick={() => onEdit(item)}
+        className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
+        title="Edit item"
+      >
+        <Edit3 className="w-4 h-4" />
+      </button>
+
+      {/* Delete */}
+      <button
+        onClick={() => onDelete(item)}
+        disabled={isDeleting}
+        className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors disabled:opacity-40"
+        title="Delete item"
+      >
+        <Trash2 className="w-4 h-4" />
+      </button>
     </div>
   );
 };
