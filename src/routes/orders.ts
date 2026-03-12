@@ -722,9 +722,9 @@ router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) =>
       const notes = Object.keys(notesData).length > 0 ? JSON.stringify(notesData) : null;
 
       await db.run(`
-        INSERT INTO order_items (id, order_id, menu_item_id, name, quantity, unit_price, notes)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-      `, [uuidv4(), orderId, item.id, item.name, item.quantity, item.price, notes]);
+        INSERT INTO order_items (id, order_id, menu_item_id, name, quantity, unit_price, price, notes)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `, [uuidv4(), orderId, item.id, item.name, item.quantity, item.price, item.price, notes]);
     }
 
   } catch (error) {
