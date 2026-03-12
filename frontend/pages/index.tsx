@@ -114,6 +114,7 @@ export default function HomePage() {
         <meta property="og:description" content="Restaurant operating system with an AI assistant. Run orders, menu, marketing, inventory + receipts, staff ops, and integrations from one dashboard." />
         <meta property="og:type" content="website" />
         <meta property="og:url" content="https://servio.com" />
+        <meta property="og:image" content="https://servio.app/images/servio-social-preview.png" />
       </Head>
 
         <div className="min-h-screen bg-gray-900 text-white overflow-x-hidden">
