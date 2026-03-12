@@ -39,3 +39,4 @@ print-agent/
 # TypeScript build info
 *.tsbuildinfo
 
+.env
