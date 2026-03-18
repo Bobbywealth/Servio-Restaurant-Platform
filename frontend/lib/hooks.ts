@@ -182,7 +182,12 @@ export interface PushSubscriptionState {
   error: string | null;
 }
 
-export function usePushSubscription() {
+interface UsePushSubscriptionOptions {
+  enabled?: boolean;
+}
+
+export function usePushSubscription(options: UsePushSubscriptionOptions = {}) {
+  const { enabled = true } = options;
   const [state, setState] = React.useState<PushSubscriptionState>({
     isSupported: false,
     permission: 'default',
@@ -199,6 +204,18 @@ export function usePushSubscription() {
       return;
     }
 
+    if (!enabled) {
+      setState({
+        isSupported: false,
+        permission: typeof Notification !== 'undefined' ? Notification.permission : 'default',
+        subscription: null,
+        vapidKey: null,
+        isLoading: false,
+        error: null,
+      });
+      return;
+    }
+
     const isSupported = 'serviceWorker' in navigator && 'PushManager' in window;
     setState(prev => ({ ...prev, isSupported }));
 
@@ -211,16 +228,26 @@ export function usePushSubscription() {
     if (typeof Notification !== 'undefined') {
       setState(prev => ({ ...prev, permission: Notification.permission }));
     }
-  }, []);
+  }, [enabled]);
 
   // Get VAPID key and existing subscription
   useEffect(() => {
+    if (!enabled) return;
     if (!state.isSupported) return;
 
     const initPush = async () => {
       try {
         // Get VAPID key from server
         const response = await fetch('/api/push/vapid-key');
+        console.log('[Push] VAPID key response status:', response.status, response.statusText);
+        
+        // DEBUG: Validate response is OK before parsing JSON
+        if (!response.ok) {
+          const text = await response.text();
+          console.error('[Push] VAPID key request failed:', response.status, text.substring(0, 200));
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
         const data = await response.json();
 
         if (!data.success) {
@@ -250,7 +277,7 @@ export function usePushSubscription() {
     };
 
     initPush();
-  }, [state.isSupported]);
+  }, [enabled, state.isSupported]);
 
   // Subscribe to push notifications
   const subscribe = React.useCallback(async (): Promise<PushSubscription | null> => {

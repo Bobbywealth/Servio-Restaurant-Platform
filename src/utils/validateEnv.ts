@@ -211,7 +211,18 @@ export function getCorsOrigins(defaultOrigin?: string): string[] {
       .split(',')
       .map(origin => origin.trim())
       .filter(Boolean);
-    additional.forEach(origin => addOriginWithVariants(origin));
+      additional.forEach(origin => addOriginWithVariants(origin));
+  }
+
+  if (process.env.NODE_ENV !== 'production') {
+    [
+      'http://localhost:3000',
+      'http://localhost:3001',
+      'http://localhost:3003',
+      'http://127.0.0.1:3000',
+      'http://127.0.0.1:3001',
+      'http://127.0.0.1:3003',
+    ].forEach(origin => addOriginWithVariants(origin));
   }
 
   // Fallback for development

@@ -36,6 +36,11 @@ export default function App({ Component, pageProps }: AppProps) {
   const router = useRouter()
   const isTabletRoute = router.pathname.startsWith('/tablet')
   const isStaffRoute = router.pathname.startsWith('/staff')
+  const isAuthenticatedAppRoute =
+    router.pathname.startsWith('/dashboard') ||
+    router.pathname.startsWith('/admin') ||
+    isTabletRoute ||
+    isStaffRoute
 
   // Proactive session keep-alive to prevent auto-logout
   const keepSessionAlive = useCallback(async () => {
@@ -94,6 +99,46 @@ export default function App({ Component, pageProps }: AppProps) {
     } catch (error) {
       // Silent fail - token refresh will happen on next API call if needed
       console.error('[keep-alive] Refresh failed:', error)
+    }
+  }, [])
+
+  // Handle ChunkLoadError - Turbopack/Webpack chunk loading failures
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const handleChunkLoadError = (event: Event) => {
+      const error = event as ErrorEvent
+      // Check for ChunkLoadError (can be ErrorEvent or custom event with error property)
+      const errorMessage = error.message || ''
+      const errorCause = (error as any).cause
+
+      // Detect ChunkLoadError - happens when chunks fail to load (often due to HMR)
+      const isChunkLoadError =
+        errorMessage.includes('ChunkLoadError') ||
+        errorMessage.includes('Failed to load chunk') ||
+        (errorCause && errorCause.name === 'ChunkLoadError') ||
+        (typeof error.error === 'object' && error.error?.name === 'ChunkLoadError')
+
+      if (isChunkLoadError) {
+        console.error('[ChunkLoadError] Detected chunk loading failure, reloading page...')
+        // Show user-friendly message before reloading
+        const userMsg = document.getElementById('chunk-error-message')
+        if (userMsg) {
+          userMsg.style.display = 'block'
+          userMsg.textContent = 'Reloading to fix chunk loading issue...'
+        }
+        // Force full page reload to get fresh chunks
+        window.location.reload()
+      }
+    }
+
+    // Listen for unhandled promise rejections (which is how ChunkLoadError often manifests)
+    window.addEventListener('unhandledrejection', handleChunkLoadError)
+    window.addEventListener('error', handleChunkLoadError)
+
+    return () => {
+      window.removeEventListener('unhandledrejection', handleChunkLoadError)
+      window.removeEventListener('error', handleChunkLoadError)
     }
   }, [])
 
@@ -211,7 +256,7 @@ export default function App({ Component, pageProps }: AppProps) {
   }, [isStaffRoute])
 
   // Push notification subscription
-  const pushSubscription = usePushSubscription()
+  const pushSubscription = usePushSubscription({ enabled: isAuthenticatedAppRoute })
 
 
   const {

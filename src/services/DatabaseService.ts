@@ -225,27 +225,49 @@ export class DatabaseService {
 
     logger.info('Ensuring demo users exist with valid credentials...');
     const restaurantId = 'demo-restaurant-1';
-
-    // Create demo restaurant if it doesn't exist
-    await db.run(
-      `INSERT INTO restaurants (
-        id, name, slug, settings, operating_hours, timezone, closed_message
-      ) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO NOTHING`,
-      [
-        restaurantId,
-        'Demo Restaurant',
-        'demo-restaurant',
-        JSON.stringify({ currency: 'USD' }),
-        JSON.stringify({
+    const restaurantColumns = new Set(
+      (
+        await db.all<{ column_name: string }>(
+          `SELECT column_name
+           FROM information_schema.columns
+           WHERE table_name = 'restaurants'`
+        )
+      ).map((column) => column.column_name)
+    );
+    const optionalRestaurantSeedFields: Array<{ column: string; value: string }> = [
+      {
+        column: 'settings',
+        value: JSON.stringify({ currency: 'USD' })
+      },
+      {
+        column: 'operating_hours',
+        value: JSON.stringify({
           tue: ['09:00', '21:00'],
           wed: ['09:00', '21:00'],
           thu: ['09:00', '21:00'],
           fri: ['09:00', '21:00'],
           sat: ['09:00', '21:00']
-        }),
-        'America/New_York',
-        "We're temporarily closed right now..."
-      ]
+        })
+      },
+      { column: 'timezone', value: 'America/New_York' },
+      { column: 'closed_message', value: "We're temporarily closed right now..." }
+    ];
+
+    // Create demo restaurant if it doesn't exist
+    const restaurantInsertColumns = ['id', 'name', 'slug'];
+    const restaurantInsertValues = [restaurantId, 'Demo Restaurant', 'demo-restaurant'];
+
+    for (const field of optionalRestaurantSeedFields) {
+      if (!restaurantColumns.has(field.column)) continue;
+      restaurantInsertColumns.push(field.column);
+      restaurantInsertValues.push(field.value);
+    }
+
+    await db.run(
+      `INSERT INTO restaurants (${restaurantInsertColumns.join(', ')})
+       VALUES (${restaurantInsertColumns.map(() => '?').join(', ')})
+       ON CONFLICT (id) DO NOTHING`,
+      restaurantInsertValues
     );
 
     // Platform admin users (for Servio company management)
