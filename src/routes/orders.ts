@@ -1201,18 +1201,19 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
   for (const item of normalizedItems) {
     await db.run(`
       INSERT INTO order_items (
-        id, order_id, item_id, item_name_snapshot, qty, quantity, unit_price, price, 
+        id, order_id, item_id, name, item_name_snapshot, qty, quantity, unit_price, price, 
         modifiers_json, notes, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
     `, [
       `oi_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       orderId,
       item.item_id || item.itemId,
       item.name,
+              item.name,
       item.qty || item.quantity || 1,
       item.quantity || item.qty || 1,
       item.unit_price || item.price || 0,
-      item.price || item.unit_price || 0,
+                      item.price || item.unit_price || 0,
       JSON.stringify(item.modifiers || {}),
       item.notes || null
     ]);
