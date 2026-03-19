@@ -3670,8 +3670,7 @@ const CategorySection: React.FC<CategorySectionProps> = ({
         {/* Column labels — only shown when expanded, hidden on small screens */}
         {isExpanded && (
           <div className="hidden lg:flex items-center mr-6 text-xs text-gray-400 dark:text-gray-500">
-            <span className="w-24 text-center">Pickup price</span>
-            <span className="w-24 text-center">Delivery price</span>
+            <span className="w-24 text-center">Price</span>
             <span className="w-32 text-center">Item status</span>
             {/* spacer for edit+delete buttons */}
             <span className="w-20" />
@@ -3832,13 +3831,8 @@ const MenuItemCard: React.FC<MenuItemCardProps> = ({ item, onEdit, onToggleAvail
         </span>
       </div>
 
-      {/* Pickup Price */}
+      {/* Price */}
       <div className="hidden sm:block w-24 text-sm text-gray-600 dark:text-gray-300 text-center shrink-0">
-        {formattedPrice}
-      </div>
-
-      {/* Delivery Price */}
-      <div className="hidden lg:block w-24 text-sm text-gray-600 dark:text-gray-300 text-center shrink-0">
         {formattedPrice}
       </div>
 
