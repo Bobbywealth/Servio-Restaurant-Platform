@@ -6,6 +6,15 @@ import { useTheme } from '../../../contexts/ThemeContext';
 import VoiceInput from '@/components/Assistant/VoiceInput';
 import { KitchenSession, CookingTimer, Recipe, RecipeCategory } from './types';
 
+// Safe localStorage access helper - prevents crashes in private browsing mode
+const getAuthToken = (): string => {
+  try {
+    return typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
+  } catch {
+    return '';
+  }
+};
+
 interface KitchenAssistantPanelProps {
   companyId: number;
   deviceId?: string;
@@ -29,11 +38,10 @@ export default function KitchenAssistantPanel({ companyId, deviceId }: KitchenAs
   const [localTimers, setLocalTimers] = useState<Record<number, number>>({});
   const timerIntervals = useRef<Record<number, NodeJS.Timeout>>({});
 
-  // Fetch active sessions
   const fetchSessions = useCallback(async () => {
     try {
       const response = await fetch(`/api/kitchen-assistant/sessions?companyId=${companyId}`, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+        headers: { 'Authorization': `Bearer ${getAuthToken()}` }
       });
       const data = await response.json();
       setSessions(data.sessions || []);
@@ -46,7 +54,7 @@ export default function KitchenAssistantPanel({ companyId, deviceId }: KitchenAs
   const fetchRecipes = useCallback(async () => {
     try {
       const response = await fetch(`/api/kitchen-assistant/recipes?companyId=${companyId}`, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+        headers: { 'Authorization': `Bearer ${getAuthToken()}` }
       });
       const data = await response.json();
       setRecipes(data.recipes || []);
@@ -59,7 +67,7 @@ export default function KitchenAssistantPanel({ companyId, deviceId }: KitchenAs
   const fetchCategories = useCallback(async () => {
     try {
       const response = await fetch(`/api/kitchen-assistant/categories?companyId=${companyId}`, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+        headers: { 'Authorization': `Bearer ${getAuthToken()}` }
       });
       const data = await response.json();
       setCategories(data.categories || []);
@@ -72,7 +80,7 @@ export default function KitchenAssistantPanel({ companyId, deviceId }: KitchenAs
   const fetchTimers = useCallback(async () => {
     try {
       const response = await fetch(`/api/kitchen-assistant/timers?companyId=${companyId}`, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+        headers: { 'Authorization': `Bearer ${getAuthToken()}` }
       });
       const data = await response.json();
       setTimers(data.timers || []);
@@ -128,7 +136,7 @@ export default function KitchenAssistantPanel({ companyId, deviceId }: KitchenAs
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${getAuthToken()}`
         },
         body: JSON.stringify({
           sessionId,
@@ -212,7 +220,7 @@ export default function KitchenAssistantPanel({ companyId, deviceId }: KitchenAs
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${getAuthToken()}`
         },
         body: JSON.stringify({
           text,
@@ -248,7 +256,7 @@ export default function KitchenAssistantPanel({ companyId, deviceId }: KitchenAs
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${getAuthToken()}`
         },
         body: JSON.stringify({
           recipeId: recipe.id,

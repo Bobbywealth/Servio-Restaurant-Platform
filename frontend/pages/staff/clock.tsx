@@ -19,6 +19,22 @@ import {
   X
 } from 'lucide-react';
 
+// Safe localStorage helpers - prevent crashes in private browsing mode
+const safeGetItem = (key: string): string | null => {
+  if (typeof window === 'undefined') return null;
+  try { return localStorage.getItem(key); } catch { return null; }
+};
+
+const safeSetItem = (key: string, value: string): void => {
+  if (typeof window === 'undefined') return;
+  try { localStorage.setItem(key, value); } catch {}
+};
+
+const safeRemoveItem = (key: string): void => {
+  if (typeof window === 'undefined') return;
+  try { localStorage.removeItem(key); } catch {}
+};
+
 // Confirmation Dialog Component
 interface ConfirmDialogProps {
   isOpen: boolean;
@@ -742,13 +758,11 @@ export default function StaffClockPage() {
   const [weeklyHours, setWeeklyHours] = useState(0);
   const [rememberDevice, setRememberDevice] = useState(false);
   const [lockedUntil, setLockedUntil] = useState<number | null>(() => {
-    if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem('pinLockedUntil');
-      if (stored) {
-        const ts = parseInt(stored, 10);
-        if (ts > Date.now()) return ts;
-        localStorage.removeItem('pinLockedUntil');
-      }
+    const stored = safeGetItem('pinLockedUntil');
+    if (stored) {
+      const ts = parseInt(stored, 10);
+      if (ts > Date.now()) return ts;
+      safeRemoveItem('pinLockedUntil');
     }
     return null;
   });
@@ -808,7 +822,7 @@ export default function StaffClockPage() {
         const retryAfterSecs = retryAfter ? parseInt(retryAfter, 10) : 5 * 60;
         const lockoutEnd = Date.now() + retryAfterSecs * 1000;
         setLockedUntil(lockoutEnd);
-        localStorage.setItem('pinLockedUntil', String(lockoutEnd));
+        safeSetItem('pinLockedUntil', String(lockoutEnd));
         setError(null);
         setLoading(false);
         return;
@@ -818,7 +832,7 @@ export default function StaffClockPage() {
 
       if (data.success) {
         setLockedUntil(null);
-        localStorage.removeItem('pinLockedUntil');
+        safeRemoveItem('pinLockedUntil');
         const userData = {
           ...data.data.user,
           pin
@@ -827,19 +841,19 @@ export default function StaffClockPage() {
         userRef.current = userData;
         setCurrentShift(data.data.currentShift);
         setWeeklyHours(data.data.weeklyHours);
-        localStorage.setItem('staffUser', JSON.stringify(userData));
+        safeSetItem('staffUser', JSON.stringify(userData));
         const shouldRemember = options?.remember ?? rememberDevice;
         if (shouldRemember) {
-          localStorage.setItem('staffClockPin', pin);
-          localStorage.setItem('staffClockRemember', 'true');
+          safeSetItem('staffClockPin', pin);
+          safeSetItem('staffClockRemember', 'true');
         } else {
-          localStorage.removeItem('staffClockPin');
-          localStorage.setItem('staffClockRemember', 'false');
+          safeRemoveItem('staffClockPin');
+          safeSetItem('staffClockRemember', 'false');
         }
       } else {
         if (options?.silent) {
-          localStorage.removeItem('staffClockPin');
-          localStorage.setItem('staffClockRemember', 'false');
+          safeRemoveItem('staffClockPin');
+          safeSetItem('staffClockRemember', 'false');
           setError('Saved PIN is no longer valid. Please enter your PIN again.');
         } else {
           setError(data.error?.message || 'Invalid PIN');
@@ -869,11 +883,11 @@ export default function StaffClockPage() {
   // Check for existing session and set up periodic refresh
   useEffect(() => {
     const isStandalone = window.matchMedia?.('(display-mode: standalone)').matches || (window.navigator as any)?.standalone === true;
-    const rememberSetting = localStorage.getItem('staffClockRemember');
+    const rememberSetting = safeGetItem('staffClockRemember');
     const shouldRemember = rememberSetting ? rememberSetting === 'true' : isStandalone;
     setRememberDevice(shouldRemember);
 
-    const savedUser = localStorage.getItem('staffUser');
+    const savedUser = safeGetItem('staffUser');
     let autoLoginStarted = false;
     if (savedUser) {
       try {
@@ -882,10 +896,10 @@ export default function StaffClockPage() {
         userRef.current = userData;
         fetchUserStatus(userData.pin);
       } catch {
-        localStorage.removeItem('staffUser');
+        safeRemoveItem('staffUser');
       }
     } else if (shouldRemember) {
-      const storedPin = localStorage.getItem('staffClockPin');
+      const storedPin = safeGetItem('staffClockPin');
       if (storedPin) {
         autoLoginStarted = true;
         handleLogin(storedPin, { silent: true, remember: shouldRemember });

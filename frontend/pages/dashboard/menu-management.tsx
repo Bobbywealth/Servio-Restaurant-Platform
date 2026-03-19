@@ -1432,6 +1432,7 @@ const MenuManagement: React.FC = () => {
     setSelectedItemId(item.id);
     setEditorTab('basics');
     setBasicsDirty(false);
+    setShowEditItemModal(true);
   };
 
   const reloadEditItemSizes = async (itemId: string) => {

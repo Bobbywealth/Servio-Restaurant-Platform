@@ -1,3 +1,5 @@
+'use client';
+
 import Head from 'next/head';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Search, X, Filter, RefreshCcw, ChevronDown, Calendar, DollarSign, User, Clock, ShoppingBag } from 'lucide-react';
@@ -51,7 +53,8 @@ const RANGE_OPTIONS = [
   { value: '7', label: 'Last 7 days' },
   { value: '30', label: 'Last 30 days' },
   { value: '90', label: 'Last 90 days' },
-  { value: 'all', label: 'All time' }
+  { value: 'all', label: 'All time' },
+  { value: 'custom', label: 'Custom range' }
 ];
 
 function shortId(id: string | null | undefined) {
@@ -147,9 +150,27 @@ export default function TabletHistoryPage() {
   const [error, setError] = useState<string | null>(null);
   const [pagination, setPagination] = useState<{ total?: number; limit?: number; offset?: number; hasMore?: boolean }>({});
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
+  
+  // Custom date range state
+  const [customDateFrom, setCustomDateFrom] = useState<string>('');
+  const [customDateTo, setCustomDateTo] = useState<string>('');
 
   const dateRange = useMemo(() => {
     if (rangeFilter === 'all') return {};
+    
+    // Handle custom date range
+    if (rangeFilter === 'custom') {
+      if (!customDateFrom || !customDateTo) return {};
+      const from = new Date(customDateFrom);
+      const to = new Date(customDateTo);
+      // Set to end of day for the end date
+      to.setHours(23, 59, 59, 999);
+      return {
+        dateFrom: from.toISOString(),
+        dateTo: to.toISOString()
+      };
+    }
+    
     const days = Number(rangeFilter);
     if (!Number.isFinite(days)) return {};
     const now = new Date();
@@ -158,7 +179,7 @@ export default function TabletHistoryPage() {
       dateFrom: dateFrom.toISOString(),
       dateTo: now.toISOString()
     };
-  }, [rangeFilter]);
+  }, [rangeFilter, customDateFrom, customDateTo]);
 
   const loadOrders = useCallback(async (offset = 0, replace = true) => {
     try {
@@ -218,7 +239,7 @@ export default function TabletHistoryPage() {
         <title>Order History • Servio</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=yes" />
       </Head>
-      <div className="no-print flex min-h-screen flex-col lg:flex-row">
+      <div className="no-print flex min-h-screen flex-col md:flex-row">
         <TabletSidebar />
         <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8">
           <div className="max-w-5xl">
@@ -286,6 +307,33 @@ export default function TabletHistoryPage() {
                       ))}
                     </select>
                   </div>
+                  {/* Custom Date Range Picker */}
+                  {rangeFilter === 'custom' && (
+                    <>
+                      <div className="min-w-[140px]">
+                        <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--tablet-muted)] mb-2">
+                          From
+                        </label>
+                        <input
+                          type="date"
+                          value={customDateFrom}
+                          onChange={(e) => setCustomDateFrom(e.target.value)}
+                          className="w-full px-3 py-2.5 rounded-lg border border-[var(--tablet-border)] bg-[var(--tablet-bg)] text-[var(--tablet-text)] focus:outline-none focus:ring-2 focus:ring-[var(--tablet-accent)] cursor-pointer"
+                        />
+                      </div>
+                      <div className="min-w-[140px]">
+                        <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--tablet-muted)] mb-2">
+                          To
+                        </label>
+                        <input
+                          type="date"
+                          value={customDateTo}
+                          onChange={(e) => setCustomDateTo(e.target.value)}
+                          className="w-full px-3 py-2.5 rounded-lg border border-[var(--tablet-border)] bg-[var(--tablet-bg)] text-[var(--tablet-text)] focus:outline-none focus:ring-2 focus:ring-[var(--tablet-accent)] cursor-pointer"
+                        />
+                      </div>
+                    </>
+                  )}
                 </div>
                 <button
                   onClick={() => loadOrders(0, true)}

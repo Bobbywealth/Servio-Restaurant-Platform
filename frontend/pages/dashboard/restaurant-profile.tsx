@@ -411,10 +411,12 @@ export default function RestaurantProfile() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const token = localStorage.getItem('servio_access_token');
-    if (!token) {
-      router.replace('/login');
-    }
+    try {
+      const token = localStorage.getItem('servio_access_token');
+      if (!token) {
+        router.replace('/login');
+      }
+    } catch { router.replace('/login'); }
   }, [router]);
 
   // Profile form state
@@ -561,11 +563,13 @@ export default function RestaurantProfile() {
   useEffect(() => {
     const loadData = async () => {
       if (typeof window !== 'undefined') {
-        const token = localStorage.getItem('servio_access_token');
-        if (!token) {
-          setLoading(false);
-          return;
-        }
+        try {
+          const token = localStorage.getItem('servio_access_token');
+          if (!token) {
+            setLoading(false);
+            return;
+          }
+        } catch { setLoading(false); return; }
       }
       setLoading(true);
       await Promise.all([fetchProfile(), fetchTheme(), fetchLinks()]);

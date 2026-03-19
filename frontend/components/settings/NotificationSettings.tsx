@@ -82,6 +82,16 @@ export default function NotificationSettings({ isOpen, onClose }: NotificationSe
   const handleTestPush = async () => {
     try {
       const response = await fetch('/api/push/test', { method: 'POST' });
+      console.log('[Push Test] Response status:', response.status, response.statusText);
+      
+      // DEBUG: Validate response is OK before parsing JSON
+      if (!response.ok) {
+        const text = await response.text();
+        console.error('[Push Test] Request failed:', response.status, text.substring(0, 200));
+        showToast.error('Failed to send test notification');
+        return;
+      }
+      
       const data = await response.json();
 
       if (data.success) {

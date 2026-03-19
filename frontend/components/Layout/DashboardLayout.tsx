@@ -454,13 +454,13 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                           `}
                         >
                           <div className={`
-                            flex items-center justify-center w-10 h-10 rounded-lg mr-3 transition-colors
+                            flex items-center justify-center w-12 h-12 rounded-lg mr-3 transition-colors
                             ${isActive
                               ? 'bg-primary-100 dark:bg-primary-800/50'
                               : 'bg-white dark:bg-surface-800 group-hover:bg-gray-200 dark:group-hover:bg-surface-700'
                             }
                           `}>
-                            <item.icon className={`w-5 h-5 ${isActive ? item.color : 'text-surface-500 dark:text-surface-400'}`} />
+                            <item.icon className={`w-6 h-6 ${isActive ? item.color : 'text-surface-500 dark:text-surface-400'}`} />
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center justify-between">
@@ -626,11 +626,11 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                     setSidebarOpen(true);
                     triggerHaptic();
                   }}
-                  className={`flex flex-col items-center justify-center py-2 rounded-lg text-xs font-medium ${
+                  className={`flex flex-col items-center justify-center py-3 rounded-lg text-xs font-medium ${
                     isActive ? 'text-primary-700 dark:text-primary-300' : 'text-gray-500 dark:text-surface-400'
                   } hover:text-primary-700 dark:hover:text-primary-300 transition-colors`}
                 >
-                  <item.icon className="w-5 h-5" />
+                  <item.icon className="w-6 h-6" />
                   <span className="mt-1">{item.name}</span>
                 </button>
               );
@@ -639,11 +639,11 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
               <Link
                 key={item.name}
                 href={item.href}
-                className={`flex flex-col items-center justify-center py-2 rounded-lg text-xs font-medium ${
+                className={`flex flex-col items-center justify-center py-3 rounded-lg text-xs font-medium ${
                   isActive ? 'text-primary-700 dark:text-primary-300' : 'text-gray-500 dark:text-surface-400'
                 }`}
               >
-                <item.icon className="w-5 h-5" />
+                <item.icon className="w-6 h-6" />
                 <span className="mt-1">{item.name}</span>
               </Link>
             );

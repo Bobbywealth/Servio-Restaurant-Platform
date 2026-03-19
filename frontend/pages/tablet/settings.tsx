@@ -171,7 +171,7 @@ export default function TabletSettings() {
         <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=yes" />
       </Head>
 
-      <div className="no-print flex min-h-screen flex-col lg:flex-row">
+      <div className="no-print flex min-h-screen flex-col md:flex-row">
         <TabletSidebar />
         <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8">
           <div className="max-w-4xl space-y-6">

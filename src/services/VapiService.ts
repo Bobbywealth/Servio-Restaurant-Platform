@@ -427,11 +427,11 @@ export class VapiService {
       (parameters && (parameters as any).restaurant_slug) ||
       safeGet(parameters, ['restaurant', 'slug']) ||
       (parameters && (parameters as any).slug) ||
-      parameters?.restaurantSlug ??
+      (parameters?.restaurantSlug ??
       parameters?.restaurant_slug ??
       parameters?.restaurant?.slug ??
       parameters?.slug ??
-      process.env.VAPI_RESTAURANT_SLUG;
+      process.env.VAPI_RESTAURANT_SLUG);
     if (typeof fromSlug === 'string' && fromSlug.trim()) {
       return { restaurantId: null, restaurantSlug: fromSlug.trim(), source: 'parameters.restaurantSlug' };
     }

@@ -44,7 +44,8 @@ export class PushService {
   }
 
   getVapidPublicKey(): string {
-    return this.vapidPublicKey;
+    // Read dynamically to support hot-reloading and ensure we get the value after dotenv loads
+    return process.env.VAPID_PUBLIC_KEY || '';
   }
 
   /**

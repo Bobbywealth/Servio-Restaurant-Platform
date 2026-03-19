@@ -26,6 +26,232 @@ import { ORDER_STATUS, TABLET_STATUS_ACTION, mapTabletStatusActionToOrderStatus,
 import type { OrderStatus } from '../../hooks/tablet/orderStatus';
 import { NotificationEventPayload, shouldRefreshForNotification } from '../../lib/tablet/orderNotifications';
 
+// KDS Order Card Component - matches KitchenBoard styling
+function normalizeStatus(s: string | null | undefined) {
+  const v = (s || '').trim();
+  if (!v) return 'received';
+  const lower = v.toLowerCase();
+  if (lower === 'new') return 'received';
+  return lower;
+}
+
+const kdsStatusStyles = {
+  received: {
+    rail: 'bg-amber-500',
+    badge: 'border-amber-300 bg-amber-50 text-amber-700',
+    timer: 'text-amber-600',
+  },
+  preparing: {
+    rail: 'bg-blue-500',
+    badge: 'border-blue-300 bg-blue-50 text-blue-700',
+    timer: 'text-blue-600',
+  },
+  ready: {
+    rail: 'bg-emerald-500',
+    badge: 'border-emerald-300 bg-emerald-50 text-emerald-700',
+    timer: 'text-emerald-600',
+  },
+};
+
+interface KDSOrderCardProps {
+  order: Order;
+  now: number | null;
+  busyId: string | null;
+  onAccept: () => void;
+  onDecline: () => void;
+  onMarkReady: () => void;
+  onMarkPickedUp: () => void;
+  onPrint: () => void;
+  formatMoney: (v: number | null | undefined) => string;
+}
+
+function KDSOrderCard({ order, now, busyId, onAccept, onDecline, onMarkReady, onMarkPickedUp, onPrint, formatMoney }: KDSOrderCardProps) {
+  const status = normalizeStatus(order.status);
+  const style = kdsStatusStyles[status as keyof typeof kdsStatusStyles] || kdsStatusStyles.received;
+  const isBusy = busyId === order.id;
+  const items = order.items || [];
+  const totalItems = items.reduce((sum, item) => sum + (item.quantity || item.qty || 0), 0);
+
+  const getOrderAge = (createdAt: string | null | undefined): string => {
+    if (!createdAt || !now) return '';
+    const created = new Date(createdAt).getTime();
+    const diffMs = now - created;
+    const diffMins = Math.floor(diffMs / 60000);
+    
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m`;
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours}h ${diffMins % 60}m`;
+    return `${Math.floor(diffHours / 24)}d ${diffHours % 24}h`;
+  };
+
+  const formatPickupTime = (pickupTime: string | null | undefined): string => {
+    if (!pickupTime) return '';
+    const date = new Date(pickupTime);
+    return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  };
+
+  const getStatusLabel = (s: string): string => {
+    if (s === 'received') return 'Needs action';
+    if (s === 'preparing') return 'In progress';
+    if (s === 'ready') return 'Ready';
+    return s;
+  };
+
+  const renderActionButton = () => {
+    if (status === 'received') {
+      return (
+        <div className="grid grid-cols-2 gap-2 pt-2">
+          <button
+            onClick={onAccept}
+            disabled={isBusy}
+            className="rounded-lg bg-blue-600 text-white py-2 font-semibold hover:bg-blue-700 disabled:opacity-50 text-sm"
+          >
+            {isBusy ? 'Accepting...' : 'Accept'}
+          </button>
+          <button
+            onClick={onDecline}
+            disabled={isBusy}
+            className="rounded-lg border border-slate-300 py-2 font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50 text-sm"
+          >
+            Reject
+          </button>
+        </div>
+      );
+    }
+
+    if (status === 'preparing') {
+      return (
+        <button
+          onClick={onMarkReady}
+          disabled={isBusy}
+          className="w-full rounded-lg bg-slate-800 text-white py-2 font-semibold hover:bg-slate-700 disabled:opacity-50 text-sm"
+        >
+          {isBusy ? 'Marking...' : 'Ready for pickup'}
+        </button>
+      );
+    }
+
+    if (status === 'ready') {
+      return (
+        <button
+          onClick={onMarkPickedUp}
+          disabled={isBusy}
+          className="w-full rounded-lg bg-emerald-600 text-white py-2 font-semibold hover:bg-emerald-700 disabled:opacity-50 text-sm"
+        >
+          {isBusy ? 'Marking...' : 'Mark as picked up'}
+        </button>
+      );
+    }
+
+    return null;
+  };
+
+  return (
+    <div className="relative w-[320px] shrink-0 rounded-xl border border-slate-200 bg-white shadow-sm">
+      {/* Colored left status rail */}
+      <div className={clsx('absolute left-0 top-0 h-full w-1', style.rail)} />
+
+      {/* ORDER HEADER */}
+      <div className="border-b border-slate-200 px-5 py-4">
+        <div className="flex justify-between items-start">
+          <div>
+            <div className="text-xs font-semibold text-slate-500 uppercase">
+              {getStatusLabel(status)}
+            </div>
+            <div className="text-2xl font-semibold text-slate-900">
+              {order.customer_name || 'Guest'}
+            </div>
+          </div>
+
+          {status === 'preparing' && (
+            <div className="text-right">
+              <div className="text-xs text-slate-500">Ready in</div>
+              <div className={clsx('text-2xl font-semibold', style.timer)}>
+                {order.prep_minutes ? `${order.prep_minutes}m` : '--'}
+              </div>
+            </div>
+          )}
+
+          {status === 'received' && (
+            <div className="text-right">
+              <div className="text-xs text-slate-500">Received</div>
+              <div className={clsx('text-2xl font-semibold', style.timer)}>
+                {getOrderAge(order.created_at)}
+              </div>
+            </div>
+          )}
+
+          {status === 'ready' && (
+            <div className={clsx('text-xs font-semibold border px-2 py-1 rounded', style.badge)}>
+              Ready
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ORDER BODY */}
+      <div className="space-y-3 px-5 py-4">
+        <div className="text-slate-700 font-medium">
+          {order.order_type === 'delivery' ? 'Delivery' : order.order_type === 'pickup' ? 'Pickup' : 'Dine-in'} •{' '}
+          {order.channel || 'Online'}
+        </div>
+
+        <div className="space-y-1 text-sm text-slate-600">
+          {order.pickup_time && (
+            <div>🕒 Pickup at {formatPickupTime(order.pickup_time)}</div>
+          )}
+          <div>👜 {totalItems} items</div>
+          <div>🍴 {order.order_type === 'dine-in' ? 'Dine-in' : 'No utensils'}</div>
+        </div>
+
+        <div className="border-t border-slate-200 pt-3" />
+
+        {items.map((item, index) => (
+          <div key={index} className="flex justify-between text-sm">
+            <div className="flex gap-2">
+              <span className="font-semibold text-blue-600">
+                {item.quantity || item.qty || 1}
+              </span>
+              <span className="text-slate-800 font-medium">
+                {item.name || 'Item'}
+              </span>
+            </div>
+            <div className="font-semibold text-slate-900">
+              {formatMoney((item.unit_price || item.price || 0) * (item.quantity || item.qty || 1))}
+            </div>
+          </div>
+        ))}
+
+        {/* Modifiers/Extras */}
+        {items.some((item) => item.modifiers && (Array.isArray(item.modifiers) ? item.modifiers.length > 0 : Object.keys(item.modifiers).length > 0)) && (
+          <div className="text-sm text-slate-500 pt-2">
+            <div className="font-medium">Extras:</div>
+            {items.map((item, idx) => {
+              const mods = item.modifiers;
+              if (!mods) return null;
+              const modArray = Array.isArray(mods) ? mods : Object.values(mods);
+              return modArray.map((mod: any, modIdx: number) => (
+                <div key={modIdx} className="ml-2">• {typeof mod === 'string' ? mod : mod.name || mod}</div>
+              ));
+            })}
+          </div>
+        )}
+
+        {/* Special Instructions */}
+        {order.special_instructions && (
+          <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-700">
+            📝 {order.special_instructions}
+          </div>
+        )}
+
+        {/* ACTION BUTTONS */}
+        {renderActionButton()}
+      </div>
+    </div>
+  );
+}
+
 type OrderItem = {
   id?: string;
   name?: string;
@@ -178,15 +404,13 @@ function getOrderUrgencyBadgeClass(level: UrgencyLevel): string {
   }
 }
 
-function normalizeStatus(s: string | null | undefined) {
-  const v = (s || '').trim();
-  if (!v) return 'received';
-  const lower = v.toLowerCase();
-  if (lower === 'new') return 'received';
-  return lower;
-}
-
 function isArchivedOrder(order: Order, now: number | null): boolean {
+  // Always archive orders that are completed or cancelled - they should go to history immediately
+  if (order.status === 'completed' || order.status === 'cancelled') {
+    return true;
+  }
+  
+  // Also archive stale orders based on time threshold
   if (!Number.isFinite(STALE_ORDER_THRESHOLD_MINUTES) || STALE_ORDER_THRESHOLD_MINUTES <= 0) return false;
   const { elapsedMinutes } = formatTimeAgo(order.created_at, now);
   return typeof elapsedMinutes === 'number' && elapsedMinutes >= STALE_ORDER_THRESHOLD_MINUTES;
@@ -1680,7 +1904,7 @@ export default function TabletOrdersPage() {
     );
   }, [busyId, isDesktopLayout, now, pendingActions, renderOrderActions, selectedOrder]);
 
-  const { soundEnabled, toggleSound } = useOrderAlerts(receivedOrders.length);
+  const { soundEnabled, toggleSound } = useOrderAlerts(receivedOrders);
 
 
   useEffect(() => {
@@ -1768,7 +1992,7 @@ export default function TabletOrdersPage() {
   }
 
   return (
-    <div className="tablet-theme tablet-orders-theme min-h-screen bg-[var(--tablet-bg)] text-[var(--tablet-text)] font-sans">
+    <div className="tablet-theme tablet-orders-theme min-h-screen bg-slate-100 text-slate-800 font-sans">
       <Head>
         <title>Orders • Servio</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=yes" />
@@ -1780,206 +2004,95 @@ export default function TabletOrdersPage() {
         {receiptHtml ? <PrintReceipt receiptHtml={receiptHtml} copies={2} paperWidth={paperWidth} /> : null}
       </div>
 
-      <div className="no-print flex min-h-screen flex-col lg:flex-row">
+      <div className="no-print flex min-h-screen flex-col md:flex-row">
         <TabletSidebar statusDotClassName={isOnline && socketConnected ? 'bg-emerald-400' : 'bg-amber-400'} />
 
-        <main className="flex-1 bg-[var(--tablet-bg)] text-[var(--tablet-text)] px-3 py-3 sm:px-4 sm:py-4 md:px-5 md:py-5 lg:px-6 lg:py-6">
-          <div className="flex flex-col gap-5 lg:gap-6">
-            {/* Header with search and filters */}
-            <div className="flex flex-col gap-4">
-              <OrdersHeader
-                connectionDotClasses={connectionDotClasses}
-                connectionText={connectionText}
-                soundEnabled={soundEnabled}
-                toggleSound={toggleSound}
-                isFullscreen={isFullscreen}
-                onFullscreenToggle={() => {
-                  if (!document.fullscreenElement) {
-                    document.documentElement.requestFullscreen();
-                  } else {
-                    document.exitFullscreen();
-                  }
-                }}
-                now={now}
-                refresh={refresh}
-                loading={loading}
-                activeCount={activeOrders.length}
-                lateCount={lateOrdersCount}
-              />
-
-              {/* Search and Filter Bar */}
-              <OrderFiltersBar>
-                <div className="flex items-center gap-3 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                  {[
-                    { key: 'all' as const, label: 'All', count: activeOrders.length },
-                    { key: 'received' as const, label: 'Needs action', count: receivedOrders.length },
-                    { key: 'preparing' as const, label: 'In progress', count: preparingOrders.length },
-                    { key: 'ready' as const, label: 'Ready', count: readyOrders.length },
-                    { key: 'scheduled' as const, label: 'Scheduled', count: 0 }
-                  ].map((segment) => {
-                    const isActive = segment.key !== 'scheduled' && statusFilter === segment.key;
-                    return (
-                      <button
-                        key={segment.key}
-                        type="button"
-                        onClick={() => segment.key !== 'scheduled' && setStatusFilter(segment.key as OrderFilter['status'])}
-                        className={clsx(
-                          'min-h-[48px] min-w-[104px] rounded-xl border px-4 text-sm font-semibold transition touch-manipulation',
-                          isActive
-                            ? 'border-[var(--tablet-accent)] bg-[var(--tablet-accent)] text-[var(--tablet-accent-contrast)]'
-                            : 'border-[var(--tablet-border)] bg-[var(--tablet-surface)] text-[var(--tablet-text)] hover:bg-[var(--tablet-surface-alt)]'
-                        )}
-                      >
-                        {segment.label} <span className="opacity-80">({segment.count})</span>
-                      </button>
-                    );
-                  })}
-                  <button
-                    type="button"
-                    onClick={() => setNeedsAttentionOnly((prev) => !prev)}
-                    className={clsx(
-                      'min-h-[48px] rounded-xl border px-4 text-sm font-semibold transition touch-manipulation whitespace-nowrap',
-                      needsAttentionOnly
-                        ? 'border-[var(--tablet-danger)] bg-[color-mix(in_srgb,var(--tablet-danger)_16%,transparent)] text-[var(--tablet-danger)]'
-                        : 'border-[var(--tablet-border)] bg-[var(--tablet-surface)] text-[var(--tablet-text)] hover:bg-[var(--tablet-surface-alt)]'
-                    )}
-                  >
-                    Needs attention ({attentionOrdersCount})
-                  </button>
-
-                  <div className="relative">
-                    {isSearchOpen || searchQuery ? (
-                      <div className="relative min-w-[240px] max-w-[320px]">
-                        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-[var(--tablet-muted)]" />
-                        <input
-                          ref={searchInputRef}
-                          type="text"
-                          placeholder="Search orders..."
-                          value={searchQuery}
-                          autoFocus
-                          onChange={(e) => setSearchQuery(e.target.value)}
-                          onBlur={handleSearchBlur}
-                          onKeyDown={handleSearchKeyDown}
-                          className="w-full pl-11 pr-10 py-3 rounded-xl border border-[var(--tablet-border)] bg-[var(--tablet-surface)] text-[var(--tablet-text)] placeholder-[var(--tablet-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--tablet-accent)] focus:border-transparent transition-all text-base"
-                        />
-                        {searchQuery && (
-                          <button
-                            type="button"
-                            aria-label="Clear search"
-                            onClick={handleSearchClear}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 p-2 min-w-[32px] min-h-[32px] flex items-center justify-center rounded-full hover:bg-[var(--tablet-border)] transition touch-manipulation"
-                          >
-                            <X className="h-4 w-4 text-[var(--tablet-muted)]" />
-                          </button>
-                        )}
+        <main className="flex-1 bg-slate-100 text-slate-800 p-4 md:p-6">
+          <div className="mx-auto max-w-[1800px]">
+            {/* NEW KDS-STYLE HEADER */}
+            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm mb-6">
+              <div className="border-b border-slate-200 bg-slate-50 px-6 py-5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-600 text-white font-bold text-xl">
+                      S
+                    </div>
+                    <div>
+                      <div className="text-xs font-semibold tracking-wider text-slate-500 uppercase">
+                        Servio Kitchen OS
                       </div>
-                    ) : (
-                      <button
-                        type="button"
-                        aria-label="Open search"
-                        onClick={handleSearchToggle}
-                        className="flex min-h-[48px] min-w-[48px] items-center justify-center rounded-xl border border-[var(--tablet-border)] bg-[var(--tablet-surface)] p-3 text-[var(--tablet-text)] transition-all hover:bg-[var(--tablet-surface-alt)] focus:outline-none focus:ring-2 focus:ring-[var(--tablet-accent)]"
-                      >
-                        <Search className="h-5 w-5" />
-                      </button>
-                    )}
+                      <div className="text-xl font-semibold text-slate-800">Live Board</div>
+                    </div>
                   </div>
 
-                  <button
-                    onClick={() => setShowFilters(!showFilters)}
-                    className={clsx(
-                      'flex min-h-[48px] items-center justify-center gap-2 rounded-xl border px-4 text-sm font-semibold transition-all touch-manipulation',
-                      showFilters || channelFilter !== 'all' || sortBy !== 'newest'
-                        ? 'bg-[var(--tablet-accent)] border-[var(--tablet-accent)] text-[var(--tablet-accent-contrast)]'
-                        : 'bg-[var(--tablet-surface)] border-[var(--tablet-border)] text-[var(--tablet-text)]'
-                    )}
-                  >
-                    <Filter className="h-5 w-5" />
-                    More filters
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <div className={clsx(
+                      'rounded-lg px-3 py-1 text-sm font-medium',
+                      isOnline && socketConnected ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
+                    )}>
+                      {isOnline && socketConnected ? 'Kitchen Online' : 'Reconnecting...'}
+                    </div>
+                    <div className="rounded-lg bg-white border border-slate-200 px-4 py-1.5 text-sm font-semibold text-slate-700">
+                      {now ? new Date(now).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '--:--'}
+                    </div>
+                  </div>
                 </div>
-              </OrderFiltersBar>
 
-              {/* Expanded Filters Panel */}
-              {showFilters && (
-                <div className="flex flex-wrap gap-4 p-4 rounded-xl bg-[var(--tablet-surface)] border border-[var(--tablet-border)] animate-fade-in">
-                  <div className="flex-1 min-w-[200px]">
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--tablet-muted)] mb-2">
-                      Status (from quick filters)
-                    </label>
-                    <select
-                      value={statusFilter}
-                      disabled
-                      aria-readonly="true"
-                      className="w-full px-3 py-2 rounded-lg border border-[var(--tablet-border)] bg-[var(--tablet-surface-alt)] text-[var(--tablet-muted)] cursor-not-allowed"
-                    >
-                      <option value="all">All Statuses</option>
-                      <option value="received">New Orders</option>
-                      <option value="preparing">In Progress</option>
-                      <option value="ready">Ready</option>
-                    </select>
-                    <p className="mt-1 text-[0.65rem] text-[var(--tablet-muted)]">Use the status chips above to change this filter.</p>
-                  </div>
-                  <div className="flex-1 min-w-[200px]">
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--tablet-muted)] mb-2">
-                      Channel
-                    </label>
-                    <select
-                      value={channelFilter}
-                      onChange={(e) => setChannelFilter(e.target.value)}
-                      className="w-full px-3 py-2 rounded-lg border border-[var(--tablet-border)] bg-[var(--tablet-bg)] text-[var(--tablet-text)] focus:outline-none focus:ring-2 focus:ring-[var(--tablet-accent)]"
-                    >
-                      <option value="all">All Channels</option>
-                      {channels.map(channel => (
-                        <option key={channel} value={channel}>{channel}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="flex items-end">
+                {/* FILTER TABS */}
+                <div className="mt-4 overflow-x-auto">
+                  <div className="flex gap-2 flex-wrap">
+                    {[
+                      { key: 'all' as const, label: 'All', count: activeOrders.length },
+                      { key: 'received' as const, label: 'Needs action', count: receivedOrders.length },
+                      { key: 'preparing' as const, label: 'In progress', count: preparingOrders.length },
+                      { key: 'ready' as const, label: 'Ready', count: readyOrders.length },
+                    ].map((segment) => {
+                      const isActive = statusFilter === segment.key;
+                      return (
+                        <button
+                          key={segment.key}
+                          type="button"
+                          onClick={() => setStatusFilter(segment.key)}
+                          className={clsx(
+                            'rounded-lg border px-4 py-2 text-sm font-medium transition whitespace-nowrap',
+                            isActive
+                              ? 'border-blue-300 bg-blue-50 text-blue-700'
+                              : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-100'
+                          )}
+                        >
+                          {segment.label}
+                          <span className="ml-2 rounded-md bg-slate-100 px-2 py-0.5 text-xs">
+                            {segment.count}
+                          </span>
+                        </button>
+                      );
+                    })}
                     <button
-                      onClick={() => {
-                        setStatusFilter('all');
-                        setChannelFilter('all');
-                        setSearchQuery('');
-                        setIsSearchOpen(false);
-                        setSortBy('newest');
-                        setNeedsAttentionOnly(false);
-                      }}
-                      className="px-4 py-2 rounded-lg border border-[var(--tablet-border)] text-[var(--tablet-muted)] hover:text-[var(--tablet-text)] hover:bg-[var(--tablet-surface-alt)] transition"
+                      type="button"
+                      onClick={() => setNeedsAttentionOnly((prev) => !prev)}
+                      className={clsx(
+                        'rounded-lg border px-4 py-2 text-sm font-medium transition whitespace-nowrap',
+                        needsAttentionOnly
+                          ? 'border-amber-300 bg-amber-50 text-amber-700'
+                          : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-100'
+                      )}
                     >
-                      Clear All
+                      Needs attention
+                      <span className="ml-2 rounded-md bg-slate-100 px-2 py-0.5 text-xs">
+                        {attentionOrdersCount}
+                      </span>
                     </button>
                   </div>
                 </div>
-              )}
-
-              {/* Active Filters Display */}
-              {activeFilterChips.length > 0 && (
-                <div className="flex flex-wrap gap-2 items-center">
-                  <span className="text-xs text-[var(--tablet-muted)]">Showing:</span>
-                  {activeFilterChips.slice(0, 2).map((chip) => (
-                    <span key={chip.key} className={clsx('inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium', chip.tone)}>
-                      {chip.label}
-                      <button onClick={chip.onClear} className="ml-1 p-1 min-w-[24px] min-h-[24px] flex items-center justify-center" aria-label={`Clear ${chip.label} filter`}>
-                        <X className="h-4 w-4" />
-                      </button>
-                    </span>
-                  ))}
-                  {activeFilterChips.length > 2 && (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-[var(--tablet-surface-alt)] border border-[var(--tablet-border)] text-[var(--tablet-muted)]">
-                      +{activeFilterChips.length - 2}
-                    </span>
-                  )}
-                </div>
-              )}
+              </div>
             </div>
 
             {showUpdateBanner && (
-              <div className="bg-[var(--tablet-surface-alt)] text-[var(--tablet-text)] px-4 py-3 flex items-center justify-between rounded-xl border border-[var(--tablet-border-strong)] shadow-[0_2px_8px_rgba(0,0,0,0.3)]">
+              <div className="bg-white text-slate-800 px-4 py-3 flex items-center justify-between rounded-xl border border-slate-300 shadow-sm mb-4">
                 <div className="font-semibold">Update available — refresh to get the latest tablet improvements.</div>
                 <button
                   type="button"
-                  className="bg-[var(--tablet-accent)] text-[var(--tablet-accent-contrast)] px-3 py-1 rounded-lg font-semibold"
+                  className="bg-blue-600 text-white px-3 py-1 rounded-lg font-semibold hover:bg-blue-700"
                   onClick={() => window.location.reload()}
                 >
                   Refresh
@@ -1987,166 +2100,40 @@ export default function TabletOrdersPage() {
               </div>
             )}
 
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
-              <div className="min-w-0 flex-1">
-                {statusFilter === 'all' ? (
-                  <div className="flex flex-row gap-3 sm:gap-4 overflow-x-auto pb-4 scrollbar-thin">
-                    <section className="bg-[var(--tablet-surface)] rounded-2xl shadow-sm border border-[var(--tablet-border)] flex flex-col w-[320px] sm:w-[380px] md:w-[420px] lg:w-[460px] min-h-[28rem] sm:min-h-[32rem] md:min-h-[40rem] shrink-0 overflow-hidden">
-                      <div className="px-4 py-3.5 border-b border-[var(--tablet-border)] flex items-center justify-between">
-                        <h3 className="text-sm font-bold uppercase tracking-wider text-[var(--tablet-text)]">
-                          All Orders
-                        </h3>
-                        <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-[var(--tablet-surface-alt)] text-[var(--tablet-muted)]">
-                          {activeQueueOrders.length}
-                        </span>
-                      </div>
-                      <div className="flex-1 overflow-x-auto overflow-y-hidden p-3 scrollbar-thin">
-                        {activeQueueOrders.length === 0 ? (
-                          <div className="text-xs text-[var(--tablet-muted)] uppercase tracking-wide py-6 text-center border border-dashed border-[var(--tablet-border)] rounded-xl mt-1">
-                            No active orders
-                          </div>
-                        ) : (
-                          <div className="flex flex-row gap-3">
-                            {activeQueueOrders.map((o, index) => renderOrderCard(o, index))}
-                          </div>
-                        )}
-                      </div>
-                    </section>
+            {/* KDS ORDER BOARD - Full width horizontal scrolling */}
+            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+              <div className="overflow-x-auto px-6 py-6">
+                {filteredOrders.length === 0 ? (
+                  <div className="text-center py-12">
+                    <p className="text-slate-500 text-lg">No orders in this view</p>
                   </div>
                 ) : (
-                  <div className="flex flex-row gap-4 overflow-x-auto pb-4 scrollbar-thin">
-                    {visibleSections.map((section) => {
-                      const columnAccentClass = {
-                        received: 'text-[var(--tablet-danger)]',
-                        preparing: 'text-[var(--tablet-warning)]',
-                        ready: 'text-[var(--tablet-success)]',
-                      } as const;
-
-                      const columnBadgeClass = {
-                        received: 'bg-[var(--tablet-danger)]/15 text-[var(--tablet-danger)]',
-                        preparing: 'bg-[var(--tablet-warning)]/15 text-[var(--tablet-warning)]',
-                        ready: 'bg-[var(--tablet-success)]/18 text-[var(--tablet-success)]',
-                      } as const;
-
-                      const columnBorderClass = {
-                        received: 'border-b-2 border-b-[var(--tablet-danger)]/35',
-                        preparing: 'border-b-2 border-b-[var(--tablet-warning)]/35',
-                        ready: 'border-b-2 border-b-[var(--tablet-success)]/35',
-                      } as const;
-
-                      const emptyStateByLane = {
-                        received: 'No new orders',
-                        preparing: 'No orders in progress',
-                        ready: 'No orders ready'
-                      } as const;
-
-                      return (
-                        <section
-                          key={section.key}
-                          className="bg-[var(--tablet-surface)] rounded-2xl shadow-sm border border-[var(--tablet-border)] flex flex-col w-[280px] sm:w-[340px] md:w-[380px] min-h-[28rem] sm:min-h-[32rem] md:min-h-[40rem] shrink-0 overflow-hidden"
-                        >
-                          <div
-                            className={clsx(
-                              'px-4 py-3.5 border-b border-[var(--tablet-border)] flex items-center justify-between',
-                              columnBorderClass[section.key]
-                            )}
-                          >
-                            <h3 className={clsx('text-sm font-bold uppercase tracking-wider', columnAccentClass[section.key])}>
-                              {section.label}
-                            </h3>
-                            <span className={clsx('px-2.5 py-0.5 rounded-full text-xs font-bold', columnBadgeClass[section.key])}>
-                              {section.orders.length}
-                            </span>
-                          </div>
-                          <div className="flex-1 overflow-x-auto overflow-y-hidden p-3 scrollbar-thin">
-                            {section.orders.length === 0 ? (
-                              <div className="text-xs text-[var(--tablet-muted)] uppercase tracking-wide py-6 text-center border border-dashed border-[var(--tablet-border)] rounded-xl mt-1">
-                                {emptyStateByLane[section.key]}
-                              </div>
-                            ) : (
-                              <div className="flex flex-row gap-3">
-                                {section.orders.map((o, index) => renderOrderCard(o, index))}
-                              </div>
-                            )}
-                          </div>
-                        </section>
-                      );
-                    })}
+                  <div className="flex min-w-max gap-5">
+                    {filteredOrders.map((order) => (
+                      <KDSOrderCard
+                        key={order.id}
+                        order={order}
+                        now={now}
+                        busyId={busyId}
+                        onAccept={() => openAcceptModal(order)}
+                        onDecline={() => declineOrder(order)}
+                        onMarkReady={() => setStatus(order.id, ORDER_STATUS.READY)}
+                        onMarkPickedUp={() => setStatus(order.id, ORDER_STATUS.COMPLETED)}
+                        onPrint={() => printOrder(order.id)}
+                        formatMoney={formatMoney}
+                      />
+                    ))}
                   </div>
                 )}
-
-                {showArchivedOrders && (
-                  <section className="bg-[var(--tablet-surface)] rounded-2xl border border-[var(--tablet-border)] p-3 sm:p-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <h3 className="text-sm font-bold uppercase tracking-wider text-[var(--tablet-muted)]">Archive</h3>
-                      <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-[var(--tablet-surface-alt)] text-[var(--tablet-muted)]">
-                        {archivedOrders.length}
-                      </span>
-                    </div>
-                    {archivedOrders.length === 0 ? (
-                      <div className="text-xs text-[var(--tablet-muted)] uppercase tracking-wide py-6 text-center border border-dashed border-[var(--tablet-border)] rounded-xl mt-1">
-                        No archived orders for current filters
-                      </div>
-                    ) : (
-                      <div className="space-y-2.5">
-                        {archivedOrders.map((o, index) => renderOrderCard(o, index, { isArchived: true }))}
-                      </div>
-                    )}
-                  </section>
-                )}
               </div>
-
-              <aside className="hidden lg:block lg:w-[360px] xl:w-[420px] lg:shrink-0">
-                <div className="sticky top-4 space-y-4 rounded-2xl border border-[var(--tablet-border)] bg-[var(--tablet-surface)] p-4">
-                  {!selectedOrder ? (
-                    <div className="rounded-xl border border-dashed border-[var(--tablet-border)] px-4 py-10 text-center text-sm text-[var(--tablet-muted)]">
-                      Select an order to view details
-                    </div>
-                  ) : (
-                    <>
-                      <section className="rounded-xl border border-[var(--tablet-border)] bg-[var(--tablet-card)] p-4">
-                        <div className="flex items-center justify-between gap-3">
-                          <h3 className="text-base font-semibold">Order #{shortId(selectedOrder.external_id || selectedOrder.id)}</h3>
-                          <span className={clsx('rounded-full px-2.5 py-1 text-xs font-semibold uppercase', statusBadgeClassesForStatus(normalizeStatus(selectedOrder.status)))}>{normalizeStatus(selectedOrder.status)}</span>
-                        </div>
-                        <div className="mt-3 space-y-1 text-sm">
-                          <div className="text-[var(--tablet-muted)]">{selectedOrder.customer_name || 'Guest'} • {selectedOrder.order_type || 'Pickup'}</div>
-                          <div className="text-[var(--tablet-muted)]">{selectedOrder.channel || 'POS'}</div>
-                          <div className="font-semibold">{formatMoney(selectedOrder.total_amount)}</div>
-                        </div>
-                      </section>
-
-                      <section className="rounded-xl border border-[var(--tablet-border)] bg-[var(--tablet-card)] p-4">
-                        <div className="mb-2 text-sm font-semibold">Items</div>
-                        <div className="max-h-[42vh] space-y-2 overflow-y-auto pr-1">
-                          {(selectedOrder.items || []).map((item, idx) => {
-                            const quantity = item.quantity || item.qty || 1;
-                            const linePrice = (item.unit_price || item.price || 0) * quantity;
-                            return (
-                              <div key={`${selectedOrder.id}-${idx}`} className="rounded-lg border border-[var(--tablet-border)]/50 px-3 py-2 text-sm">
-                                <div className="flex items-center justify-between">
-                                  <span className="font-medium">{quantity}× {item.name || 'Item'}</span>
-                                  <span>{formatMoney(linePrice)}</span>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </section>
-
-                      {renderOrderActions(selectedOrder, { className: 'flex items-center gap-2', showPickedUpAction: false })}
-                    </>
-                  )}
-                </div>
-              </aside>
             </div>
           </div>
         </main>
       </div>
 
-      {/* Order Details Modal */}
+      {/* Order Details Modal - for mobile/tablet when clicking a card */}
       <OrderDetailsModal
-        order={isDesktopLayout ? null : orderDetailsOrder}
+        order={!isDesktopLayout ? orderDetailsOrder : null}
         onClose={() => setOrderDetailsOrder(null)}
         onConfirmOrder={(order) => {
           openAcceptModal(order);
@@ -2172,12 +2159,33 @@ export default function TabletOrdersPage() {
 
       {prepModalOrder && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-4">
-          <div className="w-full max-w-sm rounded-2xl border border-[var(--tablet-border)] bg-[var(--tablet-surface)] p-5 shadow-lg">
-            <h3 className="text-lg font-semibold text-[var(--tablet-text)]">Accept order #{shortId(prepModalOrder.id)}</h3>
-            <p className="mt-2 text-sm text-[var(--tablet-muted)]">Set prep time before moving this order to In Progress.</p>
+          <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-5 shadow-lg">
+            <h3 className="text-lg font-semibold text-slate-800">Accept order #{shortId(prepModalOrder.id)}</h3>
+            <p className="mt-2 text-sm text-slate-500">Set prep time before moving this order to In Progress.</p>
 
-            <label className="mt-4 block text-sm font-medium text-[var(--tablet-text)]" htmlFor="prep-minutes-input">
-              Preparation time (minutes)
+            {/* Quick select preset buttons */}
+            <div className="mt-4">
+              <p className="text-sm font-medium text-slate-700 mb-2">Quick select</p>
+              <div className="flex flex-wrap gap-2">
+                {[5, 10, 15, 20, 30, 45].map((mins) => (
+                  <button
+                    key={mins}
+                    type="button"
+                    onClick={() => setPrepMinutes(mins)}
+                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      prepMinutes === mins
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    {mins} min
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <label className="mt-4 block text-sm font-medium text-slate-700" htmlFor="prep-minutes-input">
+              Or enter custom time
             </label>
             <input
               id="prep-minutes-input"
@@ -2189,20 +2197,20 @@ export default function TabletOrdersPage() {
                 const next = Number(event.target.value);
                 setPrepMinutes(Number.isFinite(next) ? next : 15);
               }}
-              className="mt-2 w-full rounded-xl border border-[var(--tablet-border)] bg-[var(--tablet-card)] px-3 py-2 text-[var(--tablet-text)] focus:outline-none focus:ring-2 focus:ring-[var(--tablet-accent)]"
+              className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
 
             <div className="mt-5 flex items-center gap-2">
               <button
                 type="button"
-                className="flex-1 rounded-lg border border-[var(--tablet-border)] px-3 py-2 font-semibold"
+                className="flex-1 rounded-lg border border-slate-300 px-3 py-2 font-semibold text-slate-700 hover:bg-slate-50"
                 onClick={() => setPrepModalOrder(null)}
               >
                 Cancel
               </button>
               <button
                 type="button"
-                className="flex-1 rounded-lg bg-[var(--tablet-accent)] px-3 py-2 font-semibold text-[var(--tablet-accent-contrast)] disabled:opacity-50"
+                className="flex-1 rounded-lg bg-blue-600 px-3 py-2 font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
                 onClick={() => {
                   if (!prepModalOrder) return;
                   const boundedMinutes = Math.min(180, Math.max(1, Number(prepMinutes) || 15));
@@ -2218,58 +2226,10 @@ export default function TabletOrdersPage() {
         </div>
       )}
 
-
-
       <style jsx global>{`
         body {
           overscroll-behavior-y: contain;
           -webkit-tap-highlight-color: transparent;
-        }
-        .tablet-orders-theme {
-          --tablet-accent: #3b82f6;
-          --tablet-accent-contrast: #ffffff;
-          --tablet-warning: #f97316;
-        }
-        .light .tablet-orders-theme {
-          --tablet-accent: #2563eb;
-          --tablet-accent-contrast: #ffffff;
-          --tablet-warning: #ea580c;
-        }
-        /* Mobile-first responsive adjustments */
-        @media (max-width: 639px) {
-          .tablet-theme main {
-            padding: 0.5rem;
-          }
-          .tablet-theme .text-3xl {
-            font-size: 1.5rem;
-          }
-          .tablet-theme .text-2xl {
-            font-size: 1.25rem;
-          }
-        }
-        /* 7-inch tablets */
-        @media (min-width: 640px) and (max-width: 767px) {
-          .tablet-theme .text-3xl {
-            font-size: 1.75rem;
-          }
-          .tablet-theme .text-2xl {
-            font-size: 1.35rem;
-          }
-        }
-        /* 8-inch+ tablets */
-        @media (min-width: 768px) and (max-width: 1023px) {
-          .tablet-theme .text-3xl {
-            font-size: 1.9rem;
-          }
-          .tablet-theme .text-2xl {
-            font-size: 1.45rem;
-          }
-        }
-        /* Desktop */
-        @media (min-width: 1024px) {
-          .tablet-theme .text-3xl {
-            font-size: 2rem;
-          }
         }
         /* Ensure touch targets are large enough */
         .tablet-theme button {

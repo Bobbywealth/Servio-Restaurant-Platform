@@ -185,13 +185,13 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
                           <Link
                             key={item.name}
                             href={item.href}
-                            className={`group flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                            className={`group flex items-center px-3 py-3 text-sm font-medium rounded-lg transition-colors ${
                               isActive
                                 ? 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-300'
                                 : 'text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-700'
                             }`}
                           >
-                            <item.icon className={`mr-3 h-5 w-5 ${
+                            <item.icon className={`mr-3 h-6 w-6 ${
                               isActive ? 'text-red-500' : 'text-gray-400 group-hover:text-gray-500'
                             }`} />
                             {item.name}
@@ -292,11 +292,11 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
                 <Link
                   key={item.name}
                   href={item.href}
-                  className={`flex flex-col items-center justify-center py-2 rounded-lg text-xs font-medium ${
+                  className={`flex flex-col items-center justify-center py-3 rounded-lg text-xs font-medium ${
                     isActive ? 'text-red-600' : 'text-gray-500'
                   }`}
                 >
-                  <item.icon className="w-5 h-5" />
+                  <item.icon className="w-6 h-6" />
                   <span className="mt-1 truncate max-w-full">{item.name}</span>
                 </Link>
               )

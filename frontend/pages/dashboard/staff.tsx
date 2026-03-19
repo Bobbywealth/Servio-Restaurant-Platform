@@ -613,13 +613,7 @@ export default function StaffPage() {
     const year = date.getFullYear()
     const month = String(date.getMonth() + 1).padStart(2, '0')
     const day = String(date.getDate()).padStart(2, '0')
-    const result = `${year}-${month}-${day}`
-    console.log('[DEBUG-DATE] formatLocalDate:', {
-      input: date.toISOString(),
-      output: result,
-      localDate: date.toLocaleDateString('en-CA') // en-CA gives YYYY-MM-DD format
-    })
-    return result
+    return `${year}-${month}-${day}`
   }
 
   const normalizeScheduleDate = (value?: string) => {
@@ -697,13 +691,7 @@ export default function StaffPage() {
       try {
         // Fetch staff data
         const staffResp = await api.get('/api/restaurant/staff')
-        console.log('[DEBUG] Staff response structure:', {
-          fullResponse: JSON.stringify(staffResp.data).substring(0, 500)
-        })
-        
         const staffList = (staffResp.data?.data?.staff || []) as StaffUser[]
-        console.log('[DEBUG] Parsed staff list:', { count: staffList.length, isArray: Array.isArray(staffList) })
-
         if (!isMounted) return
         setStaff(staffList)
 
@@ -771,10 +759,7 @@ export default function StaffPage() {
 
   // Socket listeners for real-time updates
   useEffect(() => {
-    console.log('[DEBUG] Setting up socket listeners...')
-    
     const handleNotificationEvent = (data: { notification?: { type?: string } }) => {
-      console.log('[DEBUG-SOCKET] Notification received:', data)
       const actions = getStaffRefreshActionsFromNotification(data)
 
       if (!actions) {
@@ -791,26 +776,19 @@ export default function StaffPage() {
     }
 
     const handleScheduleUpdated = () => {
-      console.log('[DEBUG-SOCKET] Schedule updated event received')
       showToast.info('Schedule has been updated')
       refreshStaffData()
     }
 
     // Connect and listen
     if (!socketManager.connected) {
-      console.log('[DEBUG] Socket not connected, connecting...')
       socketManager.connect()
-    } else {
-      console.log('[DEBUG] Socket already connected')
     }
 
     socketManager.on('notifications.new', handleNotificationEvent)
     socketManager.on('staff.schedule_updated', handleScheduleUpdated)
 
-    console.log('[DEBUG] Socket listeners registered')
-
     return () => {
-      console.log('[DEBUG] Cleaning up socket listeners...')
       socketManager.off('notifications.new', handleNotificationEvent)
       socketManager.off('staff.schedule_updated', handleScheduleUpdated)
     }
@@ -907,8 +885,6 @@ export default function StaffPage() {
       const startDateStr = formatLocalDate(ws)
       const endDateStr = formatLocalDate(endDate)
 
-      console.log('[SCHEDULING-FRONTEND] Fetching schedules for date range:', startDateStr, 'to', endDateStr);
-
       const [schedulesResp, templatesResp] = await Promise.all([
         api.get('/api/staff/scheduling/schedules', {
           params: {
@@ -969,14 +945,6 @@ export default function StaffPage() {
   }
 
   const handleSaveShift = async (scheduleData: any) => {
-    console.log('[SCHEDULING-FRONTEND] Saving shift:', {
-      user_id: scheduleData.user_id,
-      shift_date: scheduleData.shift_date,
-      shift_start_time: scheduleData.shift_start_time,
-      shift_end_time: scheduleData.shift_end_time,
-      isEdit: !!editingSchedule?.id
-    });
-
     try {
       if (editingSchedule?.id) {
         // Update existing schedule
@@ -989,7 +957,6 @@ export default function StaffPage() {
       }
       // Refresh schedules and verify
       const refreshedSchedules = await loadSchedules(true)
-      console.log('[SCHEDULING-FRONTEND] After save, loaded', refreshedSchedules.length, 'schedules');
       if (!refreshedSchedules || refreshedSchedules.length === 0) {
         showToast.error('Schedule saved but failed to refresh the view')
       }

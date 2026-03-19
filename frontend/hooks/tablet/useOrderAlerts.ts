@@ -76,7 +76,8 @@ function stopAlarmTone() {
   } catch {}
 }
 
-export function useOrderAlerts(receivedOrdersCount: number) {
+export function useOrderAlerts(receivedOrders: Array<{ created_at?: string | null }>) {
+  const receivedOrdersCount = receivedOrders.length;
   const [soundEnabled, setSoundEnabled] = useState(() => {
     if (typeof window === 'undefined') return true;
     const storedSound = safeLocalStorage.getItem('servio_sound_enabled');
@@ -104,6 +105,16 @@ export function useOrderAlerts(receivedOrdersCount: number) {
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
+    // Check if there's a genuinely NEW order (created within last 5 seconds)
+    // This prevents sounds from playing on page load or when existing orders change status
+    const hasNewIncomingOrder = receivedOrders.some(order => {
+      const createdAtStr = order.created_at;
+      if (!createdAtStr) return false;
+      const createdAt = new Date(createdAtStr).getTime();
+      const now = Date.now();
+      return (now - createdAt) < 5000; // Order created in last 5 seconds
+    });
+
     const hasNewReceivedOrders = receivedOrdersCount > previousReceivedOrdersCountRef.current;
 
     if (!hasSeenInitialCountRef.current) {
@@ -120,7 +131,8 @@ export function useOrderAlerts(receivedOrdersCount: number) {
 
     previousReceivedOrdersCountRef.current = receivedOrdersCount;
 
-    if (soundEnabled && receivedOrdersCount > 0 && hasNewReceivedOrders) {
+    // Only play sound if there's a genuinely NEW incoming order (not just status changes)
+    if (soundEnabled && hasNewIncomingOrder) {
       if (alarmIntervalRef.current === null) {
         playAlarmTone();
         alarmIntervalRef.current = window.setInterval(playAlarmTone, 2500);
@@ -140,7 +152,7 @@ export function useOrderAlerts(receivedOrdersCount: number) {
       }
       stopAlarmTone();
     };
-  }, [receivedOrdersCount, soundEnabled]);
+  }, [receivedOrdersCount, soundEnabled, receivedOrders]);
 
   const toggleSound = () => {
     const nextValue = !soundEnabled;

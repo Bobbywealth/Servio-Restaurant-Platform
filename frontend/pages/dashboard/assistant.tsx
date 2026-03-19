@@ -10,6 +10,11 @@ import { api } from '../../lib/api'
 import { WakeWordService, isWakeWordSupported, getDefaultWakeWordConfig } from '../../lib/WakeWordService'
 import { assistantStateReducer, initialAssistantMachineState } from '../../lib/assistant/stateMachine'
 
+// Debug logging helper - only logs in development
+const debugLog = (...args: unknown[]) => {
+  if (process.env.NODE_ENV !== 'production') console.log(...args)
+}
+
 interface AssistantState {
   isRecording: boolean
   isProcessing: boolean
@@ -256,11 +261,11 @@ export default function AssistantPage() {
 
       // Auto-restart recording after audio finishes in Always Listening mode
       if (stateRef.current.alwaysListening) {
-        console.log('📍 Audio ended - scheduling restart...');
+        debugLog('📍 Audio ended - scheduling restart...');
         setTimeout(() => {
-          console.log(`📍 Audio end restart check: alwaysListening=${stateRef.current.alwaysListening}, isRecording=${stateRef.current.isRecording}, isProcessing=${stateRef.current.isProcessing}`);
+          debugLog(`📍 Audio end restart check: alwaysListening=${stateRef.current.alwaysListening}, isRecording=${stateRef.current.isRecording}, isProcessing=${stateRef.current.isProcessing}`);
           if (stateRef.current.alwaysListening && !stateRef.current.isRecording && !stateRef.current.isProcessing) {
-            console.log('✅ Auto-restarting recording after audio playback (Always Listening mode)');
+            debugLog('✅ Auto-restarting recording after audio playback (Always Listening mode)');
             startRecordingRef.current?.();
           }
         }, 800);
@@ -350,7 +355,7 @@ export default function AssistantPage() {
   }, [addMessage])
 
   const processRecording = useCallback(async () => {
-    console.log('Processing recording, chunks count:', audioChunksRef.current.length);
+    debugLog('Processing recording, chunks count:', audioChunksRef.current.length);
     if (audioChunksRef.current.length === 0) {
       console.warn('No audio chunks to process');
       setState(prev => ({ ...prev, isProcessing: false }))
@@ -366,12 +371,12 @@ export default function AssistantPage() {
       const mimeType = recorderMimeTypeRef.current || 'audio/webm;codecs=opus'
       const extension = mimeType.includes('mp4') ? 'mp4' : 'webm'
       const audioBlob = new Blob(audioChunksRef.current, { type: mimeType })
-      console.log('[stt] built audio blob', { mimeType, extension, bytes: audioBlob.size })
+      debugLog('[stt] built audio blob', { mimeType, extension, bytes: audioBlob.size })
       const formData = new FormData()
       formData.append('audio', audioBlob, `recording.${extension}`)
       formData.append('userId', user?.id || 'anonymous')
 
-      console.log('Sending audio to backend...');
+      debugLog('Sending audio to backend...');
       // Send to backend for processing
       const response = await api.post(`/api/assistant/process-audio`, formData, {
         headers: {
@@ -380,7 +385,7 @@ export default function AssistantPage() {
       })
 
       const payload = response.data?.data || response.data
-      console.log('Backend response received:', payload);
+      debugLog('Backend response received:', payload);
       const { transcript, response: assistantResponse, actions, audioUrl } = payload
 
       // **ALWAYS LISTENING: Check for wake word in transcript**
@@ -402,10 +407,10 @@ export default function AssistantPage() {
         // Check if we're in an active conversation window
         const inConversationWindow = inConversationWindowRef.current;
         
-        console.log(`🔍 Transcript: "${transcript}" | Has wake word: ${hasWakeWord} | In window: ${inConversationWindow}`);
+        debugLog(`🔍 Transcript: "${transcript}" | Has wake word: ${hasWakeWord} | In window: ${inConversationWindow}`);
         
         if (!hasWakeWord && !inConversationWindow) {
-          console.log(`⏭️ IGNORING - No wake word and not in conversation window`);
+          debugLog(`⏭️ IGNORING - No wake word and not in conversation window`);
           addMessageRef.current?.({
             type: 'system',
             content: `🔇 Ignored: "${transcript.substring(0, 50)}..." (say "Servio" to start)`,
@@ -415,14 +420,14 @@ export default function AssistantPage() {
           setState(prev => ({ ...prev, isProcessing: false }));
           audioChunksRef.current = [];
           setTimeout(() => {
-            console.log('🔄 Restarting recording after ignoring...');
+            debugLog('🔄 Restarting recording after ignoring...');
             startRecordingRef.current?.();
           }, 500);
           return;
         }
         
         if (hasWakeWord) {
-          console.log(`✅ Wake word detected - starting conversation window (30s)`);
+          debugLog(`✅ Wake word detected - starting conversation window (30s)`);
           // Start/restart conversation window
           if (conversationWindowRef.current) {
             clearTimeout(conversationWindowRef.current);
@@ -431,7 +436,7 @@ export default function AssistantPage() {
           setState(prev => ({ ...prev, inConversationWindow: true }));
           
           conversationWindowRef.current = setTimeout(() => {
-            console.log('⏱️ Conversation window expired - wake word required again');
+            debugLog('⏱️ Conversation window expired - wake word required again');
             inConversationWindowRef.current = false;
             setState(prev => ({ ...prev, inConversationWindow: false }));
             addMessageRef.current?.({
@@ -441,13 +446,13 @@ export default function AssistantPage() {
             });
           }, CONVERSATION_WINDOW_DURATION);
         } else if (inConversationWindow) {
-          console.log(`💬 In conversation window - processing without wake word: "${transcript}"`);
+          debugLog(`💬 In conversation window - processing without wake word: "${transcript}"`);
           // Reset the conversation window timer (extends the window)
           if (conversationWindowRef.current) {
             clearTimeout(conversationWindowRef.current);
           }
           conversationWindowRef.current = setTimeout(() => {
-            console.log('⏱️ Conversation window expired');
+            debugLog('⏱️ Conversation window expired');
             inConversationWindowRef.current = false;
             setState(prev => ({ ...prev, inConversationWindow: false }));
             addMessageRef.current?.({
@@ -527,18 +532,18 @@ export default function AssistantPage() {
       
       // Auto-restart recording if in Always Listening mode
       if (stateRef.current.alwaysListening) {
-        console.log('📍 Scheduling auto-restart after audio processing...');
+        debugLog('📍 Scheduling auto-restart after audio processing...');
         setTimeout(() => {
-          console.log(`📍 Checking restart conditions: alwaysListening=${stateRef.current.alwaysListening}, isRecording=${stateRef.current.isRecording}, isProcessing=${stateRef.current.isProcessing}, isSpeaking=${stateRef.current.isSpeaking}`);
+          debugLog(`📍 Checking restart conditions: alwaysListening=${stateRef.current.alwaysListening}, isRecording=${stateRef.current.isRecording}, isProcessing=${stateRef.current.isProcessing}, isSpeaking=${stateRef.current.isSpeaking}`);
           if (stateRef.current.alwaysListening && !stateRef.current.isRecording && !stateRef.current.isProcessing && !stateRef.current.isSpeaking) {
-            console.log('✅ Auto-restarting recording after audio processing (Always Listening mode)');
+            debugLog('✅ Auto-restarting recording after audio processing (Always Listening mode)');
             startRecordingRef.current?.();
           } else {
-            console.log('⚠️ Cannot restart yet, scheduling retry...');
+            debugLog('⚠️ Cannot restart yet, scheduling retry...');
             // Retry after audio finishes
             setTimeout(() => {
               if (stateRef.current.alwaysListening && !stateRef.current.isRecording && !stateRef.current.isProcessing) {
-                console.log('✅ Retry: Auto-restarting recording (Always Listening mode)');
+                debugLog('✅ Retry: Auto-restarting recording (Always Listening mode)');
                 startRecordingRef.current?.();
               }
             }, 1000);
@@ -567,7 +572,7 @@ export default function AssistantPage() {
 
       isInitializingMediaRecorderRef.current = true;
       try {
-        console.log('[stt] requesting microphone permission via getUserMedia...')
+        debugLog('[stt] requesting microphone permission via getUserMedia...')
         stream = await navigator.mediaDevices.getUserMedia({
           audio: {
             echoCancellation: true,
@@ -575,7 +580,7 @@ export default function AssistantPage() {
             sampleRate: 44100
           }
         })
-        console.log('[stt] getUserMedia success', {
+        debugLog('[stt] getUserMedia success', {
           tracks: stream.getAudioTracks().map((t) => ({
             label: t.label,
             enabled: t.enabled,
@@ -589,15 +594,15 @@ export default function AssistantPage() {
           ? new MediaRecorder(stream, { mimeType: supportedMimeType })
           : new MediaRecorder(stream)
         recorderMimeTypeRef.current = supportedMimeType ?? recorder.mimeType ?? null
-        console.log('[stt] MediaRecorder initialized', {
+        debugLog('[stt] MediaRecorder initialized', {
           requestedMimeType: supportedMimeType,
           actualMimeType: recorder.mimeType,
           state: recorder.state
         })
 
-        recorder.onstart = () => console.log('[stt] recorder onstart', { state: recorder.state })
+        recorder.onstart = () => debugLog('[stt] recorder onstart', { state: recorder.state })
         recorder.onstop = async () => {
-          console.log('[stt] recorder onstop', {
+          debugLog('[stt] recorder onstop', {
             state: recorder.state,
             chunks: audioChunksRef.current.length
           })
@@ -658,7 +663,7 @@ export default function AssistantPage() {
     audioChunksRef.current = []
     speechDetectedRef.current = false
     
-    console.log('[stt] startRecording', {
+    debugLog('[stt] startRecording', {
       recorderState: mediaRecorder.state,
       mimeType: recorderMimeTypeRef.current ?? mediaRecorder.mimeType
     })
@@ -671,9 +676,9 @@ export default function AssistantPage() {
     
     // Simple timer-based auto-stop for Always Listening (much more performant)
     if (stateRef.current.alwaysListening) {
-      console.log('⏲️ Starting 5-second auto-stop timer for Always Listening');
+      debugLog('⏲️ Starting 5-second auto-stop timer for Always Listening');
       silenceTimeoutRef.current = setTimeout(() => {
-        console.log('⏱️ 5 seconds elapsed - auto-stopping recording');
+        debugLog('⏱️ 5 seconds elapsed - auto-stopping recording');
         if (stateRef.current.isRecording && stopRecordingRef.current) {
           stopRecordingRef.current();
         }
@@ -685,7 +690,7 @@ export default function AssistantPage() {
     if (!mediaRecorder || !state.isRecording) return
     if (mediaRecorder.state !== 'recording') return
 
-    console.log('[stt] stopRecording', {
+    debugLog('[stt] stopRecording', {
       recorderState: mediaRecorder.state,
       chunks: audioChunksRef.current.length
     })
@@ -722,7 +727,7 @@ export default function AssistantPage() {
   }, [stopRecording])
 
   const handleQuickCommand = useCallback(async (command: string) => {
-    console.log('Handling quick command:', command);
+    debugLog('Handling quick command:', command);
     // Add user message immediately
     addMessage({
       type: 'user',
@@ -733,14 +738,14 @@ export default function AssistantPage() {
     setState(prev => ({ ...prev, isProcessing: true }))
 
     try {
-      console.log('Sending text command to backend...');
+      debugLog('Sending text command to backend...');
       const response = await api.post(`/api/assistant/process-text`, {
         text: command,
         userId: user?.id || 'anonymous'
       })
 
       const payload = response.data?.data || response.data
-      console.log('Backend response received:', payload);
+      debugLog('Backend response received:', payload);
       const { response: assistantResponse, actions, audioUrl } = payload
 
       // Add assistant response
@@ -802,16 +807,16 @@ export default function AssistantPage() {
       
       // Auto-restart if Always Listening is enabled
       if (stateRef.current.alwaysListening) {
-        console.log('📍 Scheduling auto-restart after text command...');
+        debugLog('📍 Scheduling auto-restart after text command...');
         setTimeout(() => {
-          console.log(`📍 Text command restart check: alwaysListening=${stateRef.current.alwaysListening}, isRecording=${stateRef.current.isRecording}, isSpeaking=${stateRef.current.isSpeaking}`);
+          debugLog(`📍 Text command restart check: alwaysListening=${stateRef.current.alwaysListening}, isRecording=${stateRef.current.isRecording}, isSpeaking=${stateRef.current.isSpeaking}`);
           if (stateRef.current.alwaysListening && !stateRef.current.isRecording && !stateRef.current.isProcessing && !stateRef.current.isSpeaking) {
-            console.log('✅ Auto-restarting recording after text command (Always Listening mode)');
+            debugLog('✅ Auto-restarting recording after text command (Always Listening mode)');
             startRecordingRef.current?.();
           } else {
             setTimeout(() => {
               if (stateRef.current.alwaysListening && !stateRef.current.isRecording && !stateRef.current.isProcessing) {
-                console.log('✅ Retry: Auto-restarting after text command (Always Listening mode)');
+                debugLog('✅ Retry: Auto-restarting after text command (Always Listening mode)');
                 startRecordingRef.current?.();
               }
             }, 1000);
@@ -845,7 +850,7 @@ export default function AssistantPage() {
       wakeWordServiceRef.current = new WakeWordService({
         ...config,
         onWakeWordDetected: async (detectedPhrase: string) => {
-          console.log(`Wake word detected callback: "${detectedPhrase}"`);
+          debugLog(`Wake word detected callback: "${detectedPhrase}"`);
           
           // Immediate audio acknowledgment - play a quick "beep" or say "Yes?"
           const beep = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuBzvLZiTYHGGS56+mgUBELTKXh8bllHAU7k9XvyH0pBSh+zPDakTsIF2Kz6OumVRMNS6Lf8rpnIAU3i9Pvx4EqByR8yu/ekj0JGWG16+ypVxQLTKPi8LxnIgU7lNbvyH4qBCh9zO/dkj0JGGCy6OymVBINSqDf8rtnIQU5i9Huyoau');
@@ -853,7 +858,7 @@ export default function AssistantPage() {
           try {
             await beep.play();
           } catch (e) {
-            console.log('Could not play beep');
+            debugLog('Could not play beep');
           }
           
           // Use refs to get latest callbacks

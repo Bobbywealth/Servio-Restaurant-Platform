@@ -82,19 +82,23 @@ export default function ReceiptsPage() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return
-    const token = localStorage.getItem('servio_access_token')
-    if (!token) {
-      router.replace('/login')
-    }
+    try {
+      const token = localStorage.getItem('servio_access_token')
+      if (!token) {
+        router.replace('/login')
+      }
+    } catch { router.replace('/login'); }
   }, [router])
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const token = localStorage.getItem('servio_access_token')
-      if (!token) {
-        setLoading(false)
-        return
-      }
+      try {
+        const token = localStorage.getItem('servio_access_token')
+        if (!token) {
+          setLoading(false)
+          return
+        }
+      } catch { setLoading(false); return; }
     }
     fetchReceipts()
     fetchInventory()
