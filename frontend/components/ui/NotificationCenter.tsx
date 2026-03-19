@@ -20,7 +20,7 @@ import {
 } from 'lucide-react'
 import { useSocket } from '../../lib/socket'
 import { formatRelativeTime } from '../../lib/utils'
-import axios from 'axios'
+import { api } from '../../lib/api'
 import dynamic from 'next/dynamic'
 import { useRouter } from 'next/router'
 
@@ -83,7 +83,7 @@ export default function NotificationCenter({ className = '' }: NotificationCente
   const fetchNotifications = useCallback(async () => {
     try {
       setIsLoading(true)
-      const response = await axios.get('/api/notifications?limit=100')
+            const response = await api.get('/api/notifications?limit=100')
       if (response.data.success) {
         const normalized = response.data.data.items.map((item: any) => ({
           ...item,
@@ -106,7 +106,7 @@ export default function NotificationCenter({ className = '' }: NotificationCente
   // Mark notification as read
   const markAsRead = useCallback(async (id: string) => {
     try {
-      await axios.post(`/api/notifications/${id}/read`)
+      await api.post(`/api/notifications/${id}/read`)
       setNotifications(prev =>
         prev.map(n => (n.id === id ? { ...n, read: true } : n))
       )
@@ -119,7 +119,7 @@ export default function NotificationCenter({ className = '' }: NotificationCente
   // Mark all as read
   const markAllAsRead = useCallback(async () => {
     try {
-      await axios.post('/api/notifications/read-all')
+      await api.post('/api/notifications/read-all')
       setNotifications(prev => prev.map(n => ({ ...n, read: true })))
       setUnreadCount(0)
     } catch (error) {
@@ -130,7 +130,7 @@ export default function NotificationCenter({ className = '' }: NotificationCente
   // Clear all notifications
   const clearAll = useCallback(async () => {
     try {
-      await axios.delete('/api/notifications/clear-all')
+      await api.delete('/api/notifications/clear-all')
       setNotifications([])
       setUnreadCount(0)
     } catch (error) {
@@ -141,7 +141,7 @@ export default function NotificationCenter({ className = '' }: NotificationCente
   // Remove single notification
   const removeNotification = useCallback(async (id: string) => {
     try {
-      await axios.delete(`/api/notifications/${id}`)
+      await api.delete(`/api/notifications/${id}`)
       setNotifications(prev => {
         const notification = prev.find(n => n.id === id)
         if (notification && !notification.read) {
