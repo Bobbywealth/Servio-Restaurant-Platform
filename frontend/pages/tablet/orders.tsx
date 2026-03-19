@@ -2013,17 +2013,7 @@ export default function TabletOrdersPage() {
             <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm mb-6">
               <div className="border-b border-slate-200 bg-slate-50 px-6 py-5">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-600 text-white font-bold text-xl">
-                      S
-                    </div>
-                    <div>
-                      <div className="text-xs font-semibold tracking-wider text-slate-500 uppercase">
-                        Servio Kitchen OS
-                      </div>
-                      <div className="text-xl font-semibold text-slate-800">Live Board</div>
-                    </div>
-                  </div>
+                  <div /> {/* Spacer for alignment */}
 
                   <div className="flex items-center gap-3">
                     <div className={clsx(
