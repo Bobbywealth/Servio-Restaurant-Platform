@@ -2823,14 +2823,14 @@ const MenuManagement: React.FC = () => {
         )}
       </AnimatePresence>
 
-      {/* Edit Item Modal */}
+      {/* Edit Item Drawer - Slides in from right */}
       <AnimatePresence>
         {showEditItemModal && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+            className="fixed inset-0 bg-black/50 z-50"
             onClick={() => {
               setShowEditItemModal(false);
               setEditingItem(null);
@@ -2841,14 +2841,33 @@ const MenuManagement: React.FC = () => {
             }}
           >
             <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-white dark:bg-gray-800 rounded-lg max-w-lg w-full p-6"
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+              className="absolute right-0 top-0 h-full w-full sm:w-[500px] bg-white dark:bg-gray-800 shadow-xl flex flex-col"
               onClick={(e) => e.stopPropagation()}
             >
-              <h2 className="text-xl font-bold text-gray-900 dark:text-white">Edit Menu Item</h2>
-              <div className="mt-4 space-y-4">
+              {/* Drawer Header */}
+              <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+                <h2 className="text-lg font-bold text-gray-900 dark:text-white">Edit Menu Item</h2>
+                <button
+                  onClick={() => {
+                    setShowEditItemModal(false);
+                    setEditingItem(null);
+                    setEditItemAttachedGroups([]);
+                    setEditItemExistingAttachedGroups([]);
+                    setEditItemSizes([]);
+                    setEditItemInheritedGroups([]);
+                  }}
+                  className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Drawer Content - Scrollable */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Name</label>
                   <input
@@ -2880,13 +2899,13 @@ const MenuManagement: React.FC = () => {
                     placeholder="Short description"
                   />
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                       Base Price
                       {editItemSizes.length > 0 && (
                         <span className="ml-2 text-xs font-normal text-amber-600 dark:text-amber-400">
-                          (Not used - sizes override)
+                          (sizes override)
                         </span>
                       )}
                     </label>
@@ -2898,11 +2917,6 @@ const MenuManagement: React.FC = () => {
                       className="mt-1 w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                       placeholder="0.00"
                     />
-                    {editItemSizes.length === 0 && (
-                      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                        Price customers pay. Add sizes below for size-based pricing.
-                      </p>
-                    )}
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Prep time (mins)</label>
@@ -2933,7 +2947,7 @@ const MenuManagement: React.FC = () => {
                 <ItemSizeEditor
                   sizes={editItemSizes}
                   onCreate={async (input) => {
-                    await api.post(`/api/menu/items/${encodeURIComponent(editItem.id)}/sizes`, {
+                    await api.post("/api/menu/items/" + encodeURIComponent(editItem.id) + "/sizes", {
                       sizeName: input.sizeName,
                       price: input.price,
                       isPreselected: input.isPreselected,
@@ -2942,11 +2956,11 @@ const MenuManagement: React.FC = () => {
                     await reloadEditItemSizes(editItem.id);
                   }}
                   onUpdate={async (sizeId, patch) => {
-                    await api.put(`/api/menu/items/${encodeURIComponent(editItem.id)}/sizes/${encodeURIComponent(sizeId)}`, patch);
+                    await api.put("/api/menu/items/" + encodeURIComponent(editItem.id) + "/sizes/" + encodeURIComponent(sizeId), patch);
                     await reloadEditItemSizes(editItem.id);
                   }}
                   onDelete={async (sizeId) => {
-                    await api.delete(`/api/menu/items/${encodeURIComponent(editItem.id)}/sizes/${encodeURIComponent(sizeId)}`);
+                    await api.delete("/api/menu/items/" + encodeURIComponent(editItem.id) + "/sizes/" + encodeURIComponent(sizeId));
                     await reloadEditItemSizes(editItem.id);
                   }}
                 />
@@ -3087,7 +3101,9 @@ const MenuManagement: React.FC = () => {
                   </label>
                 </div>
               </div>
-              <div className="mt-6 flex justify-end gap-3">
+
+              {/* Drawer Footer - Fixed */}
+              <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-3 bg-white dark:bg-gray-800">
                 <button
                   onClick={() => {
                     setShowEditItemModal(false);
