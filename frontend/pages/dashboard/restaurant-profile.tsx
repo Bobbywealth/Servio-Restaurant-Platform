@@ -520,6 +520,11 @@ export default function RestaurantProfile() {
           socialLinks: data.data.social_links || {},
           operatingHours: data.data.operating_hours || {},
           onlineOrderingEnabled: data.data.online_ordering_enabled || false,
+          deliveryEnabled: data.data.delivery_enabled || false,
+          pickupEnabled: data.data.pickup_enabled || true,
+          deliveryRadius: data.data.delivery_radius || 0,
+          deliveryFee: data.data.delivery_fee || 0,
+          minimumOrder: data.data.minimum_order || 0,
         });
         
         // Load tax settings from restaurant settings
@@ -527,12 +532,6 @@ export default function RestaurantProfile() {
         setTaxSettings({
           taxRate: settings.taxRate || 0,
           taxState: settings.taxState || ''
-        });
-          deliveryEnabled: data.data.delivery_enabled || false,
-          pickupEnabled: data.data.pickup_enabled || true,
-          deliveryRadius: data.data.delivery_radius || 0,
-          deliveryFee: data.data.delivery_fee || 0,
-          minimumOrder: data.data.minimum_order || 0
         });
       }
     } catch (error) {

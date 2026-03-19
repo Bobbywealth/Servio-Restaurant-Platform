@@ -733,7 +733,7 @@ router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) =>
       restaurant: restaurant ?? null,
       restaurantId,
       body: safeBody,
-      totals: { subtotal: finalSubtotal, tax: finalTax, total: finalTotal }
+      totals: { subtotal, tax, total }
     })}`
   );
 
