@@ -408,8 +408,8 @@ export function useNotificationPreferences() {
   useEffect(() => {
     const fetchPreferences = async () => {
       try {
-        const response = await fetch('/api/push/preferences');
-        const data = await response.json();
+                const response = await api.get('/api/push/preferences');
+                const data = response.data;
 
         if (data.success) {
           setPreferences(data.data);
@@ -430,13 +430,9 @@ export function useNotificationPreferences() {
   const updatePreferences = React.useCallback(
     async (updates: Partial<NotificationPreferences>): Promise<boolean> => {
       try {
-        const response = await fetch('/api/push/preferences', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ preferences: updates }),
-        });
+        const response = await api.put('/api/push/preferences', { preferences: updates });
 
-        const data = await response.json();
+                const data = response.data;
 
         if (data.success) {
           setPreferences(prev => (prev ? { ...prev, ...updates } : null));
