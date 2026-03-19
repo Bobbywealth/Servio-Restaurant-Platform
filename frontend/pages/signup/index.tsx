@@ -103,11 +103,21 @@ export default function SignupPage() {
         restaurantName,
         planSlug: selectedPlan!.slug,
       });
-      const checkoutUrl = response.data?.data?.checkoutUrl;
+      const data = response.data?.data;
+      const checkoutUrl = data?.checkoutUrl;
       if (checkoutUrl) {
         window.location.href = checkoutUrl;
+      } else if (data?.stripeError) {
+        const query = new URLSearchParams({
+          deferred: 'true',
+          email,
+          plan: selectedPlan?.slug || '',
+          restaurant: restaurantName,
+          name: fullName,
+        });
+        router.push(`/signup/success?${query.toString()}`);
       } else {
-        setError('Unexpected response from server. Please try again.');
+        setError('Your account was created, but billing could not start. Please log in and retry payment from your account.');
       }
     } catch (err: any) {
       const message =
@@ -345,11 +355,12 @@ export default function SignupPage() {
               <form onSubmit={handleSubmit} className="space-y-5" noValidate>
                 {/* Restaurant Name */}
                 <div className="space-y-1.5">
-                  <label className="text-sm font-semibold text-gray-300 flex items-center gap-1.5">
+                  <label htmlFor="restaurant-name" className="text-sm font-semibold text-gray-300 flex items-center gap-1.5">
                     <Building2 className="w-4 h-4 text-gray-400" />
                     Restaurant Name
                   </label>
                   <input
+                    id="restaurant-name"
                     type="text"
                     value={restaurantName}
                     onChange={(e) => {
@@ -370,11 +381,12 @@ export default function SignupPage() {
 
                 {/* Full Name */}
                 <div className="space-y-1.5">
-                  <label className="text-sm font-semibold text-gray-300 flex items-center gap-1.5">
+                  <label htmlFor="full-name" className="text-sm font-semibold text-gray-300 flex items-center gap-1.5">
                     <User className="w-4 h-4 text-gray-400" />
                     Full Name
                   </label>
                   <input
+                    id="full-name"
                     type="text"
                     value={fullName}
                     onChange={(e) => {
@@ -395,11 +407,12 @@ export default function SignupPage() {
 
                 {/* Email */}
                 <div className="space-y-1.5">
-                  <label className="text-sm font-semibold text-gray-300 flex items-center gap-1.5">
+                  <label htmlFor="signup-email" className="text-sm font-semibold text-gray-300 flex items-center gap-1.5">
                     <Mail className="w-4 h-4 text-gray-400" />
                     Email
                   </label>
                   <input
+                    id="signup-email"
                     type="email"
                     value={email}
                     onChange={(e) => {
@@ -421,12 +434,13 @@ export default function SignupPage() {
 
                 {/* Password */}
                 <div className="space-y-1.5">
-                  <label className="text-sm font-semibold text-gray-300 flex items-center gap-1.5">
+                  <label htmlFor="signup-password" className="text-sm font-semibold text-gray-300 flex items-center gap-1.5">
                     <Lock className="w-4 h-4 text-gray-400" />
                     Password
                   </label>
                   <div className="relative">
                     <input
+                      id="signup-password"
                       type={showPassword ? 'text' : 'password'}
                       value={password}
                       onChange={(e) => {
@@ -456,12 +470,13 @@ export default function SignupPage() {
 
                 {/* Confirm Password */}
                 <div className="space-y-1.5">
-                  <label className="text-sm font-semibold text-gray-300 flex items-center gap-1.5">
+                  <label htmlFor="signup-confirm-password" className="text-sm font-semibold text-gray-300 flex items-center gap-1.5">
                     <Lock className="w-4 h-4 text-gray-400" />
                     Confirm Password
                   </label>
                   <div className="relative">
                     <input
+                      id="signup-confirm-password"
                       type={showConfirmPassword ? 'text' : 'password'}
                       value={confirmPassword}
                       onChange={(e) => {
@@ -513,7 +528,7 @@ export default function SignupPage() {
                 </div>
 
                 <p className="text-center text-xs text-gray-500 pt-1">
-                  You&apos;ll be redirected to Stripe to complete your payment securely.
+                  You&apos;ll review your billing in Stripe after your account is created.
                 </p>
               </form>
             </div>

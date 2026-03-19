@@ -1,4 +1,4 @@
-import { Request } from 'express';
+import type { Request as _Request } from 'express';
 
 export interface FilterParams {
   filters: Record<string, any>;
@@ -188,7 +188,7 @@ export function buildWhereClause(
   
   // Handle search filter
   if (searchFilter && searchFilter.or) {
-    const searchConditions = searchFilter.or.map((cond: Record<string, any>) => {
+    const _searchConditions = searchFilter.or.map((cond: Record<string, any>) => {
       const [key, value] = Object.entries(cond)[0];
       conditions.push(`LOWER(${key}) LIKE LOWER($${paramIndex++})`);
       params.push(value.ilike);

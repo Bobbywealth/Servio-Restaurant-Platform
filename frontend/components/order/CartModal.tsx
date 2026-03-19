@@ -2,9 +2,10 @@ import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft, ArrowRight, Plus, Minus, Loader2, CheckCircle2,
-  CreditCard, Wallet, User, Phone, Mail
+  CreditCard, Wallet, User, Phone, Mail, MapPin
 } from 'lucide-react';
 import type { CartItem, CustomerInfo, CheckoutStep } from './types';
+import { calculateTax, calculateOrderTotals, getStateTaxInfo, getStateOptions } from '../../utils/taxRates';
 
 interface CartModalProps {
   isOpen: boolean;
@@ -97,6 +98,7 @@ export function CartModal({
                     paymentMethod={paymentMethod}
                     setPaymentMethod={setPaymentMethod}
                     cartTotal={cartTotal}
+                    customerInfo={customerInfo}
                     isSubmitting={isSubmitting}
                     onBack={() => setCheckoutStep('details')}
                     onPlaceOrder={onPlaceOrder}
@@ -160,9 +162,10 @@ function CartReviewStep({
 
       <div className="border-t pt-4 mb-6">
         <div className="flex justify-between items-center text-xl font-bold">
-          <span>Total</span>
+          <span>Subtotal</span>
           <span>${cartTotal.toFixed(2)}</span>
         </div>
+        <p className="text-sm text-gray-500 mt-1 text-right">Tax calculated at checkout</p>
       </div>
 
       <div style={{ paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}>
@@ -192,6 +195,12 @@ function CustomerDetailsStep({
   onBack: () => void;
   onProceed: () => void;
 }) {
+  // Calculate tax based on selected state
+  const stateTaxInfo = customerInfo.state ? getStateTaxInfo(customerInfo.state) : null;
+  const taxAmount = customerInfo.state ? calculateTax(cartTotal, customerInfo.state) : 0;
+  const orderTotal = customerInfo.state ? cartTotal + taxAmount : cartTotal;
+  const stateOptions = getStateOptions();
+
   return (
     <>
       <div className="flex items-center gap-4 mb-6">
@@ -232,6 +241,31 @@ function CustomerDetailsStep({
             className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none text-lg scroll-mt-24"
           />
           <p className="text-sm text-gray-500 mt-1">We'll text you when your order is ready</p>
+        </div>
+
+        <div>
+          <label className="block text-sm font-semibold text-gray-700 mb-2">
+            <MapPin className="w-4 h-4 inline mr-2" />
+            State (for tax calculation) *
+          </label>
+          <select
+            value={customerInfo.state || ''}
+            onChange={(e) => setCustomerInfo((prev: CustomerInfo) => ({ ...prev, state: e.target.value }))}
+            onFocus={(e) => { setTimeout(() => { e.target.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 300); }}
+            className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none text-lg scroll-mt-24 bg-white"
+          >
+            <option value="">Select your state</option>
+            {stateOptions.map((state) => (
+              <option key={state.code} value={state.code}>
+                {state.name}
+              </option>
+            ))}
+          </select>
+          {stateTaxInfo && (
+            <p className="text-sm text-gray-500 mt-1">
+              Tax rate: {(stateTaxInfo.rate * 100).toFixed(2)}%
+            </p>
+          )}
         </div>
 
         <div>
@@ -313,16 +347,28 @@ function CustomerDetailsStep({
         </div>
       </div>
 
-      <div className="border-t pt-4 mb-4">
+      <div className="border-t pt-4 mb-4 space-y-2">
+        <div className="flex justify-between items-center text-base">
+          <span className="text-gray-600">Subtotal</span>
+          <span>${cartTotal.toFixed(2)}</span>
+        </div>
+        {customerInfo.state && (
+          <div className="flex justify-between items-center text-base">
+            <span className="text-gray-600">
+              Tax {stateTaxInfo ? `(${stateTaxInfo.name})` : ''}
+            </span>
+            <span>${taxAmount.toFixed(2)}</span>
+          </div>
+        )}
         <div className="flex justify-between items-center text-lg font-bold">
           <span>Order Total</span>
-          <span>${cartTotal.toFixed(2)}</span>
+          <span>${orderTotal.toFixed(2)}</span>
         </div>
       </div>
 
       <div style={{ paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}>
         <button
-          disabled={isSubmitting}
+          disabled={isSubmitting || !customerInfo.state}
           onClick={onProceed}
           className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-xl text-base sm:text-lg font-bold flex items-center justify-center gap-2 disabled:opacity-50 active:scale-[0.98] transition-transform"
         >
@@ -340,21 +386,30 @@ function CustomerDetailsStep({
             </>
           )}
         </button>
+        {!customerInfo.state && (
+          <p className="text-sm text-gray-500 mt-2 text-center">Please select your state to continue</p>
+        )}
       </div>
     </>
   );
 }
 
 function PaymentStep({
-  paymentMethod, setPaymentMethod, cartTotal, isSubmitting, onBack, onPlaceOrder
+  paymentMethod, setPaymentMethod, cartTotal, customerInfo, isSubmitting, onBack, onPlaceOrder
 }: {
   paymentMethod: 'pickup' | 'online';
   setPaymentMethod: (v: 'pickup' | 'online') => void;
   cartTotal: number;
+  customerInfo: CustomerInfo;
   isSubmitting: boolean;
   onBack: () => void;
   onPlaceOrder: () => void;
 }) {
+  // Calculate tax based on selected state
+  const stateTaxInfo = customerInfo.state ? getStateTaxInfo(customerInfo.state) : null;
+  const taxAmount = customerInfo.state ? calculateTax(cartTotal, customerInfo.state) : 0;
+  const orderTotal = customerInfo.state ? cartTotal + taxAmount : cartTotal;
+
   return (
     <>
       <div className="flex items-center gap-4 mb-6">
@@ -418,14 +473,22 @@ function PaymentStep({
       )}
 
 
-      <div className="border-t pt-4 mb-4">
+      <div className="border-t pt-4 mb-4 space-y-2">
         <div className="flex justify-between items-center">
           <span className="text-gray-600">Subtotal</span>
           <span>${cartTotal.toFixed(2)}</span>
         </div>
+        {customerInfo.state && (
+          <div className="flex justify-between items-center">
+            <span className="text-gray-600">
+              Tax {stateTaxInfo ? `(${stateTaxInfo.name})` : ''}
+            </span>
+            <span>${taxAmount.toFixed(2)}</span>
+          </div>
+        )}
         <div className="flex justify-between items-center text-xl font-bold mt-2">
           <span>Total</span>
-          <span>${cartTotal.toFixed(2)}</span>
+          <span>${orderTotal.toFixed(2)}</span>
         </div>
       </div>
 

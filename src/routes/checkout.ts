@@ -8,7 +8,7 @@ import crypto from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 import rateLimit from 'express-rate-limit';
 import { DatabaseService } from '../services/DatabaseService';
-import { asyncHandler, ForbiddenError, UnauthorizedError } from '../middleware/errorHandler';
+import { asyncHandler, } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
 
 // ---------------------------------------------------------------------------

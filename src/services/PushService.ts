@@ -3,13 +3,32 @@ import { v4 as uuidv4 } from 'uuid';
 import { DbClient } from './DatabaseService';
 import { logger } from '../utils/logger';
 
+// VAPID key validation: public key must be exactly 65 bytes when decoded
+function isValidVapidKey(key: string): boolean {
+  if (!key || typeof key !== 'string') return false;
+  try {
+    const decoded = Buffer.from(key, 'base64url');
+    return decoded.length === 65;
+  } catch {
+    return false;
+  }
+}
+
 // Configure VAPID details from environment variables
 const vapidPublicKey = process.env.VAPID_PUBLIC_KEY;
 const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY;
 const vapidEmail = process.env.VAPID_EMAIL || 'mailto:admin@servio.com';
 
+let vapidConfigured = false;
 if (vapidPublicKey && vapidPrivateKey) {
-  webPush.setVapidDetails(vapidEmail, vapidPublicKey, vapidPrivateKey);
+  if (isValidVapidKey(vapidPublicKey)) {
+    webPush.setVapidDetails(vapidEmail, vapidPublicKey, vapidPrivateKey);
+    vapidConfigured = true;
+    logger.info('VAPID keys configured successfully');
+  } else {
+    logger.error('VAPID public key is invalid. It must be exactly 65 bytes when decoded. Push notifications will not work.');
+    logger.error('Generate new keys with: npx web-push generate-vapid-keys');
+  }
 } else {
   logger.warn('VAPID keys not configured. Push notifications will not work.');
 }

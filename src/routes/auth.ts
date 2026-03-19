@@ -16,7 +16,7 @@ const authRateLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-const pinRateLimiter = rateLimit({
+const _pinRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 5, // 5 PIN attempts per window (stricter)
   message: { success: false, error: { message: 'Too many PIN attempts. Please try again in 15 minutes.' } },

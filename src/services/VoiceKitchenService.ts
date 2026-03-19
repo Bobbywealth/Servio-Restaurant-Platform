@@ -188,7 +188,7 @@ class VoiceKitchenService {
 
   // AWS Polly text-to-speech (fallback)
   private async synthesizeWithPolly(
-    text: string,
+    _text: string,
     _options: SpeechSynthesisOptions
   ): Promise<SpeechSynthesisResult> {
     // AWS Polly would require AWS SDK setup

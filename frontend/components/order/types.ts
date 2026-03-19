@@ -77,6 +77,13 @@ export interface CustomerInfo {
   email: string;
   orderType: string;
   specialInstructions: string;
+  state?: string;
+}
+
+export interface OrderTotals {
+  subtotal: number;
+  tax: number;
+  total: number;
 }
 
 export type CheckoutStep = 'cart' | 'details' | 'payment';

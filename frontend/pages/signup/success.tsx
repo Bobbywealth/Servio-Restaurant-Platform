@@ -23,7 +23,7 @@ const PLAN_NAMES: Record<string, string> = {
 
 export default function SignupSuccessPage() {
   const router = useRouter();
-  const { session_id } = router.query;
+  const { session_id, deferred, email, plan, restaurant, name } = router.query;
 
   const [sessionData, setSessionData] = useState<SessionData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -31,6 +31,19 @@ export default function SignupSuccessPage() {
 
   useEffect(() => {
     if (!router.isReady) return;
+
+    if (deferred === 'true') {
+      setSessionData({
+        planName: PLAN_NAMES[String(plan || '')] || String(plan || 'Servio'),
+        planSlug: String(plan || ''),
+        email: String(email || ''),
+        restaurantName: restaurant ? String(restaurant) : undefined,
+        customerName: name ? String(name) : undefined,
+        status: 'pending_payment',
+      });
+      setLoading(false);
+      return;
+    }
 
     if (!session_id || Array.isArray(session_id)) {
       setError('No session ID found. If you just completed checkout, please wait a moment and refresh.');
@@ -64,7 +77,7 @@ export default function SignupSuccessPage() {
     };
 
     fetchSession();
-  }, [router.isReady, session_id]);
+  }, [router.isReady, session_id, deferred, email, plan, restaurant, name]);
 
   return (
     <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center p-4 relative overflow-hidden">
@@ -219,7 +232,7 @@ export default function SignupSuccessPage() {
               >
                 <div className="inline-flex items-center gap-2 bg-primary-500/15 border border-primary-500/25 text-primary-300 px-4 py-1.5 rounded-full text-sm font-semibold mb-4">
                   <Sparkles className="w-3.5 h-3.5" />
-                  Subscription Confirmed
+                  {sessionData?.status === 'pending_payment' ? 'Account Created' : 'Subscription Confirmed'}
                 </div>
                 <h1 className="text-3xl sm:text-4xl font-bold text-white mb-3">
                   Welcome to Servio!
@@ -227,10 +240,17 @@ export default function SignupSuccessPage() {
                 {sessionData.customerName && (
                   <p className="text-xl text-gray-300 mb-1">Hey, {sessionData.customerName.split(' ')[0]}!</p>
                 )}
-                <p className="text-gray-400 leading-relaxed">
-                  You&apos;re all set. Your{' '}
-                  <span className="text-white font-semibold">{sessionData.planName}</span> plan is now active.
-                </p>
+                  <p className="text-gray-400 leading-relaxed">
+                    {sessionData.status === 'pending_payment' ? (
+                      <>
+                        Your account is ready. Your <span className="text-white font-semibold">{sessionData.planName}</span> billing setup still needs attention.
+                      </>
+                    ) : (
+                      <>
+                        You&apos;re all set. Your <span className="text-white font-semibold">{sessionData.planName}</span> plan is now active.
+                      </>
+                    )}
+                  </p>
               </motion.div>
 
               {/* Account details card */}
@@ -261,9 +281,13 @@ export default function SignupSuccessPage() {
                 )}
                 <div className="flex justify-between items-center">
                   <span className="text-gray-400 text-sm">Status</span>
-                  <span className="text-green-400 text-sm font-semibold flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse inline-block" />
-                    Active
+                  <span className={`text-sm font-semibold flex items-center gap-1.5 ${
+                    sessionData.status === 'pending_payment' ? 'text-amber-400' : 'text-green-400'
+                  }`}>
+                    <span className={`w-2 h-2 rounded-full inline-block ${
+                      sessionData.status === 'pending_payment' ? 'bg-amber-400' : 'bg-green-400 animate-pulse'
+                    }`} />
+                    {sessionData.status === 'pending_payment' ? 'Payment retry needed' : 'Active'}
                   </span>
                 </div>
               </motion.div>
@@ -281,7 +305,7 @@ export default function SignupSuccessPage() {
                     whileHover={{ scale: 1.01 }}
                     whileTap={{ scale: 0.98 }}
                   >
-                    Go to Dashboard
+                    {sessionData.status === 'pending_payment' ? 'Log in to finish billing' : 'Go to Dashboard'}
                     <ArrowRight className="w-5 h-5" />
                   </motion.span>
                 </Link>

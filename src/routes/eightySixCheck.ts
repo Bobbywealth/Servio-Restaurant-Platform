@@ -1,7 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { asyncHandler } from '../middleware/errorHandler';
 import { requireAuth } from '../middleware/auth';
-import { VoiceOrderingService } from '../services/VoiceOrderingService';
 import { DatabaseService } from '../services/DatabaseService';
 import { logger } from '../utils/logger';
 import { eventBus } from '../events/bus';
@@ -11,21 +10,8 @@ const router = Router();
 interface EightySixCheckRequest {
   restaurantId: string;
   phoneNumber: string;
-  scheduledTime?: string; // ISO format
+  scheduledTime?: string;
   checkType: 'full' | 'quick' | 'custom';
-}
-
-interface EightySixCheckResult {
-  checkId: string;
-  restaurantId: string;
-  callId?: string;
-  itemsBefore: Array<{id: string; name: string; available: boolean}>;
-  itemsConfirmed: Array<{id: string; name: string; stillUnavailable: boolean}>;
-  itemsUpdated: Array<{id: string; name: string; newStatus: boolean}>;
-  staffName?: string;
-  durationSeconds?: number;
-  status: 'completed' | 'failed' | 'partial' | 'in-progress';
-  notes?: string;
 }
 
 /**
@@ -36,7 +22,6 @@ router.get('/status/:restaurantId', requireAuth, asyncHandler(async (req: Reques
   const { restaurantId } = req.params;
   const db = DatabaseService.getInstance().getDatabase();
   
-  // Get currently unavailable items
   const unavailableItems = await db.all(
     `SELECT id, name, base_price, category_id 
      FROM menu_items 
@@ -44,7 +29,6 @@ router.get('/status/:restaurantId', requireAuth, asyncHandler(async (req: Reques
     [restaurantId]
   );
   
-  // Get recent 86 check history
   const recentChecks = await db.all(
     `SELECT * FROM eighty_six_checks 
      WHERE restaurant_id = ? 
@@ -58,7 +42,7 @@ router.get('/status/:restaurantId', requireAuth, asyncHandler(async (req: Reques
     data: {
       currentlyUnavailable: unavailableItems,
       recentChecks,
-      nextScheduledCheck: null // TODO: Get from cron
+      nextScheduledCheck: null
     }
   });
 }));
@@ -68,7 +52,7 @@ router.get('/status/:restaurantId', requireAuth, asyncHandler(async (req: Reques
  * Manually trigger an 86 check call
  */
 router.post('/trigger', requireAuth, asyncHandler(async (req: Request, res: Response) => {
-  const { restaurantId, phoneNumber, checkType = 'quick' }: EightySixCheckRequest = req.body;
+  const { restaurantId, phoneNumber, checkType: _checkType = 'quick' }: EightySixCheckRequest = req.body;
   
   if (!restaurantId || !phoneNumber) {
     res.status(400).json({
@@ -80,7 +64,6 @@ router.post('/trigger', requireAuth, asyncHandler(async (req: Request, res: Resp
   
   const db = DatabaseService.getInstance().getDatabase();
   
-  // Get currently unavailable items (these will be verified)
   const unavailableItems = await db.all(
     `SELECT id, name 
      FROM menu_items 
@@ -89,7 +72,6 @@ router.post('/trigger', requireAuth, asyncHandler(async (req: Request, res: Resp
     [restaurantId]
   );
   
-  // Create check record
   const checkId = `86check_${Date.now()}`;
   await db.run(
     `INSERT INTO eighty_six_checks (id, restaurant_id, started_at, items_checked, status)
@@ -97,7 +79,6 @@ router.post('/trigger', requireAuth, asyncHandler(async (req: Request, res: Resp
     [checkId, restaurantId, JSON.stringify(unavailableItems), 'in-progress']
   );
   
-  // Emit event for call initiation
   await eventBus.emit('86check.initiated', {
     type: '86check.initiated',
     restaurantId,
@@ -136,7 +117,6 @@ router.post('/result', asyncHandler(async (req: Request, res: Response) => {
   
   const db = DatabaseService.getInstance().getDatabase();
   
-  // Get check record
   const check = await db.get(
     'SELECT * FROM eighty_six_checks WHERE id = ?',
     [checkId]
@@ -147,12 +127,10 @@ router.post('/result', asyncHandler(async (req: Request, res: Response) => {
     return;
   }
   
-  // Process results and update availability
   const itemsUpdated: Array<{id: string; name: string; newStatus: boolean}> = [];
   
   for (const item of results) {
     if (item.updateRequired) {
-      // Update item availability
       await db.run(
         `UPDATE menu_items 
          SET is_available = ?, updated_at = CURRENT_TIMESTAMP 
@@ -166,7 +144,6 @@ router.post('/result', asyncHandler(async (req: Request, res: Response) => {
         newStatus: item.newStatus
       });
       
-      // Log audit
       await DatabaseService.getInstance().logAudit(
         check.restaurant_id,
         null,
@@ -178,7 +155,6 @@ router.post('/result', asyncHandler(async (req: Request, res: Response) => {
     }
   }
   
-  // Update check record
   await db.run(
     `UPDATE eighty_six_checks 
      SET completed_at = CURRENT_TIMESTAMP,
@@ -199,7 +175,6 @@ router.post('/result', asyncHandler(async (req: Request, res: Response) => {
     ]
   );
   
-  // Emit completion event
   await eventBus.emit('86check.completed', {
     type: '86check.completed',
     restaurantId: check.restaurant_id,
@@ -251,8 +226,6 @@ router.get('/history/:restaurantId', requireAuth, asyncHandler(async (req: Reque
 router.post('/schedule', requireAuth, asyncHandler(async (req: Request, res: Response) => {
   const { restaurantId, times, enabled = true } = req.body;
   
-  // times should be array like ["09:00", "14:00", "18:00"]
-  
   const db = DatabaseService.getInstance().getDatabase();
   
   await db.run(
@@ -261,8 +234,6 @@ router.post('/schedule', requireAuth, asyncHandler(async (req: Request, res: Res
      WHERE id = ?`,
     [JSON.stringify({ times, enabled }), restaurantId]
   );
-  
-  // TODO: Update actual cron jobs
   
   res.json({
     success: true,

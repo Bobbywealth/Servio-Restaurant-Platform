@@ -2,7 +2,6 @@ import { Router, Request, Response } from 'express';
 import { ApiKeyService } from '../services/ApiKeyService';
 import {
   asyncHandler,
-  BadRequestError,
   NotFoundError,
   ForbiddenError,
   ValidationError,

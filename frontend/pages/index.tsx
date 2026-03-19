@@ -325,7 +325,7 @@ export default function HomePage() {
                   >
                     <Mic className="w-6 h-6" />
                   </motion.div>
-                  <span>Get Started Free</span>
+                  <span>Start Setup</span>
                   <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                 </Link>
 
@@ -504,10 +504,10 @@ export default function HomePage() {
                     <ArrowRight className="w-4 h-4" />
                   </Link>
                   <Link
-                    href="/dashboard/assistant"
+                    href="/book-demo"
                     className="btn-ghost inline-flex items-center justify-center gap-2 border border-white/20 hover:bg-white/10"
                   >
-                    Try the voice agent
+                    See the live demo
                   </Link>
                 </motion.div>
 
@@ -1008,11 +1008,11 @@ export default function HomePage() {
               viewport={{ once: true }}
             >
               <Link
-                href="/dashboard/assistant"
+                href="/book-demo"
                 className="btn-primary inline-flex items-center gap-3 px-8 py-4 text-lg"
               >
                 <Sparkles className="w-5 h-5" />
-                Try the Assistant
+                Book a guided demo
                 <ArrowRight className="w-5 h-5" />
               </Link>
             </motion.div>
@@ -1039,30 +1039,30 @@ export default function HomePage() {
               <div>
                 <h3 className="text-white font-semibold mb-4">Services</h3>
                 <ul className="space-y-3">
-                  <li><a href="#" className="text-gray-400 hover:text-white transition-colors">Assistant</a></li>
-                  <li><a href="#" className="text-gray-400 hover:text-white transition-colors">Orders</a></li>
-                  <li><a href="#" className="text-gray-400 hover:text-white transition-colors">Inventory</a></li>
-                  <li><a href="#" className="text-gray-400 hover:text-white transition-colors">Staff</a></li>
+                  <li><a href="/#features" className="text-gray-400 hover:text-white transition-colors">Assistant</a></li>
+                  <li><a href="/#services" className="text-gray-400 hover:text-white transition-colors">Orders</a></li>
+                  <li><a href="/#features" className="text-gray-400 hover:text-white transition-colors">Inventory</a></li>
+                  <li><a href="/#features" className="text-gray-400 hover:text-white transition-colors">Staff</a></li>
                 </ul>
               </div>
 
               <div>
                 <h3 className="text-white font-semibold mb-4">Features</h3>
                 <ul className="space-y-3">
-                  <li><a href="#" className="text-gray-400 hover:text-white transition-colors">AI Assistant</a></li>
-                  <li><a href="#" className="text-gray-400 hover:text-white transition-colors">Analytics</a></li>
-                  <li><a href="#" className="text-gray-400 hover:text-white transition-colors">Receipts</a></li>
-                  <li><a href="#" className="text-gray-400 hover:text-white transition-colors">Integrations</a></li>
+                  <li><a href="/#features" className="text-gray-400 hover:text-white transition-colors">AI Assistant</a></li>
+                  <li><a href="/#features" className="text-gray-400 hover:text-white transition-colors">Analytics</a></li>
+                  <li><a href="/#features" className="text-gray-400 hover:text-white transition-colors">Receipts</a></li>
+                  <li><a href="/#services" className="text-gray-400 hover:text-white transition-colors">Integrations</a></li>
                 </ul>
               </div>
 
               <div>
                 <h3 className="text-white font-semibold mb-4">Company</h3>
                 <ul className="space-y-3">
-                  <li><a href="#" className="text-gray-400 hover:text-white transition-colors">Pricing</a></li>
-                  <li><a href="#" className="text-gray-400 hover:text-white transition-colors">FAQ</a></li>
+                  <li><a href="/#pricing" className="text-gray-400 hover:text-white transition-colors">Pricing</a></li>
+                  <li><a href="/#faq" className="text-gray-400 hover:text-white transition-colors">FAQ</a></li>
                   <li><Link href="/login" className="text-gray-400 hover:text-white transition-colors">Login</Link></li>
-                  <li><a href="#" className="text-gray-400 hover:text-white transition-colors">Support</a></li>
+                  <li><a href="mailto:hello@servio.solutions" className="text-gray-400 hover:text-white transition-colors">Support</a></li>
                 </ul>
               </div>
             </div>
@@ -1070,8 +1070,8 @@ export default function HomePage() {
             <div className="border-t border-white/10 pt-8 flex flex-col md:flex-row justify-between items-center">
               <p className="text-gray-400">© 2026 Servio. All rights reserved.</p>
               <div className="flex space-x-6 mt-4 md:mt-0">
-                <a href="#" className="text-gray-400 hover:text-white transition-colors">Privacy Policy</a>
-                <a href="#" className="text-gray-400 hover:text-white transition-colors">Terms of Service</a>
+                <Link href="/privacy-policy" className="text-gray-400 hover:text-white transition-colors">Privacy Policy</Link>
+                <Link href="/terms-and-conditions" className="text-gray-400 hover:text-white transition-colors">Terms of Service</Link>
               </div>
             </div>
           </div>

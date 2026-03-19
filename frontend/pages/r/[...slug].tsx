@@ -22,7 +22,7 @@ import type { MenuItem, ItemSize, SelectedModifier } from '../../components/orde
 
 export default function PublicProfile() {
   const router = useRouter();
-  const { slug } = router.query;
+  const { slug, orderId, checkout } = router.query;
   const restaurantSlug = Array.isArray(slug) ? slug[0] : slug;
 
   const menu = useMenu(restaurantSlug);
@@ -31,6 +31,7 @@ export default function PublicProfile() {
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
   const [isFilterMenuOpen, setIsFilterMenuOpen] = useState(false);
   const [showStickyNav, setShowStickyNav] = useState(false);
+  const [checkoutNotice, setCheckoutNotice] = useState<string | null>(null);
 
   // Scroll listener for sticky navigation
   useEffect(() => {
@@ -58,6 +59,27 @@ export default function PublicProfile() {
     const t = window.setInterval(poll, 15000);
     return () => window.clearInterval(t);
   }, [cart.orderComplete]);
+
+  useEffect(() => {
+    if (!router.isReady || !restaurantSlug) return;
+
+    const normalizedOrderId = Array.isArray(orderId) ? orderId[0] : orderId;
+    const normalizedCheckout = Array.isArray(checkout) ? checkout[0] : checkout;
+
+    if (normalizedCheckout === 'success' && normalizedOrderId) {
+      cart.setOrderComplete(normalizedOrderId);
+      cart.setOrderStatus('received');
+      cart.setIsCartOpen(false);
+      setCheckoutNotice(null);
+      void router.replace(`/r/${restaurantSlug}`, undefined, { shallow: true });
+      return;
+    }
+
+    if (normalizedCheckout === 'cancelled') {
+      setCheckoutNotice('Checkout was cancelled before payment completed. You can review the menu and place a new order when ready.');
+      void router.replace(`/r/${restaurantSlug}`, undefined, { shallow: true });
+    }
+  }, [router, router.isReady, restaurantSlug, orderId, checkout]);
 
   const handleAddToCart = (item: MenuItem, size: ItemSize | null, modifiers: Record<string, SelectedModifier[]>) => {
     return cart.addToCart(item, size, modifiers);
@@ -161,6 +183,14 @@ export default function PublicProfile() {
       <HeroSection restaurant={menu.restaurant} />
 
       <InfoBar restaurant={menu.restaurant} />
+
+      {checkoutNotice && (
+        <div className="mx-auto mt-4 max-w-4xl px-4">
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900">
+            {checkoutNotice}
+          </div>
+        </div>
+      )}
 
       <SearchFilterBar
         searchQuery={menu.searchQuery}

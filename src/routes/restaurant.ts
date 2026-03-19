@@ -20,7 +20,7 @@ declare global {
 }
 
 // Helper to get user ID for audit logs - returns null for API key auth
-function getAuditUserId(req: Request): string | null {
+function _getAuditUserId(req: Request): string | null {
   if (req.user?.id?.startsWith('apikey:')) return null;
   return req.user?.id || 'system';
 }

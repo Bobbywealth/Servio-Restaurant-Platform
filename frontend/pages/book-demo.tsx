@@ -75,6 +75,8 @@ export default function BookDemoPage() {
   const [selectedTime, setSelectedTime] = useState<string>('')
   const [slots, setSlots] = useState<BookingSlot[]>([])
   const [loadingSlots, setLoadingSlots] = useState(false)
+  const [availabilityError, setAvailabilityError] = useState<string | null>(null)
+  const [availabilityReloadKey, setAvailabilityReloadKey] = useState(0)
 
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
@@ -112,6 +114,7 @@ export default function BookDemoPage() {
   useEffect(() => {
     let mounted = true
     setLoadingSlots(true)
+    setAvailabilityError(null)
     api
       .get('/api/bookings', { params: range })
       .then((res) => {
@@ -121,14 +124,15 @@ export default function BookDemoPage() {
       .catch((e) => {
         if (!mounted) return
         console.error(e)
-        // don't block UI if availability fails
         setSlots([])
+        setSelectedTime('')
+        setAvailabilityError('Live availability is temporarily unavailable. Please retry before choosing a time.')
       })
       .finally(() => mounted && setLoadingSlots(false))
     return () => {
       mounted = false
     }
-  }, [range.start, range.end])
+  }, [range.start, range.end, availabilityReloadKey])
 
   useEffect(() => {
     if (!mobileMenuOpen) return
@@ -155,6 +159,10 @@ export default function BookDemoPage() {
   const isWeekend = selectedDate ? [0, 6].includes(selectedDate.getDay()) : false
 
   const submit = async () => {
+    if (availabilityError) {
+      setError('Please reload availability before booking a time.')
+      return
+    }
     if (!selectedDate || !selectedTime) {
       setError('Pick a date and time first.')
       return
@@ -369,7 +377,7 @@ export default function BookDemoPage() {
                     {calendarCells.map((cell) => {
                       const ymd = toYmd(cell.date)
                       const isSelected = selectedDate && toYmd(selectedDate) === ymd
-                      const disabled = !cell.inMonth
+                      const disabled = !cell.inMonth || Boolean(availabilityError)
                       return (
                         <button
                           key={`${ymd}-${cell.inMonth ? 'in' : 'out'}`}
@@ -415,12 +423,13 @@ export default function BookDemoPage() {
                       {timeSlots.map((t) => {
                         const key = `${selectedYmd}|${t}`
                         const booked = bookedSet.has(key)
+                        const disabled = booked || Boolean(availabilityError)
                         const active = selectedTime === t
                         return (
                           <button
                             key={t}
                             type="button"
-                            disabled={booked}
+                            disabled={disabled}
                             onClick={() => {
                               setSelectedTime(t)
                               setSuccessId(null)
@@ -428,7 +437,7 @@ export default function BookDemoPage() {
                             }}
                             className={[
                               'px-3 py-2 rounded-lg border text-sm transition-colors',
-                              booked
+                              disabled
                                 ? 'bg-gray-700 border-gray-600 text-gray-500 cursor-not-allowed line-through'
                                 : 'bg-gray-700 border-gray-600 hover:border-teal-400 hover:bg-teal-500/20 text-white',
                               active ? 'ring-2 ring-teal-400 border-teal-400 bg-teal-500/30' : ''
@@ -479,10 +488,27 @@ export default function BookDemoPage() {
                 </div>
               )}
 
+              {availabilityError && (
+                <div className="mb-5 p-4 rounded-xl border border-amber-500/30 bg-amber-500/20 text-amber-200 backdrop-blur-sm">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="w-5 h-5 mt-0.5 text-amber-300" />
+                    <div className="flex-1 text-sm">{availabilityError}</div>
+                    <button
+                      type="button"
+                      onClick={() => setAvailabilityReloadKey((current) => current + 1)}
+                      className="text-xs font-semibold text-amber-100 underline underline-offset-2"
+                    >
+                      Retry
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <div className="space-y-4">
                 <div>
-                  <label className="text-sm text-gray-300 font-medium">Name</label>
+                  <label htmlFor="demo-name" className="text-sm text-gray-300 font-medium">Name</label>
                   <input
+                    id="demo-name"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     className="mt-1 w-full rounded-lg bg-gray-700/50 border border-gray-600 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-teal-500/50 focus:border-teal-400 placeholder-gray-400 transition-colors"
@@ -490,8 +516,10 @@ export default function BookDemoPage() {
                   />
                 </div>
                 <div>
-                  <label className="text-sm text-gray-300 font-medium">Email</label>
+                  <label htmlFor="demo-email" className="text-sm text-gray-300 font-medium">Email</label>
                   <input
+                    id="demo-email"
+                    type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="mt-1 w-full rounded-lg bg-gray-700/50 border border-gray-600 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-teal-500/50 focus:border-teal-400 placeholder-gray-400 transition-colors"
@@ -499,8 +527,9 @@ export default function BookDemoPage() {
                   />
                 </div>
                 <div>
-                  <label className="text-sm text-gray-300 font-medium">Phone (optional)</label>
+                  <label htmlFor="demo-phone" className="text-sm text-gray-300 font-medium">Phone (optional)</label>
                   <input
+                    id="demo-phone"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
                     className="mt-1 w-full rounded-lg bg-gray-700/50 border border-gray-600 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-teal-500/50 focus:border-teal-400 placeholder-gray-400 transition-colors"
@@ -508,8 +537,9 @@ export default function BookDemoPage() {
                   />
                 </div>
                 <div>
-                  <label className="text-sm text-gray-300 font-medium">Restaurant (optional)</label>
+                  <label htmlFor="demo-restaurant" className="text-sm text-gray-300 font-medium">Restaurant (optional)</label>
                   <input
+                    id="demo-restaurant"
                     value={restaurantName}
                     onChange={(e) => setRestaurantName(e.target.value)}
                     className="mt-1 w-full rounded-lg bg-gray-700/50 border border-gray-600 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-teal-500/50 focus:border-teal-400 placeholder-gray-400 transition-colors"
@@ -517,8 +547,9 @@ export default function BookDemoPage() {
                   />
                 </div>
                 <div>
-                  <label className="text-sm text-gray-300 font-medium">Notes (optional)</label>
+                  <label htmlFor="demo-notes" className="text-sm text-gray-300 font-medium">Notes (optional)</label>
                   <textarea
+                    id="demo-notes"
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
                     rows={3}
@@ -531,6 +562,7 @@ export default function BookDemoPage() {
                   type="button"
                   disabled={
                     submitting ||
+                    Boolean(availabilityError) ||
                     !name.trim() ||
                     !email.trim() ||
                     !selectedDate ||

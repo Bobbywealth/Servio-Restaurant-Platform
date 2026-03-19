@@ -694,7 +694,11 @@ router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) =>
     orderType,
     specialInstructions,
     paymentMethod,
-    marketingConsent
+    marketingConsent,
+    state,
+    subtotal,
+    tax,
+    total
   } = req.body;
   const db = DatabaseService.getInstance().getDatabase();
   const requestId = getRequestId(req);
@@ -714,7 +718,8 @@ router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) =>
     customerEmail,
     orderType,
     paymentMethod,
-    itemsCount: Array.isArray(parsedItems) ? parsedItems.length : 0
+    itemsCount: Array.isArray(parsedItems) ? parsedItems.length : 0,
+    state
   };
 
   const restaurant = await db.get('SELECT id, slug FROM restaurants WHERE slug = ?', [slug]);
@@ -726,7 +731,8 @@ router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) =>
       slug,
       restaurant: restaurant ?? null,
       restaurantId,
-      body: safeBody
+      body: safeBody,
+      totals: { subtotal: finalSubtotal, tax: finalTax, total: finalTotal }
     })}`
   );
 
@@ -768,27 +774,39 @@ router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) =>
   }
 
   const orderId = uuidv4();
-  // Calculate total and validate items (simplified for v1 fast build)
-  let totalAmount = 0;
+  
+  // Use provided totals from frontend or calculate them
+  const orderSubtotal = typeof subtotal === 'number' && Number.isFinite(subtotal) ? subtotal : 0;
+  const orderTax = typeof tax === 'number' && Number.isFinite(tax) ? tax : 0;
+  const totalAmount = typeof total === 'number' && Number.isFinite(total) ? total : (orderSubtotal + orderTax);
+  
+  // Calculate and validate items
+  let calculatedSubtotal = 0;
   for (const item of parsedItems) {
     const price = Number(item?.price ?? 0);
     const quantity = Number(item?.quantity ?? 0);
     if (!Number.isFinite(price) || !Number.isFinite(quantity) || quantity <= 0) {
       return res.status(400).json({ success: false, error: { message: 'Invalid items' } });
     }
-    totalAmount += price * quantity;
+    calculatedSubtotal += price * quantity;
   }
+  
+  // If totals weren't provided, calculate them now
+  const finalSubtotal = orderSubtotal > 0 ? orderSubtotal : calculatedSubtotal;
+  const finalTax = orderTax > 0 ? orderTax : 0;
+  const finalTotal = totalAmount > 0 ? totalAmount : (finalSubtotal + finalTax);
 
   try {
     await db.run(`
       INSERT INTO orders (
         id, restaurant_id, channel, status, total_amount, payment_status,
-        items, customer_name, customer_phone, customer_email, order_type, special_instructions, marketing_consent, created_at, updated_at
-      ) VALUES (?, ?, 'website', 'received', ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        items, customer_name, customer_phone, customer_email, order_type, special_instructions, marketing_consent, 
+        subtotal, tax, fees, state, created_at, updated_at
+      ) VALUES (?, ?, 'website', 'received', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     `, [
       orderId,
       restaurantId,
-      totalAmount,
+      finalTotal,
       normalizedPaymentMethod === 'online' ? 'pending' : 'unpaid',
       JSON.stringify(parsedItems),
       customerName || null,
@@ -796,7 +814,11 @@ router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) =>
       normalizedCustomerEmail,
       orderType || 'pickup',
       specialInstructions || null,
-      marketingConsent === true || marketingConsent === 'true' ? 1 : 0
+      marketingConsent === true || marketingConsent === 'true' ? 1 : 0,
+      finalSubtotal,
+      finalTax,
+      0, // fees
+      state || null
     ]);
 
     // Create order items
@@ -847,8 +869,14 @@ router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) =>
       const params = new URLSearchParams();
 
       params.append('mode', 'payment');
-      params.append('success_url', `${baseUrl}/${slug}/order-success?orderId=${orderId}&session_id={CHECKOUT_SESSION_ID}`);
-      params.append('cancel_url', `${baseUrl}/${slug}/menu?checkout=cancelled`);
+      params.append(
+        'success_url',
+        `${baseUrl}/r/${encodeURIComponent(slug)}?orderId=${encodeURIComponent(orderId)}&checkout=success&session_id={CHECKOUT_SESSION_ID}`
+      );
+      params.append(
+        'cancel_url',
+        `${baseUrl}/r/${encodeURIComponent(slug)}?checkout=cancelled`
+      );
 
       if (normalizedCustomerEmail) {
         params.append('customer_email', normalizedCustomerEmail);
@@ -945,7 +973,11 @@ router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) =>
       orderId,
       status: 'received',
       paymentMethod: normalizedPaymentMethod,
-      checkoutUrl
+      checkoutUrl,
+      subtotal: finalSubtotal,
+      tax: finalTax,
+      total: finalTotal,
+      state: state || null
     }
   });
 }));

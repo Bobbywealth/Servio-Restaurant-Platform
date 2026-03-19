@@ -362,8 +362,8 @@ router.put('/', requireAuth, async (req: Request, res: Response) => {
  */
 async function executeOperation(
   operation: BulkOperation,
-  req: Request,
-  res: Response
+  _req: Request,
+  _res: Response
 ): Promise<any> {
   const { method, resource, data = {}, filter = {} } = operation;
   const id = operation.id;
@@ -434,7 +434,7 @@ async function handleDelete(resource: string, id?: string, filter?: Record<strin
     
     return { deleted: true, id };
   } else if (filter) {
-    const conditions = Object.entries(filter).map(([key, value], i) => {
+    const conditions = Object.entries(filter).map(([key, _value], i) => {
       return `${key} = $${i + 1}`;
     }).join(' AND ');
     

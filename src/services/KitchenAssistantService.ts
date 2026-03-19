@@ -2,7 +2,7 @@
 // Handles voice AI interactions, cooking sessions, and timer management
 
 import { Pool } from 'pg';
-import RecipeService, { RecipeWithDetails, CookingSession, RecipeIngredient, CookingTimer } from './RecipeService';
+import RecipeService, { RecipeWithDetails, CookingSession, CookingTimer } from './RecipeService';
 import { SocketService } from './SocketService';
 
 const pool = new Pool({
@@ -436,7 +436,7 @@ class KitchenAssistantService {
   // Generate response for starting a recipe
   async generateStartResponse(recipe: RecipeWithDetails, scaledServings?: number): Promise<string> {
     const servings = scaledServings || recipe.servings;
-    const scaleFactor = servings / recipe.servings;
+    const _scaleFactor = servings / recipe.servings;
     
     const firstStep = recipe.steps[0];
     
