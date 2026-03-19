@@ -77,7 +77,6 @@ export interface CustomerInfo {
   email: string;
   orderType: string;
   specialInstructions: string;
-  state?: string;
 }
 
 export interface OrderTotals {

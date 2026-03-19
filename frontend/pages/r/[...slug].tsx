@@ -274,7 +274,9 @@ export default function PublicProfile() {
         onRemoveItem={cart.removeFromCart}
         onIncreaseItem={cart.increaseCartItemQuantity}
         onProceedToPayment={cart.handleProceedToPayment}
-        onPlaceOrder={cart.handlePlaceOrder}
+        onPlaceOrder={(taxRate, restaurantState) => cart.handlePlaceOrder(taxRate, restaurantState)}
+        taxRate={menu.restaurant?.settings?.taxRate || 0}
+        restaurantState={menu.restaurant?.settings?.taxState || ''}
       />
 
       <ItemDetailModal

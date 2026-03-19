@@ -2,10 +2,9 @@ import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft, ArrowRight, Plus, Minus, Loader2, CheckCircle2,
-  CreditCard, Wallet, User, Phone, Mail, MapPin
+  CreditCard, Wallet, User, Phone, Mail
 } from 'lucide-react';
 import type { CartItem, CustomerInfo, CheckoutStep } from './types';
-import { calculateTax, calculateOrderTotals, getStateTaxInfo, getStateOptions } from '../../utils/taxRates';
 
 interface CartModalProps {
   isOpen: boolean;
@@ -26,6 +25,8 @@ interface CartModalProps {
   onIncreaseItem: (index: number) => void;
   onProceedToPayment: (onlinePaymentsEnabled: boolean) => void;
   onPlaceOrder: () => void;
+  taxRate?: number; // Restaurant's configured tax rate (e.g., 0.0825 for 8.25%)
+  restaurantState?: string; // Restaurant's state for display
 }
 
 export function CartModal({
@@ -47,6 +48,8 @@ export function CartModal({
   onIncreaseItem,
   onProceedToPayment,
   onPlaceOrder,
+  taxRate = 0,
+  restaurantState = '',
 }: CartModalProps) {
   return (
     <AnimatePresence>
@@ -86,6 +89,8 @@ export function CartModal({
                     marketingConsent={marketingConsent}
                     setMarketingConsent={setMarketingConsent}
                     cartTotal={cartTotal}
+                    taxRate={taxRate}
+                    restaurantState={restaurantState}
                     isSubmitting={isSubmitting}
                     onlinePaymentsEnabled={onlinePaymentsEnabled}
                     onBack={() => setCheckoutStep('cart')}
@@ -99,6 +104,8 @@ export function CartModal({
                     setPaymentMethod={setPaymentMethod}
                     cartTotal={cartTotal}
                     customerInfo={customerInfo}
+                    taxRate={taxRate}
+                    restaurantState={restaurantState}
                     isSubmitting={isSubmitting}
                     onBack={() => setCheckoutStep('details')}
                     onPlaceOrder={onPlaceOrder}
@@ -183,23 +190,23 @@ function CartReviewStep({
 
 function CustomerDetailsStep({
   customerInfo, setCustomerInfo, marketingConsent, setMarketingConsent,
-  cartTotal, isSubmitting, onlinePaymentsEnabled, onBack, onProceed
+  cartTotal, taxRate, restaurantState, isSubmitting, onlinePaymentsEnabled, onBack, onProceed
 }: {
   customerInfo: CustomerInfo;
   setCustomerInfo: (info: CustomerInfo | ((prev: CustomerInfo) => CustomerInfo)) => void;
   marketingConsent: boolean;
   setMarketingConsent: (v: boolean) => void;
   cartTotal: number;
+  taxRate: number;
+  restaurantState: string;
   isSubmitting: boolean;
   onlinePaymentsEnabled: boolean;
   onBack: () => void;
   onProceed: () => void;
 }) {
-  // Calculate tax based on selected state
-  const stateTaxInfo = customerInfo.state ? getStateTaxInfo(customerInfo.state) : null;
-  const taxAmount = customerInfo.state ? calculateTax(cartTotal, customerInfo.state) : 0;
-  const orderTotal = customerInfo.state ? cartTotal + taxAmount : cartTotal;
-  const stateOptions = getStateOptions();
+  // Calculate tax based on restaurant's configured tax rate
+  const taxAmount = taxRate > 0 ? Math.round(cartTotal * taxRate * 100) / 100 : 0;
+  const orderTotal = cartTotal + taxAmount;
 
   return (
     <>
@@ -241,31 +248,6 @@ function CustomerDetailsStep({
             className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none text-lg scroll-mt-24"
           />
           <p className="text-sm text-gray-500 mt-1">We'll text you when your order is ready</p>
-        </div>
-
-        <div>
-          <label className="block text-sm font-semibold text-gray-700 mb-2">
-            <MapPin className="w-4 h-4 inline mr-2" />
-            State (for tax calculation) *
-          </label>
-          <select
-            value={customerInfo.state || ''}
-            onChange={(e) => setCustomerInfo((prev: CustomerInfo) => ({ ...prev, state: e.target.value }))}
-            onFocus={(e) => { setTimeout(() => { e.target.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 300); }}
-            className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none text-lg scroll-mt-24 bg-white"
-          >
-            <option value="">Select your state</option>
-            {stateOptions.map((state) => (
-              <option key={state.code} value={state.code}>
-                {state.name}
-              </option>
-            ))}
-          </select>
-          {stateTaxInfo && (
-            <p className="text-sm text-gray-500 mt-1">
-              Tax rate: {(stateTaxInfo.rate * 100).toFixed(2)}%
-            </p>
-          )}
         </div>
 
         <div>
@@ -352,10 +334,10 @@ function CustomerDetailsStep({
           <span className="text-gray-600">Subtotal</span>
           <span>${cartTotal.toFixed(2)}</span>
         </div>
-        {customerInfo.state && (
+        {taxRate > 0 && (
           <div className="flex justify-between items-center text-base">
             <span className="text-gray-600">
-              Tax {stateTaxInfo ? `(${stateTaxInfo.name})` : ''}
+              Tax {restaurantState ? `(${restaurantState})` : ''} ({(taxRate * 100).toFixed(2)}%)
             </span>
             <span>${taxAmount.toFixed(2)}</span>
           </div>
@@ -368,7 +350,7 @@ function CustomerDetailsStep({
 
       <div style={{ paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}>
         <button
-          disabled={isSubmitting || !customerInfo.state}
+          disabled={isSubmitting}
           onClick={onProceed}
           className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-xl text-base sm:text-lg font-bold flex items-center justify-center gap-2 disabled:opacity-50 active:scale-[0.98] transition-transform"
         >
@@ -386,29 +368,27 @@ function CustomerDetailsStep({
             </>
           )}
         </button>
-        {!customerInfo.state && (
-          <p className="text-sm text-gray-500 mt-2 text-center">Please select your state to continue</p>
-        )}
       </div>
     </>
   );
 }
 
 function PaymentStep({
-  paymentMethod, setPaymentMethod, cartTotal, customerInfo, isSubmitting, onBack, onPlaceOrder
+  paymentMethod, setPaymentMethod, cartTotal, customerInfo, taxRate, restaurantState, isSubmitting, onBack, onPlaceOrder
 }: {
   paymentMethod: 'pickup' | 'online';
   setPaymentMethod: (v: 'pickup' | 'online') => void;
   cartTotal: number;
   customerInfo: CustomerInfo;
+  taxRate: number;
+  restaurantState: string;
   isSubmitting: boolean;
   onBack: () => void;
   onPlaceOrder: () => void;
 }) {
-  // Calculate tax based on selected state
-  const stateTaxInfo = customerInfo.state ? getStateTaxInfo(customerInfo.state) : null;
-  const taxAmount = customerInfo.state ? calculateTax(cartTotal, customerInfo.state) : 0;
-  const orderTotal = customerInfo.state ? cartTotal + taxAmount : cartTotal;
+  // Calculate tax based on restaurant's configured tax rate
+  const taxAmount = taxRate > 0 ? Math.round(cartTotal * taxRate * 100) / 100 : 0;
+  const orderTotal = cartTotal + taxAmount;
 
   return (
     <>
@@ -478,10 +458,10 @@ function PaymentStep({
           <span className="text-gray-600">Subtotal</span>
           <span>${cartTotal.toFixed(2)}</span>
         </div>
-        {customerInfo.state && (
+        {taxRate > 0 && (
           <div className="flex justify-between items-center">
             <span className="text-gray-600">
-              Tax {stateTaxInfo ? `(${stateTaxInfo.name})` : ''}
+              Tax {restaurantState ? `(${restaurantState})` : ''} ({(taxRate * 100).toFixed(2)}%)
             </span>
             <span>${taxAmount.toFixed(2)}</span>
           </div>

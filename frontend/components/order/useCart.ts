@@ -2,7 +2,6 @@ import { useState, useCallback, useMemo } from 'react';
 import toast from 'react-hot-toast';
 import { api } from '../../lib/api';
 import type { CartItem, MenuItem, ItemSize, SelectedModifier, CustomerInfo, CheckoutStep } from './types';
-import { calculateTax, calculateOrderTotals } from '../../utils/taxRates';
 
 export function useCart(restaurantSlug: string | undefined) {
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -17,8 +16,7 @@ export function useCart(restaurantSlug: string | undefined) {
     phone: '',
     email: '',
     orderType: 'pickup',
-    specialInstructions: '',
-    state: ''
+    specialInstructions: ''
   });
   const [marketingConsent, setMarketingConsent] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<'pickup' | 'online'>('pickup');
@@ -119,10 +117,6 @@ export function useCart(restaurantSlug: string | undefined) {
       toast.error('Please enter a valid phone number');
       return false;
     }
-    if (!customerInfo.state?.trim()) {
-      toast.error('Please select your state for tax calculation');
-      return false;
-    }
     const normalizedEmail = customerInfo.email.trim();
     if (normalizedEmail) {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -134,12 +128,14 @@ export function useCart(restaurantSlug: string | undefined) {
     return true;
   }, [customerInfo]);
 
-  const handlePlaceOrder = useCallback(async () => {
+  const handlePlaceOrder = useCallback(async (taxRate: number = 0, restaurantState: string = '') => {
     if (cart.length === 0) return;
     if (!validateCustomerInfo()) return;
 
     // Calculate order totals with tax
-    const { subtotal, tax, total } = calculateOrderTotals(cartTotal, customerInfo.state || 'CA');
+    const subtotal = cartTotal;
+    const tax = taxRate > 0 ? Math.round(cartTotal * taxRate * 100) / 100 : 0;
+    const total = subtotal + tax;
 
     setIsSubmitting(true);
     try {
@@ -170,7 +166,8 @@ export function useCart(restaurantSlug: string | undefined) {
         specialInstructions: customerInfo.specialInstructions.trim() || null,
         paymentMethod,
         marketingConsent,
-        state: customerInfo.state,
+        taxRate,
+        restaurantState,
         subtotal,
         tax,
         total
@@ -188,7 +185,7 @@ export function useCart(restaurantSlug: string | undefined) {
       setCart([]);
       setIsCartOpen(false);
       setCheckoutStep('cart');
-      setCustomerInfo({ name: '', phone: '', email: '', orderType: 'pickup', specialInstructions: '', state: '' });
+      setCustomerInfo({ name: '', phone: '', email: '', orderType: 'pickup', specialInstructions: '' });
       setMarketingConsent(false);
     } catch (error: any) {
       const errorMessage = error?.response?.data?.error?.message;

@@ -371,7 +371,9 @@ router.put('/settings', asyncHandler(async (req: Request, res: Response) => {
     printer_number_of_copies,
     printer_receipt_header_text,
     printer_receipt_footer_text,
-    printer_font_size
+    printer_font_size,
+    taxRate,
+    taxState
   } = req.body;
 
   if (!restaurantId) {
@@ -424,6 +426,15 @@ router.put('/settings', asyncHandler(async (req: Request, res: Response) => {
   if (printer_font_size !== undefined) {
     (settings as any).printer_font_size = String(printer_font_size);
   }
+  
+  // Tax settings
+  if (taxRate !== undefined) {
+    const rate = parseFloat(String(taxRate));
+    (settings as any).taxRate = Number.isFinite(rate) && rate >= 0 ? rate : 0;
+  }
+  if (taxState !== undefined) {
+    (settings as any).taxState = String(taxState).toUpperCase().trim();
+  }
 
   // Save updated settings
   await db.run(
@@ -444,7 +455,9 @@ router.put('/settings', asyncHandler(async (req: Request, res: Response) => {
       printer_mode,
       printer_number_of_copies,
       printer_receipt_header_text,
-      printer_receipt_footer_text
+      printer_receipt_footer_text,
+      taxRate: (settings as any).taxRate,
+      taxState: (settings as any).taxState
     }
   );
 

@@ -32,6 +32,7 @@ import toast from 'react-hot-toast';
 import { api } from '../../lib/api';
 import { resolveMediaUrl } from '../../lib/utils';
 import { RestaurantIntegration } from '../../components/RestaurantIntegration';
+import { US_STATE_TAX_RATES } from '../../utils/taxRates';
 
 interface RestaurantProfile {
   id: string;
@@ -408,6 +409,11 @@ export default function RestaurantProfile() {
   const [coverPreview, setCoverPreview] = useState<string | null>(null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [uploadingCover, setUploadingCover] = useState(false);
+  const [taxSettings, setTaxSettings] = useState({
+    taxRate: 0,
+    taxState: ''
+  });
+  const [savingTax, setSavingTax] = useState(false);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -514,6 +520,14 @@ export default function RestaurantProfile() {
           socialLinks: data.data.social_links || {},
           operatingHours: data.data.operating_hours || {},
           onlineOrderingEnabled: data.data.online_ordering_enabled || false,
+        });
+        
+        // Load tax settings from restaurant settings
+        const settings = data.data.settings || {};
+        setTaxSettings({
+          taxRate: settings.taxRate || 0,
+          taxState: settings.taxState || ''
+        });
           deliveryEnabled: data.data.delivery_enabled || false,
           pickupEnabled: data.data.pickup_enabled || true,
           deliveryRadius: data.data.delivery_radius || 0,
@@ -679,6 +693,28 @@ export default function RestaurantProfile() {
     }
   };
 
+  const handleSaveTaxSettings = async () => {
+    setSavingTax(true);
+    try {
+      const response = await api.put('/api/restaurant/settings', {
+        taxRate: taxSettings.taxRate,
+        taxState: taxSettings.taxState
+      });
+      const data = response.data;
+      if (data.success) {
+        toast.success('Tax settings updated successfully');
+        await fetchProfile();
+      } else {
+        toast.error(data.error?.message || 'Failed to update tax settings');
+      }
+    } catch (error) {
+      console.error('Error updating tax settings:', error);
+      toast.error('Failed to update tax settings');
+    } finally {
+      setSavingTax(false);
+    }
+  };
+
   const handleSaveLink = async (linkData: any) => {
     try {
       const url = editingLink ? `/api/restaurant/links/${editingLink.id}` : '/api/restaurant/links';
@@ -743,6 +779,7 @@ export default function RestaurantProfile() {
     { id: 'branding', name: 'Branding', icon: Palette },
     { id: 'integration', name: 'Integration', icon: Share2 },
     { id: 'links', name: 'Links & QR', icon: LinkIcon },
+    { id: 'tax', name: 'Tax Settings', icon: MapPin },
   ];
 
   if (loading) {
@@ -1249,6 +1286,90 @@ export default function RestaurantProfile() {
                   </p>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Tax Settings Tab */}
+          {activeTab === 'tax' && (
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+                  Tax Settings
+                </h2>
+                <p className="text-gray-600 dark:text-gray-400 mt-1">
+                  Configure your sales tax rate for online orders. This tax will be automatically applied to all customer orders.
+                </p>
+              </div>
+
+              <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 space-y-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Your State
+                  </label>
+                  <select
+                    value={taxSettings.taxState}
+                    onChange={(e) => setTaxSettings({ ...taxSettings, taxState: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                  >
+                    <option value="">Select your state</option>
+                    {Object.entries(US_STATE_TAX_RATES).map(([code, info]) => (
+                      <option key={code} value={code}>
+                        {info.name} ({(info.rate * 100).toFixed(2)}% tax)
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Select the state where your restaurant is located
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Sales Tax Rate
+                  </label>
+                  <div className="flex items-center space-x-3">
+                    <input
+                      type="number"
+                      step="0.001"
+                      min="0"
+                      max="1"
+                      value={taxSettings.taxRate}
+                      onChange={(e) => setTaxSettings({ ...taxSettings, taxRate: parseFloat(e.target.value) || 0 })}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                      placeholder="0.0825"
+                    />
+                    <span className="text-gray-500">or {(taxSettings.taxRate * 100).toFixed(3)}%</span>
+                  </div>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Enter the combined state and local tax rate as a decimal (e.g., 0.0825 for 8.25%)
+                  </p>
+                </div>
+
+                {taxSettings.taxRate > 0 && (
+                  <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                    <p className="text-sm text-blue-800 dark:text-blue-300">
+                      <strong>Preview:</strong> For a $100 order, tax will be <strong>${(100 * taxSettings.taxRate).toFixed(2)}</strong>
+                    </p>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-end pt-4 border-t border-gray-200 dark:border-gray-700">
+                  <button
+                    onClick={handleSaveTaxSettings}
+                    disabled={savingTax}
+                    className="flex items-center space-x-2 bg-primary-500 text-white px-6 py-2 rounded-lg hover:bg-primary-600 transition-colors disabled:opacity-50"
+                  >
+                    <Save className="h-4 w-4" />
+                    <span>{savingTax ? 'Saving...' : 'Save Tax Settings'}</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
+                <p className="text-sm text-amber-800 dark:text-amber-300">
+                  <strong>Note:</strong> Tax rates may vary by location. Make sure to use the correct combined state and local tax rate for your restaurant's address.
+                </p>
+              </div>
             </div>
           )}
 

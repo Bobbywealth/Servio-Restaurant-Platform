@@ -695,7 +695,8 @@ router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) =>
     specialInstructions,
     paymentMethod,
     marketingConsent,
-    state,
+    taxRate,
+    restaurantState,
     subtotal,
     tax,
     total
@@ -719,7 +720,7 @@ router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) =>
     orderType,
     paymentMethod,
     itemsCount: Array.isArray(parsedItems) ? parsedItems.length : 0,
-    state
+    restaurantState
   };
 
   const restaurant = await db.get('SELECT id, slug FROM restaurants WHERE slug = ?', [slug]);
@@ -818,7 +819,7 @@ router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) =>
       finalSubtotal,
       finalTax,
       0, // fees
-      state || null
+      restaurantState || null
     ]);
 
     // Create order items
@@ -977,7 +978,7 @@ router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) =>
       subtotal: finalSubtotal,
       tax: finalTax,
       total: finalTotal,
-      state: state || null
+      restaurantState: restaurantState || null
     }
   });
 }));
