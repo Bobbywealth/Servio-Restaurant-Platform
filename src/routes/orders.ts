@@ -798,6 +798,25 @@ router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) =>
   const finalTotal = totalAmount > 0 ? totalAmount : (finalSubtotal + finalTax);
 
   try {
+    // Prepare items with modifiers included directly for orders.items JSON
+    const itemsWithModifiers = parsedItems.map((item: any) => {
+      const modifiers: any[] = [];
+      if (item.selectedModifiers && item.selectedModifiers.length > 0) {
+        item.selectedModifiers.forEach((mod: any) => {
+          modifiers.push({
+            name: mod.optionName,
+            groupName: mod.groupName,
+            priceDelta: mod.priceDelta,
+            quantity: mod.quantity
+          });
+        });
+      }
+      return {
+        ...item,
+        modifiers: modifiers.length > 0 ? modifiers : undefined
+      };
+    });
+
     await db.run(`
       INSERT INTO orders (
         id, restaurant_id, channel, status, total_amount, payment_status,
@@ -809,7 +828,7 @@ router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) =>
       restaurantId,
       finalTotal,
       normalizedPaymentMethod === 'online' ? 'pending' : 'unpaid',
-      JSON.stringify(parsedItems),
+      JSON.stringify(itemsWithModifiers),
       customerName || null,
       customerPhone || null,
       normalizedCustomerEmail,
