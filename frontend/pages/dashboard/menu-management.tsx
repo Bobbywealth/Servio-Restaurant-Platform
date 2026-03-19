@@ -342,7 +342,7 @@ const MenuManagement: React.FC = () => {
         // On first load (nothing expanded yet), expand all categories.
         // On subsequent loads, preserve the user's current expanded state and
         // also expand any newly-added categories so they're visible.
-        if (prev.size === 0) return new Set(mergedCategories.map((cat) => cat.id));
+        if (prev.size === 0) return new Set();
         const next = new Set(prev);
         mergedCategories.forEach((cat) => {
           if (!prev.has(cat.id)) next.add(cat.id);
