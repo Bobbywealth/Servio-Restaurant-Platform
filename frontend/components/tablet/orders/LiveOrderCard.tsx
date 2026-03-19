@@ -1,5 +1,6 @@
 import clsx from 'clsx';
-import { AlertTriangle, Check, Clock, X, Package, MapPin, ShoppingBag } from 'lucide-react';
+import { AlertTriangle, Check, Clock, X, Package, MapPin, ShoppingBag, Timer, Phone } from 'lucide-react';
+import { CountdownTimer } from './CountdownTimer';
 
 // Types
 type OrderItem = {
@@ -17,6 +18,7 @@ type Order = {
   channel?: string | null;
   status?: string | null;
   customer_name?: string | null;
+  customer_phone?: string | null;
   order_type?: string | null;
   total_amount?: number | null;
   created_at?: string | null;
@@ -24,6 +26,7 @@ type Order = {
   prep_time?: string | null;
   prep_minutes?: number | null;
   special_instructions?: string | null;
+  accepted_at?: string | null;
 };
 
 type OrderStatus = 'received' | 'preparing' | 'ready' | 'completed' | 'cancelled';
@@ -114,7 +117,7 @@ function StatusBadge({ status }: { status: OrderStatus }) {
   );
 }
 
-// Time pill component for urgency
+// Time pill component for elapsed time (used for non-received orders)
 function TimePill({ 
   elapsedMinutes, 
   text 
@@ -149,6 +152,35 @@ function TimePill({
       {icon}
       {text}
       {urgencyLevel === 'critical' && ' late'}
+    </span>
+  );
+}
+
+// Prep time display component for accepted orders
+function PrepTimeDisplay({
+  prepMinutes,
+  prepTime,
+  orderType
+}: {
+  prepMinutes: number | null | undefined;
+  prepTime: string | null | undefined;
+  orderType: string | null | undefined;
+}) {
+  const displayText = prepTime || (prepMinutes ? `${prepMinutes} min` : null);
+  
+  if (!displayText) {
+    return null;
+  }
+
+  const isDelivery = orderType?.toLowerCase().includes('delivery');
+
+  return (
+    <span className={clsx(
+      'inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold',
+      'bg-[var(--tablet-success)]/15 text-[var(--tablet-success)]'
+    )}>
+      <Timer className="h-3 w-3" />
+      <span>Ready {displayText}</span>
     </span>
   );
 }
@@ -278,19 +310,33 @@ export function LiveOrderCard({
         isActionBusy && 'opacity-75'
       )}
     >
-      {/* Card Header: Status badge + Time pill */}
+      {/* Card Header: Status badge + Timer/Time display */}
       <div className="flex items-center justify-between px-3 pt-2.5 pb-1.5">
         <StatusBadge status={status} />
-        <TimePill 
-          elapsedMinutes={timeAgo.elapsedMinutes} 
-          text={timeAgo.text}
-        />
+        {status === 'received' ? (
+          <CountdownTimer
+            orderReceivedAt={order.created_at}
+            durationSeconds={180} // 3 minutes
+            visible={true}
+            orderType={order.order_type}
+            onExpire={() => {
+              // Auto-reject the order when timer expires
+              onReject?.(order);
+            }}
+          />
+        ) : (
+          <PrepTimeDisplay
+            prepMinutes={order.prep_minutes}
+            prepTime={order.prep_time}
+            orderType={order.order_type}
+          />
+        )}
       </div>
 
       {/* Card Body */}
       <div className="px-3 pb-1.5">
         {/* Main info: Customer name + Amount */}
-        <div className="flex items-start justify-between gap-2 mb-2">
+        <div className="flex items-start justify-between gap-2 mb-1">
           <div className="text-lg font-bold text-[var(--tablet-text)] truncate min-w-0 flex-1">
             {order.customer_name || 'Guest'}
           </div>
@@ -298,6 +344,24 @@ export function LiveOrderCard({
             {formatMoney(order.total_amount)}
           </div>
         </div>
+
+        {/* Customer phone + Order time (shown for new orders) */}
+        {status === 'received' && (order.customer_phone || order.created_at) && (
+          <div className="flex items-center gap-3 text-xs text-[var(--tablet-muted)] mb-2">
+            {order.customer_phone && (
+              <span className="flex items-center gap-1">
+                <Phone className="h-3 w-3" />
+                {order.customer_phone}
+              </span>
+            )}
+            {order.created_at && (
+              <span className="flex items-center gap-1">
+                <Clock className="h-3 w-3" />
+                {new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            )}
+          </div>
+        )}
 
         {/* Metadata: Source + Fulfillment + Item count */}
         <div className="flex items-center gap-3 text-xs text-[var(--tablet-muted)] mb-2">

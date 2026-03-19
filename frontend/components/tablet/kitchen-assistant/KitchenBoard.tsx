@@ -4,6 +4,7 @@ import { Order, OrdersResponse } from '../../../hooks/tablet/ordersTypes';
 import { ORDER_STATUS, OrderStatus, postOrderStatus } from '../../../hooks/tablet/orderStatus';
 import { api } from '../../../lib/api';
 import { safeLocalStorage } from '../../../lib/utils';
+import { CountdownTimer } from '../orders/CountdownTimer';
 
 const ORDER_CACHE_KEY = 'servio_cached_orders';
 
@@ -216,15 +217,7 @@ export function KitchenBoard({
           <div className="border-b border-slate-200 bg-slate-50 px-6 py-5">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-blue-600 text-white font-bold">
-                  S
-                </div>
-                <div>
-                  <div className="text-xs font-semibold tracking-wider text-slate-500 uppercase">
-                    Servio Kitchen OS
-                  </div>
-                  <div className="text-xl font-semibold text-slate-800">Live Board</div>
-                </div>
+                <div /> {/* Spacer to maintain alignment */}
               </div>
 
               <div className="flex items-center gap-3">
@@ -304,9 +297,14 @@ export function KitchenBoard({
 
                           {order.status === ORDER_STATUS.RECEIVED && (
                             <div className="text-right">
-                              <div className="text-xs text-slate-500">Received</div>
+                              <div className="text-xs text-slate-500">Accept by</div>
                               <div className={clsx('text-2xl font-semibold', style.timer)}>
-                                {getOrderAge(order.created_at)}
+                                <CountdownTimer
+                                  orderReceivedAt={order.created_at}
+                                  durationSeconds={180}
+                                  visible={true}
+                                  orderType={order.order_type}
+                                />
                               </div>
                             </div>
                           )}
