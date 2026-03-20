@@ -343,7 +343,7 @@ const RECEIPT_CSS = `
   .receipt-footer { text-align: center; font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em; }
   .receipt-custom-header { text-align: center; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; padding: 4px 0; }
 
-  /* Font size variants - standardized for readability */
+  /* Font size variants - increased for better print readability */
   .receipt.font-small {
     --receipt-font-base: 12px; --receipt-font-lg: 14px; --receipt-font-2xl: 18px; --receipt-font-xl: 16px; --receipt-logo-size: 56px;
   }
@@ -354,7 +354,7 @@ const RECEIPT_CSS = `
     --receipt-font-base: 16px; --receipt-font-lg: 18px; --receipt-font-2xl: 24px; --receipt-font-xl: 20px; --receipt-logo-size: 88px;
   }
   .receipt.font-xlarge {
-    --receipt-font-base: 18px; --receipt-font-lg: 22px; --receipt-font-2xl: 28px; --receipt-font-xl: 24px; --receipt-logo-size: 104px;
+    --receipt-font-base: 18px; --receipt-font-lg: 20px; --receipt-font-2xl: 30px; --receipt-font-xl: 24px; --receipt-logo-size: 104px;
   }
 
   /* Apply font size variables to all elements */
