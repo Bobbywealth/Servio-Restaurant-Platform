@@ -247,13 +247,16 @@ export function useMenu(restaurantSlug: string | undefined) {
   }, []);
 
   const scrollToCategory = useCallback((cat: string) => {
-    setSelectedCategory(cat === 'all' ? null : cat);
     const element = document.getElementById(`category-${cat.replace(/\s+/g, '-').toLowerCase()}`);
     if (element) {
       const offset = 120;
       const elementPosition = element.getBoundingClientRect().top + window.scrollY;
       window.scrollTo({ top: elementPosition - offset, behavior: 'smooth' });
     }
+    // Use setTimeout to ensure scroll happens before category filter hides elements
+    setTimeout(() => {
+      setSelectedCategory(cat === 'all' ? null : cat);
+    }, 100);
   }, []);
 
   const handleShowMoreCategories = useCallback(() => {
