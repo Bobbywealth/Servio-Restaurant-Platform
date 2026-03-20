@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { api } from '../../lib/api';
 import { safeLocalStorage } from '../../lib/utils';
-import type { Order, PendingAction } from './ordersTypes';
+import type { Order, PendingAction, EnqueueAction } from '../../components/tablet/orders/types';
 import { ORDER_STATUS, postOrderStatus } from './orderStatus';
 import type { OrderStatus } from './orderStatus';
 
@@ -27,8 +27,15 @@ export function useOrderStatusActions(setOrders: Dispatch<SetStateAction<Order[]
   const [busyId, setBusyId] = useState<string | null>(null);
   const [pendingActions, setPendingActions] = useState<Set<string>>(new Set());
 
-  const enqueueAction = (action: PendingAction) => {
-    const next = [...loadActionQueue(), action];
+  const enqueueAction = (action: EnqueueAction) => {
+    // Add the required fields for storage
+    const fullAction: PendingAction = {
+      ...action,
+      idempotencyKey: `${action.id}-${action.queuedAt}`,
+      retryCount: 0,
+      lastError: null
+    } as PendingAction;
+    const next = [...loadActionQueue(), fullAction];
     saveActionQueue(next);
     setPendingActions((prev) => new Set(prev).add(action.orderId));
   };

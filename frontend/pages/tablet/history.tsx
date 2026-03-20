@@ -72,15 +72,6 @@ function formatRelativeTime(value: string | null | undefined) {
   if (diffDays < 7) return `${diffDays}d ago`;
   return date.toLocaleDateString();
 }
-  if (c.includes('ubereats') || c.includes('uber')) return '🛵';
-  if (c.includes('grubhub')) return '🍔';
-  if (c.includes('toast')) return '🍞';
-  if (c.includes('pos') || c === 'in-store') return '🏪';
-  if (c.includes('online') || c.includes('web')) return '💻';
-  if (c.includes('phone') || c.includes('call')) return '📞';
-  if (c.includes('vapi') || c.includes('voice')) return '🎙️';
-  return '📋';
-}
 
 function getStatusColor(status: string | null | undefined): string {
   const s = (status || '').toLowerCase();
