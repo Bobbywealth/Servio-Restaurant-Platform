@@ -1313,7 +1313,7 @@ async function runAllTests(): Promise<void> {
     (index) => ({
       method: 'GET',
       path: '/api/menu',
-      headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+      headers: { 'Authorization': `Bearer ${token}` },
     }),
     10,
     CONFIG.durationMs
@@ -1541,7 +1541,7 @@ function generateMarkdownReport(report: any): string {
 
 ## Test Categories
 
-${[...new Set(report.results.map((r: any) => r.category))].map((category: string) => {
+${[...new Set(report.results.map((r: any) => r.category))].map((category: any) => {
   const categoryResults = report.results.filter((r: any) => r.category === category);
   const passed = categoryResults.filter((r: any) => r.status === 'passed').length;
   return `- **${category}:** ${passed}/${categoryResults.length} passed`;
