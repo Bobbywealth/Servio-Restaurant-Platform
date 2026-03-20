@@ -28,6 +28,7 @@ export type ReceiptOrder = {
   status?: string | null;
   customer_name?: string | null;
   customer_phone?: string | null;
+  customer_email?: string | null;
   order_type?: string | null;
   pickup_time?: string | null;
   created_at?: string | null;
@@ -176,8 +177,9 @@ export function generateReceiptHtml(args: {
   const created = formatReceiptDate(order.created_at || '');
   const customerName = (order.customer_name || 'Guest').toString();
   const customerPhone = formatReceiptPhone(order.customer_phone || '');
-  const channel = (order.channel || 'POS').toString();
-  const orderType = (order.order_type || '').toString();
+  const customerEmail = (order.customer_email || '').toString();
+  const channel = (order.channel || 'POS').toString().toLowerCase();
+  const orderType = (order.order_type || 'pickup').toString().toLowerCase();
   const pickupTime = (order.pickup_time || '').toString();
   const instructions = (order.special_instructions || '').toString();
 
@@ -186,6 +188,31 @@ export function generateReceiptHtml(args: {
 
   const items = Array.isArray(order.items) ? order.items : [];
   const totals = calculateOrderTotals(order);
+  const totalItemCount = items.reduce((sum, it) => sum + (it.quantity || 1), 0);
+
+  // Channel icon mapping
+  const channelIcons: Record<string, string> = {
+    doordash: '🚗',
+    ubereats: '🛵',
+    grubhub: '🍔',
+    toast: '🍞',
+    pos: '🏪',
+    online: '💻',
+    web: '💻',
+    phone: '📞',
+    call: '📞',
+    vapi: '🎙️',
+    voice: '🎙️',
+  };
+  const channelIcon = channelIcons[channel] || '📋';
+  const channelDisplay = channel !== 'pos' ? `${channelIcon} ${channel.toUpperCase()}` : 'POS';
+
+  // Order type badge styling
+  const orderTypeBadge = orderType.includes('delivery') 
+    ? `<div class="receipt-order-type delivery">🚚 DELIVERY</div>` 
+    : orderType.includes('dine') || orderType.includes('dine-in') || orderType.includes('eat') || orderType.includes('in') 
+    ? `<div class="receipt-order-type dinein">🍽️ DINE-IN</div>` 
+    : `<div class="receipt-order-type pickup">📦 PICKUP</div>`;
 
   const itemsHtml = items.length
     ? items
@@ -235,22 +262,30 @@ export function generateReceiptHtml(args: {
 
       <div class="receipt-divider"></div>
 
-      <div class="receipt-row receipt-row-strong">
+      ${orderTypeBadge}
+
+      <div class="receipt-row receipt-row-strong receipt-order-number">
         <div>ORDER</div>
         <div>#${escapeHtml(orderNumber.toUpperCase())}</div>
       </div>
       ${created ? `<div class="receipt-row"><div>TIME</div><div>${escapeHtml(created)}</div></div>` : ''}
-      <div class="receipt-row"><div>CHANNEL</div><div>${escapeHtml(channel.toUpperCase())}</div></div>
-      ${orderType ? `<div class="receipt-row"><div>TYPE</div><div>${escapeHtml(orderType.toUpperCase())}</div></div>` : ''}
-      ${pickupTime ? `<div class="receipt-row"><div>PICKUP</div><div>${escapeHtml(pickupTime)}</div></div>` : ''}
+      <div class="receipt-row"><div>SOURCE</div><div>${channelDisplay}</div></div>
+      ${pickupTime ? `<div class="receipt-row receipt-row-highlight"><div>📍 PICKUP BY</div><div>${escapeHtml(pickupTime)}</div></div>` : ''}
 
       <div class="receipt-divider"></div>
 
-      <div class="receipt-row"><div>CUSTOMER</div><div>${escapeHtml(customerName.toUpperCase())}</div></div>
-      ${customerPhone ? `<div class="receipt-row"><div>PHONE</div><div>${escapeHtml(customerPhone)}</div></div>` : ''}
+      <div class="receipt-customer">
+        <div class="receipt-row"><div>CUSTOMER</div><div>${escapeHtml(customerName.toUpperCase())}</div></div>
+        ${customerPhone ? `<div class="receipt-row"><div>PHONE</div><div>${escapeHtml(customerPhone)}</div></div>` : ''}
+        ${customerEmail ? `<div class="receipt-row receipt-email"><div>EMAIL</div><div>${escapeHtml(customerEmail)}</div></div>` : ''}
+      </div>
 
       <div class="receipt-divider"></div>
 
+      <div class="receipt-items-header">
+        <div>ITEMS</div>
+        <div>${totalItemCount} ${totalItemCount === 1 ? 'item' : 'items'}</div>
+      </div>
       <div class="receipt-items">
         ${itemsHtml}
       </div>
@@ -258,21 +293,21 @@ export function generateReceiptHtml(args: {
       <div class="receipt-divider"></div>
 
       <div class="receipt-totals">
-        <div class="receipt-row"><div>SUBTOTAL</div><div>$${totals.subtotal.toFixed(2)}</div></div>
-        <div class="receipt-row"><div>TAX</div><div>$${totals.tax.toFixed(2)}</div></div>
-        <div class="receipt-row receipt-row-strong"><div>TOTAL</div><div>$${totals.total.toFixed(2)}</div></div>
+        <div class="receipt-row"><div>SUBTOTAL</div><div>${totals.subtotal.toFixed(2)}</div></div>
+        <div class="receipt-row"><div>TAX</div><div>${totals.tax.toFixed(2)}</div></div>
+        <div class="receipt-row receipt-row-strong receipt-total"><div>TOTAL</div><div>${totals.total.toFixed(2)}</div></div>
       </div>
 
       ${instructions ? `
         <div class="receipt-divider"></div>
         <div class="receipt-notes">
-          <div class="receipt-notes-title">NOTES</div>
+          <div class="receipt-notes-title">📝 SPECIAL INSTRUCTIONS</div>
           <div class="receipt-notes-body">${escapeHtml(instructions)}</div>
         </div>
       ` : ''}
 
       <div class="receipt-divider"></div>
-      <div class="receipt-footer">${footerText ? escapeHtml(footerText) : 'THANK YOU'}</div>
+      <div class="receipt-footer">${footerText ? escapeHtml(footerText) : '🙏 THANK YOU!'}</div>
     </div>
   `;
 }
