@@ -821,8 +821,8 @@ router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) =>
       INSERT INTO orders (
         id, restaurant_id, channel, status, total_amount, payment_status,
         items, customer_name, customer_phone, customer_email, order_type, special_instructions, marketing_consent, 
-        subtotal, tax, fees, state, created_at, updated_at
-      ) VALUES (?, ?, 'website', 'received', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        subtotal, tax, fees, created_at, updated_at
+      ) VALUES (?, ?, 'website', 'received', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     `, [
       orderId,
       restaurantId,
@@ -837,8 +837,7 @@ router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) =>
       marketingConsent === true || marketingConsent === 'true' ? 1 : 0,
       finalSubtotal,
       finalTax,
-      0, // fees
-      restaurantState || null
+      0 // fees
     ]);
 
     // Create order items
