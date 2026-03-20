@@ -131,8 +131,11 @@ export function useOrderAlerts(receivedOrders: Array<{ created_at?: string | nul
 
     previousReceivedOrdersCountRef.current = receivedOrdersCount;
 
-    // Only play sound if there's a genuinely NEW incoming order (not just status changes)
-    if (soundEnabled && hasNewIncomingOrder) {
+    // Play sound if:
+    // 1. Sound is enabled AND
+    // 2. There's either a new incoming order OR there are received orders that haven't been accepted yet
+    // The sound should continue until someone accepts the order (moves it from 'received' status)
+    if (soundEnabled && (hasNewIncomingOrder || receivedOrdersCount > 0)) {
       if (alarmIntervalRef.current === null) {
         playAlarmTone();
         alarmIntervalRef.current = window.setInterval(playAlarmTone, 2500);
