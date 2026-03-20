@@ -3,6 +3,7 @@ import clsx from 'clsx';
 import type { Order } from '../../../hooks/tablet/ordersTypes';
 import type { OrderStatus } from '../../../hooks/tablet/orderStatus';
 import { ORDER_STATUS } from '../../../hooks/tablet/orderStatus';
+import { CountdownTimer } from './CountdownTimer';
 
 type Props = {
   order: Order | null;
@@ -90,7 +91,21 @@ export function OrderDetailsModal({
     <div className="no-print fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
       <div className="bg-[var(--tablet-surface)] rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden border border-[var(--tablet-border)]">
         <div className="px-6 py-4 border-b border-[var(--tablet-border)] flex items-center justify-between">
-          <h3 className="text-xl font-semibold">Order #{orderNumber}</h3>
+          <div className="flex items-center gap-4">
+            <h3 className="text-xl font-semibold">Order #{orderNumber}</h3>
+            {status === 'received' && (
+              <CountdownTimer
+                orderReceivedAt={order.created_at}
+                durationSeconds={180}
+                visible={true}
+                orderType={order.order_type}
+                onExpire={(reason) => {
+                  console.log(`Order expired while modal open: ${reason}`);
+                  onDeclineOrder(order);
+                }}
+              />
+            )}
+          </div>
           <button onClick={onClose} aria-label="Close order details">
             <X className="h-5 w-5" />
           </button>
