@@ -25,6 +25,7 @@ import { useUser } from '../../contexts/UserContext';
 import { ORDER_STATUS, TABLET_STATUS_ACTION, mapTabletStatusActionToOrderStatus, postOrderStatus } from '../../hooks/tablet/orderStatus';
 import type { OrderStatus } from '../../hooks/tablet/orderStatus';
 import { NotificationEventPayload, shouldRefreshForNotification } from '../../lib/tablet/orderNotifications';
+import { CountdownTimer } from '../../components/tablet/orders/CountdownTimer';
 
 // KDS Order Card Component - matches KitchenBoard styling
 function normalizeStatus(s: string | null | undefined) {
@@ -63,9 +64,10 @@ interface KDSOrderCardProps {
   onMarkPickedUp: () => void;
   onPrint: () => void;
   formatMoney: (v: number | null | undefined) => string;
+  onExpire?: (orderId: string) => void;
 }
 
-function KDSOrderCard({ order, now, busyId, onAccept, onDecline, onMarkReady, onMarkPickedUp, onPrint, formatMoney }: KDSOrderCardProps) {
+function KDSOrderCard({ order, now, busyId, onAccept, onDecline, onMarkReady, onMarkPickedUp, onPrint, formatMoney, onExpire }: KDSOrderCardProps) {
   const status = normalizeStatus(order.status);
   const style = kdsStatusStyles[status as keyof typeof kdsStatusStyles] || kdsStatusStyles.received;
   const isBusy = busyId === order.id;
@@ -166,19 +168,39 @@ function KDSOrderCard({ order, now, busyId, onAccept, onDecline, onMarkReady, on
 
           {status === 'preparing' && (
             <div className="text-right">
-              <div className="text-xs text-slate-500">Ready in</div>
-              <div className={clsx('text-2xl font-semibold', style.timer)}>
-                {order.prep_minutes ? `${order.prep_minutes}m` : '--'}
-              </div>
+              {order.pickup_time ? (
+                <>
+                  <div className="text-xs text-slate-500">
+                    {order.order_type === 'delivery' ? 'Delivery by' : 'Pickup at'}
+                  </div>
+                  <div className={clsx('text-2xl font-semibold', style.timer)}>
+                    {formatPickupTime(order.pickup_time)}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="text-xs text-slate-500">Prep time</div>
+                  <div className={clsx('text-2xl font-semibold', style.timer)}>
+                    {order.prep_minutes ? `${order.prep_minutes}m` : '--'}
+                  </div>
+                </>
+              )}
             </div>
           )}
 
           {status === 'received' && (
             <div className="text-right">
-              <div className="text-xs text-slate-500">Received</div>
-              <div className={clsx('text-2xl font-semibold', style.timer)}>
-                {getOrderAge(order.created_at)}
-              </div>
+              <div className="text-xs text-slate-500 mb-1">Time remaining</div>
+              <CountdownTimer
+                orderReceivedAt={order.created_at}
+                durationSeconds={180}
+                visible={true}
+                orderType={order.order_type}
+                onExpire={(reason) => {
+                  console.log(`Order ${order.id} expired: ${reason}`);
+                  onExpire?.(order.id);
+                }}
+              />
             </div>
           )}
 
@@ -2109,6 +2131,10 @@ export default function TabletOrdersPage() {
                         onMarkPickedUp={() => setStatus(order.id, ORDER_STATUS.COMPLETED)}
                         onPrint={() => printOrder(order.id)}
                         formatMoney={formatMoney}
+                        onExpire={(orderId) => {
+                          console.log(`Order ${orderId} expired - auto declining`);
+                          declineOrder(filteredOrders.find(o => o.id === orderId) || { id: orderId } as Order);
+                        }}
                       />
                     ))}
                   </div>
