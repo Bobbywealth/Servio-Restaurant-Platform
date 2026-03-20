@@ -212,17 +212,17 @@ export function getOrderTypeLabel(orderType: string | null | undefined, channel?
 export function normalizeOrderItems(items: unknown): OrderItem[] {
   if (!Array.isArray(items)) return [];
 
-  return items.map((item: unknown) => {
+  return items.map((item: unknown): OrderItem => {
     const itemObj = item as Record<string, unknown>;
     const parsedQuantity = Number(itemObj?.quantity ?? itemObj?.qty ?? 1);
     const quantity = Number.isFinite(parsedQuantity) && parsedQuantity > 0 ? parsedQuantity : 1;
 
-    let modifiers = itemObj?.modifiers;
+    let modifiers: string[] | Record<string, unknown> | undefined = itemObj?.modifiers as string[] | Record<string, unknown> | undefined;
     if ((!modifiers || typeof modifiers !== 'object') && typeof itemObj?.notes === 'string') {
       try {
         const parsedNotes = JSON.parse(itemObj.notes as string);
         if (parsedNotes?.modifiers) {
-          modifiers = parsedNotes.modifiers;
+          modifiers = parsedNotes.modifiers as string[] | Record<string, unknown>;
         }
       } catch {
         // Notes can be plain text; ignore parse errors.
@@ -230,7 +230,6 @@ export function normalizeOrderItems(items: unknown): OrderItem[] {
     }
 
     return {
-      ...itemObj,
       name: (itemObj?.name || itemObj?.item_name_snapshot || itemObj?.item_id) as string || 'Item',
       quantity,
       modifiers
