@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { CheckCircle2, Clock, AlertTriangle } from 'lucide-react';
+import { CheckCircle2, Clock, AlertTriangle, CalendarClock } from 'lucide-react';
 
 interface OrderConfirmationProps {
   orderId: string;
@@ -88,10 +88,17 @@ export function OrderConfirmation({ orderId, orderStatus, pickupTime, orderCreat
 
         {pickupTime && !isCancelled && (
           <div className="border-t pt-4 mt-4">
-            <div className="text-sm text-gray-500 uppercase tracking-widest mb-1">Ready For Pickup</div>
-            <div className="text-2xl font-bold text-gray-900">
+            <div className="flex items-center gap-2 text-sm text-gray-500 uppercase tracking-widest mb-1">
+              <CalendarClock className="h-4 w-4" />
+              Scheduled Pickup
+            </div>
+            <div className="text-lg font-semibold text-gray-900">
+              {new Date(pickupTime).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })} at{' '}
               {new Date(pickupTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </div>
+            <p className="text-sm text-gray-500 mt-1">
+              Please arrive at your scheduled time to pick up your order
+            </p>
           </div>
         )}
 

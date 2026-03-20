@@ -699,7 +699,8 @@ router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) =>
     restaurantState,
     subtotal,
     tax,
-    total
+    total,
+    scheduledPickupTime
   } = req.body;
   const db = DatabaseService.getInstance().getDatabase();
   const requestId = getRequestId(req);
@@ -764,6 +765,26 @@ router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) =>
     }
   }
 
+  // Validate scheduled pickup time if provided
+  let normalizedScheduledPickupTime: string | null = null;
+  if (scheduledPickupTime) {
+    const scheduledDate = new Date(scheduledPickupTime);
+    const now = new Date();
+    const minTime = new Date(now.getTime() + 15 * 60 * 1000); // 15 min from now
+    const maxTime = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000); // 7 days ahead
+
+    if (isNaN(scheduledDate.getTime())) {
+      return res.status(400).json({ success: false, error: { message: 'Invalid scheduled pickup time' } });
+    }
+    if (scheduledDate < minTime) {
+      return res.status(400).json({ success: false, error: { message: 'Scheduled pickup must be at least 15 minutes from now' } });
+    }
+    if (scheduledDate > maxTime) {
+      return res.status(400).json({ success: false, error: { message: 'Cannot schedule more than 7 days in advance' } });
+    }
+    normalizedScheduledPickupTime = scheduledDate.toISOString();
+  }
+
   const normalizedPaymentMethod = paymentMethod === 'online' ? 'online' : 'pickup';
   const stripeSecretKey = getStripeSecretKey();
 
@@ -821,8 +842,8 @@ router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) =>
       INSERT INTO orders (
         id, restaurant_id, channel, status, total_amount, payment_status,
         items, customer_name, customer_phone, customer_email, order_type, special_instructions, marketing_consent, 
-        subtotal, tax, fees, created_at, updated_at
-      ) VALUES (?, ?, 'website', 'received', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        subtotal, tax, fees, pickup_time, created_at, updated_at
+      ) VALUES (?, ?, 'website', 'received', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     `, [
       orderId,
       restaurantId,
@@ -837,7 +858,8 @@ router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) =>
       marketingConsent === true || marketingConsent === 'true' ? 1 : 0,
       finalSubtotal,
       finalTax,
-      0 // fees
+      0, // fees
+      normalizedScheduledPickupTime // pickup_time
     ]);
 
     // Create order items

@@ -77,6 +77,8 @@ export interface CustomerInfo {
   email: string;
   orderType: string;
   specialInstructions: string;
+  scheduleForLater: boolean;
+  scheduledPickupTime: string | null;
 }
 
 export interface OrderTotals {

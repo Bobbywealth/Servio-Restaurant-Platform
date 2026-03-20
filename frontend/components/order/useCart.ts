@@ -17,7 +17,9 @@ export function useCart(restaurantSlug: string | undefined) {
     phone: '',
     email: '',
     orderType: 'pickup',
-    specialInstructions: ''
+    specialInstructions: '',
+    scheduleForLater: false,
+    scheduledPickupTime: null
   });
   const [marketingConsent, setMarketingConsent] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<'pickup' | 'online'>('pickup');
@@ -126,6 +128,26 @@ export function useCart(restaurantSlug: string | undefined) {
         return false;
       }
     }
+    // Validate scheduled pickup time if enabled
+    if (customerInfo.scheduleForLater && !customerInfo.scheduledPickupTime) {
+      toast.error('Please select a pickup time');
+      return false;
+    }
+    if (customerInfo.scheduleForLater && customerInfo.scheduledPickupTime) {
+      const scheduledTime = new Date(customerInfo.scheduledPickupTime);
+      const now = new Date();
+      const minTime = new Date(now.getTime() + 15 * 60 * 1000); // 15 min from now
+      const maxTime = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000); // 7 days ahead
+      
+      if (scheduledTime < minTime) {
+        toast.error('Scheduled pickup must be at least 15 minutes from now');
+        return false;
+      }
+      if (scheduledTime > maxTime) {
+        toast.error('Cannot schedule more than 7 days in advance');
+        return false;
+      }
+    }
     return true;
   }, [customerInfo]);
 
@@ -171,7 +193,8 @@ export function useCart(restaurantSlug: string | undefined) {
         restaurantState,
         subtotal,
         tax,
-        total
+        total,
+        scheduledPickupTime: customerInfo.scheduleForLater ? customerInfo.scheduledPickupTime : null
       });
       const checkoutUrl = resp?.data?.data?.checkoutUrl as string | undefined;
       const selectedPaymentMethod = resp?.data?.data?.paymentMethod as 'pickup' | 'online' | undefined;
@@ -183,11 +206,12 @@ export function useCart(restaurantSlug: string | undefined) {
 
       setOrderComplete(resp.data.data.orderId);
       setOrderStatus(resp.data.data.status || null);
+      setPickupTime(resp.data.data.pickupTime || null);
       setOrderCreatedAt(new Date().toISOString());
       setCart([]);
       setIsCartOpen(false);
       setCheckoutStep('cart');
-      setCustomerInfo({ name: '', phone: '', email: '', orderType: 'pickup', specialInstructions: '' });
+      setCustomerInfo({ name: '', phone: '', email: '', orderType: 'pickup', specialInstructions: '', scheduleForLater: false, scheduledPickupTime: null });
       setMarketingConsent(false);
     } catch (error: any) {
       const errorMessage = error?.response?.data?.error?.message;

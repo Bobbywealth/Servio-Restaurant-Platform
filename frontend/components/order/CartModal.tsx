@@ -2,7 +2,7 @@ import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft, ArrowRight, Plus, Minus, Loader2, CheckCircle2,
-  CreditCard, Wallet, User, Phone, Mail
+  CreditCard, Wallet, User, Phone, Mail, CalendarClock, Clock
 } from 'lucide-react';
 import type { CartItem, CustomerInfo, CheckoutStep } from './types';
 
@@ -208,6 +208,19 @@ function CustomerDetailsStep({
   const taxAmount = taxRate > 0 ? Math.round(cartTotal * taxRate * 100) / 100 : 0;
   const orderTotal = cartTotal + taxAmount;
 
+  // Helper functions for scheduling
+  const getMinDateTime = () => {
+    const now = new Date();
+    now.setMinutes(now.getMinutes() + 15);
+    return now.toISOString().slice(0, 16);
+  };
+
+  const getMaxDateTime = () => {
+    const max = new Date();
+    max.setDate(max.getDate() + 7);
+    return max.toISOString().slice(0, 16);
+  };
+
   return (
     <>
       <div className="flex items-center gap-4 mb-6">
@@ -292,6 +305,67 @@ function CustomerDetailsStep({
             </button>
           </div>
         </div>
+
+        {/* Schedule for Later Toggle */}
+        <div>
+          <label className="block text-sm font-semibold text-gray-700 mb-2">
+            <CalendarClock className="w-4 h-4 inline mr-2" />
+            Pickup Time
+          </label>
+          <div className="flex gap-3">
+            <button
+              onClick={() => setCustomerInfo((prev: CustomerInfo) => ({ ...prev, scheduleForLater: false, scheduledPickupTime: null }))}
+              className={`flex-1 py-3 px-4 rounded-xl border-2 font-semibold transition-all ${
+                !customerInfo.scheduleForLater
+                  ? 'border-blue-600 bg-blue-50 text-blue-700'
+                  : 'border-gray-200 text-gray-600 hover:border-gray-300'
+              }`}
+            >
+              As Soon As Possible
+            </button>
+            <button
+              onClick={() => setCustomerInfo((prev: CustomerInfo) => ({ ...prev, scheduleForLater: true }))}
+              className={`flex-1 py-3 px-4 rounded-xl border-2 font-semibold transition-all ${
+                customerInfo.scheduleForLater
+                  ? 'border-blue-600 bg-blue-50 text-blue-700'
+                  : 'border-gray-200 text-gray-600 hover:border-gray-300'
+              }`}
+            >
+              Schedule for Later
+            </button>
+          </div>
+        </div>
+
+        {/* Date/Time Picker - shown when Schedule for Later is enabled */}
+        {customerInfo.scheduleForLater && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="mt-2">
+              <label className="block text-xs font-medium text-gray-500 mb-1">
+                <Clock className="w-3 h-3 inline mr-1" />
+                Select Pickup Time
+              </label>
+              <input
+                type="datetime-local"
+                value={customerInfo.scheduledPickupTime || ''}
+                onChange={(e) => setCustomerInfo((prev: CustomerInfo) => ({ 
+                  ...prev, 
+                  scheduledPickupTime: e.target.value || null 
+                }))}
+                min={getMinDateTime()}
+                max={getMaxDateTime()}
+                className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none text-lg bg-white"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Schedule at least 15 minutes in advance (max 7 days)
+              </p>
+            </div>
+          </motion.div>
+        )}
 
         <div>
           <label className="block text-xs font-medium text-gray-500 mb-1">
