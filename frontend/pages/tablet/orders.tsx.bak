@@ -8,6 +8,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { useSocket } from '../../lib/socket';
+import { api } from '../../lib/api';
 import { PrintReceipt } from '../../components/PrintReceipt';
 import { TabletSidebar } from '../../components/tablet/TabletSidebar';
 import { OrdersHeader } from '../../components/tablet/orders/OrdersHeader';
@@ -22,8 +23,14 @@ import type { OrderStatus } from '../../hooks/tablet/orderStatus';
 import { NotificationEventPayload, shouldRefreshForNotification } from '../../lib/tablet/orderNotifications';
 import { CountdownTimer } from '../../components/tablet/orders/CountdownTimer';
 
+// Local apiGet helper - mirrors the pattern used in hooks
+async function apiGet<T>(path: string): Promise<T> {
+  const res = await api.get<T>(path);
+  return res.data;
+}
+
 // Import shared types and utilities
-import type { Order, OrderItem, OrdersResponse } from '../../components/tablet/orders/types';
+import type { Order, OrderItem, OrdersResponse, PendingAction, EnqueueAction } from '../../components/tablet/orders/types';
 import {
   normalizeStatus,
   formatMoney,
@@ -99,7 +106,7 @@ export default function TabletOrdersPage() {
     declineOrder,
     setPrepTime,
   } = useOrderActions({
-    enqueueAction,
+    enqueueAction: enqueueAction as (action: { id: string; orderId: string; type: string; payload: unknown; queuedAt: number }) => void,
     onSyncFailure: upsertStatusSyncFailure,
     socket,
   });
@@ -126,7 +133,7 @@ export default function TabletOrdersPage() {
     printTestReceipt,
     fetchRestaurantProfile,
   } = useOrderPrint({
-    onRestaurantProfileChange: setRestaurantProfile,
+    onRestaurantProfileChange: () => {}, // Placeholder - restaurant profile state not used
   });
   
   // Local UI state (kept for modal and UI-specific state)
@@ -200,8 +207,8 @@ export default function TabletOrdersPage() {
     }
   }, [searchQuery]);
 
-  // Get unique channels for filter dropdown
-  const channels = useMemo(() => {
+  // Get unique channels for filter dropdown - renamed to avoid conflict with useOrders hook
+  const localChannels = useMemo(() => {
     const channelSet = new Set<string>();
     orders.forEach(o => {
       if (o.channel) channelSet.add(o.channel);
@@ -230,7 +237,7 @@ export default function TabletOrdersPage() {
     setIsOnline(navigator.onLine);
     const handleOnline = () => {
       setIsOnline(true);
-      processActionQueue();
+      localProcessActionQueue();
     };
     const handleOffline = () => {
       setIsOnline(false);
@@ -317,14 +324,8 @@ export default function TabletOrdersPage() {
       setFontSize(storedFontSize);
     }
 
-    const storedResult = typeof window !== 'undefined' ? safeLocalStorage.getItem('servio_last_print_result') : null;
-    if (storedResult) {
-      try {
-        setLastPrintResult(JSON.parse(storedResult));
-      } catch {
-        // ignore
-      }
-    }
+    // Note: setLastPrintResult is not exported from useOrderPrint hook
+    // The hook handles lastPrintResult internally
     
   }, []);
 
@@ -392,7 +393,8 @@ export default function TabletOrdersPage() {
     });
   }, []);
 
-  const enqueueAction = (action: EnqueueAction) => {
+  // Local queue management - renamed to avoid conflict with useSyncQueue hook's enqueueAction
+  const persistActionToQueue = (action: EnqueueAction) => {
     const current = loadActionQueue();
     const idempotencyKey = action.type === 'status'
       ? `status:${action.orderId}:${action.payload.status.toLowerCase()}`
@@ -405,7 +407,7 @@ export default function TabletOrdersPage() {
     persistActionQueue(next);
   };
 
-  const upsertStatusSyncFailure = useCallback((params: {
+  const localUpsertStatusSyncFailure = useCallback((params: {
     orderId: string;
     status: OrderStatus;
     message: string;
@@ -435,7 +437,7 @@ export default function TabletOrdersPage() {
     persistActionQueue(next);
   }, [persistActionQueue]);
 
-  const processActionQueue = async (force = false) => {
+  const localProcessActionQueue = async (force = false) => {
     if (typeof window === 'undefined') return;
     if (!navigator.onLine) return;
     const queue = loadActionQueue();
@@ -488,14 +490,15 @@ export default function TabletOrdersPage() {
     }
   };
 
-  const retryQueueNow = async () => {
+  // Local queue management functions - renamed to avoid conflict with useSyncQueue hook
+  const localRetryQueueNow = async () => {
     if (!window.confirm('Retry all failed and queued sync actions now?')) return;
     const resetQueue = loadActionQueue().map((action) => ({ ...action, permanentFailure: false }));
     persistActionQueue(resetQueue);
-    await processActionQueue(true);
+    await localProcessActionQueue(true);
   };
 
-  const clearFailedActions = () => {
+  const localClearFailedActions = () => {
     if (!window.confirm('Clear failed actions that exceeded retry limits? This cannot be undone.')) return;
     const next = loadActionQueue().filter((action) => !action.permanentFailure && action.retryCount < ACTION_RETRY_THRESHOLD);
     persistActionQueue(next);
@@ -513,9 +516,9 @@ export default function TabletOrdersPage() {
   }, []);
 
   useEffect(() => {
-    processActionQueue();
+    localProcessActionQueue();
     const t = window.setInterval(() => {
-      processActionQueue();
+      localProcessActionQueue();
     }, 15000);
     return () => window.clearInterval(t);
   }, []);
@@ -589,7 +592,8 @@ export default function TabletOrdersPage() {
     return () => window.clearInterval(t);
   }, []);
 
-  const activeOrders = useMemo(() => {
+  // Local order processing (deduplicated) - renamed to avoid conflict with useOrders hook
+  const localActiveOrders = useMemo(() => {
     const activeStatuses = new Set(['received', 'preparing', 'ready']);
     // Deduplicate by order ID to prevent the same order from appearing multiple times
     const seen = new Set<string>();
@@ -600,78 +604,19 @@ export default function TabletOrdersPage() {
     });
   }, [orders]);
 
-  const attentionOrdersCount = useMemo(() => {
-    return activeOrders.filter((order) => {
+  const localAttentionOrdersCount = useMemo(() => {
+    return localActiveOrders.filter((order) => {
       const { elapsedMinutes } = formatTimeAgo(order.created_at, now);
       return getOrderUrgencyLevel(elapsedMinutes) !== 'normal';
     }).length;
-  }, [activeOrders, now]);
+  }, [localActiveOrders, now]);
 
   const lateOrdersCount = useMemo(() => {
-    return activeOrders.filter((order) => {
+    return localActiveOrders.filter((order) => {
       const { elapsedMinutes } = formatTimeAgo(order.created_at, now);
       return getOrderUrgencyLevel(elapsedMinutes) === 'critical';
     }).length;
-  }, [activeOrders, now]);
-
-  const filteredOrders = useMemo(() => {
-    let result = [...activeOrders];
-
-    // Apply status filter
-    if (statusFilter !== 'all') {
-      result = result.filter(o => normalizeStatus(o.status) === statusFilter);
-    }
-
-    // Apply channel filter
-    if (channelFilter !== 'all') {
-      result = result.filter(o => o.channel === channelFilter);
-    }
-
-    // Apply search query
-    if (searchQuery.trim()) {
-      result = result.filter(o => matchesSearchQuery(o, searchQuery));
-    }
-
-    if (needsAttentionOnly) {
-      result = result.filter((order) => {
-        const { elapsedMinutes } = formatTimeAgo(order.created_at, now);
-        return getOrderUrgencyLevel(elapsedMinutes) !== 'normal';
-      });
-    }
-
-    // Apply sorting
-    switch (sortBy) {
-      case 'oldest':
-        result.sort((a, b) => {
-          const ta = a.created_at ? new Date(a.created_at).getTime() : 0;
-          const tb = b.created_at ? new Date(b.created_at).getTime() : 0;
-          return ta - tb;
-        });
-        break;
-      case 'prep-time':
-        result.sort((a, b) => {
-          // Put orders with prep time at top, sorted by remaining time
-          const pa = a.prep_minutes || 15;
-          const pb = b.prep_minutes || 15;
-          const hasA = a.created_at ? Date.now() - new Date(a.created_at).getTime() : 0;
-          const hasB = b.created_at ? Date.now() - new Date(b.created_at).getTime() : 0;
-          const ra = pa * 60000 - hasA;
-          const rb = pb * 60000 - hasB;
-          return ra - rb; // Orders closer to deadline first
-        });
-        break;
-      case 'newest':
-      default:
-        result.sort((a, b) => {
-          const ta = a.created_at ? new Date(a.created_at).getTime() : 0;
-          const tb = b.created_at ? new Date(b.created_at).getTime() : 0;
-          return tb - ta;
-        });
-        break;
-    }
-
-    return result;
-  }, [activeOrders, statusFilter, channelFilter, searchQuery, sortBy, needsAttentionOnly, now]);
+  }, [localActiveOrders, now]);
 
   useEffect(() => {
     if (filteredOrders.length === 0) {
@@ -718,23 +663,23 @@ export default function TabletOrdersPage() {
     return { activeQueueOrders: activeQueue, archivedOrders: archived };
   }, [filteredOrders, now]);
 
-  const receivedOrders = useMemo(() => {
+  const localReceivedOrders = useMemo(() => {
     return activeQueueOrders.filter((o) => normalizeStatus(o.status) === 'received');
   }, [activeQueueOrders]);
 
-  const preparingOrders = useMemo(() => {
+  const localPreparingOrders = useMemo(() => {
     return activeQueueOrders.filter((o) => normalizeStatus(o.status) === 'preparing');
   }, [activeQueueOrders]);
 
-  const readyOrders = useMemo(() => {
+  const localReadyOrders = useMemo(() => {
     return activeQueueOrders.filter((o) => normalizeStatus(o.status) === 'ready');
   }, [activeQueueOrders]);
 
   const queueSections = useMemo(() => ([
-    { key: 'received' as const, label: 'New', orders: receivedOrders },
-    { key: 'preparing' as const, label: 'In Progress', orders: preparingOrders },
-    { key: 'ready' as const, label: 'Ready', orders: readyOrders },
-  ]), [receivedOrders, preparingOrders, readyOrders]);
+    { key: 'received' as const, label: 'New', orders: localReceivedOrders },
+    { key: 'preparing' as const, label: 'In Progress', orders: localPreparingOrders },
+    { key: 'ready' as const, label: 'Ready', orders: localReadyOrders },
+  ]), [localReceivedOrders, localPreparingOrders, localReadyOrders]);
 
   const visibleSections = useMemo(() => {
     if (statusFilter === 'all') {
