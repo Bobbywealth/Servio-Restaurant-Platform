@@ -3,9 +3,7 @@ import { useEffect, useMemo, useRef, useState, useCallback, KeyboardEvent, Mouse
 import { useRouter } from 'next/router';
 import clsx from 'clsx';
 import {
-  Printer,
   Search,
-  Filter,
   X,
   AlertTriangle,
 } from 'lucide-react';
@@ -16,663 +14,131 @@ import { OrdersHeader } from '../../components/tablet/orders/OrdersHeader';
 import { OrderFiltersBar } from '../../components/tablet/orders/OrderFiltersBar';
 import { OrderDetailsModal } from '../../components/tablet/orders/OrderDetailsModal';
 import { useOrderAlerts } from '../../hooks/tablet/useOrderAlerts';
-import type { ReceiptPaperWidth, ReceiptOrder, ReceiptRestaurant } from '../../utils/receiptGenerator';
-import { generateReceiptHtml, generateStandaloneReceiptHtml, getReceiptItemModifiers } from '../../utils/receiptGenerator';
-import { api } from '../../lib/api'
+import type { ReceiptPaperWidth } from '../../utils/receiptGenerator';
 import { safeLocalStorage } from '../../lib/utils';
-import { generatePlainTextReceipt, printViaRawBT } from '../../utils/escpos';
 import { useUser } from '../../contexts/UserContext';
-import { ORDER_STATUS, TABLET_STATUS_ACTION, mapTabletStatusActionToOrderStatus, postOrderStatus } from '../../hooks/tablet/orderStatus';
+import { ORDER_STATUS, TABLET_STATUS_ACTION, mapTabletStatusActionToOrderStatus } from '../../hooks/tablet/orderStatus';
 import type { OrderStatus } from '../../hooks/tablet/orderStatus';
 import { NotificationEventPayload, shouldRefreshForNotification } from '../../lib/tablet/orderNotifications';
 import { CountdownTimer } from '../../components/tablet/orders/CountdownTimer';
 
-// KDS Order Card Component - matches KitchenBoard styling
-function normalizeStatus(s: string | null | undefined) {
-  const v = (s || '').trim();
-  if (!v) return 'received';
-  const lower = v.toLowerCase();
-  if (lower === 'new') return 'received';
-  return lower;
-}
-
-const kdsStatusStyles = {
-  received: {
-    rail: 'bg-amber-500',
-    badge: 'border-amber-300 bg-amber-50 text-amber-700',
-    timer: 'text-amber-600',
-  },
-  preparing: {
-    rail: 'bg-blue-500',
-    badge: 'border-blue-300 bg-blue-50 text-blue-700',
-    timer: 'text-blue-600',
-  },
-  ready: {
-    rail: 'bg-emerald-500',
-    badge: 'border-emerald-300 bg-emerald-50 text-emerald-700',
-    timer: 'text-emerald-600',
-  },
-};
-
-interface KDSOrderCardProps {
-  order: Order;
-  now: number | null;
-  busyId: string | null;
-  onAccept: () => void;
-  onDecline: () => void;
-  onMarkReady: () => void;
-  onMarkPickedUp: () => void;
-  onPrint: () => void;
-  formatMoney: (v: number | null | undefined) => string;
-  onExpire?: (orderId: string) => void;
-  onViewDetails?: () => void;
-}
-
-function KDSOrderCard({ order, now, busyId, onAccept, onDecline, onMarkReady, onMarkPickedUp, onPrint, formatMoney, onExpire, onViewDetails }: KDSOrderCardProps) {
-  const status = normalizeStatus(order.status);
-  const style = kdsStatusStyles[status as keyof typeof kdsStatusStyles] || kdsStatusStyles.received;
-  const isBusy = busyId === order.id;
-  const items = order.items || [];
-  const totalItems = items.reduce((sum, item) => sum + (item.quantity || item.qty || 0), 0);
-
-  const getOrderAge = (createdAt: string | null | undefined): string => {
-    if (!createdAt || !now) return '';
-    const created = new Date(createdAt).getTime();
-    const diffMs = now - created;
-    const diffMins = Math.floor(diffMs / 60000);
-    
-    if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins}m`;
-    const diffHours = Math.floor(diffMins / 60);
-    if (diffHours < 24) return `${diffHours}h ${diffMins % 60}m`;
-    return `${Math.floor(diffHours / 24)}d ${diffHours % 24}h`;
-  };
-
-  const formatPickupTime = (pickupTime: string | null | undefined): string => {
-    if (!pickupTime) return '';
-    const date = new Date(pickupTime);
-    return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-  };
-
-  const getStatusLabel = (s: string): string => {
-    if (s === 'received') return 'Needs action';
-    if (s === 'preparing') return 'In progress';
-    if (s === 'ready') return 'Ready';
-    return s;
-  };
-
-  const renderActionButton = () => {
-    if (status === 'received') {
-      return (
-        <div className="grid grid-cols-2 gap-2 pt-2">
-          <button
-            onClick={onAccept}
-            disabled={isBusy}
-            className="rounded-lg bg-blue-600 text-white py-2 font-semibold hover:bg-blue-700 disabled:opacity-50 text-sm"
-          >
-            {isBusy ? 'Accepting...' : 'Accept'}
-          </button>
-          <button
-            onClick={onDecline}
-            disabled={isBusy}
-            className="rounded-lg border border-slate-300 py-2 font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50 text-sm"
-          >
-            Reject
-          </button>
-        </div>
-      );
-    }
-
-    if (status === 'preparing') {
-      return (
-        <button
-          onClick={onMarkReady}
-          disabled={isBusy}
-          className="w-full rounded-lg bg-slate-800 text-white py-2 font-semibold hover:bg-slate-700 disabled:opacity-50 text-sm"
-        >
-          {isBusy ? 'Marking...' : 'Ready for pickup'}
-        </button>
-      );
-    }
-
-    if (status === 'ready') {
-      return (
-        <button
-          onClick={onMarkPickedUp}
-          disabled={isBusy}
-          className="w-full rounded-lg bg-emerald-600 text-white py-2 font-semibold hover:bg-emerald-700 disabled:opacity-50 text-sm"
-        >
-          {isBusy ? 'Marking...' : 'Mark as picked up'}
-        </button>
-      );
-    }
-
-    return null;
-  };
-
-  return (
-    <div className="relative w-[320px] shrink-0 rounded-xl border border-slate-200 bg-white shadow-sm">
-      {/* Colored left status rail */}
-      <div className={clsx('absolute left-0 top-0 h-full w-1', style.rail)} />
-
-      {/* ORDER HEADER */}
-      <div className="border-b border-slate-200 px-5 py-4">
-        <div className="flex justify-between items-start">
-          <div>
-            <div className="text-xs font-semibold text-slate-500 uppercase">
-              {getStatusLabel(status)}
-            </div>
-            <div className="text-2xl font-semibold text-slate-900">
-              {order.customer_name || 'Guest'}
-            </div>
-          </div>
-
-          {status === 'preparing' && (
-            <div className="text-right">
-              {order.pickup_time ? (
-                <>
-                  <div className="text-xs text-slate-500">
-                    {order.order_type === 'delivery' ? 'Delivery by' : 'Pickup at'}
-                  </div>
-                  <div className={clsx('text-2xl font-semibold', style.timer)}>
-                    {formatPickupTime(order.pickup_time)}
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="text-xs text-slate-500">Prep time</div>
-                  <div className={clsx('text-2xl font-semibold', style.timer)}>
-                    {order.prep_minutes ? `${order.prep_minutes}m` : '--'}
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-
-          {status === 'received' && (
-            <div className="text-right">
-              <div className="text-xs text-slate-500 mb-1">Time remaining</div>
-              <CountdownTimer
-                orderReceivedAt={order.created_at}
-                durationSeconds={180}
-                visible={true}
-                orderType={order.order_type}
-                onExpire={(reason) => {
-                  console.log(`Order ${order.id} expired: ${reason}`);
-                  onExpire?.(order.id);
-                }}
-              />
-            </div>
-          )}
-
-          {status === 'ready' && (
-            <div className={clsx('text-xs font-semibold border px-2 py-1 rounded', style.badge)}>
-              Ready
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* ORDER BODY */}
-      <div className="space-y-3 px-5 py-4">
-        <div className="text-slate-700 font-medium">
-          {order.order_type === 'delivery' ? 'Delivery' : order.order_type === 'pickup' ? 'Pickup' : 'Dine-in'} •{' '}
-          {order.channel || 'Online'}
-        </div>
-
-        <div className="space-y-1 text-sm text-slate-600">
-          {order.pickup_time && (
-            <div>🕒 Pickup at {formatPickupTime(order.pickup_time)}</div>
-          )}
-          <div>👜 {totalItems} items</div>
-          <div>🍴 {order.order_type === 'dine-in' ? 'Dine-in' : 'No utensils'}</div>
-        </div>
-
-        <div className="border-t border-slate-200 pt-3" />
-
-        {items.map((item, index) => (
-          <div key={index} className="flex justify-between text-sm">
-            <div className="flex gap-2">
-              <span className="font-semibold text-blue-600">
-                {item.quantity || item.qty || 1}
-              </span>
-              <span className="text-slate-800 font-medium">
-                {item.name || 'Item'}
-              </span>
-            </div>
-            <div className="font-semibold text-slate-900">
-              {formatMoney((item.unit_price || item.price || 0) * (item.quantity || item.qty || 1))}
-            </div>
-          </div>
-        ))}
-
-        {/* Modifiers/Extras */}
-        {items.some((item) => item.modifiers && (Array.isArray(item.modifiers) ? item.modifiers.length > 0 : Object.keys(item.modifiers).length > 0)) && (
-          <div className="text-sm text-slate-500 pt-2">
-            <div className="font-medium">Extras:</div>
-            {items.map((item, idx) => {
-              const mods = item.modifiers;
-              if (!mods) return null;
-              const modArray = Array.isArray(mods) ? mods : Object.values(mods);
-              return modArray.map((mod: any, modIdx: number) => (
-                <div key={modIdx} className="ml-2">• {typeof mod === 'string' ? mod : mod.name || mod}</div>
-              ));
-            })}
-          </div>
-        )}
-
-        {/* Special Instructions */}
-        {order.special_instructions && (
-          <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-700">
-            📝 {order.special_instructions}
-          </div>
-        )}
-
-        {/* ACTION BUTTONS */}
-        {renderActionButton()}
-
-        {/* VIEW DETAILS BUTTON */}
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onViewDetails?.();
-          }}
-          className="w-full mt-2 rounded-lg border border-slate-300 py-2 font-medium text-slate-600 hover:bg-slate-100 text-sm"
-        >
-          View Full Details
-        </button>
-      </div>
-    </div>
-  );
-}
-
-type OrderItem = {
-  id?: string;
-  name?: string;
-  quantity?: number;
-  qty?: number;
-  unit_price?: number;
-  price?: number;
-  modifiers?: Record<string, unknown> | string[];
-  notes?: string | null;
-};
-
-type Order = {
-  id: string;
-  external_id?: string | null;
-  channel?: string | null;
-  status?: string | null;
-  customer_name?: string | null;
-  customer_phone?: string | null;
-  order_type?: string | null;
-  pickup_time?: string | null;
-  special_instructions?: string | null;
-  total_amount?: number | null;
-  subtotal?: number | null;
-  created_at?: string | null;
-  items?: OrderItem[];
-  prep_time?: string | null;
-  prep_minutes?: number | null;
-};
-
-type OrdersResponse = {
-  success: boolean;
-  data?: {
-    orders?: Order[];
-    pagination?: { total?: number; limit?: number; offset?: number; hasMore?: boolean };
-  };
-  error?: { message?: string };
-};
-
-type OrderFilter = {
-  status: 'all' | 'received' | 'preparing' | 'ready';
-  channel: string;
-  orderType: string;
-  sortBy: 'newest' | 'oldest' | 'prep-time';
-  searchQuery: string;
-};
-
-type PendingAction =
-  | {
-      id: string;
-      orderId: string;
-      type: 'status';
-      payload: { status: OrderStatus };
-      queuedAt: number;
-      idempotencyKey: string;
-      retryCount: number;
-      lastError: string | null;
-      lastAttemptAt?: number;
-      permanentFailure?: boolean;
-    }
-  | {
-      id: string;
-      orderId: string;
-      type: 'prep-time';
-      payload: { prepMinutes: number };
-      queuedAt: number;
-      idempotencyKey: string;
-      retryCount: number;
-      lastError: string | null;
-      lastAttemptAt?: number;
-      permanentFailure?: boolean;
-    };
-
-type EnqueueAction = PendingAction extends infer Action
-  ? Action extends PendingAction
-    ? Omit<Action, 'idempotencyKey' | 'retryCount' | 'lastError'>
-    : never
-  : never;
-
-async function apiGet<T>(path: string): Promise<T> {
-  const res = await api.get(path);
-  return res.data as T;
-}
-
-async function apiPost<T>(path: string, body: unknown): Promise<T> {
-  const res = await api.post(path, body);
-  return res.data as T;
-}
-
-function shortId(id: string) {
-  if (!id) return '';
-  return id.length <= 8 ? id : `${id.slice(0, 4)}…${id.slice(-4)}`;
-}
-
-function formatMoney(v: number | null | undefined) {
-  const n = typeof v === 'number' ? v : 0;
-  try {
-    return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(n);
-  } catch {
-    return `$${n.toFixed(2)}`;
-  }
-}
-
-function formatTimeAgo(iso: string | null | undefined, now: number | null) {
-  if (now === null || !iso) return { text: '—', elapsedMinutes: null };
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return { text: '—', elapsedMinutes: null };
-  const diffMs = now - d.getTime();
-  const mins = Math.max(0, Math.floor(diffMs / 60000));
-
-  if (mins < 1) {
-    return { text: 'Just now', elapsedMinutes: mins };
-  }
-
-  if (mins < 60) {
-    return { text: `${mins}m`, elapsedMinutes: mins };
-  }
-
-  const hours = Math.floor(mins / 60);
-  const remainingMinutes = mins % 60;
-  return { text: `${hours}h ${remainingMinutes}m`, elapsedMinutes: mins };
-}
-
-type UrgencyLevel = 'normal' | 'warning' | 'critical';
-
-function getOrderUrgencyLevel(elapsedMinutes: number | null): UrgencyLevel {
-  if (elapsedMinutes === null || elapsedMinutes < 10) return 'normal';
-  if (elapsedMinutes <= 20) return 'warning';
-  return 'critical';
-}
-
-function getOrderUrgencyClass(level: UrgencyLevel): string {
-  switch (level) {
-    case 'critical':
-      return 'text-[var(--tablet-danger)]';
-    case 'warning':
-      return 'text-[var(--tablet-warning)]';
-    default:
-      return 'text-[var(--tablet-muted)]';
-  }
-}
-
-function getOrderUrgencyBadgeClass(level: UrgencyLevel): string {
-  switch (level) {
-    case 'critical':
-      return 'bg-[color-mix(in_srgb,var(--tablet-danger)_18%,transparent)] text-[var(--tablet-danger)]';
-    case 'warning':
-      return 'bg-[color-mix(in_srgb,var(--tablet-warning)_18%,transparent)] text-[var(--tablet-warning)]';
-    default:
-      return 'bg-[var(--tablet-surface-alt)] text-[var(--tablet-muted)]';
-  }
-}
-
-function isArchivedOrder(order: Order, now: number | null): boolean {
-  // Always archive orders that are completed or cancelled - they should go to history immediately
-  if (order.status === 'completed' || order.status === 'cancelled') {
-    return true;
-  }
-  
-  // Also archive stale orders based on time threshold
-  if (!Number.isFinite(STALE_ORDER_THRESHOLD_MINUTES) || STALE_ORDER_THRESHOLD_MINUTES <= 0) return false;
-  const { elapsedMinutes } = formatTimeAgo(order.created_at, now);
-  return typeof elapsedMinutes === 'number' && elapsedMinutes >= STALE_ORDER_THRESHOLD_MINUTES;
-}
-
-function normalizeOrderItems(items: unknown): OrderItem[] {
-  if (!Array.isArray(items)) return [];
-
-  return items.map((item: any) => {
-    const parsedQuantity = Number(item?.quantity ?? item?.qty ?? 1);
-    const quantity = Number.isFinite(parsedQuantity) && parsedQuantity > 0 ? parsedQuantity : 1;
-
-    let modifiers = item?.modifiers;
-    if ((!modifiers || typeof modifiers !== 'object') && typeof item?.notes === 'string') {
-      try {
-        const parsedNotes = JSON.parse(item.notes);
-        if (parsedNotes?.modifiers) {
-          modifiers = parsedNotes.modifiers;
-        }
-      } catch {
-        // Notes can be plain text; ignore parse errors.
-      }
-    }
-
-    return {
-      ...item,
-      name: item?.name || item?.item_name_snapshot || item?.item_id || 'Item',
-      quantity,
-      modifiers
-    };
-  });
-}
-
-// Prep time countdown function
-function formatPrepTimeRemaining(
-  prepMinutes: number | null | undefined,
-  createdAt: string | null | undefined,
-  now: number | null
-): { text: string; isOverdue: boolean; percentRemaining: number; overdueMinutes: number | null } | null {
-  if (!prepMinutes || !createdAt || now === null) return null;
-
-  const created = new Date(createdAt).getTime();
-  if (Number.isNaN(created)) return null;
-
-  const totalMs = prepMinutes * 60 * 1000;
-  const elapsedMs = now - created;
-  const remainingMs = totalMs - elapsedMs;
-  const percentRemaining = Math.max(0, Math.min(100, (remainingMs / totalMs) * 100));
-
-  if (remainingMs <= 0) {
-    const overdueMinutes = Math.ceil(Math.abs(remainingMs) / 60000);
-    return {
-      text: overdueMinutes > 0 ? `Overdue by ${overdueMinutes} min` : 'Overdue',
-      isOverdue: true,
-      percentRemaining: 0,
-      overdueMinutes
-    };
-  }
-
-  const minsRemaining = Math.ceil(remainingMs / 60000);
-  return {
-    text: `${minsRemaining}m`,
-    isOverdue: false,
-    percentRemaining,
-    overdueMinutes: null
-  };
-}
-
-function getPrepTimeWarningLevel(percentRemaining: number): 'normal' | 'warning' | 'critical' {
-  if (percentRemaining <= 25) return 'critical';
-  if (percentRemaining <= 50) return 'warning';
-  return 'normal';
-}
-
-function getPrepTimeColorClass(level: 'normal' | 'warning' | 'critical'): string {
-  switch (level) {
-    case 'critical':
-      return 'bg-[var(--tablet-danger)] text-[var(--tablet-text)]';
-    case 'warning':
-      return 'bg-[var(--tablet-warning)] text-[var(--tablet-text)]';
-    default:
-      return 'bg-[var(--tablet-success)] text-[var(--tablet-text)]';
-  }
-}
-
-function statusBadgeClassesForStatus(status: string): string {
-  switch (status) {
-    case 'received':
-      return 'bg-[var(--tablet-danger)] text-white';
-    case 'preparing':
-      return 'bg-[var(--tablet-warning)] text-[var(--tablet-text)]';
-    case 'ready':
-      return 'bg-[var(--tablet-success)] text-white';
-    default:
-      return 'bg-[var(--tablet-surface-alt)] text-[var(--tablet-text)]';
-  }
-}
-
-const STALE_ORDER_THRESHOLD_MINUTES = Number(process.env.NEXT_PUBLIC_TABLET_STALE_ORDER_MINUTES ?? 120);
-
-// Search/filter utilities
-function matchesSearchQuery(order: Order, query: string): boolean {
-  if (!query.trim()) return true;
-  const searchTerms = query.toLowerCase().split(' ').filter(Boolean);
-
-  const searchableText = [
-    order.customer_name || '',
-    order.customer_phone || '',
-    order.external_id || order.id || '',
-    order.channel || '',
-    order.order_type || '',
-    (order.items || []).map(i => i.name || '').join(' ')
-  ].join(' ').toLowerCase();
-
-  return searchTerms.every(term => searchableText.includes(term));
-}
-
-function getChannelIcon(channel: string | null | undefined): string {
-  const c = (channel || '').toLowerCase();
-  if (c.includes('doordash')) return '🚗';
-  if (c.includes('ubereats') || c.includes('uber')) return '🛵';
-  if (c.includes('grubhub')) return '🍔';
-  if (c.includes('toast')) return '🍞';
-  if (c.includes('pos') || c === 'in-store') return '🏪';
-  if (c.includes('online') || c.includes('web')) return '💻';
-  if (c.includes('phone') || c.includes('call')) return '📞';
-  if (c.includes('vapi') || c.includes('voice')) return '🎙️';
-  return '📋';
-}
-
-
-const ACTION_QUEUE_KEY = 'servio_tablet_action_queue';
-const ORDER_CACHE_KEY = 'servio_cached_orders';
-const ACTION_RETRY_THRESHOLD = 3;
-
-function normalizeQueuedAction(action: any): PendingAction | null {
-  if (!action || typeof action !== 'object') return null;
-  if (!action.id || !action.orderId || !action.type || !action.payload) return null;
-  if (action.type !== 'status' && action.type !== 'prep-time') return null;
-  const idempotencyKey = action.idempotencyKey
-    || (action.type === 'status'
-      ? `status:${action.orderId}:${String(action.payload?.status || '').toLowerCase()}`
-      : `prep-time:${action.orderId}:${action.queuedAt || Date.now()}`);
-
-  return {
-    ...action,
-    queuedAt: Number(action.queuedAt) || Date.now(),
-    idempotencyKey,
-    retryCount: Number(action.retryCount) || 0,
-    lastError: typeof action.lastError === 'string' ? action.lastError : null,
-    lastAttemptAt: typeof action.lastAttemptAt === 'number' ? action.lastAttemptAt : undefined,
-    permanentFailure: Boolean(action.permanentFailure)
-  } as PendingAction;
-}
-
-function loadActionQueue(): PendingAction[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    const raw = safeLocalStorage.getItem(ACTION_QUEUE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .map((entry) => normalizeQueuedAction(entry))
-      .filter((entry): entry is PendingAction => Boolean(entry));
-  } catch {
-    return [];
-  }
-}
-
-function saveActionQueue(next: PendingAction[]) {
-  if (typeof window === 'undefined') return;
-  safeLocalStorage.setItem(ACTION_QUEUE_KEY, JSON.stringify(next));
-}
-
-function removeAuthTokens() {
-  if (typeof window === 'undefined') return;
-  safeLocalStorage.removeItem('servio_access_token');
-  safeLocalStorage.removeItem('servio_refresh_token');
-  safeLocalStorage.removeItem('servio_user');
-}
+// Import shared types and utilities
+import type { Order, OrderItem, OrdersResponse } from '../../components/tablet/orders/types';
+import {
+  normalizeStatus,
+  formatMoney,
+  formatTimeAgo,
+  getOrderUrgencyLevel,
+  matchesSearchQuery,
+  isArchivedOrder,
+  normalizeOrderItems,
+  getChannelIcon,
+  shortId,
+  formatPrepTimeRemaining,
+  getStatusLabel,
+  STATUS_STYLES,
+  URGENCY_CONFIG,
+  STALE_ORDER_THRESHOLD_MINUTES,
+  PREP_TIME_THRESHOLDS,
+} from '../../components/tablet/orders';
+
+// Import custom hooks
+import { useOrders } from '../../hooks/tablet/useOrders';
+import { useSyncQueue } from '../../hooks/tablet/useSyncQueue';
+import { useOrderActions } from '../../hooks/tablet/useOrderActions';
+import { useOrderPrint } from '../../hooks/tablet/useOrderPrint';
+
+// Types are imported from shared module
+// Utility functions are imported from shared module
+// Constants are imported from shared module
 
 export default function TabletOrdersPage() {
   const router = useRouter();
   const { user, isLoading: authLoading } = useUser();
   const socket = useSocket();
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [busyId, setBusyId] = useState<string | null>(null);
-  const [now, setNow] = useState<number | null>(null);
-  const [autoPrintEnabled, setAutoPrintEnabled] = useState<boolean>(false);
-  const [paperWidth, setPaperWidth] = useState<ReceiptPaperWidth>('80mm');
-  const [printMode, setPrintMode] = useState<'bluetooth' | 'system' | 'bridge' | 'rawbt'>('system');
-  const [fontSize, setFontSize] = useState<string>('medium');
-  const [headerText, setHeaderText] = useState<string>('');
-  const [footerText, setFooterText] = useState<string>('');
-
-  const [lastPrintResult, setLastPrintResult] = useState<{ status: 'success' | 'error'; message?: string } | null>(null);
-  const [autoPrintPendingId, setAutoPrintPendingId] = useState<string | null>(null);
-  const lastAutoPromptedId = useRef<string | null>(null);
-  const [prepModalOrder, setPrepModalOrder] = useState<Order | null>(null);
-  const [prepMinutes, setPrepMinutes] = useState<number>(15);
-  const [printingOrderId, setPrintingOrderId] = useState<string | null>(null);
-  const [printedOrders, setPrintedOrders] = useState<Set<string>>(() => new Set());
-  const printedOrdersRef = useRef<Set<string>>(new Set());
-  const hasInitializedPrintedRef = useRef(false);
-  const [restaurantProfile, setRestaurantProfile] = useState<ReceiptRestaurant | null>(null);
-  const [receiptHtml, setReceiptHtml] = useState<string | null>(null);
-  const lastRefreshAt = useRef<number>(0);
+  
+  // Use custom hooks for business logic
+  const {
+    orders,
+    loading,
+    now,
+    filteredOrders,
+    receivedOrders,
+    preparingOrders,
+    readyOrders,
+    attentionOrdersCount,
+    statusFilter,
+    setStatusFilter,
+    channelFilter,
+    setChannelFilter,
+    sortBy,
+    setSortBy,
+    searchQuery,
+    setSearchQuery,
+    needsAttentionOnly,
+    setNeedsAttentionOnly,
+    channels,
+    refresh,
+  } = useOrders();
+  
+  const {
+    actionQueue,
+    pendingActions,
+    syncAttemptStatus,
+    enqueueAction,
+    retryQueueNow,
+    clearFailedActions,
+    upsertStatusSyncFailure,
+  } = useSyncQueue();
+  
+  // Order actions hook
+  const {
+    busyId,
+    setStatus,
+    acceptOrder,
+    declineOrder,
+    setPrepTime,
+  } = useOrderActions({
+    enqueueAction,
+    onSyncFailure: upsertStatusSyncFailure,
+    socket,
+  });
+  
+  // Print hook
+  const {
+    autoPrintEnabled,
+    setAutoPrintEnabled,
+    paperWidth,
+    setPaperWidth,
+    printMode,
+    setPrintMode,
+    fontSize,
+    setFontSize,
+    headerText,
+    setHeaderText,
+    footerText,
+    setFooterText,
+    printingOrderId,
+    lastPrintResult,
+    receiptHtml,
+    setReceiptHtml,
+    printOrder,
+    printTestReceipt,
+    fetchRestaurantProfile,
+  } = useOrderPrint({
+    onRestaurantProfileChange: setRestaurantProfile,
+  });
+  
+  // Local UI state (kept for modal and UI-specific state)
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
-  const [pendingActions, setPendingActions] = useState<Set<string>>(() => new Set());
   const [isOnline, setIsOnline] = useState<boolean>(true);
   const [socketConnected, setSocketConnected] = useState<boolean>(false);
   const [showUpdateBanner, setShowUpdateBanner] = useState(false);
-  const [actionQueue, setActionQueue] = useState<PendingAction[]>(() => loadActionQueue());
-  const [lastSuccessfulSyncAt, setLastSuccessfulSyncAt] = useState<number | null>(null);
-  const [syncAttemptStatus, setSyncAttemptStatus] = useState<'idle' | 'syncing' | 'success' | 'error'>('idle');
   
   // New feature toggles
   const [isFullscreen, setIsFullscreen] = useState(false);
-  // Search and filter state
-  const [searchQuery, setSearchQuery] = useState('');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
-  const [statusFilter, setStatusFilter] = useState<OrderFilter['status']>('all');
-  const [channelFilter, setChannelFilter] = useState('all');
-  const [sortBy, setSortBy] = useState<OrderFilter['sortBy']>('newest');
   const [showFilters, setShowFilters] = useState(false);
-  const [needsAttentionOnly, setNeedsAttentionOnly] = useState(false);
   const [showArchivedOrders, setShowArchivedOrders] = useState(false);
   const [orderDetailsOrder, setOrderDetailsOrder] = useState<Order | null>(null);
   const [isDesktopLayout, setIsDesktopLayout] = useState(false);
@@ -743,6 +209,14 @@ export default function TabletOrdersPage() {
     return Array.from(channelSet).sort();
   }, [orders]);
 
+  // Helper to remove auth tokens
+  const removeAuthTokens = () => {
+    if (typeof window === 'undefined') return;
+    safeLocalStorage.removeItem('servio_access_token');
+    safeLocalStorage.removeItem('servio_refresh_token');
+    safeLocalStorage.removeItem('servio_user');
+  };
+
   useEffect(() => {
     if (authLoading) return;
     if (!user) {
@@ -792,40 +266,15 @@ export default function TabletOrdersPage() {
     };
   }, []);
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const cachedQueue = loadActionQueue();
-    if (cachedQueue.length > 0) {
-      setPendingActions(new Set(cachedQueue.map((item) => item.orderId)));
-    }
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const raw = safeLocalStorage.getItem(ORDER_CACHE_KEY);
-    if (!raw) return;
-    try {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed?.orders)) {
-        setOrders(parsed.orders);
-        setLoading(false);
-      }
-    } catch {
-      // ignore cache parse issues
-    }
-  }, []);
-
   // Extended idle timeout - 8 hours for tablet use (restaurant shift duration)
   // Session is kept alive by _app.tsx proactive token refresh
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    // 8 hours = 28800000ms - covers a full restaurant shift
     const idleMs = 8 * 60 * 60 * 1000;
     let idleTimer: number | null = null;
     let lastActivity = Date.now();
 
     const handleIdleLogout = () => {
-      // Only logout if truly idle (no activity for the full duration)
       if (Date.now() - lastActivity >= idleMs) {
         removeAuthTokens();
         const next = router.asPath || '/tablet/orders';
@@ -1049,459 +498,7 @@ export default function TabletOrdersPage() {
     persistActionQueue(next);
   };
 
-  async function retryOrderSync(orderId: string) {
-    const queue = loadActionQueue();
-    if (!queue.some((action) => action.orderId === orderId)) return;
-
-    const resetQueue = queue.map((action) => (
-      action.orderId === orderId
-        ? { ...action, retryCount: 0, permanentFailure: false, lastError: null }
-        : action
-    ));
-
-    persistActionQueue(resetQueue);
-    await processActionQueue(true);
-  }
-
-  async function refresh() {
-    try {
-      if (typeof window !== 'undefined' && !safeLocalStorage.getItem('servio_access_token')) {
-        setLoading(false);
-        return;
-      }
-      const json = await apiGet<OrdersResponse>('/api/orders?limit=50&offset=0');
-      const list = Array.isArray(json?.data?.orders) ? json.data!.orders! : [];
-      setOrders(list.map((order) => ({ ...order, items: normalizeOrderItems(order.items) })));
-      if (typeof window !== 'undefined') {
-        const payload = JSON.stringify({ orders: list, cachedAt: new Date().toISOString() });
-        safeLocalStorage.setItem(ORDER_CACHE_KEY, payload);
-      }
-      lastRefreshAt.current = Date.now();
-    } catch (e: unknown) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function fetchRestaurantProfile() {
-    try {
-      if (typeof window !== 'undefined' && !safeLocalStorage.getItem('servio_access_token')) {
-        return;
-      }
-      const json = await apiGet<{ success: boolean; data?: any }>('/api/restaurant/profile');
-      if (json?.success && json.data) {
-        setRestaurantProfile({
-          name: json.data.name,
-          phone: json.data.phone,
-          address: json.data.address,
-          logo_url: json.data.logo_url
-        });
-      }
-    } catch (e) {
-      // Non-fatal for printing; receipts will still print with fallback header.
-      console.warn('Failed to load restaurant profile for printing', e);
-    }
-  }
-
-  async function printOrder(orderId: string, opts?: { markAsPrinted?: boolean }) {
-    // Prevent duplicate prints
-    if (printingOrderId) {
-      console.log('Print already in progress, ignoring');
-      return;
-    }
-    
-    setPrintingOrderId(orderId);
-    try {
-      // Fetch order details
-      const full = await apiGet<{ success: boolean; data?: any }>(`/api/orders/${encodeURIComponent(orderId)}`);
-      const order = (full?.data || full) as ReceiptOrder;
-
-      // Ensure we have restaurant info
-      let restaurant = restaurantProfile;
-      if (!restaurant) {
-        await fetchRestaurantProfile();
-        restaurant = restaurantProfile;
-      }
-
-      if (printMode === 'rawbt') {
-        // RawBT auto-print mode - plain text for thermal printer compatibility
-        const items = (order.items || []).map((it: any) => ({
-          name: it.name || 'Item',
-          quantity: it.quantity || 1,
-          price: it.unit_price || it.price || 0,
-          modifiers: getReceiptItemModifiers(it)
-        }));
-
-        const orderAny = order as any;
-        const plainText = generatePlainTextReceipt({
-          restaurantName: restaurant?.name || undefined,
-          restaurantPhone: restaurant?.phone || undefined,
-          restaurantAddress: restaurant?.address || undefined,
-          orderId: order.id,
-          orderNumber: orderAny.external_id?.slice(-4).toUpperCase() || order.id.slice(-4).toUpperCase(),
-          customerName: order.customer_name || undefined,
-          customerPhone: orderAny.customer_phone || undefined,
-          orderType: orderAny.order_type || undefined,
-          items,
-          subtotal: orderAny.subtotal || undefined,
-          tax: orderAny.tax || undefined,
-          total: order.total_amount || 0,
-          pickupTime: orderAny.pickup_time || undefined,
-          createdAt: order.created_at || undefined,
-          specialInstructions: orderAny.special_instructions || undefined,
-          headerText: headerText || undefined,
-          footerText: footerText || undefined
-        }, paperWidth);
-        const success = printViaRawBT(plainText);
-
-        if (success) {
-          if (opts?.markAsPrinted !== false) {
-            setPrintedOrders((prev) => {
-              const next = new Set(prev);
-              next.add(orderId);
-              printedOrdersRef.current = next;
-              return next;
-            });
-          }
-          setLastPrintResult({ status: 'success' });
-          safeLocalStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'success' }));
-        } else {
-          setLastPrintResult({ status: 'error', message: 'RawBT not available. Is the app installed?' });
-          safeLocalStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'error', message: 'RawBT not available' }));
-        }
-        return;
-      }
-
-      if (printMode === 'system') {
-        // Open a popup window with only the receipt content so the printer
-        // gets a clean rendered page (not the full orders UI).
-        const standaloneHtml = generateStandaloneReceiptHtml({
-          restaurant: restaurant || null,
-          order: order as ReceiptOrder,
-          paperWidth,
-          headerText,
-          footerText,
-          fontSize
-        });
-
-        const printWindow = window.open('', '_blank', 'width=400,height=600');
-        if (printWindow) {
-          printWindow.document.write(standaloneHtml);
-          printWindow.document.close();
-          printWindow.onload = () => {
-            printWindow.focus();
-            printWindow.print();
-            printWindow.close();
-          };
-        } else {
-          // Fallback if popup blocked: print current page
-          setReceiptHtml(generateReceiptHtml({
-            restaurant: restaurant || null,
-            order: order as ReceiptOrder,
-            paperWidth, headerText, footerText, fontSize
-          }));
-          await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
-          window.print();
-        }
-
-        if (opts?.markAsPrinted !== false) {
-          setPrintedOrders((prev) => {
-            const next = new Set(prev);
-            next.add(orderId);
-            printedOrdersRef.current = next;
-            return next;
-          });
-        }
-        setLastPrintResult({ status: 'success' });
-        safeLocalStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'success' }));
-        return;
-      }
-
-      // Bluetooth or Bridge mode - not fully implemented
-      const message = printMode === 'bluetooth'
-        ? 'WebBluetooth mode requires BLE printer. Try RawBT or System Print instead.'
-        : 'Print Bridge mode is not configured';
-      setLastPrintResult({ status: 'error', message });
-      safeLocalStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'error', message }));
-
-    } catch (e) {
-      console.error('Print failed', e);
-      const message = e instanceof Error ? e.message : 'Print failed';
-      setLastPrintResult({ status: 'error', message });
-      safeLocalStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'error', message }));
-    } finally {
-      setPrintingOrderId(null);
-      // clear receipt after print dialog is opened; also clear onafterprint for some browsers
-      window.setTimeout(() => setReceiptHtml(null), 250);
-    }
-  }
-
-  async function printTestReceipt() {
-    if (printingOrderId) return;
-    setPrintingOrderId('test');
-
-    try {
-      let restaurant = restaurantProfile;
-      if (!restaurant) {
-        await fetchRestaurantProfile();
-        restaurant = restaurantProfile;
-      }
-
-      const now = new Date();
-      const testOrder: ReceiptOrder = {
-        id: `test_${now.getTime()}`,
-        external_id: 'TEST',
-        channel: 'POS',
-        status: 'received',
-        customer_name: 'Test Customer',
-        customer_phone: '(555) 123-4567',
-        order_type: 'pickup',
-        created_at: now.toISOString(),
-        items: [
-          { name: 'Test Burger', quantity: 1, price: 9.99, modifiers: ['No onions', 'Extra cheese'] },
-          { name: 'Fries', quantity: 1, price: 3.49 },
-          { name: 'Soda', quantity: 2, price: 1.75 }
-        ],
-        special_instructions: 'Test print from dashboard'
-      };
-
-      if (printMode === 'rawbt') {
-        // RawBT test print - plain text for thermal printer compatibility
-        const plainText = generatePlainTextReceipt({
-          restaurantName: restaurant?.name || undefined,
-          restaurantPhone: restaurant?.phone || undefined,
-          restaurantAddress: restaurant?.address || undefined,
-          orderId: testOrder.id,
-          orderNumber: testOrder.external_id || testOrder.id.slice(-4).toUpperCase(),
-          customerName: testOrder.customer_name || undefined,
-          customerPhone: testOrder.customer_phone || undefined,
-          orderType: testOrder.order_type || undefined,
-          items: (testOrder.items || []).map((it: any) => ({
-            name: it.name,
-            quantity: it.quantity || 1,
-            price: it.unit_price || it.price || 0,
-            modifiers: getReceiptItemModifiers(it)
-          })),
-          total: (testOrder.items || []).reduce((sum: number, it: any) => {
-            const qty = it.quantity || 1;
-            const price = it.unit_price || it.price || 0;
-            return sum + qty * price;
-          }, 0),
-          createdAt: testOrder.created_at || undefined,
-          specialInstructions: testOrder.special_instructions || undefined,
-          headerText: headerText || undefined,
-          footerText: footerText || undefined
-        }, paperWidth);
-        const success = printViaRawBT(plainText);
-        if (success) {
-          setLastPrintResult({ status: 'success' });
-          safeLocalStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'success' }));
-        } else {
-          setLastPrintResult({ status: 'error', message: 'RawBT not available. Is the app installed?' });
-          safeLocalStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'error', message: 'RawBT not available' }));
-        }
-        return;
-      }
-
-      if (printMode === 'system') {
-        const standaloneHtml = generateStandaloneReceiptHtml({
-          restaurant: restaurant || null,
-          order: testOrder,
-          paperWidth,
-          headerText,
-          footerText,
-          fontSize
-        });
-
-        const printWindow = window.open('', '_blank', 'width=400,height=600');
-        if (printWindow) {
-          printWindow.document.write(standaloneHtml);
-          printWindow.document.close();
-          printWindow.onload = () => {
-            printWindow.focus();
-            printWindow.print();
-            printWindow.close();
-          };
-        } else {
-          setReceiptHtml(generateReceiptHtml({
-            restaurant: restaurant || null, order: testOrder,
-            paperWidth, headerText, footerText, fontSize
-          }));
-          await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
-          window.print();
-        }
-        setLastPrintResult({ status: 'success' });
-        safeLocalStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'success' }));
-        return;
-      }
-
-      const message = printMode === 'bluetooth'
-        ? 'WebBluetooth mode requires BLE printer. Try RawBT or System Print instead.'
-        : 'Print Bridge mode is not configured';
-      setLastPrintResult({ status: 'error', message });
-      safeLocalStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'error', message }));
-    } catch (e) {
-      const message = e instanceof Error ? e.message : 'Test print failed';
-      setLastPrintResult({ status: 'error', message });
-      safeLocalStorage.setItem('servio_last_print_result', JSON.stringify({ status: 'error', message }));
-    } finally {
-      setPrintingOrderId(null);
-      window.setTimeout(() => setReceiptHtml(null), 250);
-    }
-  }
-
-  async function setStatus(orderId: string, nextStatus: OrderStatus) {
-    let previousStatus: string | null | undefined;
-    setBusyId(orderId);
-    setOrders((prev) => prev.map((o) => {
-      if (o.id === orderId) {
-        previousStatus = o.status;
-        return { ...o, status: nextStatus };
-      }
-      return o;
-    }));
-    setSelectedOrder((prev) => (prev?.id === orderId ? { ...prev, status: nextStatus } : prev));
-
-    const rollbackToPreviousStatus = () => {
-      setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, status: previousStatus } : o)));
-      setSelectedOrder((prev) => (prev?.id === orderId ? { ...prev, status: previousStatus } : prev));
-    };
-
-    try {
-      if (!navigator.onLine) {
-        enqueueAction({
-          id: `${orderId}-${Date.now()}`,
-          orderId,
-          type: 'status',
-          payload: { status: nextStatus },
-          queuedAt: Date.now()
-        });
-      } else {
-        await postOrderStatus(api, orderId, nextStatus);
-        if (socket) {
-          socket.emit('order:status_changed', { orderId, status: nextStatus, timestamp: new Date() });
-        }
-      }
-    } catch (error: any) {
-      rollbackToPreviousStatus();
-      const statusCode = error?.response?.status;
-      const permanentFailure = statusCode === 400 || statusCode === 404 || statusCode === 409 || statusCode === 422;
-      const message = error?.response?.data?.error?.message || error?.message || 'Sync failed';
-
-      upsertStatusSyncFailure({
-        orderId,
-        status: nextStatus,
-        message: String(message),
-        permanentFailure
-      });
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  function openAcceptModal(order: Order) {
-    setPrepModalOrder(order);
-    setPrepMinutes(order.prep_minutes && order.prep_minutes > 0 ? order.prep_minutes : 15);
-  }
-
-  async function acceptOrder(order: Order, minutes: number) {
-    setBusyId(order.id);
-    try {
-      await setPrepTime(order.id, minutes);
-      if (socket) {
-        socket.emit('order:status_changed', { orderId: order.id, status: ORDER_STATUS.PREPARING, timestamp: new Date() });
-      }
-      
-      if (autoPrintEnabled) {
-        await printOrder(order.id, { markAsPrinted: true });
-      }
-    } catch (e) {
-      enqueueAction({
-        id: `${order.id}-${Date.now()}`,
-        orderId: order.id,
-        type: 'prep-time',
-        payload: { prepMinutes: minutes },
-        queuedAt: Date.now()
-      });
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  async function declineOrder(order: Order) {
-    setBusyId(order.id);
-    setSelectedOrder(null);
-    try {
-      if (!navigator.onLine) {
-        enqueueAction({
-          id: `${order.id}-${Date.now()}`,
-          orderId: order.id,
-          type: 'status',
-          payload: { status: ORDER_STATUS.CANCELLED },
-          queuedAt: Date.now()
-        });
-      } else {
-        await postOrderStatus(api, order.id, ORDER_STATUS.CANCELLED);
-      }
-      setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, status: ORDER_STATUS.CANCELLED } : o)));
-      if (socket) {
-        socket.emit('order:status_changed', { orderId: order.id, status: ORDER_STATUS.CANCELLED, timestamp: new Date() });
-      }
-    } catch (e) {
-      enqueueAction({
-        id: `${order.id}-${Date.now()}`,
-        orderId: order.id,
-        type: 'status',
-        payload: { status: ORDER_STATUS.CANCELLED },
-        queuedAt: Date.now()
-      });
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  async function setPrepTime(orderId: string, minutes: number) {
-    setBusyId(orderId);
-    try {
-      let pickupTime: string | undefined;
-      if (!navigator.onLine) {
-        enqueueAction({
-          id: `${orderId}-${Date.now()}`,
-          orderId,
-          type: 'prep-time',
-          payload: { prepMinutes: minutes },
-          queuedAt: Date.now()
-        });
-      } else {
-        const resp = await apiPost<{ success: boolean; data?: { pickupTime?: string } }>(
-          `/api/orders/${encodeURIComponent(orderId)}/prep-time`,
-          { prepMinutes: minutes }
-        );
-        pickupTime = resp?.data?.pickupTime;
-      }
-      setOrders((prev) =>
-        prev.map((o) => (o.id === orderId ? { ...o, status: ORDER_STATUS.PREPARING, pickup_time: pickupTime, prep_minutes: minutes } : o))
-      );
-      setSelectedOrder((prev) =>
-        prev?.id === orderId ? { ...prev, status: ORDER_STATUS.PREPARING, pickup_time: pickupTime, prep_minutes: minutes } : prev
-      );
-      if (socket) {
-        socket.emit('order:status_changed', { orderId, status: ORDER_STATUS.PREPARING, timestamp: new Date() });
-      }
-    } catch (e) {
-      enqueueAction({
-        id: `${orderId}-${Date.now()}`,
-        orderId,
-        type: 'prep-time',
-        payload: { prepMinutes: minutes },
-        queuedAt: Date.now()
-      });
-    } finally {
-      setBusyId(null);
-    }
-  }
-
+  // useEffect for initial data loading (refresh and profile are from hooks)
   useEffect(() => {
     refresh();
     fetchRestaurantProfile();

@@ -1,43 +1,8 @@
-import type { OrderStatus } from './orderStatus';
+/**
+ * Order Types
+ * 
+ * This file re-exports types from the shared tablet orders module.
+ * For new code, import directly from '@/components/tablet/orders/types'.
+ */
 
-export type OrderItem = {
-  id?: string;
-  name?: string;
-  quantity?: number;
-  qty?: number;
-  unit_price?: number;
-  price?: number;
-  modifiers?: Record<string, unknown> | string[];
-  notes?: string | null;
-};
-
-export type Order = {
-  id: string;
-  external_id?: string | null;
-  channel?: string | null;
-  status?: string | null;
-  customer_name?: string | null;
-  customer_phone?: string | null;
-  order_type?: string | null;
-  pickup_time?: string | null;
-  special_instructions?: string | null;
-  total_amount?: number | null;
-  subtotal?: number | null;
-  created_at?: string | null;
-  items?: OrderItem[];
-  prep_time?: string | null;
-  prep_minutes?: number | null;
-};
-
-export type OrdersResponse = {
-  success: boolean;
-  data?: {
-    orders?: Order[];
-    pagination?: { total?: number; limit?: number; offset?: number; hasMore?: boolean };
-  };
-  error?: { message?: string };
-};
-
-export type PendingAction =
-  | { id: string; orderId: string; type: 'status'; payload: { status: OrderStatus }; queuedAt: number }
-  | { id: string; orderId: string; type: 'prep-time'; payload: { prepMinutes: number }; queuedAt: number };
+export type { Order, OrderItem, OrderStatus, OrdersResponse, PendingAction } from '../../components/tablet/orders/types';

@@ -1,118 +1,29 @@
 import clsx from 'clsx';
-import { AlertTriangle, Check, Clock, X, Package, MapPin, ShoppingBag, Timer, Phone } from 'lucide-react';
+import { AlertTriangle, Check, Clock, Package, MapPin, Phone, Timer } from 'lucide-react';
 import { CountdownTimer } from './CountdownTimer';
-
-// Types
-type OrderItem = {
-  id?: string;
-  name?: string;
-  quantity?: number;
-  qty?: number;
-  modifiers?: Record<string, unknown> | string[];
-  notes?: string | null;
-};
-
-type Order = {
-  id: string;
-  external_id?: string | null;
-  channel?: string | null;
-  status?: string | null;
-  customer_name?: string | null;
-  customer_phone?: string | null;
-  order_type?: string | null;
-  total_amount?: number | null;
-  created_at?: string | null;
-  items?: OrderItem[];
-  prep_time?: string | null;
-  prep_minutes?: number | null;
-  special_instructions?: string | null;
-  accepted_at?: string | null;
-};
-
-type OrderStatus = 'received' | 'preparing' | 'ready' | 'completed' | 'cancelled';
-
-type UrgencyLevel = 'normal' | 'warning' | 'critical';
-
-// Utility functions
-function formatMoney(v: number | null | undefined): string {
-  const n = typeof v === 'number' ? v : 0;
-  try {
-    return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(n);
-  } catch {
-    return `$${n.toFixed(2)}`;
-  }
-}
-
-function formatTimeAgo(iso: string | null | undefined, now: number | null): { text: string; elapsedMinutes: number | null } {
-  if (now === null || !iso) return { text: '—', elapsedMinutes: null };
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return { text: '—', elapsedMinutes: null };
-  const diffMs = now - d.getTime();
-  const mins = Math.max(0, Math.floor(diffMs / 60000));
-
-  if (mins < 1) {
-    return { text: 'Just now', elapsedMinutes: mins };
-  }
-
-  if (mins < 60) {
-    return { text: `${mins}m`, elapsedMinutes: mins };
-  }
-
-  const hours = Math.floor(mins / 60);
-  const remainingMinutes = mins % 60;
-  return { text: `${hours}h ${remainingMinutes}m`, elapsedMinutes: mins };
-}
-
-function getOrderUrgencyLevel(elapsedMinutes: number | null): UrgencyLevel {
-  if (elapsedMinutes === null || elapsedMinutes < 10) return 'normal';
-  if (elapsedMinutes <= 20) return 'warning';
-  return 'critical';
-}
-
-function normalizeStatus(s: string | null | undefined): OrderStatus {
-  const v = (s || '').trim();
-  if (!v) return 'received';
-  const lower = v.toLowerCase();
-  if (lower === 'new') return 'received';
-  if (lower === 'preparing' || lower === 'in-progress') return 'preparing';
-  if (lower === 'ready' || lower === 'completed') return 'ready';
-  if (lower === 'picked-up' || lower === 'picked up') return 'ready';
-  return lower as OrderStatus;
-}
-
-function getChannelIcon(channel: string | null | undefined): string {
-  const c = (channel || '').toLowerCase();
-  if (c.includes('doordash')) return '🚗';
-  if (c.includes('ubereats') || c.includes('uber')) return '🛵';
-  if (c.includes('grubhub')) return '🍔';
-  if (c.includes('toast')) return '🍞';
-  if (c.includes('pos') || c === 'in-store') return '🏪';
-  if (c.includes('online') || c.includes('web')) return '💻';
-  if (c.includes('phone') || c.includes('call')) return '📞';
-  if (c.includes('vapi') || c.includes('voice')) return '🎙️';
-  return '📋';
-}
+import type { Order, OrderItem, OrderStatus, UrgencyLevel } from './types';
+import {
+  formatMoney,
+  formatTimeAgo,
+  getOrderUrgencyLevel,
+  normalizeStatus,
+  getChannelIcon,
+  STATUS_BADGE_CONFIG,
+  URGENCY_CONFIG,
+} from './index';
 
 // Status badge component
 function StatusBadge({ status }: { status: OrderStatus }) {
-  const config = {
-    received: { label: 'New', className: 'bg-[var(--tablet-danger)] text-white' },
-    preparing: { label: 'Preparing', className: 'bg-[var(--tablet-warning)] text-[var(--tablet-text)]' },
-    ready: { label: 'Ready', className: 'bg-[var(--tablet-success)] text-white' },
-    completed: { label: 'Completed', className: 'bg-[var(--tablet-success)]/50 text-white' },
-    cancelled: { label: 'Cancelled', className: 'bg-[var(--tablet-muted)] text-white' },
-  };
-
-  const { label, className } = config[status] || config.received;
+  const config = STATUS_BADGE_CONFIG[status] || STATUS_BADGE_CONFIG.received;
 
   return (
     <span className={clsx(
       'inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold',
-      className
+      config.className
     )}>
-      {status === 'preparing' && <Clock className="h-3 w-3 mr-1" />}
-      {status === 'ready' && <Check className="h-3 w-3 mr-1" />}
-      {label}
+      {config.icon === 'clock' && <Clock className="h-3 w-3 mr-1" />}
+      {config.icon === 'check' && <Check className="h-3 w-3 mr-1" />}
+      {config.label}
     </span>
   );
 }
@@ -126,30 +37,15 @@ function TimePill({
   text: string 
 }) {
   const urgencyLevel = getOrderUrgencyLevel(elapsedMinutes);
-  
-  const config = {
-    normal: { 
-      className: 'bg-[var(--tablet-surface-alt)] text-[var(--tablet-muted)]',
-      icon: null
-    },
-    warning: { 
-      className: 'bg-[color-mix(in_srgb,var(--tablet-warning)_18%,transparent)] text-[var(--tablet-warning)]',
-      icon: <Clock className="h-3 w-3" />
-    },
-    critical: { 
-      className: 'bg-[color-mix(in_srgb,var(--tablet-danger)_18%,transparent)] text-[var(--tablet-danger)]',
-      icon: <AlertTriangle className="h-3 w-3" />
-    },
-  };
-
-  const { className, icon } = config[urgencyLevel];
+  const config = URGENCY_CONFIG[urgencyLevel];
 
   return (
     <span className={clsx(
       'inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold tabular-nums',
-      className
+      config.badgeClass
     )}>
-      {icon}
+      {urgencyLevel === 'warning' && <Clock className="h-3 w-3" />}
+      {urgencyLevel === 'critical' && <AlertTriangle className="h-3 w-3" />}
       {text}
       {urgencyLevel === 'critical' && ' late'}
     </span>
@@ -482,5 +378,5 @@ export function LiveOrderCard({
   );
 }
 
-// Export types for external use
-export type { Order, OrderStatus, OrderItem };
+// Export types for external use (re-exported from shared module for convenience)
+export type { Order, OrderStatus, OrderItem } from './types';

@@ -7,25 +7,17 @@ import clsx from 'clsx';
 import { TabletSidebar } from '../../components/tablet/TabletSidebar';
 import { api } from '../../lib/api';
 
-type HistoryOrder = {
-  id: string;
-  external_id?: string | null;
-  customer_name?: string | null;
-  customer_phone?: string | null;
-  status?: string | null;
-  total_amount?: number | null;
-  subtotal?: number | null;
-  tax?: number | null;
-  channel?: string | null;
-  order_type?: string | null;
-  created_at?: string | null;
+// Import shared types and utilities
+import type { Order } from '../../components/tablet/orders/types';
+import {
+  shortId,
+  formatMoney,
+  getChannelIcon,
+} from '../../components/tablet/orders';
+
+// Type for history-specific order (extends Order with history fields)
+type HistoryOrder = Order & {
   updated_at?: string | null;
-  items?: Array<{
-    name?: string | null;
-    quantity?: number | null;
-    unit_price?: number | null;
-  }>;
-  special_instructions?: string | null;
 };
 
 type HistoryResponse = {
@@ -57,20 +49,6 @@ const RANGE_OPTIONS = [
   { value: 'custom', label: 'Custom range' }
 ];
 
-function shortId(id: string | null | undefined) {
-  if (!id) return '—';
-  return id.length <= 8 ? id : `${id.slice(0, 4)}…${id.slice(-4)}`;
-}
-
-function formatMoney(value: number | null | undefined) {
-  const amount = typeof value === 'number' ? value : 0;
-  try {
-    return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(amount);
-  } catch {
-    return `$${amount.toFixed(2)}`;
-  }
-}
-
 function formatDateTime(value: string | null | undefined) {
   if (!value) return '—';
   const date = new Date(value);
@@ -94,10 +72,6 @@ function formatRelativeTime(value: string | null | undefined) {
   if (diffDays < 7) return `${diffDays}d ago`;
   return date.toLocaleDateString();
 }
-
-function getChannelIcon(channel: string | null | undefined): string {
-  const c = (channel || '').toLowerCase();
-  if (c.includes('doordash')) return '🚗';
   if (c.includes('ubereats') || c.includes('uber')) return '🛵';
   if (c.includes('grubhub')) return '🍔';
   if (c.includes('toast')) return '🍞';
