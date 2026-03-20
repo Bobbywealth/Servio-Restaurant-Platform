@@ -342,7 +342,7 @@ router.get('/public/:slug', asyncHandler(async (req: Request, res: Response) => 
     SELECT mi.*, mc.name as category_name, mc.sort_order as category_sort_order
     FROM menu_items mi
     LEFT JOIN menu_categories mc ON mi.category_id = mc.id
-    WHERE mi.restaurant_id = ?
+    WHERE mi.restaurant_id = ? AND mi.is_available = TRUE
     ORDER BY mc.sort_order ASC, mi.sort_order ASC, mi.name ASC
   `, [restaurant.id]);
 
