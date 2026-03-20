@@ -343,36 +343,40 @@ const RECEIPT_CSS = `
   .receipt-footer { text-align: center; font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em; }
   .receipt-custom-header { text-align: center; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; padding: 4px 0; }
 
-  /* Font size variants via CSS custom properties (mirrors thermal-print.css) */
+  /* Font size variants - standardized for readability */
   .receipt.font-small {
-    --receipt-font-base: 10px; --receipt-font-lg: 12px; --receipt-font-2xl: 16px; --receipt-logo-size: 48px;
+    --receipt-font-base: 12px; --receipt-font-lg: 14px; --receipt-font-2xl: 18px; --receipt-font-xl: 16px; --receipt-logo-size: 56px;
   }
   .receipt.font-medium {
-    --receipt-font-base: 12px; --receipt-font-lg: 14px; --receipt-font-2xl: 18px; --receipt-logo-size: 64px;
+    --receipt-font-base: 14px; --receipt-font-lg: 16px; --receipt-font-2xl: 20px; --receipt-font-xl: 18px; --receipt-logo-size: 72px;
   }
   .receipt.font-large {
-    --receipt-font-base: 14px; --receipt-font-lg: 16px; --receipt-font-2xl: 22px; --receipt-logo-size: 80px;
+    --receipt-font-base: 16px; --receipt-font-lg: 18px; --receipt-font-2xl: 24px; --receipt-font-xl: 20px; --receipt-logo-size: 88px;
   }
   .receipt.font-xlarge {
-    --receipt-font-base: 16px; --receipt-font-lg: 18px; --receipt-font-2xl: 28px; --receipt-logo-size: 96px;
+    --receipt-font-base: 18px; --receipt-font-lg: 22px; --receipt-font-2xl: 28px; --receipt-font-xl: 24px; --receipt-logo-size: 104px;
   }
 
   /* Apply font size variables to all elements */
-  .receipt { font-size: var(--receipt-font-base, 12px); }
-  .receipt-logo { width: var(--receipt-logo-size, 64px); height: var(--receipt-logo-size, 64px); }
-  .receipt-title { font-size: var(--receipt-font-2xl, 18px); }
-  .receipt-subtitle { font-size: var(--receipt-font-base, 12px); }
-  .receipt-row { font-size: var(--receipt-font-base, 12px); }
-  .receipt-row-strong { font-size: var(--receipt-font-lg, 14px); }
-  .receipt-item-qty { font-size: var(--receipt-font-lg, 14px); }
-  .receipt-item-name { font-size: var(--receipt-font-base, 12px); }
-  .receipt-item-total { font-size: var(--receipt-font-base, 12px); }
-  .receipt-item-modifiers { font-size: calc(var(--receipt-font-base, 12px) - 1px); }
-  .receipt-muted { font-size: var(--receipt-font-base, 12px); }
-  .receipt-notes-title { font-size: var(--receipt-font-base, 12px); }
-  .receipt-notes-body { font-size: var(--receipt-font-base, 12px); }
-  .receipt-footer { font-size: var(--receipt-font-base, 12px); }
-  .receipt-custom-header { font-size: var(--receipt-font-lg, 14px); }
+  .receipt { font-size: var(--receipt-font-base, 14px); }
+  .receipt-logo { width: var(--receipt-logo-size, 72px); height: var(--receipt-logo-size, 72px); }
+  .receipt-title { font-size: var(--receipt-font-2xl, 20px); }
+  .receipt-subtitle { font-size: var(--receipt-font-base, 14px); }
+  .receipt-order-header { font-size: var(--receipt-font-xl, 18px); }
+  .receipt-row { font-size: var(--receipt-font-base, 14px); }
+  .receipt-row-strong { font-size: var(--receipt-font-xl, 18px); }
+  .receipt-item-qty { font-size: var(--receipt-font-xl, 18px); }
+  .receipt-item-name { font-size: var(--receipt-font-base, 14px); }
+  .receipt-item-total { font-size: var(--receipt-font-lg, 16px); }
+  .receipt-item-modifiers { font-size: var(--receipt-font-base, 14px); }
+  .receipt-muted { font-size: var(--receipt-font-base, 14px); }
+  .receipt-notes-title { font-size: var(--receipt-font-base, 14px); }
+  .receipt-notes-body { font-size: var(--receipt-font-base, 14px); }
+  .receipt-footer { font-size: var(--receipt-font-lg, 16px); }
+  .receipt-custom-header { font-size: var(--receipt-font-lg, 16px); }
+  .receipt-items-header { font-size: var(--receipt-font-lg, 16px); font-weight: 900; }
+  .receipt-total { font-size: var(--receipt-font-2xl, 20px); }
+  .receipt-customer { font-size: var(--receipt-font-base, 14px); }
 `;
 
 /**
