@@ -216,7 +216,10 @@ export function OrderDetailsModal({
           {status === 'preparing' && (
             <>
               <button
-                onClick={() => onSetStatus(order.id, ORDER_STATUS.READY)}
+                onClick={() => {
+                  console.log('[DEBUG] OrderDetailsModal - Ready button clicked, orderId:', order.id);
+                  onSetStatus(order.id, ORDER_STATUS.READY);
+                }}
                 disabled={isBusy}
                 className="flex-1 min-w-[140px] py-3 rounded-xl bg-[var(--tablet-success)] text-[var(--tablet-text)] font-semibold uppercase disabled:opacity-60"
               >
@@ -245,14 +248,6 @@ export function OrderDetailsModal({
 
           <button onClick={onClose} className="flex-1 min-w-[120px] py-3 rounded-xl border border-[var(--tablet-border)] font-semibold uppercase">
             Close
-          </button>
-          <button
-            onClick={() => onPrintOrder(order.id)}
-            disabled={isPrinting}
-            className="min-w-[120px] px-4 py-3 rounded-xl border border-[var(--tablet-border-strong)] font-semibold uppercase inline-flex items-center justify-center gap-2 disabled:opacity-60"
-          >
-            <Printer className="h-4 w-4" />
-            Print
           </button>
         </div>
       </div>

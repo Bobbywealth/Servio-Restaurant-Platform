@@ -155,6 +155,8 @@ export function useOrderPrint({
       return;
     }
     
+    console.log('[DEBUG] printOrder - fontSize:', fontSize, '| paperWidth:', paperWidth, '| printMode:', printMode);
+    
     setPrintingOrderId(orderId);
     try {
       const full = await apiGet<{ success: boolean; data?: any }>(`/api/orders/${encodeURIComponent(orderId)}`);
@@ -208,6 +210,7 @@ export function useOrderPrint({
       }
 
       if (printMode === 'system') {
+        console.log('[DEBUG] generateStandaloneReceiptHtml - fontSize:', fontSize);
         const standaloneHtml = generateStandaloneReceiptHtml({
           restaurant: restaurant || null,
           order: order as any,

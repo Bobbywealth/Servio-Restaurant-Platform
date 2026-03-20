@@ -246,6 +246,7 @@ export function generateReceiptHtml(args: {
     return parts.join(', ');
   })();
 
+  console.log('[DEBUG] generateReceiptHtml - fontSize:', fontSize, '| class will be: receipt paper-', paperWidth, ' font-', fontSize);
   return `
     <div class="receipt paper-${paperWidth} font-${fontSize}">
       ${headerText ? `<div class="receipt-custom-header">${escapeHtml(headerText)}</div><div class="receipt-divider"></div>` : ''}

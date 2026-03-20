@@ -362,8 +362,11 @@ export default function TabletOrdersPage() {
         }
         if (['small', 'medium', 'large', 'xlarge'].includes(settings.printer_font_size)) {
           const size = settings.printer_font_size;
+          console.log('[DEBUG] Tablet loading fontSize from server settings:', size);
           setFontSize(size);
           safeLocalStorage.setItem('servio_font_size', size);
+        } else {
+          console.log('[DEBUG] Tablet - printer_font_size not in valid values. Value:', settings.printer_font_size);
         }
         if (settings.printer_receipt_header_text !== undefined) {
           setHeaderText(settings.printer_receipt_header_text || '');

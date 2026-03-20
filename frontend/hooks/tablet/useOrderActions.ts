@@ -42,6 +42,8 @@ export function useOrderActions({
   const setStatus = useCallback(async (orderId: string, nextStatus: OrderStatus) => {
     let previousStatus: string | null | undefined;
     
+    console.log('[DEBUG] setStatus called - orderId:', orderId, 'nextStatus:', nextStatus);
+    
     // Optimistic update notification
     if (onOrderUpdate) {
       onOrderUpdate({ id: orderId, status: nextStatus } as Order);
@@ -51,6 +53,7 @@ export function useOrderActions({
     
     try {
       if (!navigator.onLine) {
+        console.log('[DEBUG] setStatus - offline, enqueuing action');
         enqueueAction?.({
           id: `${orderId}-${Date.now()}`,
           orderId,
@@ -59,12 +62,15 @@ export function useOrderActions({
           queuedAt: Date.now()
         });
       } else {
+        console.log('[DEBUG] setStatus - posting to API:', `/api/orders/${orderId}/status`, { status: nextStatus });
         await postOrderStatus(api, orderId, nextStatus);
+        console.log('[DEBUG] setStatus - API call succeeded');
         if (socket) {
           socket.emit('order:status_changed', { orderId, status: nextStatus, timestamp: new Date() });
         }
       }
     } catch (error: unknown) {
+      console.error('[DEBUG] setStatus - API call failed:', error);
       const err = error as { response?: { status?: number; data?: { error?: { message?: string } } }; message?: string };
       const statusCode = err?.response?.status;
       const message = err?.response?.data?.error?.message || err?.message || 'Sync failed';
