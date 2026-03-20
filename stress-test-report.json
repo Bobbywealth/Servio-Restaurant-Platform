@@ -1,0 +1,135 @@
+{
+  "executionDate": "2026-03-20T16:01:29.317Z",
+  "totalDuration": 43738,
+  "configuration": {
+    "baseUrl": "http://localhost:3002",
+    "testRestaurantId": "demo-restaurant-1",
+    "testAdminToken": "",
+    "concurrencyLevels": [
+      1,
+      5,
+      10,
+      20,
+      50
+    ],
+    "durationMs": 20000,
+    "warmupMs": 3000,
+    "cooldownMs": 2000,
+    "maxPayloadSize": 10485760,
+    "requestTimeout": 30000
+  },
+  "summary": {
+    "totalTests": 8,
+    "passed": 2,
+    "warnings": 3,
+    "failed": 3
+  },
+  "results": [
+    {
+      "name": "Normal Load - Menu Browse",
+      "category": "Load Testing",
+      "status": "failed",
+      "duration": 20000,
+      "metrics": {
+        "requests": 18510,
+        "errors": 18510,
+        "errorRate": 100,
+        "avgResponseTime": 1.8518638573743922,
+        "minResponseTime": 0,
+        "maxResponseTime": 29,
+        "p50ResponseTime": 2,
+        "p95ResponseTime": 4,
+        "p99ResponseTime": 6,
+        "throughput": 11814486206.896551,
+        "rps": 638275.8620689654
+      },
+      "timestamp": "2026-03-20T16:01:05.594Z"
+    },
+    {
+      "name": "Peak Load - Order Creation",
+      "category": "Load Testing",
+      "status": "failed",
+      "duration": 20005,
+      "metrics": {
+        "requests": 36995,
+        "errors": 36995,
+        "errorRate": 100,
+        "avgResponseTime": 2.5951344776321124,
+        "minResponseTime": 0,
+        "maxResponseTime": 143,
+        "p50ResponseTime": 2,
+        "p95ResponseTime": 4,
+        "p99ResponseTime": 23,
+        "throughput": 9570839335.664337,
+        "rps": 258706.29370629374
+      },
+      "timestamp": "2026-03-20T16:01:25.603Z"
+    },
+    {
+      "name": "Multi-User Menu Access",
+      "category": "Concurrency Testing",
+      "status": "failed",
+      "duration": 8,
+      "metrics": {
+        "requests": 40,
+        "errors": 40,
+        "errorRate": 100,
+        "avgResponseTime": 5.6,
+        "minResponseTime": 4,
+        "maxResponseTime": 7,
+        "p50ResponseTime": 0,
+        "p95ResponseTime": 0,
+        "p99ResponseTime": 0,
+        "throughput": 0
+      },
+      "timestamp": "2026-03-20T16:01:25.612Z"
+    },
+    {
+      "name": "Performance Benchmark",
+      "category": "Performance Benchmarking",
+      "status": "passed",
+      "duration": 34,
+      "timestamp": "2026-03-20T16:01:25.647Z"
+    },
+    {
+      "name": "Security Vulnerability Tests",
+      "category": "Security Testing",
+      "status": "warning",
+      "duration": 1290,
+      "metrics": {
+        "requests": 12,
+        "errors": 6,
+        "errorRate": 50,
+        "avgResponseTime": 0,
+        "minResponseTime": 0,
+        "maxResponseTime": 0,
+        "p50ResponseTime": 0,
+        "p95ResponseTime": 0,
+        "p99ResponseTime": 0,
+        "throughput": 0
+      },
+      "timestamp": "2026-03-20T16:01:26.938Z"
+    },
+    {
+      "name": "Failure Mode Tests",
+      "category": "Failure Mode Testing",
+      "status": "warning",
+      "duration": 614,
+      "timestamp": "2026-03-20T16:01:27.553Z"
+    },
+    {
+      "name": "Edge Case Tests",
+      "category": "Edge Case Testing",
+      "status": "passed",
+      "duration": 934,
+      "timestamp": "2026-03-20T16:01:28.488Z"
+    },
+    {
+      "name": "Scenario Simulations",
+      "category": "Scenario Testing",
+      "status": "warning",
+      "duration": 823,
+      "timestamp": "2026-03-20T16:01:29.312Z"
+    }
+  ]
+}

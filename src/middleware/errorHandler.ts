@@ -108,6 +108,10 @@ export const errorHandler = (
   } else if (error.code === 'SQLITE_CONSTRAINT' || (error.message && error.message.includes('duplicate key'))) {
     statusCode = 400;
     message = 'Database constraint violation';
+  } else if (error.message && error.message.includes('CORS policy')) {
+    // Handle CORS errors - return 403 Forbidden instead of 500
+    statusCode = 403;
+    message = 'Cross-origin request blocked by CORS policy';
   }
 
   // Log error details
