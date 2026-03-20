@@ -131,7 +131,7 @@ export function CountdownTimer({
 
   const timerState = getTimerState();
 
-  // Expired state
+  // Expired state - show as "Missed" to indicate order was not accepted in time
   if (timerState === 'expired') {
     return (
       <div className={clsx(
@@ -139,7 +139,7 @@ export function CountdownTimer({
         'bg-[var(--tablet-danger)]/15 text-[var(--tablet-danger)] animate-pulse'
       )}>
         <AlertTriangle className="h-3.5 w-3.5" />
-        <span>Expired</span>
+        <span>Missed</span>
       </div>
     );
   }

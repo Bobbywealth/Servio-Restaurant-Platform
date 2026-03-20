@@ -320,8 +320,8 @@ export function LiveOrderCard({
             visible={true}
             orderType={order.order_type}
             onExpire={() => {
-              // Auto-reject the order when timer expires
-              onReject?.(order);
+              // Don't auto-reject - keep the order visible so staff can still accept it if needed
+              console.log(`Order ${order.id} timer expired - showing as missed`);
             }}
           />
         ) : (

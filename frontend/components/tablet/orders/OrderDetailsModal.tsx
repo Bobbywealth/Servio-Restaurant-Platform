@@ -100,8 +100,8 @@ export function OrderDetailsModal({
                 visible={true}
                 orderType={order.order_type}
                 onExpire={(reason) => {
-                  console.log(`Order expired while modal open: ${reason}`);
-                  onDeclineOrder(order);
+                  console.log(`Order ${order.id} expired while modal open: ${reason} - keeping visible`);
+                  // Don't auto-decline - keep the order visible so staff can still accept it
                 }}
               />
             )}

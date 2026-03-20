@@ -2144,8 +2144,8 @@ export default function TabletOrdersPage() {
                         onPrint={() => printOrder(order.id)}
                         formatMoney={formatMoney}
                         onExpire={(orderId) => {
-                          console.log(`Order ${orderId} expired - auto declining`);
-                          declineOrder(filteredOrders.find(o => o.id === orderId) || { id: orderId } as Order);
+                          console.log(`Order ${orderId} timer expired - keeping visible as missed`);
+                          // Don't auto-decline - keep the order visible so staff can still accept it if they want
                         }}
                         onViewDetails={() => {
                           setOrderDetailsOrder(order);
