@@ -1,15 +1,66 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { CheckCircle2 } from 'lucide-react';
+import { CheckCircle2, Clock, AlertTriangle } from 'lucide-react';
 
 interface OrderConfirmationProps {
   orderId: string;
   orderStatus: string | null;
   pickupTime: string | null;
+  orderCreatedAt?: string | null;
   onNewOrder: () => void;
 }
 
-export function OrderConfirmation({ orderId, orderStatus, pickupTime, onNewOrder }: OrderConfirmationProps) {
+// Expected max wait time for restaurant approval (in seconds)
+const APPROVAL_TIMEOUT_SECONDS = 180; // 3 minutes
+
+function ApprovalTimer({ createdAt, status }: { createdAt: string | null | undefined; status: string | null }) {
+  const [elapsed, setElapsed] = useState(0);
+  const normalizedStatus = (status || '').toLowerCase();
+  const isApproved = normalizedStatus === 'preparing' || normalizedStatus === 'ready' || normalizedStatus === 'completed';
+  const isRejected = normalizedStatus === 'cancelled' || normalizedStatus === 'canceled' || normalizedStatus === 'declined';
+
+  useEffect(() => {
+    if (!createdAt || isApproved || isRejected) return;
+
+    const startTime = new Date(createdAt).getTime();
+    const updateElapsed = () => {
+      setElapsed(Math.floor((Date.now() - startTime) / 1000));
+    };
+
+    updateElapsed();
+    const interval = setInterval(updateElapsed, 1000);
+    return () => clearInterval(interval);
+  }, [createdAt, isApproved, isRejected]);
+
+  if (isApproved || isRejected) return null;
+
+  const minutes = Math.floor(elapsed / 60);
+  const seconds = elapsed % 60;
+  const remaining = APPROVAL_TIMEOUT_SECONDS - elapsed;
+  const isOverdue = remaining <= 0;
+  const isWarning = remaining <= 60 && remaining > 0;
+
+  return (
+    <div className={`border-t pt-4 mt-4 ${isOverdue ? 'border-red-200' : isWarning ? 'border-amber-200' : 'border-gray-200'}`}>
+      <div className="flex items-center gap-2 mb-2">
+        {isOverdue ? (
+          <AlertTriangle className="h-4 w-4 text-red-500" />
+        ) : (
+          <Clock className="h-4 w-4 text-gray-400" />
+        )}
+        <span className="text-sm text-gray-500 uppercase tracking-widest">Awaiting Restaurant Approval</span>
+      </div>
+      <div className={`text-2xl font-mono font-bold ${isOverdue ? 'text-red-500' : isWarning ? 'text-amber-500' : 'text-gray-900'}`}>
+        {minutes}:{seconds.toString().padStart(2, '0')}
+      </div>
+      {isOverdue && (
+        <p className="text-xs text-red-500 mt-1">Restaurant is taking longer than expected...</p>
+      )}
+    </div>
+  );
+}
+
+export function OrderConfirmation({ orderId, orderStatus, pickupTime, orderCreatedAt, onNewOrder }: OrderConfirmationProps) {
   const normalizedStatus = (orderStatus || '').toLowerCase();
   const isCancelled = normalizedStatus === 'cancelled' || normalizedStatus === 'canceled' || normalizedStatus === 'declined';
   const headline = isCancelled ? 'Order Cancelled' : 'Order Confirmed!';
@@ -58,6 +109,9 @@ export function OrderConfirmation({ orderId, orderStatus, pickupTime, onNewOrder
             </div>
           </div>
         )}
+
+        {/* Approval Timer - shows elapsed time waiting for restaurant to approve */}
+        <ApprovalTimer createdAt={orderCreatedAt} status={orderStatus} />
       </div>
 
       {!isCancelled && (

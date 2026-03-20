@@ -10,6 +10,7 @@ export function useCart(restaurantSlug: string | undefined) {
   const [orderComplete, setOrderComplete] = useState<string | null>(null);
   const [orderStatus, setOrderStatus] = useState<string | null>(null);
   const [pickupTime, setPickupTime] = useState<string | null>(null);
+  const [orderCreatedAt, setOrderCreatedAt] = useState<string | null>(null);
   const [checkoutStep, setCheckoutStep] = useState<CheckoutStep>('cart');
   const [customerInfo, setCustomerInfo] = useState<CustomerInfo>({
     name: '',
@@ -182,6 +183,7 @@ export function useCart(restaurantSlug: string | undefined) {
 
       setOrderComplete(resp.data.data.orderId);
       setOrderStatus(resp.data.data.status || null);
+      setOrderCreatedAt(new Date().toISOString());
       setCart([]);
       setIsCartOpen(false);
       setCheckoutStep('cart');
@@ -216,6 +218,8 @@ export function useCart(restaurantSlug: string | undefined) {
     setOrderStatus,
     pickupTime,
     setPickupTime,
+    orderCreatedAt,
+    setOrderCreatedAt,
     checkoutStep,
     setCheckoutStep,
     customerInfo,

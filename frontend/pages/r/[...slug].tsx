@@ -162,7 +162,13 @@ export default function PublicProfile() {
         orderId={cart.orderComplete}
         orderStatus={cart.orderStatus}
         pickupTime={cart.pickupTime}
-        onNewOrder={() => cart.setOrderComplete(null)}
+        orderCreatedAt={cart.orderCreatedAt}
+        onNewOrder={() => {
+          cart.setOrderComplete(null);
+          cart.setOrderStatus(null);
+          cart.setPickupTime(null);
+          cart.setOrderCreatedAt(null);
+        }}
       />
     );
   }
