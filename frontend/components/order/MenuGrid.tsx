@@ -1,4 +1,5 @@
 import React from 'react';
+import clsx from 'clsx';
 import { motion } from 'framer-motion';
 import { Flame, ChevronDown, ChevronUp, Plus, Search } from 'lucide-react';
 import { resolveMediaUrl } from '../../lib/utils';
@@ -93,14 +94,21 @@ export function MenuGrid({
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
-                  {categoryItems.map((item, itemIndex) => (
+                  {categoryItems.map((item, itemIndex) => {
+                    const isUnavailable = item.is_available === false;
+                    return (
                     <motion.div
                       key={item.id}
-                      className="group bg-white rounded-2xl p-3 sm:p-4 shadow-sm border border-slate-100 hover:shadow-lg hover:border-blue-200 hover:-translate-y-1 transition-all duration-300 cursor-pointer"
+                      className={clsx(
+                        'rounded-2xl p-3 sm:p-4 shadow-sm border transition-all duration-300',
+                        isUnavailable 
+                          ? 'bg-slate-50 border-slate-200 opacity-60 cursor-not-allowed'
+                          : 'bg-white border-slate-100 hover:shadow-lg hover:border-blue-200 hover:-translate-y-1 cursor-pointer'
+                      )}
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: (catIndex * 0.05) + (itemIndex * 0.03) }}
-                      onClick={() => onOpenItem(item)}
+                      onClick={() => !isUnavailable && onOpenItem(item)}
                     >
                       <div className="flex items-start gap-3">
                         {item.image && (
@@ -121,25 +129,35 @@ export function MenuGrid({
                             {item.description || 'Delicious item'}
                           </p>
                           <div className="flex items-center justify-between mt-1.5 sm:mt-2">
-                            <p className="font-black text-base sm:text-lg text-slate-900">
+                            <p className={clsx(
+                              'font-black text-base sm:text-lg',
+                              isUnavailable ? 'text-slate-400 line-through' : 'text-slate-900'
+                            )}>
                               {item.sizes && item.sizes.length > 0 ? (
                                 <>From ${item.fromPrice?.toFixed(2) || item.price.toFixed(2)}</>
                               ) : (
                                 <>${item.price.toFixed(2)}</>
                               )}
                             </p>
-                            <button
-                              onClick={(e) => { e.stopPropagation(); onOpenItem(item); }}
-                              className="shrink-0 p-2 sm:p-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-600/20 min-w-[40px] min-h-[40px] sm:min-w-[44px] sm:min-h-[44px] flex items-center justify-center"
-                              aria-label={`Add ${item.name} to cart`}
-                            >
-                              <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
-                            </button>
+                            {isUnavailable ? (
+                              <span className="shrink-0 px-3 py-1.5 bg-slate-200 text-slate-500 rounded-xl text-xs font-semibold">
+                                Unavailable
+                              </span>
+                            ) : (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); onOpenItem(item); }}
+                                className="shrink-0 p-2 sm:p-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 active:scale-95 transition-all shadow-lg shadow-blue-600/20 min-w-[40px] min-h-[40px] sm:min-w-[44px] sm:min-h-[44px] flex items-center justify-center"
+                                aria-label={`Add ${item.name} to cart`}
+                              >
+                                <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
+                              </button>
+                            )}
                           </div>
                         </div>
                       </div>
                     </motion.div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </motion.div>
