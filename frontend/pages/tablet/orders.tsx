@@ -2012,10 +2012,55 @@ export default function TabletOrdersPage() {
             {/* NEW KDS-STYLE HEADER */}
             <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm mb-6">
               <div className="border-b border-slate-200 bg-slate-50 px-6 py-5">
-                <div className="flex items-center justify-between">
-                  <div /> {/* Spacer for alignment */}
+                <div className="flex items-start justify-between gap-4">
+                  {/* FILTER TABS */}
+                  <div className="min-w-0 flex-1 overflow-x-auto">
+                    <div className="flex gap-2 flex-nowrap">
+                      {[
+                        { key: 'all' as const, label: 'All', count: activeOrders.length },
+                        { key: 'received' as const, label: 'Needs action', count: receivedOrders.length },
+                        { key: 'preparing' as const, label: 'In progress', count: preparingOrders.length },
+                        { key: 'ready' as const, label: 'Ready', count: readyOrders.length },
+                      ].map((segment) => {
+                        const isActive = statusFilter === segment.key;
+                        return (
+                          <button
+                            key={segment.key}
+                            type="button"
+                            onClick={() => setStatusFilter(segment.key)}
+                            className={clsx(
+                              'rounded-lg border px-4 py-2 text-sm font-medium transition whitespace-nowrap',
+                              isActive
+                                ? 'border-blue-300 bg-blue-50 text-blue-700'
+                                : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-100'
+                            )}
+                          >
+                            {segment.label}
+                            <span className="ml-2 rounded-md bg-slate-100 px-2 py-0.5 text-xs">
+                              {segment.count}
+                            </span>
+                          </button>
+                        );
+                      })}
+                      <button
+                        type="button"
+                        onClick={() => setNeedsAttentionOnly((prev) => !prev)}
+                        className={clsx(
+                          'rounded-lg border px-4 py-2 text-sm font-medium transition whitespace-nowrap',
+                          needsAttentionOnly
+                            ? 'border-amber-300 bg-amber-50 text-amber-700'
+                            : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-100'
+                        )}
+                      >
+                        Needs attention
+                        <span className="ml-2 rounded-md bg-slate-100 px-2 py-0.5 text-xs">
+                          {attentionOrdersCount}
+                        </span>
+                      </button>
+                    </div>
+                  </div>
 
-                  <div className="flex items-center gap-3">
+                  <div className="flex shrink-0 items-center gap-3">
                     <div className={clsx(
                       'rounded-lg px-3 py-1 text-sm font-medium',
                       isOnline && socketConnected ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
@@ -2025,53 +2070,6 @@ export default function TabletOrdersPage() {
                     <div className="rounded-lg bg-white border border-slate-200 px-4 py-1.5 text-sm font-semibold text-slate-700">
                       {now ? new Date(now).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '--:--'}
                     </div>
-                  </div>
-                </div>
-
-                {/* FILTER TABS */}
-                <div className="mt-4 overflow-x-auto">
-                  <div className="flex gap-2 flex-wrap">
-                    {[
-                      { key: 'all' as const, label: 'All', count: activeOrders.length },
-                      { key: 'received' as const, label: 'Needs action', count: receivedOrders.length },
-                      { key: 'preparing' as const, label: 'In progress', count: preparingOrders.length },
-                      { key: 'ready' as const, label: 'Ready', count: readyOrders.length },
-                    ].map((segment) => {
-                      const isActive = statusFilter === segment.key;
-                      return (
-                        <button
-                          key={segment.key}
-                          type="button"
-                          onClick={() => setStatusFilter(segment.key)}
-                          className={clsx(
-                            'rounded-lg border px-4 py-2 text-sm font-medium transition whitespace-nowrap',
-                            isActive
-                              ? 'border-blue-300 bg-blue-50 text-blue-700'
-                              : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-100'
-                          )}
-                        >
-                          {segment.label}
-                          <span className="ml-2 rounded-md bg-slate-100 px-2 py-0.5 text-xs">
-                            {segment.count}
-                          </span>
-                        </button>
-                      );
-                    })}
-                    <button
-                      type="button"
-                      onClick={() => setNeedsAttentionOnly((prev) => !prev)}
-                      className={clsx(
-                        'rounded-lg border px-4 py-2 text-sm font-medium transition whitespace-nowrap',
-                        needsAttentionOnly
-                          ? 'border-amber-300 bg-amber-50 text-amber-700'
-                          : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-100'
-                      )}
-                    >
-                      Needs attention
-                      <span className="ml-2 rounded-md bg-slate-100 px-2 py-0.5 text-xs">
-                        {attentionOrdersCount}
-                      </span>
-                    </button>
                   </div>
                 </div>
               </div>
