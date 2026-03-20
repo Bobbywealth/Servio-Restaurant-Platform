@@ -5,6 +5,7 @@ import { ORDER_STATUS, OrderStatus, postOrderStatus } from '../../../hooks/table
 import { api } from '../../../lib/api';
 import { safeLocalStorage } from '../../../lib/utils';
 import { CountdownTimer } from '../orders/CountdownTimer';
+import { OrderDetailsModal } from '../orders/OrderDetailsModal';
 
 const ORDER_CACHE_KEY = 'servio_cached_orders';
 
@@ -76,6 +77,8 @@ export function KitchenBoard({
   busyId,
 }: KitchenBoardProps) {
   const [activeTab, setActiveTab] = useState<TabType>('all');
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [printOrderId, setPrintOrderId] = useState<string | null>(null);
 
   const { filteredOrders, tabCounts } = useMemo(() => {
     const counts = {
@@ -270,7 +273,8 @@ export function KitchenBoard({
                   return (
                     <div
                       key={order.id}
-                      className="relative w-[320px] shrink-0 rounded-xl border border-slate-200 bg-white shadow-sm"
+                      className="relative w-[320px] shrink-0 rounded-xl border border-slate-200 bg-white shadow-sm cursor-pointer hover:shadow-lg hover:border-blue-300 transition-all"
+                      onClick={() => setSelectedOrder(order)}
                     >
                       <div className={clsx('absolute left-0 top-0 h-full w-1', style.rail)} />
 
@@ -383,6 +387,33 @@ export function KitchenBoard({
           </div>
         </div>
       </div>
+
+      {/* Order Details Modal */}
+      {selectedOrder && (
+        <OrderDetailsModal
+          order={selectedOrder}
+          onClose={() => setSelectedOrder(null)}
+          onConfirmOrder={(order) => {
+            onAcceptOrder(order);
+            setSelectedOrder(null);
+          }}
+          onDeclineOrder={(order) => {
+            onDeclineOrder(order);
+            setSelectedOrder(null);
+          }}
+          onSetStatus={(orderId, status) => {
+            // Handle status change
+            setSelectedOrder(null);
+          }}
+          onPrintOrder={(orderId) => {
+            // Trigger print - would need to integrate with printing system
+            setPrintOrderId(orderId);
+          }}
+          busyOrderId={busyId}
+          printingOrderId={printOrderId}
+          formatMoney={(v) => `$${(v || 0).toFixed(2)}`}
+        />
+      )}
     </div>
   );
 }
