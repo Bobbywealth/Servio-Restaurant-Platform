@@ -247,17 +247,26 @@ export function useMenu(restaurantSlug: string | undefined) {
   }, []);
 
   const scrollToCategory = useCallback((cat: string) => {
-    const element = document.getElementById(`category-${cat.replace(/\s+/g, '-').toLowerCase()}`);
-    if (element) {
-      const offset = 120;
-      const elementPosition = element.getBoundingClientRect().top + window.scrollY;
-      window.scrollTo({ top: elementPosition - offset, behavior: 'smooth' });
+    // If category is beyond visible count, expand all categories first
+    if (cat !== 'all') {
+      const catIndex = categories.indexOf(cat);
+      if (catIndex >= visibleCategoryCount && !showAllCategories) {
+        setShowAllCategories(true);
+      }
     }
-    // Use setTimeout to ensure scroll happens before category filter hides elements
-    setTimeout(() => {
+    
+    // Use requestAnimationFrame to wait for DOM update
+    requestAnimationFrame(() => {
+      const element = document.getElementById(`category-${cat.replace(/\s+/g, '-').toLowerCase()}`);
+      if (element) {
+        const offset = 120;
+        const elementPosition = element.getBoundingClientRect().top + window.scrollY;
+        window.scrollTo({ top: elementPosition - offset, behavior: 'smooth' });
+      }
+      // Set selected category after scroll
       setSelectedCategory(cat === 'all' ? null : cat);
-    }, 100);
-  }, []);
+    });
+  }, [categories, visibleCategoryCount, showAllCategories]);
 
   const handleShowMoreCategories = useCallback(() => {
     setVisibleCategoryCount(prev => prev + 2);
