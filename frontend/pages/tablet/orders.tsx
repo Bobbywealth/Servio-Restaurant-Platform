@@ -65,9 +65,10 @@ interface KDSOrderCardProps {
   onPrint: () => void;
   formatMoney: (v: number | null | undefined) => string;
   onExpire?: (orderId: string) => void;
+  onViewDetails?: () => void;
 }
 
-function KDSOrderCard({ order, now, busyId, onAccept, onDecline, onMarkReady, onMarkPickedUp, onPrint, formatMoney, onExpire }: KDSOrderCardProps) {
+function KDSOrderCard({ order, now, busyId, onAccept, onDecline, onMarkReady, onMarkPickedUp, onPrint, formatMoney, onExpire, onViewDetails }: KDSOrderCardProps) {
   const status = normalizeStatus(order.status);
   const style = kdsStatusStyles[status as keyof typeof kdsStatusStyles] || kdsStatusStyles.received;
   const isBusy = busyId === order.id;
@@ -269,6 +270,17 @@ function KDSOrderCard({ order, now, busyId, onAccept, onDecline, onMarkReady, on
 
         {/* ACTION BUTTONS */}
         {renderActionButton()}
+
+        {/* VIEW DETAILS BUTTON */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onViewDetails?.();
+          }}
+          className="w-full mt-2 rounded-lg border border-slate-300 py-2 font-medium text-slate-600 hover:bg-slate-100 text-sm"
+        >
+          View Full Details
+        </button>
       </div>
     </div>
   );
@@ -2135,6 +2147,9 @@ export default function TabletOrdersPage() {
                           console.log(`Order ${orderId} expired - auto declining`);
                           declineOrder(filteredOrders.find(o => o.id === orderId) || { id: orderId } as Order);
                         }}
+                        onViewDetails={() => {
+                          setOrderDetailsOrder(order);
+                        }}
                       />
                     ))}
                   </div>
@@ -2145,9 +2160,9 @@ export default function TabletOrdersPage() {
         </main>
       </div>
 
-      {/* Order Details Modal - for mobile/tablet when clicking a card */}
+      {/* Order Details Modal - for viewing order details */}
       <OrderDetailsModal
-        order={!isDesktopLayout ? orderDetailsOrder : null}
+        order={orderDetailsOrder}
         onClose={() => setOrderDetailsOrder(null)}
         onConfirmOrder={(order) => {
           openAcceptModal(order);
