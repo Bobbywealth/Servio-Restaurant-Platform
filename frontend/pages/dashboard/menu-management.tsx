@@ -657,7 +657,7 @@ const MenuManagement: React.FC = () => {
         if (slug) {
           setRestaurantSlug(slug);
           if (typeof window !== 'undefined') {
-            setPublicOrderUrl(`${window.location.origin}/r/${slug}`);
+            setPublicOrderUrl(`https://servio.solutions/r/${slug}`);
           }
         } else {
           setRestaurantSlug(null);
