@@ -81,14 +81,17 @@ export interface SocketEvents {
 class SocketManager {
   private socket: Socket | null = null
   private reconnectAttempts = 0
-  private maxReconnectAttempts = 5
+  private maxReconnectAttempts = 10
   private reconnectDelay = 1000
   private isConnected = false
   private connectionListeners: Array<(status: boolean) => void> = []
   private eventHandlers = new Map<string, Function[]>()
+  private visibilityHandler: (() => void) | null = null
+  private networkHandler: (() => void) | null = null
 
   constructor() {
     this.connect()
+    this.setupVisibilityAndNetworkHandlers()
   }
 
   private resolveBackendUrl(): string {
@@ -113,6 +116,34 @@ class SocketManager {
     return `https://${rawBackendUrl}`
   }
 
+  private setupVisibilityAndNetworkHandlers(): void {
+    if (typeof window === 'undefined') return
+
+    // Reconnect when tab becomes visible again
+    this.visibilityHandler = () => {
+      if (document.visibilityState === 'visible') {
+        console.log('🔌 Tab became visible, checking connection...')
+        if (!this.isConnected && !this.socket?.active) {
+          console.log('🔌 Attempting to reconnect...')
+          this.connect()
+        }
+      }
+    }
+    document.addEventListener('visibilitychange', this.visibilityHandler)
+
+    // Reconnect when network comes back online
+    this.networkHandler = () => {
+      if (navigator.onLine) {
+        console.log('🔌 Network online, checking connection...')
+        if (!this.isConnected) {
+          console.log('🔌 Attempting to reconnect...')
+          this.connect()
+        }
+      }
+    }
+    window.addEventListener('online', this.networkHandler)
+  }
+
   connect(): void {
     if (typeof window === 'undefined') {
       return
@@ -124,15 +155,17 @@ class SocketManager {
 
     const backendUrl = this.resolveBackendUrl()
 
+    // Exponential backoff with longer delays
     const socketOptions = {
       transports: ['websocket', 'polling'],
-      timeout: 20000,
+      timeout: 30000,
       reconnection: true,
       reconnectionAttempts: this.maxReconnectAttempts,
       reconnectionDelay: this.reconnectDelay,
-      reconnectionDelayMax: 5000,
+      reconnectionDelayMax: 30000, // Max 30 seconds between attempts
       pingTimeout: 60000,
-      pingInterval: 25000,
+      pingInterval: 30000,
+      forceNew: false, // Reuse existing connection if available
     } as Partial<ManagerOptionsWithPing>
 
     this.socket = io(backendUrl, socketOptions)
@@ -165,31 +198,37 @@ class SocketManager {
       this.isConnected = false
       this.notifyConnectionListeners(false)
 
-      if (reason === 'io server disconnect') {
-        // Server initiated disconnect - reconnect manually
-        this.socket?.connect()
+      // Only auto-reconnect if not intentionally disconnected
+      if (reason !== 'io client disconnect') {
+        // Will reconnect automatically via socket.io
       }
     })
 
     this.socket.on('connect_error', (error) => {
-      console.error('🔌 Socket connection error:', error)
+      console.error('🔌 Socket connection error:', error.message)
       this.reconnectAttempts++
 
       if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-        showToast.error('Unable to connect to Servio. Please refresh the page.')
+        // Don't show error toast on every attempt, only log
+        console.log('🔌 Max reconnect attempts reached, will keep trying...')
       }
     })
 
     this.socket.on('reconnect', (attemptNumber) => {
       console.log('🔌 Socket reconnected after', attemptNumber, 'attempts')
+      this.reconnectAttempts = 0
     })
 
     this.socket.on('reconnect_attempt', (attemptNumber) => {
       console.log('🔌 Reconnection attempt', attemptNumber)
     })
 
+    this.socket.on('reconnect_error', (error) => {
+      console.log('🔌 Reconnection error:', error.message)
+    })
+
     this.socket.on('reconnect_failed', () => {
-      console.error('🔌 Socket reconnection failed')
+      console.log('🔌 Socket reconnection failed, will retry...')
     })
 
     // System events
@@ -299,6 +338,15 @@ class SocketManager {
 
   // Disconnect
   disconnect(): void {
+    if (typeof window !== 'undefined') {
+      // Remove visibility and network handlers
+      if (this.visibilityHandler) {
+        document.removeEventListener('visibilitychange', this.visibilityHandler)
+      }
+      if (this.networkHandler) {
+        window.removeEventListener('online', this.networkHandler)
+      }
+    }
     this.socket?.disconnect()
     this.socket = null
     this.isConnected = false
