@@ -139,6 +139,7 @@ async function initializeServer() {
     const { default: inventoryRoutes } = await import('./routes/inventory');
     const { default: menuRoutes } = await import('./routes/menu');
     const { default: tasksRoutes } = await import('./routes/tasks');
+    const { default: checklistsRoutes } = await import('./routes/checklists');
     const { default: syncRoutes } = await import('./routes/sync');
     const { default: modifiersRoutes } = await import('./routes/modifiers');
     const { default: receiptsRoutes } = await import('./routes/receipts');
@@ -238,6 +239,7 @@ async function initializeServer() {
     }, menuRoutes);
 
     app.use('/api/tasks', requireAuth, tasksRoutes);
+    app.use('/api/checklists', requireAuth, checklistsRoutes);
     app.use('/api/sync', requireAuth, syncRoutes);
     app.use('/api/receipts', requireAuth, receiptsRoutes);
     app.use('/api/audit', requireAuth, auditRoutes);

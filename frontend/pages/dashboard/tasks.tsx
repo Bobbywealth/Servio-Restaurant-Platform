@@ -7,6 +7,7 @@ import { useUser } from '../../contexts/UserContext'
 import { api } from '../../lib/api'
 import { socketManager } from '../../lib/socket'
 import toast from 'react-hot-toast'
+import DailyChecklistsTab from '../../components/tasks/DailyChecklistsTab'
 
 interface Task {
   id: string
@@ -55,6 +56,7 @@ export default function TasksPage() {
   const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list')
   const [draggedTask, setDraggedTask] = useState<Task | null>(null)
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<'tasks' | 'checklists'>('tasks')
 
   // Staff can only see tasks assigned to them and cannot create/edit/delete
   const isStaff = user?.role === 'staff'
@@ -282,7 +284,7 @@ export default function TasksPage() {
               </p>
             </div>
 
-            {canCreateTasks && (
+            {canCreateTasks && activeTab === 'tasks' && (
               <div className="flex gap-2 w-full sm:w-auto">
                 <button
                   onClick={() => setShowAIGeneratorModal(true)}
@@ -308,6 +310,36 @@ export default function TasksPage() {
             </div>
           )}
 
+          <div className="card p-2">
+            <div className="inline-flex bg-surface-100 dark:bg-surface-800 rounded-lg p-1">
+              <button
+                onClick={() => setActiveTab('tasks')}
+                className={`px-4 py-2 text-sm rounded-md transition-colors ${activeTab === 'tasks'
+                  ? 'bg-white dark:bg-surface-700 text-surface-900 dark:text-white shadow-sm'
+                  : 'text-surface-600 dark:text-surface-400'}`}
+              >
+                Tasks
+              </button>
+              <button
+                onClick={() => setActiveTab('checklists')}
+                className={`px-4 py-2 text-sm rounded-md transition-colors ${activeTab === 'checklists'
+                  ? 'bg-white dark:bg-surface-700 text-surface-900 dark:text-white shadow-sm'
+                  : 'text-surface-600 dark:text-surface-400'}`}
+              >
+                Daily Checklists
+              </button>
+            </div>
+          </div>
+
+          {activeTab === 'checklists' && (
+            <DailyChecklistsTab
+              staff={staff.map(({ id, name }) => ({ id, name }))}
+              canManage={canCreateTasks}
+            />
+          )}
+
+          {activeTab === 'tasks' && (
+          <>
           {/* Summary Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="card">
@@ -614,6 +646,8 @@ export default function TasksPage() {
               </motion.div>
             )}
           </AnimatePresence>
+          </>
+          )}
         </div>
 
         {/* Create/Edit Task Modal */}
