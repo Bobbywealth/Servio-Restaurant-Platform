@@ -26,6 +26,7 @@ import { SocketService } from './services/SocketService';
 import { realtimeService } from './services/RealtimeService';
 import type { ApiKeyScope } from './types/apiKey';
 import { getCacheUrl, registerCacheInvalidator } from './utils/serverCache';
+import { cloneAllDailyChecklists } from './routes/tasks';
 
 const FRONTEND_ORIGIN = 'https://servio.solutions';
 
@@ -751,6 +752,19 @@ initializeServer().then(() => {
     cleanupExpiredSessions(); // Run once on startup
     sessionCleanupTimer = setInterval(cleanupExpiredSessions, SESSION_CLEANUP_INTERVAL);
     logger.info('🧹 Session cleanup job started (runs every hour)');
+
+        // Daily checklist clone cron job (runs every hour, idempotent)
+    const CHECKLIST_CLONE_INTERVAL = 60 * 60 * 1000; // 1 hour
+    const runChecklistClone = async () => {
+      try {
+        await cloneAllDailyChecklists();
+      } catch (err) {
+        logger.error('Daily checklist clone failed:', err);
+      }
+    };
+    runChecklistClone(); // Run once on startup
+    setInterval(runChecklistClone, CHECKLIST_CLONE_INTERVAL);
+    logger.info('📋 Daily checklist clone cron started (runs every hour)');
   });
 }).catch((error) => {
   logger.error('Failed to start server:', error);
