@@ -736,4 +736,233 @@ router.post('/bulk-create', asyncHandler(async (req: Request, res: Response) => 
   });
 }));
 
+/**
+ * GET /api/tasks/checklist/today
+ * Get today's checklist items grouped by section
+ */
+router.get('/checklist/today', asyncHandler(async (req: Request, res: Response) => {
+  const db = DatabaseService.getInstance().getDatabase();
+  const restaurantId = req.user?.restaurantId;
+  const today = new Date().toISOString().split('T')[0];
+
+  const items = await db.all(`
+    SELECT t.id, t.title, t.description, t.status, t.priority, t.section,
+           t.sort_order, t.template_id, t.checklist_date, t.assigned_to,
+           u.name as assigned_to_name
+    FROM tasks t
+    LEFT JOIN users u ON t.assigned_to = u.id
+    WHERE t.restaurant_id = ?
+      AND t.task_type = 'checklist'
+      AND t.is_template = FALSE
+      AND t.checklist_date = ?
+    ORDER BY t.section, t.sort_order, t.created_at
+  `, [restaurantId, today]);
+
+  // Group by section
+  const sections: Record<string, any[]> = {};
+  for (const item of items) {
+    const sec = item.section || 'General';
+    if (!sections[sec]) sections[sec] = [];
+    sections[sec].push(item);
+  }
+
+  // Calculate progress
+  const total = items.length;
+  const completed = items.filter((i: any) => i.status === 'completed').length;
+
+  res.json({
+    success: true,
+    data: {
+      date: today,
+      sections,
+      progress: { total, completed, percentage: total > 0 ? Math.round((completed / total) * 100) : 0 }
+    }
+  });
+}));
+
+/**
+ * GET /api/tasks/checklist/templates
+ * Get all checklist templates for this restaurant
+ */
+router.get('/checklist/templates', asyncHandler(async (req: Request, res: Response) => {
+  const db = DatabaseService.getInstance().getDatabase();
+  const restaurantId = req.user?.restaurantId;
+
+  const templates = await db.all(`
+    SELECT id, title, description, section, recurrence, sort_order, priority
+    FROM tasks
+    WHERE restaurant_id = ?
+      AND task_type = 'checklist'
+      AND is_template = TRUE
+    ORDER BY section, sort_order, title
+  `, [restaurantId]);
+
+  res.json({ success: true, data: { templates } });
+}));
+
+/**
+ * POST /api/tasks/checklist/template
+ * Create a new checklist template item
+ */
+router.post('/checklist/template', asyncHandler(async (req: Request, res: Response) => {
+  const { title, description, section, recurrence = 'daily', priority = 'medium', sortOrder = 0 } = req.body;
+  if (!title) {
+    return res.status(400).json({ success: false, error: { message: 'Title is required' } });
+  }
+  const db = DatabaseService.getInstance().getDatabase();
+  const restaurantId = req.user?.restaurantId;
+  const templateId = `tmpl_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+  await db.run(`
+    INSERT INTO tasks (id, restaurant_id, title, description, task_type, is_template, section, recurrence, priority, sort_order, status)
+    VALUES (?, ?, ?, ?, 'checklist', TRUE, ?, ?, ?, ?, 'pending')
+  `, [templateId, restaurantId, title, description || null, section || 'General', recurrence, priority, sortOrder]);
+
+  logger.info(`Checklist template created: ${title}`);
+  res.status(201).json({ success: true, data: { templateId, title, section, recurrence } });
+}));
+
+/**
+ * POST /api/tasks/checklist/templates/bulk
+ * Bulk create checklist templates
+ */
+router.post('/checklist/templates/bulk', asyncHandler(async (req: Request, res: Response) => {
+  const { templates } = req.body;
+  if (!templates || !Array.isArray(templates) || templates.length === 0) {
+    return res.status(400).json({ success: false, error: { message: 'Templates array is required' } });
+  }
+  const db = DatabaseService.getInstance().getDatabase();
+  const restaurantId = req.user?.restaurantId;
+  const created: any[] = [];
+
+  for (const tmpl of templates) {
+    if (!tmpl.title) continue;
+    const templateId = `tmpl_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    await db.run(`
+      INSERT INTO tasks (id, restaurant_id, title, description, task_type, is_template, section, recurrence, priority, sort_order, status)
+      VALUES (?, ?, ?, ?, 'checklist', TRUE, ?, ?, ?, ?, 'pending')
+    `, [templateId, restaurantId, tmpl.title, tmpl.description || null, tmpl.section || 'General', tmpl.recurrence || 'daily', tmpl.priority || 'medium', tmpl.sortOrder || 0]);
+    created.push({ templateId, title: tmpl.title, section: tmpl.section });
+  }
+
+  logger.info(`Bulk created ${created.length} checklist templates`);
+  res.status(201).json({ success: true, data: { created, count: created.length } });
+}));
+
+/**
+ * POST /api/tasks/checklist/clone-daily
+ * Clone daily templates into today's checklist (called by cron or manually)
+ */
+router.post('/checklist/clone-daily', asyncHandler(async (req: Request, res: Response) => {
+  const db = DatabaseService.getInstance().getDatabase();
+  const restaurantId = req.user?.restaurantId;
+  const today = new Date().toISOString().split('T')[0];
+
+  // Check if already cloned today
+  const existing = await db.get(`
+    SELECT COUNT(*) as count FROM tasks
+    WHERE restaurant_id = ? AND task_type = 'checklist' AND is_template = FALSE AND checklist_date = ?
+  `, [restaurantId, today]);
+
+  if (num(existing.count) > 0) {
+    return res.json({ success: true, data: { message: 'Already cloned for today', cloned: 0 } });
+  }
+
+  // Get daily templates
+  const templates = await db.all(`
+    SELECT id, title, description, section, priority, sort_order, assigned_to
+    FROM tasks
+    WHERE restaurant_id = ? AND task_type = 'checklist' AND is_template = TRUE AND recurrence = 'daily'
+    ORDER BY section, sort_order
+  `, [restaurantId]);
+
+  let cloned = 0;
+  for (const tmpl of templates) {
+    const taskId = `chk_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    await db.run(`
+      INSERT INTO tasks (id, restaurant_id, title, description, task_type, is_template, template_id, section, recurrence, priority, sort_order, assigned_to, checklist_date, status)
+      VALUES (?, ?, ?, ?, 'checklist', FALSE, ?, ?, 'none', ?, ?, ?, ?, 'pending')
+    `, [taskId, restaurantId, tmpl.title, tmpl.description, tmpl.id, tmpl.section, tmpl.priority, tmpl.sort_order, tmpl.assigned_to, today]);
+    cloned++;
+  }
+
+  logger.info(`Cloned ${cloned} daily checklist items for restaurant ${restaurantId}`);
+  res.json({ success: true, data: { cloned, date: today } });
+}));
+
+/**
+ * POST /api/tasks/checklist/dedup
+ * Deduplicate checklist templates by removing duplicates with same title+section
+ */
+router.post('/checklist/dedup', asyncHandler(async (req: Request, res: Response) => {
+  const db = DatabaseService.getInstance().getDatabase();
+  const restaurantId = req.user?.restaurantId;
+
+  // Find duplicates: same title + section in templates
+  const dupes = await db.all(`
+    SELECT title, section, COUNT(*) as cnt, MIN(id) as keep_id
+    FROM tasks
+    WHERE restaurant_id = ? AND task_type = 'checklist' AND is_template = TRUE
+    GROUP BY title, section
+    HAVING COUNT(*) > 1
+  `, [restaurantId]);
+
+  let removed = 0;
+  for (const dupe of dupes) {
+    const result = await db.run(`
+      DELETE FROM tasks
+      WHERE restaurant_id = ? AND task_type = 'checklist' AND is_template = TRUE
+        AND title = ? AND section = ? AND id != ?
+    `, [restaurantId, dupe.title, dupe.section, dupe.keep_id]);
+    removed += (result as any)?.changes || (dupe.cnt - 1);
+  }
+
+  logger.info(`Deduplicated checklist: removed ${removed} duplicates`);
+  res.json({ success: true, data: { duplicatesFound: dupes.length, removed } });
+}));
+
+/**
+ * Exported helper: cloneAllDailyChecklists
+ * Called by cron job to clone templates for ALL restaurants
+ */
+export async function cloneAllDailyChecklists(): Promise<void> {
+  const db = DatabaseService.getInstance().getDatabase();
+  const today = new Date().toISOString().split('T')[0];
+
+  // Get all restaurants that have daily checklist templates
+  const restaurants = await db.all(`
+    SELECT DISTINCT restaurant_id FROM tasks
+    WHERE task_type = 'checklist' AND is_template = TRUE AND recurrence = 'daily'
+  `);
+
+  let totalCloned = 0;
+  for (const { restaurant_id } of restaurants) {
+    // Skip if already cloned
+    const existing = await db.get(`
+      SELECT COUNT(*) as count FROM tasks
+      WHERE restaurant_id = ? AND task_type = 'checklist' AND is_template = FALSE AND checklist_date = ?
+    `, [restaurant_id, today]);
+    if (num(existing.count) > 0) continue;
+
+    const templates = await db.all(`
+      SELECT id, title, description, section, priority, sort_order, assigned_to
+      FROM tasks
+      WHERE restaurant_id = ? AND task_type = 'checklist' AND is_template = TRUE AND recurrence = 'daily'
+      ORDER BY section, sort_order
+    `, [restaurant_id]);
+
+    for (const tmpl of templates) {
+      const taskId = `chk_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      await db.run(`
+        INSERT INTO tasks (id, restaurant_id, title, description, task_type, is_template, template_id, section, recurrence, priority, sort_order, assigned_to, checklist_date, status)
+        VALUES (?, ?, ?, ?, 'checklist', FALSE, ?, ?, 'none', ?, ?, ?, ?, 'pending')
+      `, [taskId, restaurant_id, tmpl.title, tmpl.description, tmpl.id, tmpl.section, tmpl.priority, tmpl.sort_order, tmpl.assigned_to, today]);
+      totalCloned++;
+    }
+  }
+
+  logger.info(`[CRON] Daily checklist clone complete: ${totalCloned} items across ${restaurants.length} restaurants`);
+}
+
+
 export default router;
