@@ -43,6 +43,13 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
     });
   }
 
+  if (vendorPaymentDate && !/^\d{4}-\d{2}-\d{2}$/.test(String(vendorPaymentDate))) {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'Vendor payment date must be in YYYY-MM-DD format' }
+    });
+  }
+
   const items = await db.all(
     'SELECT * FROM inventory_items WHERE restaurant_id = ? ORDER BY name',
     [restaurantId]
@@ -59,7 +66,7 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
  * Create a new inventory item
  */
 router.post('/', asyncHandler(async (req: Request, res: Response) => {
-  const { name, sku, unit, onHandQty, lowStockThreshold, category, unitCost } = req.body;
+  const { name, sku, unit, onHandQty, lowStockThreshold, category, unitCost, vendorName, vendorPaymentDate } = req.body;
   const db = DatabaseService.getInstance().getDatabase();
   const restaurantId = req.user?.restaurantId;
 
@@ -84,12 +91,19 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
     });
   }
 
+  if (vendorPaymentDate && !/^\d{4}-\d{2}-\d{2}$/.test(String(vendorPaymentDate))) {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'Vendor payment date must be in YYYY-MM-DD format' }
+    });
+  }
+
   const itemId = uuidv4();
 
   await db.run(`
     INSERT INTO inventory_items (
-      id, restaurant_id, name, sku, unit, on_hand_qty, low_stock_threshold, category, unit_cost, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      id, restaurant_id, name, sku, unit, on_hand_qty, low_stock_threshold, category, unit_cost, vendor_name, vendor_payment_date, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
   `, [
     itemId,
     restaurantId,
@@ -99,7 +113,9 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
     onHandQty ?? 0,
     lowStockThreshold ?? 10,
     category?.trim() || null,
-    unitCost ? Number(unitCost) : 0
+    unitCost ? Number(unitCost) : 0,
+    vendorName?.trim() || null,
+    vendorPaymentDate?.trim() || null
   ]);
 
   const newItem = await db.get('SELECT * FROM inventory_items WHERE id = ?', [itemId]);
@@ -110,7 +126,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
     'create_inventory_item',
     'inventory',
     itemId,
-    { name, sku, unit, onHandQty, lowStockThreshold, category }
+    { name, sku, unit, onHandQty, lowStockThreshold, category, vendorName, vendorPaymentDate }
   );
 
   logger.info(`Inventory item created: ${name}`);
@@ -127,7 +143,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
  */
 router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const { name, sku, unit, onHandQty, lowStockThreshold, category, unitCost } = req.body;
+  const { name, sku, unit, onHandQty, lowStockThreshold, category, unitCost, vendorName, vendorPaymentDate } = req.body;
   const db = DatabaseService.getInstance().getDatabase();
   const restaurantId = req.user?.restaurantId;
 
@@ -140,6 +156,13 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
     return res.status(404).json({
       success: false,
       error: { message: 'Inventory item not found' }
+    });
+  }
+
+  if (vendorPaymentDate !== undefined && vendorPaymentDate && !/^\d{4}-\d{2}-\d{2}$/.test(String(vendorPaymentDate))) {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'Vendor payment date must be in YYYY-MM-DD format' }
     });
   }
 
@@ -174,6 +197,14 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
     updateFields.push('unit_cost = ?');
     updateValues.push(Number(unitCost));
   }
+  if (vendorName !== undefined) {
+    updateFields.push('vendor_name = ?');
+    updateValues.push(vendorName?.trim() || null);
+  }
+  if (vendorPaymentDate !== undefined) {
+    updateFields.push('vendor_payment_date = ?');
+    updateValues.push(vendorPaymentDate?.trim() || null);
+  }
 
   if (updateFields.length > 0) {
     updateFields.push('updated_at = CURRENT_TIMESTAMP');
@@ -194,7 +225,7 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
     'update_inventory_item',
     'inventory',
     id,
-    { name, sku, unit, onHandQty, lowStockThreshold, category }
+    { name, sku, unit, onHandQty, lowStockThreshold, category, vendorName, vendorPaymentDate }
   );
 
   logger.info(`Inventory item updated: ${updatedItem.name}`);
