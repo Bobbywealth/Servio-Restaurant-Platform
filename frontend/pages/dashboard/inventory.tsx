@@ -43,6 +43,8 @@ interface InventoryItem {
   low_stock_threshold: number
   category?: string
   unit_cost?: number
+  vendor_name?: string
+  vendor_payment_date?: string
   updated_at: string
 }
 
@@ -88,7 +90,9 @@ export default function InventoryPage() {
     onHandQty: '',
     lowStockThreshold: '',
     category: '',
-    unitCost: ''
+    unitCost: '',
+    vendorName: '',
+    vendorPaymentDate: ''
   })
   const [editItem, setEditItem] = useState({
     id: '',
@@ -98,7 +102,9 @@ export default function InventoryPage() {
     onHandQty: '',
     lowStockThreshold: '',
     category: '',
-    unitCost: ''
+    unitCost: '',
+    vendorName: '',
+    vendorPaymentDate: ''
   })
   const [showReceiptModal, setShowReceiptModal] = useState(false)
   const [receiptImage, setReceiptImage] = useState<File | null>(null)
@@ -149,11 +155,23 @@ export default function InventoryPage() {
         onHandQty: newItem.onHandQty ? Number(newItem.onHandQty) : 0,
         lowStockThreshold: newItem.lowStockThreshold ? Number(newItem.lowStockThreshold) : 10,
         category: newItem.category.trim() || undefined,
-        unitCost: newItem.unitCost ? Number(newItem.unitCost) : undefined
+        unitCost: newItem.unitCost ? Number(newItem.unitCost) : undefined,
+        vendorName: newItem.vendorName.trim() || undefined,
+        vendorPaymentDate: newItem.vendorPaymentDate || undefined
       })
       toast.success('Inventory item created')
       setShowAddModal(false)
-      setNewItem({ name: '', sku: '', unit: 'each', onHandQty: '', lowStockThreshold: '', category: '', unitCost: '' })
+      setNewItem({
+        name: '',
+        sku: '',
+        unit: 'each',
+        onHandQty: '',
+        lowStockThreshold: '',
+        category: '',
+        unitCost: '',
+        vendorName: '',
+        vendorPaymentDate: ''
+      })
       await fetchData()
     } catch (e: any) {
       const msg = e?.response?.data?.error?.message || 'Failed to create item'
@@ -172,7 +190,9 @@ export default function InventoryPage() {
       onHandQty: String(item.on_hand_qty),
       lowStockThreshold: String(item.low_stock_threshold),
       category: item.category || '',
-      unitCost: item.unit_cost !== undefined ? String(item.unit_cost) : ''
+      unitCost: item.unit_cost !== undefined ? String(item.unit_cost) : '',
+      vendorName: item.vendor_name || '',
+      vendorPaymentDate: item.vendor_payment_date || ''
     })
     setEditingItem(item)
     setShowEditModal(true)
@@ -193,7 +213,9 @@ export default function InventoryPage() {
         onHandQty: editItem.onHandQty ? Number(editItem.onHandQty) : 0,
         lowStockThreshold: editItem.lowStockThreshold ? Number(editItem.lowStockThreshold) : 10,
         category: editItem.category.trim() || undefined,
-        unitCost: editItem.unitCost ? Number(editItem.unitCost) : undefined
+        unitCost: editItem.unitCost ? Number(editItem.unitCost) : undefined,
+        vendorName: editItem.vendorName.trim() || undefined,
+        vendorPaymentDate: editItem.vendorPaymentDate || undefined
       })
       toast.success('Inventory item updated')
       setShowEditModal(false)
@@ -573,6 +595,9 @@ export default function InventoryPage() {
                       Extended Cost
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-surface-500 dark:text-surface-400 uppercase tracking-wider">
+                      Vendor Payment
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-surface-500 dark:text-surface-400 uppercase tracking-wider">
                       Status
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-surface-500 dark:text-surface-400 uppercase tracking-wider">
@@ -617,6 +642,14 @@ export default function InventoryPage() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-surface-900 dark:text-surface-100">
                         {item.unit_cost !== undefined ? `${((item.on_hand_qty || 0) * item.unit_cost).toFixed(2)}` : '—'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-surface-900 dark:text-surface-100">
+                        {item.vendor_payment_date ? (
+                          <div>
+                            <div>{new Date(item.vendor_payment_date).toLocaleDateString()}</div>
+                            <div className="text-xs text-surface-500 dark:text-surface-400">{item.vendor_name || 'No vendor'}</div>
+                          </div>
+                        ) : '—'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`status-badge ${
@@ -718,6 +751,13 @@ export default function InventoryPage() {
                         <span className="text-lg font-bold text-amber-900 dark:text-amber-100">
                           {item.unit_cost !== undefined ? `$${((item.on_hand_qty || 0) * item.unit_cost).toFixed(2)}` : '—'}
                         </span>
+                      </div>
+                    </div>
+                    <div className="col-span-2">
+                      <div className="text-xs text-surface-500 dark:text-surface-400 mb-1">Vendor Payment Day</div>
+                      <div className="text-sm font-medium text-surface-900 dark:text-surface-100">
+                        {item.vendor_payment_date ? new Date(item.vendor_payment_date).toLocaleDateString() : 'Not set'}
+                        {item.vendor_name ? ` • ${item.vendor_name}` : ''}
                       </div>
                     </div>
                   </div>
@@ -862,6 +902,27 @@ export default function InventoryPage() {
                         placeholder="0.00"
                       />
                     </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">Vendor Name</label>
+                        <input
+                          type="text"
+                          value={newItem.vendorName}
+                          onChange={(e) => setNewItem(prev => ({ ...prev, vendorName: e.target.value }))}
+                          className="input-field"
+                          placeholder="e.g. Fresh Farms Co."
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">Payment Day</label>
+                        <input
+                          type="date"
+                          value={newItem.vendorPaymentDate}
+                          onChange={(e) => setNewItem(prev => ({ ...prev, vendorPaymentDate: e.target.value }))}
+                          className="input-field"
+                        />
+                      </div>
+                    </div>
                   </div>
                   <div className="mt-6 flex justify-end gap-3">
                     <button
@@ -991,6 +1052,27 @@ export default function InventoryPage() {
                         className="input-field"
                         placeholder="0.00"
                       />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">Vendor Name</label>
+                        <input
+                          type="text"
+                          value={editItem.vendorName}
+                          onChange={(e) => setEditItem(prev => ({ ...prev, vendorName: e.target.value }))}
+                          className="input-field"
+                          placeholder="e.g. Fresh Farms Co."
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">Payment Day</label>
+                        <input
+                          type="date"
+                          value={editItem.vendorPaymentDate}
+                          onChange={(e) => setEditItem(prev => ({ ...prev, vendorPaymentDate: e.target.value }))}
+                          className="input-field"
+                        />
+                      </div>
                     </div>
                   </div>
                   <div className="mt-6 flex justify-end gap-3">
