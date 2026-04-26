@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react'
 import Head from 'next/head'
-import { CheckCircle, Plus, Filter, Clock, User, Calendar, Trash2, Edit, LayoutList, LayoutGrid, GripVertical, Sparkles, FileText, X, Upload, Wand2, Repeat } from 'lucide-react'
+import { CheckCircle, Plus, Filter, Clock, User, Calendar, Trash2, Edit, LayoutList, LayoutGrid, GripVertical, Sparkles, FileText, X, Upload, Wand2, Repeat, CalendarDays } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 import DashboardLayout from '../../components/Layout/DashboardLayout'
 import { useUser } from '../../contexts/UserContext'
@@ -53,7 +53,8 @@ export default function TasksPage() {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showAIGeneratorModal, setShowAIGeneratorModal] = useState(false)
   const [editingTask, setEditingTask] = useState<Task | null>(null)
-  const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list')
+  const [viewMode, setViewMode] = useState<'list' | 'kanban' | 'daily'>('list')
+  const [selectedDutyDate, setSelectedDutyDate] = useState<string>(() => new Date().toISOString().split('T')[0])
   const [draggedTask, setDraggedTask] = useState<Task | null>(null)
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'tasks' | 'checklists'>('tasks')
@@ -469,6 +470,17 @@ export default function TasksPage() {
                 <LayoutGrid className="w-4 h-4" />
                 Kanban
               </button>
+              <button
+                onClick={() => setViewMode('daily')}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                  viewMode === 'daily'
+                    ? 'bg-white dark:bg-surface-700 text-surface-900 dark:text-white shadow-sm'
+                    : 'text-surface-600 dark:text-surface-400 hover:text-surface-900 dark:hover:text-white'
+                }`}
+              >
+                <CalendarDays className="w-4 h-4" />
+                Daily Calendar
+              </button>
             </div>
           </div>
 
@@ -646,6 +658,52 @@ export default function TasksPage() {
               </motion.div>
             )}
           </AnimatePresence>
+
+          {/* Daily Duties Calendar View */}
+          <AnimatePresence mode="wait">
+            {viewMode === 'daily' && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="space-y-4"
+              >
+                <div className="card">
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                    <div>
+                      <h4 className="text-base font-semibold text-surface-900 dark:text-surface-100">
+                        Daily Duty Calendar
+                      </h4>
+                      <p className="text-sm text-surface-600 dark:text-surface-400">
+                        View duties for a single day and quickly identify gaps in coverage.
+                      </p>
+                    </div>
+                    <div className="w-full md:w-auto">
+                      <label className="block text-xs font-medium text-surface-600 dark:text-surface-400 mb-1">
+                        Duty Date
+                      </label>
+                      <input
+                        type="date"
+                        className="input-field w-full md:w-auto"
+                        value={selectedDutyDate}
+                        onChange={(e) => setSelectedDutyDate(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <DailyDutyCalendar
+                  tasks={tasks}
+                  selectedDate={selectedDutyDate}
+                  canUpdateTasks={canUpdateTasks}
+                  canDeleteTasks={canDeleteTasks}
+                  onStatusUpdate={handleStatusUpdate}
+                  onDeleteTask={handleDeleteTask}
+                  getPriorityBadgeClass={getPriorityBadgeClass}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
           </>
           )}
         </div>
@@ -675,6 +733,124 @@ export default function TasksPage() {
         )}
       </DashboardLayout>
     </>
+  )
+}
+
+function DailyDutyCalendar({
+  tasks,
+  selectedDate,
+  canUpdateTasks,
+  canDeleteTasks,
+  onStatusUpdate,
+  onDeleteTask,
+  getPriorityBadgeClass
+}: {
+  tasks: Task[]
+  selectedDate: string
+  canUpdateTasks: boolean
+  canDeleteTasks: boolean
+  onStatusUpdate: (taskId: string, newStatus: Task['status']) => void
+  onDeleteTask: (taskId: string) => void
+  getPriorityBadgeClass: (priority: Task['priority']) => string
+}) {
+  const selectedDateLabel = new Date(`${selectedDate}T00:00:00`).toLocaleDateString(undefined, {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric'
+  })
+
+  const matchesSelectedDate = (task: Task) => {
+    if (!task.dueDate) return false
+    return new Date(task.dueDate).toISOString().split('T')[0] === selectedDate
+  }
+
+  const dayTasks = tasks
+    .filter(matchesSelectedDate)
+    .sort((a, b) => new Date(a.dueDate as string).getTime() - new Date(b.dueDate as string).getTime())
+
+  const taskGroups = {
+    pending: dayTasks.filter((task) => task.status === 'pending'),
+    in_progress: dayTasks.filter((task) => task.status === 'in_progress'),
+    completed: dayTasks.filter((task) => task.status === 'completed')
+  }
+
+  return (
+    <div className="card">
+      <div className="flex items-center justify-between mb-4">
+        <h4 className="text-base font-semibold text-surface-900 dark:text-surface-100">
+          {selectedDateLabel}
+        </h4>
+        <span className="text-sm text-surface-500 dark:text-surface-400">{dayTasks.length} duties</span>
+      </div>
+
+      {dayTasks.length === 0 ? (
+        <p className="text-sm text-surface-600 dark:text-surface-400">
+          No duties are scheduled for this day yet.
+        </p>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {([
+            ['pending', 'Pending'],
+            ['in_progress', 'In Progress'],
+            ['completed', 'Completed']
+          ] as const).map(([status, label]) => (
+            <div key={status} className="rounded-lg border border-surface-200 dark:border-surface-700">
+              <div className="px-3 py-2 border-b border-surface-200 dark:border-surface-700 flex items-center justify-between">
+                <span className="text-sm font-medium text-surface-800 dark:text-surface-200">{label}</span>
+                <span className="text-xs text-surface-500 dark:text-surface-400">{taskGroups[status].length}</span>
+              </div>
+              <div className="p-3 space-y-3 min-h-[140px]">
+                {taskGroups[status].length === 0 ? (
+                  <p className="text-xs text-surface-500 dark:text-surface-400">No duties</p>
+                ) : (
+                  taskGroups[status].map((task) => (
+                    <div key={task.id} className="rounded-md border border-surface-200 dark:border-surface-700 p-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <p className="text-sm font-medium text-surface-900 dark:text-surface-100">{task.title}</p>
+                          {task.assignedToName && (
+                            <p className="text-xs text-surface-500 dark:text-surface-400 mt-1">{task.assignedToName}</p>
+                          )}
+                          <p className="text-xs text-surface-500 dark:text-surface-400 mt-1">
+                            {new Date(task.dueDate as string).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </p>
+                        </div>
+                        <span className={getPriorityBadgeClass(task.priority)}>{task.priority}</span>
+                      </div>
+                      {(canUpdateTasks || canDeleteTasks) && (
+                        <div className="mt-3 flex items-center gap-2">
+                          {canUpdateTasks && (
+                            <select
+                              className="input-field text-xs py-1 px-2"
+                              value={task.status}
+                              onChange={(e) => onStatusUpdate(task.id, e.target.value as Task['status'])}
+                            >
+                              <option value="pending">Pending</option>
+                              <option value="in_progress">In Progress</option>
+                              <option value="completed">Completed</option>
+                            </select>
+                          )}
+                          {canDeleteTasks && (
+                            <button
+                              className="btn-icon text-servio-red-600 hover:text-servio-red-700 dark:text-servio-red-400"
+                              onClick={() => onDeleteTask(task.id)}
+                              title="Delete duty"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 
