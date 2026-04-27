@@ -1201,7 +1201,7 @@ router.post('/staff', asyncHandler(async (req: Request, res: Response) => {
       hourly_pay_rate,
       permissions,
       is_active
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, '[]', TRUE)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `, [
     userId,
     restaurantId,
@@ -1210,7 +1210,9 @@ router.post('/staff', asyncHandler(async (req: Request, res: Response) => {
     phone || null,
     pin,
     role,
-    hourlyPayRate !== undefined && hourlyPayRate !== null ? Number(hourlyPayRate) : null
+    hourlyPayRate !== undefined && hourlyPayRate !== null ? Number(hourlyPayRate) : null,
+    JSON.stringify([]),
+    true
   ]);
 
   await DatabaseService.getInstance().logAudit(
