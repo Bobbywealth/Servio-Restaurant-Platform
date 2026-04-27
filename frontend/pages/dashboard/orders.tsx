@@ -374,6 +374,8 @@ export default function OrdersPage() {
   const [statusFilter, setStatusFilter] = useState<OrderStatus | 'active' | 'all'>('all')
   const [channelFilter, setChannelFilter] = useState<string>('all')
   const [searchQuery, setSearchQuery] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null)
@@ -448,6 +450,29 @@ export default function OrdersPage() {
       result = result.filter(o => o.channel === channelFilter)
     }
 
+    // Apply date range filter
+    if (dateFrom) {
+      const startDate = new Date(`${dateFrom}T00:00:00`)
+      if (!Number.isNaN(startDate.getTime())) {
+        result = result.filter(o => {
+          if (!o.created_at) return false
+          const createdAt = new Date(o.created_at)
+          return !Number.isNaN(createdAt.getTime()) && createdAt >= startDate
+        })
+      }
+    }
+
+    if (dateTo) {
+      const endDate = new Date(`${dateTo}T23:59:59.999`)
+      if (!Number.isNaN(endDate.getTime())) {
+        result = result.filter(o => {
+          if (!o.created_at) return false
+          const createdAt = new Date(o.created_at)
+          return !Number.isNaN(createdAt.getTime()) && createdAt <= endDate
+        })
+      }
+    }
+
     // Apply search filter
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase()
@@ -461,7 +486,13 @@ export default function OrdersPage() {
     }
 
     setFilteredOrders(result)
-  }, [orders, statusFilter, channelFilter, searchQuery])
+  }, [orders, statusFilter, channelFilter, dateFrom, dateTo, searchQuery])
+
+  const emptyStateMessage = useMemo(() => {
+    if (searchQuery) return 'No orders match your search.'
+    if (dateFrom || dateTo) return 'No orders for selected date range.'
+    return 'No orders found.'
+  }, [searchQuery, dateFrom, dateTo])
 
   const fetchData = useCallback(async () => {
     setIsLoading(true)
@@ -472,6 +503,8 @@ export default function OrdersPage() {
           params: {
             status: statusFilter === 'all' || statusFilter === 'active' ? undefined : statusFilter,
             channel: channelFilter === 'all' ? undefined : channelFilter,
+            dateFrom: dateFrom || undefined,
+            dateTo: dateTo || undefined,
             limit: 100,
             offset: 0
           }
@@ -489,12 +522,12 @@ export default function OrdersPage() {
     } finally {
       setIsLoading(false)
     }
-  }, [statusFilter, channelFilter])
+  }, [statusFilter, channelFilter, dateFrom, dateTo])
 
   useEffect(() => {
     if (!hasPermission('orders', 'read')) return
     fetchData()
-  }, [statusFilter, channelFilter, hasPermission, fetchData])
+  }, [statusFilter, channelFilter, dateFrom, dateTo, hasPermission, fetchData])
 
   useEffect(() => {
     if (!hasPermission('orders', 'read')) return
@@ -510,7 +543,7 @@ export default function OrdersPage() {
     }, 1000)
 
     return () => clearInterval(interval)
-  }, [hasPermission, fetchData])
+  }, [hasPermission, fetchData, dateFrom, dateTo])
 
   useEffect(() => {
     if (!socket) return
@@ -735,6 +768,32 @@ export default function OrdersPage() {
                   </select>
                 </label>
               </div>
+
+              {/* Date From */}
+              <div className="w-full sm:w-44">
+                <label className="flex flex-col gap-1.5 text-sm text-surface-700 dark:text-surface-300">
+                  <span className="font-medium">From Date</span>
+                  <input
+                    type="date"
+                    className="input-field w-full min-h-[44px]"
+                    value={dateFrom}
+                    onChange={(e) => setDateFrom(e.target.value)}
+                  />
+                </label>
+              </div>
+
+              {/* Date To */}
+              <div className="w-full sm:w-44">
+                <label className="flex flex-col gap-1.5 text-sm text-surface-700 dark:text-surface-300">
+                  <span className="font-medium">To Date</span>
+                  <input
+                    type="date"
+                    className="input-field w-full min-h-[44px]"
+                    value={dateTo}
+                    onChange={(e) => setDateTo(e.target.value)}
+                  />
+                </label>
+              </div>
             </div>
           </div>
 
@@ -767,7 +826,7 @@ export default function OrdersPage() {
                 ) : filteredOrders.length === 0 ? (
                   <tr>
                     <td className="py-6 px-2 text-surface-500 dark:text-surface-400" colSpan={canUpdateOrders ? 8 : 7}>
-                      {searchQuery ? 'No orders match your search.' : 'No orders found.'}
+                      {emptyStateMessage}
                     </td>
                   </tr>
                 ) : (
@@ -848,7 +907,7 @@ export default function OrdersPage() {
               <div className="card text-center py-12">
                 <ClipboardList className="w-12 h-12 mx-auto mb-3 text-surface-300 dark:text-surface-600" />
                 <p className="text-surface-500 dark:text-surface-400">
-                  {searchQuery ? 'No orders match your search.' : 'No orders found.'}
+                  {emptyStateMessage}
                 </p>
               </div>
             ) : (
