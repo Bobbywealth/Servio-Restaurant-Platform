@@ -71,6 +71,16 @@ app.get('/api/docs/health', (_req, res) => {
   });
 });
 
+// Public API health alias (used by external uptime probes and some clients)
+// Intentionally unauthenticated to avoid hitting protected /api middleware.
+app.get('/api/health', (_req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    health: '/health'
+  });
+});
+
 // Get CORS origins from environment (FRONTEND_URL + ALLOWED_ORIGINS)
 // In production, FRONTEND_URL should be set to your actual frontend URL
 // In development, it defaults to localhost:3000
