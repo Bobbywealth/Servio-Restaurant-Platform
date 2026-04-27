@@ -38,6 +38,8 @@ import EditStaffHoursModal from '../../components/staff/EditStaffHoursModal'
 import { showToast } from '../../components/ui/Toast'
 import ScheduleViewToggle from '../../components/schedule/ScheduleViewToggle'
 import { ScheduleCalendar } from '../../components/schedule/ScheduleCalendar'
+import { ShiftEditorModal } from '../../components/schedule/ShiftEditorModal'
+import { ShiftTemplatesManager } from '../../components/schedule/ShiftTemplatesManager'
 import StaffCard from '../../components/staff/StaffCard'
 
 const DashboardLayout = dynamic(() => import('../../components/Layout/DashboardLayout'), {
@@ -975,6 +977,13 @@ export default function StaffPage() {
     setShowShiftModal(true)
   }
 
+  const handleCloseShiftModal = () => {
+    setShowShiftModal(false)
+    setEditingSchedule(null)
+    setShiftModalDate('')
+    setShiftModalTime(undefined)
+  }
+
   const handleEditShift = (schedule: Schedule) => {
     setEditingSchedule(schedule)
     setShiftModalDate(schedule.shift_date)
@@ -1403,6 +1412,27 @@ export default function StaffPage() {
           onSuccess={handleStaffCreated}
         />
 
+        <ShiftEditorModal
+          isOpen={showShiftModal}
+          onClose={handleCloseShiftModal}
+          onSave={handleSaveShift}
+          onDelete={handleDeleteShift}
+          schedule={editingSchedule || undefined}
+          staff={staff.map((member) => ({ id: member.id, name: member.name, role: member.role }))}
+          initialDate={shiftModalDate}
+          initialTime={shiftModalTime}
+        />
+
+        <ShiftTemplatesManager
+          isOpen={showTemplatesModal}
+          onClose={() => setShowTemplatesModal(false)}
+          templates={templates}
+          onCreateTemplate={handleCreateTemplate}
+          onUpdateTemplate={handleUpdateTemplate}
+          onDeleteTemplate={handleDeleteTemplate}
+          onApplyTemplate={handleApplyTemplate}
+        />
+
         <EditStaffHoursModal
           isOpen={showEditHoursModal}
           staffMember={editingHoursStaff}
@@ -1680,12 +1710,8 @@ export default function StaffPage() {
               staff={filteredStaff.map(s => ({ id: s.id, name: s.name, role: s.role, hourly_pay_rate: s.hourly_pay_rate }))}
               selectedWeekStart={selectedWeekStart}
               onWeekChange={handleWeekChange}
-              onCreateShift={(date, time) => {
-                setShiftModalDate(date)
-                setShiftModalTime(time)
-                setShowShiftModal(true)
-              }}
-              onEditShift={setEditingSchedule}
+              onCreateShift={handleCreateShift}
+              onEditShift={handleEditShift}
               onDeleteShift={handleDeleteShift}
               onTogglePublish={handleTogglePublish}
               onCopyShift={handleCopyShift}
