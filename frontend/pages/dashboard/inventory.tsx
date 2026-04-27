@@ -76,6 +76,19 @@ interface ReceiptAnalysisResult {
   imageUrl?: string
 }
 
+interface InventoryTransaction {
+  id: string
+  inventory_item_id: string
+  item_name: string
+  item_unit?: string
+  type: 'adjust' | 'restock' | 'use' | string
+  quantity: number
+  reason?: string
+  unit_cost_snapshot?: number
+  created_by_name?: string
+  created_at: string
+}
+
 // Extended Cost Feature Added
 export default function InventoryPage() {
   const [searchTerm, setSearchTerm] = useState('')
@@ -126,6 +139,10 @@ export default function InventoryPage() {
   const [analysisResult, setAnalysisResult] = useState<ReceiptAnalysisResult | null>(null)
   const [analysisError, setAnalysisError] = useState<string | null>(null)
   const [isCreatingItems, setIsCreatingItems] = useState(false)
+  const [transactions, setTransactions] = useState<InventoryTransaction[]>([])
+  const [isLoadingTransactions, setIsLoadingTransactions] = useState(false)
+  const [budgetTarget, setBudgetTarget] = useState('')
+  const [isSavingBudget, setIsSavingBudget] = useState(false)
 
   const fetchData = useCallback(async () => {
     setIsLoading(true)
@@ -149,6 +166,38 @@ export default function InventoryPage() {
   useEffect(() => {
     fetchData()
   }, [fetchData])
+
+  const fetchTransactions = useCallback(async () => {
+    setIsLoadingTransactions(true)
+    try {
+      const resp = await api.get('/api/inventory/transactions', {
+        params: { limit: 25 }
+      })
+      setTransactions(resp.data?.data || [])
+    } catch (e) {
+      console.warn('Failed to load inventory transactions', e)
+      setTransactions([])
+    } finally {
+      setIsLoadingTransactions(false)
+    }
+  }, [])
+
+  const loadBudgetTarget = useCallback(async () => {
+    try {
+      const resp = await api.get('/api/restaurant/profile')
+      const settings = resp.data?.data?.settings || {}
+      if (settings.inventory_weekly_budget_target !== undefined && settings.inventory_weekly_budget_target !== null) {
+        setBudgetTarget(String(settings.inventory_weekly_budget_target))
+      }
+    } catch (e) {
+      console.warn('Failed to load inventory budget target', e)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchTransactions()
+    loadBudgetTarget()
+  }, [fetchTransactions, loadBudgetTarget])
 
   const handleCreateItem = async () => {
     if (!newItem.name.trim()) {
@@ -195,6 +244,7 @@ export default function InventoryPage() {
         paymentMethod: ''
       })
       await fetchData()
+      await fetchTransactions()
     } catch (e: any) {
       const msg = e?.response?.data?.error?.message || 'Failed to create item'
       toast.error(msg)
@@ -251,6 +301,7 @@ export default function InventoryPage() {
       setShowEditModal(false)
       setEditingItem(null)
       await fetchData()
+      await fetchTransactions()
     } catch (e: any) {
       const msg = e?.response?.data?.error?.message || 'Failed to update item'
       toast.error(msg)
@@ -268,6 +319,7 @@ export default function InventoryPage() {
       })
       toast.success('Quantity updated')
       await fetchData()
+      await fetchTransactions()
     } catch (e: any) {
       toast.error('Failed to adjust quantity')
     }
@@ -470,6 +522,28 @@ export default function InventoryPage() {
     return sum + (cost * item.on_hand_qty)
   }, 0)
 
+  const weeklyBudgetTarget = Number(budgetTarget || 0)
+  const budgetVariance = weeklyBudgetTarget > 0 ? weeklyBudgetTarget - totalInventoryValue : null
+
+  const saveBudgetTarget = async () => {
+    if (budgetTarget !== '' && (!Number.isFinite(Number(budgetTarget)) || Number(budgetTarget) < 0)) {
+      toast.error('Budget target must be a non-negative number')
+      return
+    }
+
+    setIsSavingBudget(true)
+    try {
+      await api.put('/api/restaurant/settings', {
+        inventory_weekly_budget_target: budgetTarget === '' ? null : Number(budgetTarget)
+      })
+      toast.success('Inventory budget target saved')
+    } catch (e: any) {
+      toast.error(e?.response?.data?.error?.message || 'Failed to save budget target')
+    } finally {
+      setIsSavingBudget(false)
+    }
+  }
+
   return (
     <>
       <Head>
@@ -617,6 +691,105 @@ export default function InventoryPage() {
                 </div>
               </div>
             </motion.div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="card lg:col-span-1">
+              <h3 className="text-lg font-semibold text-surface-900 dark:text-surface-100 mb-2">Inventory Budget</h3>
+              <p className="text-sm text-surface-600 dark:text-surface-400 mb-4">
+                Set a weekly inventory spend target and compare against current on-hand value.
+              </p>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">
+                    Weekly Budget Target ($)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={budgetTarget}
+                    onChange={(e) => setBudgetTarget(e.target.value)}
+                    className="input-field"
+                    placeholder="0.00"
+                  />
+                </div>
+                <div className="text-sm text-surface-700 dark:text-surface-300">
+                  Current Value: <span className="font-semibold">${totalInventoryValue.toFixed(2)}</span>
+                </div>
+                {budgetVariance !== null && (
+                  <div className={`text-sm font-medium ${budgetVariance >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                    {budgetVariance >= 0 ? 'Remaining Budget' : 'Over Budget'}: ${Math.abs(budgetVariance).toFixed(2)}
+                  </div>
+                )}
+                <button
+                  onClick={saveBudgetTarget}
+                  disabled={isSavingBudget}
+                  className="btn-primary w-full"
+                >
+                  {isSavingBudget ? 'Saving...' : 'Save Budget Target'}
+                </button>
+              </div>
+            </div>
+
+            <div className="card lg:col-span-2">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-surface-900 dark:text-surface-100">Recent Inventory Transactions</h3>
+                <button className="btn-secondary" onClick={fetchTransactions} disabled={isLoadingTransactions}>
+                  {isLoadingTransactions ? 'Loading...' : 'Refresh'}
+                </button>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-surface-500 dark:text-surface-400 border-b border-surface-200 dark:border-surface-700">
+                      <th className="py-2 pr-3">Date</th>
+                      <th className="py-2 pr-3">Item</th>
+                      <th className="py-2 pr-3">Qty</th>
+                      <th className="py-2 pr-3">Unit Cost Snapshot</th>
+                      <th className="py-2 pr-3">Value Impact</th>
+                      <th className="py-2 pr-3">Reason</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {transactions.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="py-6 text-center text-surface-500 dark:text-surface-400">
+                          {isLoadingTransactions ? 'Loading transactions...' : 'No transactions found'}
+                        </td>
+                      </tr>
+                    ) : transactions.map((tx) => {
+                      const snapshotCost = tx.unit_cost_snapshot !== undefined && tx.unit_cost_snapshot !== null
+                        ? Number(tx.unit_cost_snapshot)
+                        : null
+                      const valueImpact = snapshotCost !== null ? snapshotCost * Number(tx.quantity || 0) : null
+                      return (
+                        <tr key={tx.id} className="border-b border-surface-100 dark:border-surface-800">
+                          <td className="py-2 pr-3 text-surface-700 dark:text-surface-300">
+                            {new Date(tx.created_at).toLocaleString()}
+                          </td>
+                          <td className="py-2 pr-3 text-surface-900 dark:text-surface-100 font-medium">
+                            {tx.item_name}
+                          </td>
+                          <td className="py-2 pr-3 text-surface-700 dark:text-surface-300">
+                            {tx.quantity} {tx.item_unit || ''}
+                          </td>
+                          <td className="py-2 pr-3 text-surface-700 dark:text-surface-300">
+                            {snapshotCost !== null ? `$${snapshotCost.toFixed(2)}` : '—'}
+                          </td>
+                          <td className="py-2 pr-3 text-surface-700 dark:text-surface-300">
+                            {valueImpact !== null ? `$${valueImpact.toFixed(2)}` : '—'}
+                          </td>
+                          <td className="py-2 pr-3 text-surface-600 dark:text-surface-400">
+                            {tx.reason || tx.type}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
 
           {/* Search and Filters */}

@@ -1,0 +1,10 @@
+-- Migration: Add hourly pay rate to users for labor budgeting
+-- Date: 2026-04-27
+-- Purpose: Store default pay rate on staff profile for schedule/labor cost calculations
+
+ALTER TABLE users
+ADD COLUMN IF NOT EXISTS hourly_pay_rate DOUBLE PRECISION;
+
+ALTER TABLE users
+ADD CONSTRAINT IF NOT EXISTS users_hourly_pay_rate_non_negative
+CHECK (hourly_pay_rate IS NULL OR hourly_pay_rate >= 0);

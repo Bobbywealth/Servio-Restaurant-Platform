@@ -51,6 +51,7 @@ interface StaffUser {
   email?: string | null
   phone?: string | null
   role: 'staff' | 'manager' | 'owner' | 'admin' | 'platform-admin'
+  hourly_pay_rate?: number | null
   pin?: string | null
   is_active: boolean
   created_at: string
@@ -113,6 +114,7 @@ function AddStaffModal({ isOpen, onClose, onSuccess }: AddStaffModalProps) {
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
   const [role, setRole] = useState<'staff' | 'manager'>('staff')
+  const [hourlyPayRate, setHourlyPayRate] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
@@ -128,7 +130,8 @@ function AddStaffModal({ isOpen, onClose, onSuccess }: AddStaffModalProps) {
         name,
         email: email || undefined,
         phone: phone || undefined,
-        role
+        role,
+        hourlyPayRate: hourlyPayRate === '' ? undefined : Number(hourlyPayRate)
       })
 
       if (response.data.success) {
@@ -155,7 +158,9 @@ function AddStaffModal({ isOpen, onClose, onSuccess }: AddStaffModalProps) {
   const resetForm = () => {
     setName('')
     setEmail('')
+    setPhone('')
     setRole('staff')
+    setHourlyPayRate('')
     setError(null)
     setSuccess(false)
     setCreatedStaff(null)
@@ -285,6 +290,21 @@ function AddStaffModal({ isOpen, onClose, onSuccess }: AddStaffModalProps) {
                   </select>
                 </div>
 
+                <div>
+                  <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-2">
+                    Hourly Pay Rate ($)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={hourlyPayRate}
+                    onChange={(e) => setHourlyPayRate(e.target.value)}
+                    placeholder="18.50"
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-surface-600 bg-white dark:bg-surface-700 text-surface-900 dark:text-surface-100 focus:ring-2 focus:ring-orange-500/30 focus:border-orange-500 transition-all outline-none"
+                  />
+                </div>
+
                 <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-xl p-4">
                   <div className="flex items-start gap-3">
                     <div className="w-8 h-8 bg-orange-100 dark:bg-orange-900/50 rounded-lg flex items-center justify-center flex-shrink-0">
@@ -349,6 +369,7 @@ function EditStaffModal({ isOpen, staffMember, onClose, onSuccess }: EditStaffMo
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
   const [role, setRole] = useState<'staff' | 'manager'>('staff')
+  const [hourlyPayRate, setHourlyPayRate] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -360,6 +381,7 @@ function EditStaffModal({ isOpen, staffMember, onClose, onSuccess }: EditStaffMo
       setEmail(staffMember.email || '')
       setPhone(staffMember.phone || '')
       setRole(staffMember.role as 'staff' | 'manager' || 'staff')
+      setHourlyPayRate(staffMember.hourly_pay_rate !== undefined && staffMember.hourly_pay_rate !== null ? String(staffMember.hourly_pay_rate) : '')
       setError(null)
     }
   }, [staffMember, isOpen])
@@ -376,7 +398,8 @@ function EditStaffModal({ isOpen, staffMember, onClose, onSuccess }: EditStaffMo
         name,
         email: email || undefined,
         phone: phone || undefined,
-        role
+        role,
+        hourlyPayRate: hourlyPayRate === '' ? null : Number(hourlyPayRate)
       })
 
       if (response.data.success) {
@@ -510,6 +533,21 @@ function EditStaffModal({ isOpen, staffMember, onClose, onSuccess }: EditStaffMo
                   <option value="staff">Staff</option>
                   <option value="manager">Manager</option>
                 </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-2">
+                  Hourly Pay Rate ($)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={hourlyPayRate}
+                  onChange={(e) => setHourlyPayRate(e.target.value)}
+                  placeholder="18.50"
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-surface-600 bg-white dark:bg-surface-700 text-surface-900 dark:text-surface-100 focus:ring-2 focus:ring-orange-500/30 focus:border-orange-500 transition-all outline-none"
+                />
               </div>
 
               <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-xl p-4">
@@ -1639,7 +1677,7 @@ export default function StaffPage() {
           {scheduleView === 'calendar' && !isLoading && (
             <ScheduleCalendar
               schedules={schedules}
-              staff={filteredStaff.map(s => ({ id: s.id, name: s.name, role: s.role }))}
+              staff={filteredStaff.map(s => ({ id: s.id, name: s.name, role: s.role, hourly_pay_rate: s.hourly_pay_rate }))}
               selectedWeekStart={selectedWeekStart}
               onWeekChange={handleWeekChange}
               onCreateShift={(date, time) => {
