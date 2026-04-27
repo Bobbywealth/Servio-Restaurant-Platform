@@ -65,6 +65,10 @@ export default function TasksPage() {
   const canUpdateTasks = !isStaff && (isManagerOrOwner || hasPermission('tasks', 'update'))
   const canDeleteTasks = !isStaff && (isManagerOrOwner || hasPermission('tasks', 'delete'))
   const canAssignTasks = !isStaff && (isManagerOrOwner || hasPermission('tasks', 'assign'))
+  const pageTitle = isStaff ? 'My Tasks' : 'Task Manager'
+  const pageSubtitle = isStaff
+    ? 'Track and complete your assigned tasks.'
+    : 'Manage and track team tasks efficiently'
 
   const fetchTasks = async () => {
     setIsLoading(true)
@@ -278,10 +282,10 @@ export default function TasksPage() {
             <div>
               <h1 className="text-2xl sm:text-3xl font-bold text-surface-900 dark:text-surface-100 flex items-center">
                 <CheckCircle className="w-6 h-6 sm:w-8 sm:h-8 mr-2 text-primary-600" />
-                Task Manager
+                {pageTitle}
               </h1>
               <p className="mt-2 text-sm sm:text-base text-surface-600 dark:text-surface-400">
-                Manage and track team tasks efficiently
+                {pageSubtitle}
               </p>
             </div>
 
@@ -388,7 +392,7 @@ export default function TasksPage() {
                 Filters
               </h3>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className={`grid grid-cols-1 ${isStaff ? 'sm:grid-cols-2' : 'sm:grid-cols-3'} gap-4`}>
               <div>
                 <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-2">
                   Status
@@ -421,24 +425,26 @@ export default function TasksPage() {
                 </select>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-2">
-                  Assigned To
-                </label>
-                <select
-                  className="input-field w-full"
-                  value={assignedToFilter}
-                  onChange={(e) => setAssignedToFilter(e.target.value)}
-                >
-                  <option value="all">All Staff</option>
-                  <option value="unassigned">Unassigned</option>
-                  {staff.map((member) => (
-                    <option key={member.id} value={member.id}>
-                      {member.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {!isStaff && (
+                <div>
+                  <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-2">
+                    Assigned To
+                  </label>
+                  <select
+                    className="input-field w-full"
+                    value={assignedToFilter}
+                    onChange={(e) => setAssignedToFilter(e.target.value)}
+                  >
+                    <option value="all">All Staff</option>
+                    <option value="unassigned">Unassigned</option>
+                    {staff.map((member) => (
+                      <option key={member.id} value={member.id}>
+                        {member.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
           </div>
 
@@ -615,6 +621,7 @@ export default function TasksPage() {
                   canUpdate={canUpdateTasks}
                   onStatusUpdate={handleStatusUpdate}
                   onDelete={canDeleteTasks ? handleDeleteTask : undefined}
+                  canDrag={canUpdateTasks}
                   getPriorityBadgeClass={getPriorityBadgeClass}
                 />
 
@@ -634,6 +641,7 @@ export default function TasksPage() {
                   canUpdate={canUpdateTasks}
                   onStatusUpdate={handleStatusUpdate}
                   onDelete={canDeleteTasks ? handleDeleteTask : undefined}
+                  canDrag={canUpdateTasks}
                   getPriorityBadgeClass={getPriorityBadgeClass}
                 />
 
@@ -653,6 +661,7 @@ export default function TasksPage() {
                   canUpdate={canUpdateTasks}
                   onStatusUpdate={handleStatusUpdate}
                   onDelete={canDeleteTasks ? handleDeleteTask : undefined}
+                  canDrag={canUpdateTasks}
                   getPriorityBadgeClass={getPriorityBadgeClass}
                 />
               </motion.div>
@@ -870,6 +879,7 @@ function KanbanColumn({
   canUpdate,
   onStatusUpdate,
   onDelete,
+  canDrag,
   getPriorityBadgeClass
 }: {
   title: string
@@ -886,6 +896,7 @@ function KanbanColumn({
   canUpdate: boolean
   onStatusUpdate: (taskId: string, newStatus: Task['status']) => void
   onDelete?: (taskId: string) => void
+  canDrag: boolean
   getPriorityBadgeClass: (priority: Task['priority']) => string
 }) {
   const formatTaskType = (type: Task['type']) => {
@@ -924,9 +935,9 @@ function KanbanColumn({
           ? `${colors.lightBg} ${colors.border} shadow-lg scale-[1.02]`
           : 'bg-surface-50 dark:bg-surface-800/50 border-surface-200 dark:border-surface-700'
       }`}
-      onDragOver={(e) => onDragOver(e, status)}
-      onDragLeave={onDragLeave}
-      onDrop={(e) => onDrop(e, status)}
+      onDragOver={canDrag ? (e) => onDragOver(e, status) : undefined}
+      onDragLeave={canDrag ? onDragLeave : undefined}
+      onDrop={canDrag ? (e) => onDrop(e, status) : undefined}
     >
       {/* Column Header */}
       <div className={`flex items-center justify-between p-4 border-b ${colors.border}`}>
@@ -949,16 +960,16 @@ function KanbanColumn({
           tasks.map((task) => (
             <div
               key={task.id}
-              draggable
-              onDragStart={(e) => onDragStart(e, task)}
-              className={`bg-white dark:bg-surface-800 rounded-lg p-3 shadow-sm border border-surface-200 dark:border-surface-700 cursor-grab active:cursor-grabbing hover:shadow-md transition-shadow ${
+              draggable={canDrag}
+              onDragStart={canDrag ? (e) => onDragStart(e, task) : undefined}
+              className={`bg-white dark:bg-surface-800 rounded-lg p-3 shadow-sm border border-surface-200 dark:border-surface-700 ${canDrag ? 'cursor-grab active:cursor-grabbing' : ''} hover:shadow-md transition-shadow ${
                 draggedTask?.id === task.id ? 'opacity-50 scale-95' : ''
               }`}
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-2">
-                    <GripVertical className="w-4 h-4 text-surface-400 flex-shrink-0 cursor-grab" />
+                    {canDrag && <GripVertical className="w-4 h-4 text-surface-400 flex-shrink-0 cursor-grab" />}
                     <h4 className="font-medium text-surface-900 dark:text-white text-sm truncate">
                       {task.title}
                     </h4>
