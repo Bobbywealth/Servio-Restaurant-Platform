@@ -45,6 +45,10 @@ interface InventoryItem {
   unit_cost?: number
   vendor_name?: string
   vendor_payment_date?: string
+  payment_status?: 'unpaid' | 'due' | 'paid'
+  paid_at?: string
+  payment_reference?: string
+  payment_method?: string
   updated_at: string
 }
 
@@ -76,6 +80,7 @@ interface ReceiptAnalysisResult {
 export default function InventoryPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('all')
+  const [selectedPaymentFilter, setSelectedPaymentFilter] = useState<'all' | 'unpaid' | 'due' | 'paid'>('all')
   const [items, setItems] = useState<InventoryItem[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -92,7 +97,11 @@ export default function InventoryPage() {
     category: '',
     unitCost: '',
     vendorName: '',
-    vendorPaymentDate: ''
+    vendorPaymentDate: '',
+    paymentStatus: 'unpaid',
+    paidAt: '',
+    paymentReference: '',
+    paymentMethod: ''
   })
   const [editItem, setEditItem] = useState({
     id: '',
@@ -104,7 +113,11 @@ export default function InventoryPage() {
     category: '',
     unitCost: '',
     vendorName: '',
-    vendorPaymentDate: ''
+    vendorPaymentDate: '',
+    paymentStatus: 'unpaid',
+    paidAt: '',
+    paymentReference: '',
+    paymentMethod: ''
   })
   const [showReceiptModal, setShowReceiptModal] = useState(false)
   const [receiptImage, setReceiptImage] = useState<File | null>(null)
@@ -121,7 +134,8 @@ export default function InventoryPage() {
       const resp = await api.get('/api/inventory/search', {
         params: {
           q: searchTerm || undefined,
-          category: selectedCategory === 'all' ? undefined : selectedCategory
+          category: selectedCategory === 'all' ? undefined : selectedCategory,
+          paymentStatus: selectedPaymentFilter === 'all' ? undefined : selectedPaymentFilter
         }
       })
       setItems(resp.data?.data || [])
@@ -130,7 +144,7 @@ export default function InventoryPage() {
     } finally {
       setIsLoading(false)
     }
-  }, [searchTerm, selectedCategory])
+  }, [searchTerm, selectedCategory, selectedPaymentFilter])
 
   useEffect(() => {
     fetchData()
@@ -157,7 +171,11 @@ export default function InventoryPage() {
         category: newItem.category.trim() || undefined,
         unitCost: newItem.unitCost ? Number(newItem.unitCost) : undefined,
         vendorName: newItem.vendorName.trim() || undefined,
-        vendorPaymentDate: newItem.vendorPaymentDate || undefined
+        vendorPaymentDate: newItem.vendorPaymentDate || undefined,
+        paymentStatus: newItem.paymentStatus,
+        paidAt: newItem.paidAt || undefined,
+        paymentReference: newItem.paymentReference.trim() || undefined,
+        paymentMethod: newItem.paymentMethod.trim() || undefined
       })
       toast.success('Inventory item created')
       setShowAddModal(false)
@@ -170,7 +188,11 @@ export default function InventoryPage() {
         category: '',
         unitCost: '',
         vendorName: '',
-        vendorPaymentDate: ''
+        vendorPaymentDate: '',
+        paymentStatus: 'unpaid',
+        paidAt: '',
+        paymentReference: '',
+        paymentMethod: ''
       })
       await fetchData()
     } catch (e: any) {
@@ -192,7 +214,11 @@ export default function InventoryPage() {
       category: item.category || '',
       unitCost: item.unit_cost !== undefined ? String(item.unit_cost) : '',
       vendorName: item.vendor_name || '',
-      vendorPaymentDate: item.vendor_payment_date || ''
+      vendorPaymentDate: item.vendor_payment_date || '',
+      paymentStatus: item.payment_status || 'unpaid',
+      paidAt: formatDateTimeLocal(item.paid_at),
+      paymentReference: item.payment_reference || '',
+      paymentMethod: item.payment_method || ''
     })
     setEditingItem(item)
     setShowEditModal(true)
@@ -215,7 +241,11 @@ export default function InventoryPage() {
         category: editItem.category.trim() || undefined,
         unitCost: editItem.unitCost ? Number(editItem.unitCost) : undefined,
         vendorName: editItem.vendorName.trim() || undefined,
-        vendorPaymentDate: editItem.vendorPaymentDate || undefined
+        vendorPaymentDate: editItem.vendorPaymentDate || undefined,
+        paymentStatus: editItem.paymentStatus,
+        paidAt: editItem.paidAt || undefined,
+        paymentReference: editItem.paymentReference.trim() || undefined,
+        paymentMethod: editItem.paymentMethod.trim() || undefined
       })
       toast.success('Inventory item updated')
       setShowEditModal(false)
@@ -383,6 +413,55 @@ export default function InventoryPage() {
     items.forEach(i => { if (i.category) set.add(i.category) })
     return ['all', ...Array.from(set).sort()]
   }, [items])
+
+  const paymentFilterChips = useMemo(() => {
+    const counts = {
+      unpaid: items.filter(item => (item.payment_status || 'unpaid') === 'unpaid').length,
+      due: items.filter(item => item.payment_status === 'due').length,
+      paid: items.filter(item => item.payment_status === 'paid').length
+    }
+
+    return [
+      { key: 'all', label: 'All', count: items.length },
+      { key: 'unpaid', label: 'Unpaid', count: counts.unpaid },
+      { key: 'due', label: 'Due', count: counts.due },
+      { key: 'paid', label: 'Paid', count: counts.paid }
+    ] as const
+  }, [items])
+
+  const isOverdueUnpaid = (item: InventoryItem) => {
+    const status = item.payment_status || 'unpaid'
+    if ((status !== 'unpaid' && status !== 'due') || !item.vendor_payment_date) {
+      return false
+    }
+    const dueDate = new Date(item.vendor_payment_date)
+    if (Number.isNaN(dueDate.getTime())) {
+      return false
+    }
+    dueDate.setHours(0, 0, 0, 0)
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    return dueDate < today
+  }
+
+  const formatDateTimeLocal = (value?: string) => {
+    if (!value) return ''
+    const parsed = new Date(value)
+    if (Number.isNaN(parsed.getTime())) return ''
+    const local = new Date(parsed.getTime() - (parsed.getTimezoneOffset() * 60_000))
+    return local.toISOString().slice(0, 16)
+  }
+
+  const getPaymentStatusBadgeClasses = (status?: string) => {
+    switch (status) {
+      case 'paid':
+        return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
+      case 'due':
+        return 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300'
+      default:
+        return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'
+    }
+  }
 
   const lowStockCount = items.filter(item => item.on_hand_qty <= item.low_stock_threshold).length
 
@@ -566,6 +645,22 @@ export default function InventoryPage() {
                 ))}
               </select>
             </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {paymentFilterChips.map(chip => (
+                <button
+                  key={chip.key}
+                  type="button"
+                  onClick={() => setSelectedPaymentFilter(chip.key)}
+                  className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                    selectedPaymentFilter === chip.key
+                      ? 'bg-primary-100 text-primary-800 border-primary-300 dark:bg-primary-900/30 dark:text-primary-200 dark:border-primary-700'
+                      : 'bg-white text-surface-600 border-surface-300 hover:bg-surface-100 dark:bg-surface-800 dark:text-surface-300 dark:border-surface-600 dark:hover:bg-surface-700'
+                  }`}
+                >
+                  {chip.label} ({chip.count})
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Desktop Inventory Table */}
@@ -607,9 +702,14 @@ export default function InventoryPage() {
                 </thead>
                 <tbody className="divide-y divide-surface-200 dark:divide-surface-700">
                   {items.map((item, index) => (
+                    (() => {
+                      const overdueUnpaid = isOverdueUnpaid(item)
+                      return (
                     <motion.tr
                       key={item.id}
-                      className="hover:bg-surface-50 dark:hover:bg-surface-800/50 transition-colors"
+                      className={`hover:bg-surface-50 dark:hover:bg-surface-800/50 transition-colors ${
+                        overdueUnpaid ? 'bg-red-50/70 dark:bg-red-900/10' : ''
+                      }`}
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: 0.1 * index }}
@@ -648,15 +748,21 @@ export default function InventoryPage() {
                           <div>
                             <div>{new Date(item.vendor_payment_date).toLocaleDateString()}</div>
                             <div className="text-xs text-surface-500 dark:text-surface-400">{item.vendor_name || 'No vendor'}</div>
+                            {overdueUnpaid && (
+                              <div className="text-xs font-semibold text-red-600 dark:text-red-400">Overdue</div>
+                            )}
                           </div>
                         ) : '—'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`status-badge ${
-                          item.on_hand_qty <= item.low_stock_threshold ? 'status-warning' : 'status-success'
-                        }`}>
-                          {item.on_hand_qty <= item.low_stock_threshold ? 'Low Stock' : 'Good'}
+                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getPaymentStatusBadgeClasses(item.payment_status)}`}>
+                          {(item.payment_status || 'unpaid').toUpperCase()}
                         </span>
+                        {item.paid_at && (
+                          <div className="text-xs text-surface-500 dark:text-surface-400 mt-1">
+                            Paid {new Date(item.paid_at).toLocaleString()}
+                          </div>
+                        )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                         <div className="flex items-center space-x-2">
@@ -684,6 +790,8 @@ export default function InventoryPage() {
                         </div>
                       </td>
                     </motion.tr>
+                      )
+                    })()
                   ))}
                 </tbody>
               </table>
@@ -701,9 +809,12 @@ export default function InventoryPage() {
               </div>
             ) : (
               items.map((item, index) => (
+                (() => {
+                  const overdueUnpaid = isOverdueUnpaid(item)
+                  return (
                 <motion.div
                   key={item.id}
-                  className="card hover:shadow-lg transition-shadow"
+                  className={`card hover:shadow-lg transition-shadow ${overdueUnpaid ? 'ring-1 ring-red-300 dark:ring-red-700' : ''}`}
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.05 * index }}
@@ -719,10 +830,8 @@ export default function InventoryPage() {
                         </p>
                       )}
                     </div>
-                    <span className={`status-badge ml-2 ${
-                      item.on_hand_qty <= item.low_stock_threshold ? 'status-warning' : 'status-success'
-                    }`}>
-                      {item.on_hand_qty <= item.low_stock_threshold ? 'Low' : 'Good'}
+                    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ml-2 ${getPaymentStatusBadgeClasses(item.payment_status)}`}>
+                      {(item.payment_status || 'unpaid').toUpperCase()}
                     </span>
                   </div>
 
@@ -758,6 +867,13 @@ export default function InventoryPage() {
                       <div className="text-sm font-medium text-surface-900 dark:text-surface-100">
                         {item.vendor_payment_date ? new Date(item.vendor_payment_date).toLocaleDateString() : 'Not set'}
                         {item.vendor_name ? ` • ${item.vendor_name}` : ''}
+                        {overdueUnpaid ? ' • OVERDUE' : ''}
+                      </div>
+                    </div>
+                    <div className="col-span-2">
+                      <div className="text-xs text-surface-500 dark:text-surface-400 mb-1">Payment Reference</div>
+                      <div className="text-sm font-medium text-surface-900 dark:text-surface-100">
+                        {item.payment_reference || 'Not set'}
                       </div>
                     </div>
                   </div>
@@ -790,6 +906,8 @@ export default function InventoryPage() {
                     </div>
                   </div>
                 </motion.div>
+                  )
+                })()
               ))
             )}
           </div>
@@ -920,6 +1038,51 @@ export default function InventoryPage() {
                           value={newItem.vendorPaymentDate}
                           onChange={(e) => setNewItem(prev => ({ ...prev, vendorPaymentDate: e.target.value }))}
                           className="input-field"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">Payment Status</label>
+                        <select
+                          value={newItem.paymentStatus}
+                          onChange={(e) => setNewItem(prev => ({ ...prev, paymentStatus: e.target.value }))}
+                          className="input-field"
+                        >
+                          <option value="unpaid">Unpaid</option>
+                          <option value="due">Due</option>
+                          <option value="paid">Paid</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">Paid At</label>
+                        <input
+                          type="datetime-local"
+                          value={newItem.paidAt}
+                          onChange={(e) => setNewItem(prev => ({ ...prev, paidAt: e.target.value }))}
+                          className="input-field"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">Payment Reference</label>
+                        <input
+                          type="text"
+                          value={newItem.paymentReference}
+                          onChange={(e) => setNewItem(prev => ({ ...prev, paymentReference: e.target.value }))}
+                          className="input-field"
+                          placeholder="Invoice/transaction id"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">Payment Method (Optional)</label>
+                        <input
+                          type="text"
+                          value={newItem.paymentMethod}
+                          onChange={(e) => setNewItem(prev => ({ ...prev, paymentMethod: e.target.value }))}
+                          className="input-field"
+                          placeholder="ACH, check, card"
                         />
                       </div>
                     </div>
@@ -1071,6 +1234,51 @@ export default function InventoryPage() {
                           value={editItem.vendorPaymentDate}
                           onChange={(e) => setEditItem(prev => ({ ...prev, vendorPaymentDate: e.target.value }))}
                           className="input-field"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">Payment Status</label>
+                        <select
+                          value={editItem.paymentStatus}
+                          onChange={(e) => setEditItem(prev => ({ ...prev, paymentStatus: e.target.value }))}
+                          className="input-field"
+                        >
+                          <option value="unpaid">Unpaid</option>
+                          <option value="due">Due</option>
+                          <option value="paid">Paid</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">Paid At</label>
+                        <input
+                          type="datetime-local"
+                          value={editItem.paidAt}
+                          onChange={(e) => setEditItem(prev => ({ ...prev, paidAt: e.target.value }))}
+                          className="input-field"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">Payment Reference</label>
+                        <input
+                          type="text"
+                          value={editItem.paymentReference}
+                          onChange={(e) => setEditItem(prev => ({ ...prev, paymentReference: e.target.value }))}
+                          className="input-field"
+                          placeholder="Invoice/transaction id"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">Payment Method (Optional)</label>
+                        <input
+                          type="text"
+                          value={editItem.paymentMethod}
+                          onChange={(e) => setEditItem(prev => ({ ...prev, paymentMethod: e.target.value }))}
+                          className="input-field"
+                          placeholder="ACH, check, card"
                         />
                       </div>
                     </div>
