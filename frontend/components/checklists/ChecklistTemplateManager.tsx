@@ -86,7 +86,7 @@ export default function ChecklistTemplateManager({ isOpen, onClose, onSaved }: C
       id: s.id,
       name: s.name,
       emoji: s.emoji || '',
-      assigned_to: s.assigned_to,
+      assigned_to: s.assigned_to ?? undefined,
       items: s.items.map(i => ({ id: i.id, text: i.text, is_critical: i.is_critical }))
     })));
     setView('edit');
