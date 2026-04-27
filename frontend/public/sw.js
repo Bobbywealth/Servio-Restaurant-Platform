@@ -12,6 +12,12 @@ let cachedAuthTokenTime = 0
 let lastPersistedAuthToken = null
 const TOKEN_CACHE_MS = 60 * 60 * 1000 // 1 hour
 
+const OFFLINE_QUEUE_DB_NAME = 'servioOfflineQueue'
+const OFFLINE_QUEUE_STORE = 'actions'
+const OFFLINE_QUEUE_VERSION = 1
+const OFFLINE_QUEUE_MAX_RETRIES = 3
+const PERMANENT_FAILURE_STATUS_CODES = [400, 404, 409, 422]
+
 // AGGRESSIVE PRE-CACHING FOR INSTANT LOADS
 const CRITICAL_ASSETS = [
   '/offline',
@@ -590,8 +596,185 @@ self.addEventListener('sync', (event) => {
 })
 
 async function processOfflineQueue() {
-  // This will be handled by the app when back online
   console.log('🔄 SW: Processing offline queue')
+
+  const queue = await getOfflineQueueActions()
+  if (queue.length === 0) {
+    return
+  }
+
+  let hadSuccess = false
+
+  for (const action of queue) {
+    if (action.permanentFailure || action.retryCount >= OFFLINE_QUEUE_MAX_RETRIES) {
+      continue
+    }
+
+    try {
+      await sendQueuedAction(action)
+      await deleteOfflineQueueAction(action.id)
+      hadSuccess = true
+    } catch (error) {
+      const statusCode = error?.statusCode
+      const permanentFailure = PERMANENT_FAILURE_STATUS_CODES.includes(statusCode)
+      const nextAction = {
+        ...action,
+        retryCount: Number(action.retryCount || 0) + 1,
+        lastError: error?.message || 'Sync failed',
+        lastAttemptAt: Date.now(),
+        permanentFailure
+      }
+
+      await putOfflineQueueAction(nextAction)
+
+      if (permanentFailure) {
+        notifyClients({
+          type: 'OFFLINE_QUEUE_PERMANENT_FAILURE',
+          payload: {
+            orderId: action.orderId,
+            status: action.payload?.status,
+            message: nextAction.lastError
+          }
+        })
+      }
+    }
+  }
+
+  await notifyQueueUpdated(hadSuccess)
+}
+
+
+async function openOfflineQueueDb() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(OFFLINE_QUEUE_DB_NAME, OFFLINE_QUEUE_VERSION)
+
+    request.onupgradeneeded = () => {
+      const db = request.result
+      if (!db.objectStoreNames.contains(OFFLINE_QUEUE_STORE)) {
+        const store = db.createObjectStore(OFFLINE_QUEUE_STORE, { keyPath: 'id' })
+        store.createIndex('idempotencyKey', 'idempotencyKey', { unique: false })
+        store.createIndex('queuedAt', 'queuedAt', { unique: false })
+      }
+    }
+
+    request.onsuccess = () => resolve(request.result)
+    request.onerror = () => reject(request.error || new Error('Failed to open offline queue database'))
+  })
+}
+
+function normalizeOfflineAction(action) {
+  if (!action || typeof action !== 'object') return null
+  if (!action.id || !action.orderId || !action.type || !action.payload) return null
+  if (action.type !== 'status' && action.type !== 'prep-time') return null
+
+  const idempotencyKey = action.idempotencyKey
+    || (action.type === 'status'
+      ? `status:${action.orderId}:${String(action.payload?.status || '').toLowerCase()}`
+      : `prep-time:${action.orderId}:${action.queuedAt || Date.now()}`)
+
+  return {
+    ...action,
+    queuedAt: Number(action.queuedAt) || Date.now(),
+    idempotencyKey,
+    retryCount: Number(action.retryCount) || 0,
+    lastError: typeof action.lastError === 'string' ? action.lastError : null,
+    permanentFailure: Boolean(action.permanentFailure),
+  }
+}
+
+async function getOfflineQueueActions() {
+  const db = await openOfflineQueueDb()
+  const actions = await new Promise((resolve, reject) => {
+    const tx = db.transaction(OFFLINE_QUEUE_STORE, 'readonly')
+    const store = tx.objectStore(OFFLINE_QUEUE_STORE)
+    const req = store.getAll()
+    req.onsuccess = () => resolve((req.result || []).map(normalizeOfflineAction).filter(Boolean))
+    req.onerror = () => reject(req.error || new Error('Failed to read offline queue'))
+  })
+  db.close()
+
+  return actions.sort((a, b) => a.queuedAt - b.queuedAt)
+}
+
+async function putOfflineQueueAction(action) {
+  const normalizedAction = normalizeOfflineAction(action)
+  if (!normalizedAction) return
+
+  const db = await openOfflineQueueDb()
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction(OFFLINE_QUEUE_STORE, 'readwrite')
+    tx.objectStore(OFFLINE_QUEUE_STORE).put(normalizedAction)
+    tx.oncomplete = resolve
+    tx.onerror = () => reject(tx.error || new Error('Failed to write offline queue action'))
+  })
+  db.close()
+}
+
+async function deleteOfflineQueueAction(actionId) {
+  const db = await openOfflineQueueDb()
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction(OFFLINE_QUEUE_STORE, 'readwrite')
+    tx.objectStore(OFFLINE_QUEUE_STORE).delete(actionId)
+    tx.oncomplete = resolve
+    tx.onerror = () => reject(tx.error || new Error('Failed to delete offline queue action'))
+  })
+  db.close()
+}
+
+async function sendQueuedAction(action) {
+  const endpoint = action.type === 'status'
+    ? `/api/orders/${encodeURIComponent(action.orderId)}/status`
+    : `/api/orders/${encodeURIComponent(action.orderId)}/prep-time`
+
+  const headers = new Headers({
+    'Content-Type': 'application/json',
+    'x-idempotency-key': action.idempotencyKey,
+  })
+
+  const authToken = await getAuthToken()
+  if (authToken) {
+    headers.set('Authorization', `Bearer ${authToken}`)
+  }
+
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      ...action.payload,
+      idempotencyKey: action.idempotencyKey,
+    })
+  })
+
+  if (!response.ok) {
+    let message = `Sync failed with status ${response.status}`
+    try {
+      const body = await response.json()
+      message = body?.error?.message || body?.message || message
+    } catch (_err) {
+      // ignore parse errors
+    }
+
+    const error = new Error(message)
+    error.statusCode = response.status
+    throw error
+  }
+}
+
+function notifyClients(message) {
+  self.clients.matchAll({ includeUncontrolled: true, type: 'window' }).then((clientList) => {
+    clientList.forEach((client) => client.postMessage(message))
+  })
+}
+
+async function notifyQueueUpdated(hadSuccess = false) {
+  const queue = await getOfflineQueueActions()
+  notifyClients({
+    type: 'OFFLINE_QUEUE_UPDATED',
+    payload: {
+      queue,
+      lastSuccessfulSyncAt: hadSuccess ? Date.now() : null,
+    }
+  })
 }
 
 // PUSH NOTIFICATIONS - Enhanced
@@ -766,6 +949,25 @@ self.addEventListener('message', (event) => {
     case 'KEEP_ALIVE':
       // Used to prevent idle timeout - respond with acknowledgment
       event.ports[0]?.postMessage({ alive: true, timestamp: Date.now() })
+      break
+
+    case 'ENQUEUE_OFFLINE_ACTION':
+      event.waitUntil((async () => {
+        const action = normalizeOfflineAction(payload)
+        if (!action) {
+          event.ports[0]?.postMessage({ success: false })
+          return
+        }
+
+        await putOfflineQueueAction(action)
+        await notifyQueueUpdated(false)
+        event.ports[0]?.postMessage({ success: true })
+      })())
+      break
+
+    case 'TRIGGER_OFFLINE_SYNC':
+      event.waitUntil(processOfflineQueue())
+      event.ports[0]?.postMessage({ success: true })
       break
 
     case 'SET_AUTH_TOKEN':
