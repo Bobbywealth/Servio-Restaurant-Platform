@@ -7,6 +7,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Lock, Mail, AlertCircle, Loader2, ArrowRight, Eye, EyeOff } from 'lucide-react';
 import { useUser } from '../contexts/UserContext';
 import { api } from '../lib/api';
+import { safeLocalStorage } from '../lib/utils';
+import { ADMIN_LANDING_ROUTE, DEFAULT_USER_LANDING_ROUTE, getPostLoginRoute, isAdminRole } from '../lib/auth/loginRouting';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -26,9 +28,7 @@ export default function LoginPage() {
   React.useEffect(() => {
     if (mounted && !isLoading && user) {
       const role = user.role;
-      const targetRoute = (role === 'admin') 
-        ? '/admin/demo-bookings' 
-        : '/dashboard';
+      const targetRoute = isAdminRole(role) ? ADMIN_LANDING_ROUTE : DEFAULT_USER_LANDING_ROUTE;
       if (router.pathname === '/login') {
         router.replace(targetRoute);
       }
@@ -52,12 +52,17 @@ export default function LoginPage() {
     );
   }
 
-  const routeAfterLogin = (userRole?: string) => {
-    const role = userRole || user?.role;
-    if (role === 'admin' || role === 'platform-admin') {
-      return '/admin/demo-bookings';
+  const resolveUserRoleAfterLogin = () => {
+    try {
+      const storedUser = safeLocalStorage.getItem('servio_user');
+      if (storedUser) {
+        return JSON.parse(storedUser)?.role as string | undefined;
+      }
+    } catch {
+      // Fall back to context user role.
     }
-    return '/dashboard';
+
+    return user?.role;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -68,18 +73,9 @@ export default function LoginPage() {
     try {
       await login(email, password, stayLoggedIn);
 
-      // For restaurant users (non-admin), check if onboarding is needed
-      try {
-        const statusRes = await api.get('/api/restaurant/onboarding-status');
-        if (statusRes.data?.data?.onboardingCompleted === false) {
-          router.push('/dashboard/onboarding');
-          return;
-        }
-      } catch {
-        // If onboarding check fails, fall through to normal redirect
-      }
-
-      router.push(routeAfterLogin());
+      const role = resolveUserRoleAfterLogin();
+      const nextRoute = await getPostLoginRoute(role, () => api.get('/api/restaurant/onboarding-status'));
+      router.push(nextRoute);
     } catch (err: any) {
       const message = err.response?.data?.error?.message || err.message || 'Failed to login. Please check your credentials.';
       setError(message);
