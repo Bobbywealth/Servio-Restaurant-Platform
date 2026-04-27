@@ -43,13 +43,6 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
     });
   }
 
-  if (vendorPaymentDate && !/^\d{4}-\d{2}-\d{2}$/.test(String(vendorPaymentDate))) {
-    return res.status(400).json({
-      success: false,
-      error: { message: 'Vendor payment date must be in YYYY-MM-DD format' }
-    });
-  }
-
   const items = await db.all(
     'SELECT * FROM inventory_items WHERE restaurant_id = ? ORDER BY name',
     [restaurantId]

@@ -1124,7 +1124,7 @@ router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) =>
     // Notify dashboard via Socket.IO
     const io = req.app.get('socketio');
     if (io) {
-      io.to(`restaurant-${restaurantId}`).emit('new-order', { orderId, totalAmount });
+      io.to(`restaurant-${restaurantId}`).emit('new-order', { orderId, totalAmount: finalTotal });
     }
 
     await eventBus.emit('order.created_web', {
@@ -1134,13 +1134,13 @@ router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) =>
       payload: {
         orderId,
         customerName,
-        totalAmount,
+        totalAmount: finalTotal,
         channel: 'website'
       },
       occurredAt: new Date().toISOString()
     });
 
-    await DatabaseService.getInstance().logAudit(restaurantId, null, 'create_public_order', 'order', orderId, { totalAmount });
+    await DatabaseService.getInstance().logAudit(restaurantId, null, 'create_public_order', 'order', orderId, { totalAmount: finalTotal });
   } catch (error) {
     logger.warn(
       `[orders.public] post_create_warning ${JSON.stringify({
