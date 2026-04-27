@@ -94,6 +94,7 @@ export default function TabletOrdersPage() {
     pendingActions,
     syncAttemptStatus,
     enqueueAction,
+    processActionQueue,
     retryQueueNow,
     clearFailedActions,
     upsertStatusSyncFailure,
@@ -151,7 +152,15 @@ export default function TabletOrdersPage() {
   const [orderDetailsOrder, setOrderDetailsOrder] = useState<Order | null>(null);
   const [isDesktopLayout, setIsDesktopLayout] = useState(false);
   const [isTabletLayout, setIsTabletLayout] = useState(false);
+  const [prepModalOrder, setPrepModalOrder] = useState<Order | null>(null);
+  const [prepMinutes, setPrepMinutes] = useState(15);
+  const [autoPrintPendingId, setAutoPrintPendingId] = useState<string | null>(null);
+  const [printedOrders, setPrintedOrders] = useState<Set<string>>(new Set());
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const lastRefreshAt = useRef(0);
+  const printedOrdersRef = useRef<Set<string>>(new Set());
+  const hasInitializedPrintedRef = useRef(false);
+  const lastAutoPromptedId = useRef<string | null>(null);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -177,7 +186,7 @@ export default function TabletOrdersPage() {
 
   const handleSearchToggle = useCallback(() => {
     setIsSearchOpen(true);
-  }, []);
+  }, [processActionQueue]);
 
   const handleSearchClear = useCallback(() => {
     setSearchQuery('');
@@ -189,6 +198,11 @@ export default function TabletOrdersPage() {
       setIsSearchOpen(false);
     }
   }, [searchQuery]);
+
+  const openAcceptModal = useCallback((order: Order) => {
+    setPrepModalOrder(order);
+    setPrepMinutes(order.prep_minutes || 15);
+  }, []);
 
   const handleSearchKeyDown = useCallback((event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'Escape') {
@@ -238,7 +252,7 @@ export default function TabletOrdersPage() {
     setIsOnline(navigator.onLine);
     const handleOnline = () => {
       setIsOnline(true);
-      localProcessActionQueue();
+      processActionQueue();
     };
     const handleOffline = () => {
       setIsOnline(false);
@@ -384,145 +398,26 @@ export default function TabletOrdersPage() {
     loadPrinterSettings();
   }, []);
 
-  const persistActionQueue = useCallback((next: PendingAction[]) => {
-    saveActionQueue(next);
-    setActionQueue(next);
-    setPendingActions((prev) => {
-      const updated = new Set<string>();
-      next.forEach((queuedAction) => updated.add(queuedAction.orderId));
-      return updated;
-    });
-  }, []);
-
-  // Local queue management - renamed to avoid conflict with useSyncQueue hook's enqueueAction
-  const persistActionToQueue = (action: EnqueueAction) => {
-    const current = loadActionQueue();
-    const idempotencyKey = action.type === 'status'
-      ? `status:${action.orderId}:${action.payload.status.toLowerCase()}`
-      : `prep-time:${action.orderId}:${action.queuedAt}`;
-    const nextAction: PendingAction = { ...action, idempotencyKey, retryCount: 0, lastError: null } as PendingAction;
-    const dedupedQueue = action.type === 'status'
-      ? current.filter((queuedAction) => !(queuedAction.type === 'status' && queuedAction.idempotencyKey === idempotencyKey))
-      : current;
-    const next = [...dedupedQueue, nextAction];
-    persistActionQueue(next);
-  };
-
-  const localUpsertStatusSyncFailure = useCallback((params: {
-    orderId: string;
-    status: OrderStatus;
-    message: string;
-    permanentFailure: boolean;
-  }) => {
-    const { orderId, status, message, permanentFailure } = params;
-    const current = loadActionQueue();
-    const idempotencyKey = `status:${orderId}:${status.toLowerCase()}`;
-    const existing = current.find((action) => action.type === 'status' && action.idempotencyKey === idempotencyKey);
-    const nextRetryCount = (existing?.retryCount || 0) + 1;
-    const failedAction: PendingAction = {
-      id: existing?.id || `${orderId}-${Date.now()}`,
-      orderId,
-      type: 'status',
-      payload: { status },
-      queuedAt: existing?.queuedAt || Date.now(),
-      idempotencyKey,
-      retryCount: nextRetryCount,
-      lastError: message,
-      lastAttemptAt: Date.now(),
-      permanentFailure
-    };
-    const next = [
-      ...current.filter((action) => !(action.type === 'status' && action.idempotencyKey === idempotencyKey)),
-      failedAction
-    ];
-    persistActionQueue(next);
-  }, [persistActionQueue]);
-
-  const localProcessActionQueue = async (force = false) => {
-    if (typeof window === 'undefined') return;
-    if (!navigator.onLine) return;
-    const queue = loadActionQueue();
-    if (queue.length === 0) return;
-    setSyncAttemptStatus('syncing');
-    const remaining: PendingAction[] = [];
-    let needsReload = false;
-    for (const action of queue) {
-      if (!force && (action.permanentFailure || action.retryCount >= ACTION_RETRY_THRESHOLD)) {
-        remaining.push(action);
-        continue;
-      }
-
-      try {
-        if (action.type === 'status') {
-          await apiPost(`/api/orders/${encodeURIComponent(action.orderId)}/status`, {
-            ...action.payload,
-            idempotencyKey: action.idempotencyKey
-          });
-        } else if (action.type === 'prep-time') {
-          await apiPost(`/api/orders/${encodeURIComponent(action.orderId)}/prep-time`, {
-            ...action.payload,
-            idempotencyKey: action.idempotencyKey
-          });
-        }
-      } catch (error: any) {
-        const statusCode = error?.response?.status;
-        const message = error?.response?.data?.error?.message || error?.message || 'Sync failed';
-        const permanentFailure = statusCode === 400 || statusCode === 404 || statusCode === 409 || statusCode === 422;
-        const nextRetryCount = (action.retryCount || 0) + 1;
-        remaining.push({
-          ...action,
-          retryCount: nextRetryCount,
-          lastError: String(message),
-          lastAttemptAt: Date.now(),
-          permanentFailure
-        });
-        if (permanentFailure) needsReload = true;
-      }
-    }
-    persistActionQueue(remaining);
-    if (remaining.length === queue.length) {
-      setSyncAttemptStatus('error');
-    } else {
-      setSyncAttemptStatus('success');
-      setLastSuccessfulSyncAt(Date.now());
-    }
-    if (needsReload) {
-      await refresh();
-    }
-  };
-
-  // Local queue management functions - renamed to avoid conflict with useSyncQueue hook
-  const localRetryQueueNow = async () => {
-    if (!window.confirm('Retry all failed and queued sync actions now?')) return;
-    const resetQueue = loadActionQueue().map((action) => ({ ...action, permanentFailure: false }));
-    persistActionQueue(resetQueue);
-    await localProcessActionQueue(true);
-  };
-
-  const localClearFailedActions = () => {
-    if (!window.confirm('Clear failed actions that exceeded retry limits? This cannot be undone.')) return;
-    const next = loadActionQueue().filter((action) => !action.permanentFailure && action.retryCount < ACTION_RETRY_THRESHOLD);
-    persistActionQueue(next);
-  };
-
   // useEffect for initial data loading (refresh and profile are from hooks)
   useEffect(() => {
+    lastRefreshAt.current = Date.now();
     refresh();
     fetchRestaurantProfile();
     const t = window.setInterval(() => {
       if (Date.now() - lastRefreshAt.current < 5000) return;
+      lastRefreshAt.current = Date.now();
       refresh();
     }, 10000);
     return () => window.clearInterval(t);
-  }, []);
+  }, [fetchRestaurantProfile, refresh]);
 
   useEffect(() => {
-    localProcessActionQueue();
+    processActionQueue();
     const t = window.setInterval(() => {
-      localProcessActionQueue();
+      processActionQueue();
     }, 15000);
     return () => window.clearInterval(t);
-  }, []);
+  }, [processActionQueue]);
 
   useEffect(() => {
     if (!socket) return;
@@ -541,32 +436,19 @@ export default function TabletOrdersPage() {
     const handleNewOrder = async (data: { orderId: string; totalAmount?: number }) => {
       console.log('[tablet] New order received via socket:', data);
       try {
-        // Fetch the full order details
-        const response = await api.get<{ success: boolean; data?: Order }>(`/api/orders/${encodeURIComponent(data.orderId)}`);
-        if (response?.data?.success && response?.data?.data) {
-          const newOrder = { ...response.data.data, items: normalizeOrderItems(response.data.data.items) };
-          setOrders(prev => {
-            // Don't add if already exists
-            if (prev.some(o => o.id === newOrder.id)) return prev;
-            return [newOrder, ...prev];
-          });
-        }
+        await api.get<{ success: boolean; data?: Order }>(`/api/orders/${encodeURIComponent(data.orderId)}`);
+        await refresh();
       } catch (err) {
         console.error('[tablet] Failed to fetch new order:', err);
         // Fallback: just refresh all orders
-        refresh();
+        await refresh();
       }
     };
 
     // Handle order status changes from other clients
-    const handleOrderStatusChanged = (data: { orderId: string; previousStatus?: string; status: string; timestamp?: Date }) => {
+    const handleOrderStatusChanged = async (data: { orderId: string; previousStatus?: string; status: string; timestamp?: Date }) => {
       console.log('[tablet] Order status changed via socket:', data);
-      setOrders(prev => prev.map(o => {
-        if (o.id === data.orderId) {
-          return { ...o, status: data.status };
-        }
-        return o;
-      }));
+      await refresh();
       setSelectedOrder(prev => {
         if (prev?.id === data.orderId) {
           return { ...prev, status: data.status };
@@ -585,13 +467,7 @@ export default function TabletOrdersPage() {
       socket.off('new-order', handleNewOrder);
       socket.off('order:status_changed', handleOrderStatusChanged);
     };
-  }, [socket]);
-
-  useEffect(() => {
-    setNow(Date.now());
-    const t = window.setInterval(() => setNow(Date.now()), 10000);
-    return () => window.clearInterval(t);
-  }, []);
+  }, [refresh, socket]);
 
   // Local order processing (deduplicated) - renamed to avoid conflict with useOrders hook
   const localActiveOrders = useMemo(() => {
@@ -914,6 +790,19 @@ export default function TabletOrdersPage() {
     setAutoPrintPendingId(newest.id);
   }, [autoPrintEnabled, filteredOrders, loading, autoPrintPendingId]);
 
+  useEffect(() => {
+    if (!autoPrintPendingId) return;
+    void printOrder(autoPrintPendingId).finally(() => {
+      setPrintedOrders((prev) => {
+        const next = new Set(prev);
+        next.add(autoPrintPendingId);
+        printedOrdersRef.current = next;
+        return next;
+      });
+      setAutoPrintPendingId(null);
+    });
+  }, [autoPrintPendingId, printOrder]);
+
   const connectionText = isOnline ? (socketConnected ? 'Online' : 'Reconnecting') : 'Offline';
   const connectionDotClasses = isOnline
     ? socketConnected
@@ -997,7 +886,7 @@ export default function TabletOrdersPage() {
                   <div className="min-w-0 flex-1 overflow-x-auto">
                     <div className="flex gap-2 flex-nowrap">
                       {[
-                        { key: 'all' as const, label: 'All', count: activeOrders.length },
+                        { key: 'all' as const, label: 'All', count: localActiveOrders.length },
                         { key: 'received' as const, label: 'Needs action', count: receivedOrders.length },
                         { key: 'preparing' as const, label: 'In progress', count: preparingOrders.length },
                         { key: 'ready' as const, label: 'Ready', count: readyOrders.length },
@@ -1024,7 +913,7 @@ export default function TabletOrdersPage() {
                       })}
                       <button
                         type="button"
-                        onClick={() => setNeedsAttentionOnly((prev) => !prev)}
+                        onClick={() => setNeedsAttentionOnly(!needsAttentionOnly)}
                         className={clsx(
                           'rounded-lg border px-4 py-2 text-sm font-medium transition whitespace-nowrap',
                           needsAttentionOnly
