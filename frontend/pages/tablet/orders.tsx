@@ -95,6 +95,7 @@ export default function TabletOrdersPage() {
     syncAttemptStatus,
     processActionQueue,
     enqueueAction,
+    processActionQueue,
     retryQueueNow,
     clearFailedActions,
     upsertStatusSyncFailure,
@@ -154,7 +155,15 @@ export default function TabletOrdersPage() {
   const [prepMinutes, setPrepMinutes] = useState<number>(15);
   const [isDesktopLayout, setIsDesktopLayout] = useState(false);
   const [isTabletLayout, setIsTabletLayout] = useState(false);
+  const [prepModalOrder, setPrepModalOrder] = useState<Order | null>(null);
+  const [prepMinutes, setPrepMinutes] = useState(15);
+  const [autoPrintPendingId, setAutoPrintPendingId] = useState<string | null>(null);
+  const [printedOrders, setPrintedOrders] = useState<Set<string>>(new Set());
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const lastRefreshAt = useRef(0);
+  const printedOrdersRef = useRef<Set<string>>(new Set());
+  const hasInitializedPrintedRef = useRef(false);
+  const lastAutoPromptedId = useRef<string | null>(null);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -180,7 +189,7 @@ export default function TabletOrdersPage() {
 
   const handleSearchToggle = useCallback(() => {
     setIsSearchOpen(true);
-  }, []);
+  }, [processActionQueue]);
 
   const handleSearchClear = useCallback(() => {
     setSearchQuery('');
@@ -192,6 +201,11 @@ export default function TabletOrdersPage() {
       setIsSearchOpen(false);
     }
   }, [searchQuery]);
+
+  const openAcceptModal = useCallback((order: Order) => {
+    setPrepModalOrder(order);
+    setPrepMinutes(order.prep_minutes || 15);
+  }, []);
 
   const handleSearchKeyDown = useCallback((event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'Escape') {
@@ -397,13 +411,14 @@ export default function TabletOrdersPage() {
 
   // useEffect for initial data loading (refresh and profile are from hooks)
   useEffect(() => {
+    lastRefreshAt.current = Date.now();
     refresh();
     fetchRestaurantProfile();
     const t = window.setInterval(() => {
       refresh();
     }, 10000);
     return () => window.clearInterval(t);
-  }, []);
+  }, [fetchRestaurantProfile, refresh]);
 
   useEffect(() => {
     processActionQueue();
@@ -433,7 +448,7 @@ export default function TabletOrdersPage() {
     };
 
     // Handle order status changes from other clients
-    const handleOrderStatusChanged = (data: { orderId: string; previousStatus?: string; status: string; timestamp?: Date }) => {
+    const handleOrderStatusChanged = async (data: { orderId: string; previousStatus?: string; status: string; timestamp?: Date }) => {
       console.log('[tablet] Order status changed via socket:', data);
       refresh();
       setSelectedOrder(prev => {
