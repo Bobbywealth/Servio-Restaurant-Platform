@@ -8,6 +8,7 @@ import { logger } from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
 import { eventBus } from '../events/bus';
 import { invalidateRestaurantOrderCache } from '../utils/serverCache';
+import { calculateOrderPricing } from '../utils/orderPricing';
 
 const router = Router();
 const num = (v: any) => (typeof v === 'number' ? v : Number(v ?? 0));
@@ -754,6 +755,27 @@ router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) =>
     typeof customerEmail === 'string' && customerEmail.trim().length > 0
       ? customerEmail.trim().toLowerCase()
       : null;
+  const normalizedCustomerName =
+    typeof customerName === 'string' && customerName.trim().length > 0
+      ? customerName.trim()
+      : null;
+  const normalizedCustomerPhone =
+    typeof customerPhone === 'string' && customerPhone.trim().length > 0
+      ? customerPhone.trim()
+      : null;
+
+  if (!normalizedCustomerName) {
+    return res.status(400).json({ success: false, error: { message: 'customerName is required' } });
+  }
+
+  if (!normalizedCustomerPhone) {
+    return res.status(400).json({ success: false, error: { message: 'customerPhone is required' } });
+  }
+
+  const phoneDigits = normalizedCustomerPhone.replace(/\D/g, '');
+  if (phoneDigits.length < 10) {
+    return res.status(400).json({ success: false, error: { message: 'customerPhone must be a valid phone number' } });
+  }
 
   if (normalizedCustomerEmail) {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -797,26 +819,18 @@ router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) =>
 
   const orderId = uuidv4();
   
-  // Use provided totals from frontend or calculate them
-  const orderSubtotal = typeof subtotal === 'number' && Number.isFinite(subtotal) ? subtotal : 0;
-  const orderTax = typeof tax === 'number' && Number.isFinite(tax) ? tax : 0;
-  const totalAmount = typeof total === 'number' && Number.isFinite(total) ? total : (orderSubtotal + orderTax);
-  
-  // Calculate and validate items
-  let calculatedSubtotal = 0;
+  // Validate items and calculate authoritative server-side totals
+  const normalizedItems: Array<{ quantity: number; price: number }> = [];
   for (const item of parsedItems) {
     const price = Number(item?.price ?? 0);
     const quantity = Number(item?.quantity ?? 0);
     if (!Number.isFinite(price) || !Number.isFinite(quantity) || quantity <= 0) {
       return res.status(400).json({ success: false, error: { message: 'Invalid items' } });
     }
-    calculatedSubtotal += price * quantity;
+    normalizedItems.push({ quantity, price });
   }
-  
-  // If totals weren't provided, calculate them now
-  const finalSubtotal = orderSubtotal > 0 ? orderSubtotal : calculatedSubtotal;
-  const finalTax = orderTax > 0 ? orderTax : 0;
-  const finalTotal = totalAmount > 0 ? totalAmount : (finalSubtotal + finalTax);
+
+  const { subtotal: finalSubtotal, tax: finalTax, total: finalTotal } = calculateOrderPricing(normalizedItems, taxRate);
 
   try {
     // Prepare items with modifiers included directly for orders.items JSON
@@ -850,8 +864,8 @@ router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) =>
       finalTotal,
       normalizedPaymentMethod === 'online' ? 'pending' : 'unpaid',
       JSON.stringify(itemsWithModifiers),
-      customerName || null,
-      customerPhone || null,
+      normalizedCustomerName,
+      normalizedCustomerPhone,
       normalizedCustomerEmail,
       orderType || 'pickup',
       specialInstructions || null,
