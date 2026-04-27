@@ -983,12 +983,17 @@ self.addEventListener('notificationclick', (event) => {
       for (const client of clientList) {
         // Check if this client matches our app
         if (client.url.includes(self.registration.scope) && 'focus' in client) {
-          // Navigate to the URL
+          // Navigate to the URL and focus the matched client
           client.postMessage({
             type: 'NOTIFICATION_CLICK',
             url,
             data
           })
+
+          if ('navigate' in client) {
+            return client.navigate(url).then(() => client.focus())
+          }
+
           return client.focus()
         }
       }
