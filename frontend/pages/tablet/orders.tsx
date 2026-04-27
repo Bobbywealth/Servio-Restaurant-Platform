@@ -161,6 +161,7 @@ export default function TabletOrdersPage() {
   const printedOrdersRef = useRef<Set<string>>(new Set());
   const hasInitializedPrintedRef = useRef(false);
   const lastAutoPromptedId = useRef<string | null>(null);
+  const orderQueryRetryRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -518,6 +519,35 @@ export default function TabletOrdersPage() {
     if (!isDesktopLayout) return;
     setOrderDetailsOrder(null);
   }, [isDesktopLayout]);
+
+  useEffect(() => {
+    if (!router.isReady) return;
+
+    const rawOrderId = router.query.orderId;
+    const orderId = Array.isArray(rawOrderId) ? rawOrderId[0] : rawOrderId;
+    if (!orderId) return;
+
+    const matchingOrder = orders.find((order) => order.id === orderId);
+
+    const clearOrderIdQuery = () => {
+      const { orderId: _orderId, ...restQuery } = router.query;
+      router.replace({ pathname: router.pathname, query: restQuery }, undefined, { shallow: true });
+    };
+
+    if (matchingOrder) {
+      setSelectedOrder(matchingOrder);
+      if (!isDesktopLayout) {
+        setOrderDetailsOrder({ ...matchingOrder, items: normalizeOrderItems(matchingOrder.items) });
+      }
+      orderQueryRetryRef.current.delete(orderId);
+      clearOrderIdQuery();
+      return;
+    }
+
+    if (orderQueryRetryRef.current.has(orderId)) return;
+    orderQueryRetryRef.current.add(orderId);
+    refresh();
+  }, [isDesktopLayout, orders, refresh, router]);
 
   const { activeQueueOrders, archivedOrders } = useMemo(() => {
     const activeQueue: Order[] = [];

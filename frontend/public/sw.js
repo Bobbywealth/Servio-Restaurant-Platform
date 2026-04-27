@@ -677,7 +677,7 @@ function getNotificationUrl(type, data) {
 
   // Check for specific order ID in data
   if ((type.includes('order') || data?.orderId) && data?.orderId) {
-    return `/tablet/orders/${data.orderId}`
+    return `/tablet/orders?orderId=${encodeURIComponent(data.orderId)}`
   }
 
   // Check for specific task ID in data
