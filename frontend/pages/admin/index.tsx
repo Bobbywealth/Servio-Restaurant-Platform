@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react'
+import React, { useEffect, useState, useMemo, useCallback } from 'react'
 import Head from 'next/head'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -7,6 +7,7 @@ import {
   Building2,
   Users,
   TrendingUp,
+  CalendarDays,
   Clock,
   AlertCircle,
   RefreshCw,
@@ -32,6 +33,12 @@ interface CompanyData {
   totalRevenueToday: number
   totalRevenueWeek: number
   totalRevenueMonth: number
+  selectedRevenue: number
+  selectedOrderCount: number
+  revenueDeltaVsPriorDay: number
+  revenueDeltaVsPriorWeek: number
+  orderCountDeltaVsPriorDay: number
+  orderCountDeltaVsPriorWeek: number
 }
 
 interface RestaurantMetrics {
@@ -44,6 +51,8 @@ interface RestaurantMetrics {
   todayRevenue: number
   staffTotal: number
   staffOnDuty: number
+  selectedOrders: number
+  selectedRevenue: number
 }
 
 interface ActivityItem {
@@ -113,6 +122,12 @@ interface SummaryStats {
   totalRestaurants: number
   staffTotal: number
   staffOnDuty: number
+  selectedRevenue: number
+  selectedOrderCount: number
+  revenueDeltaVsPriorDay: number
+  revenueDeltaVsPriorWeek: number
+  orderCountDeltaVsPriorDay: number
+  orderCountDeltaVsPriorWeek: number
 }
 
 interface DashboardWidgetErrors {
@@ -208,6 +223,7 @@ const StatsCard: React.FC<StatsCardProps> = ({
     orange: 'bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400',
     purple: 'bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400'
   }
+  const trendIsPositive = (trend?.value ?? 0) >= 0
 
   return (
     <motion.div
@@ -220,9 +236,9 @@ const StatsCard: React.FC<StatsCardProps> = ({
           <Icon className="w-6 h-6" />
         </div>
         {trend && (
-          <div className="flex items-center gap-1 text-green-600 dark:text-green-400 text-sm font-medium">
+          <div className={`flex items-center gap-1 text-sm font-medium ${trendIsPositive ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
             <TrendingUp className="w-4 h-4" />
-            <span>+{trend.value}%</span>
+            <span>{trendIsPositive ? '+' : ''}{trend.value.toFixed(1)}%</span>
             <span className="text-gray-500 dark:text-gray-400">{trend.label}</span>
           </div>
         )}
@@ -453,6 +469,11 @@ const DashboardHeader: React.FC<DashboardHeaderProps> = ({
 // ============================================================================
 
 const AdminDashboard: React.FC = () => {
+  const todayDate = useMemo(() => new Date().toISOString().slice(0, 10), [])
+  const [dateFilterMode, setDateFilterMode] = useState<'single' | 'range'>('single')
+  const [selectedDate, setSelectedDate] = useState(todayDate)
+  const [rangeStartDate, setRangeStartDate] = useState(todayDate)
+  const [rangeEndDate, setRangeEndDate] = useState(todayDate)
   const [company, setCompany] = useState<CompanyData | null>(null)
   const [restaurants, setRestaurants] = useState<RestaurantMetrics[]>([])
   const [activities, setActivities] = useState<ActivityItem[]>([])
@@ -462,14 +483,29 @@ const AdminDashboard: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false)
   const [widgetErrors, setWidgetErrors] = useState<DashboardWidgetErrors>(DEFAULT_WIDGET_ERRORS)
 
-  const fetchDashboardData = async () => {
+  const requestParams = useMemo(() => {
+    const safeSelectedDate = selectedDate || todayDate
+    const safeRangeStart = rangeStartDate || todayDate
+    const safeRangeEnd = rangeEndDate || safeRangeStart
+
+    if (dateFilterMode === 'range') {
+      return {
+        startDate: safeRangeStart <= safeRangeEnd ? safeRangeStart : safeRangeEnd,
+        endDate: safeRangeStart <= safeRangeEnd ? safeRangeEnd : safeRangeStart
+      }
+    }
+
+    return { date: safeSelectedDate }
+  }, [dateFilterMode, selectedDate, rangeStartDate, rangeEndDate, todayDate])
+
+  const fetchDashboardData = useCallback(async () => {
     try {
       setLoading(true)
 
       const [platformStatsResult, restaurantsResult, analyticsResult, activitiesResult] = await Promise.allSettled([
-        api.get('/api/admin/platform-stats'),
-        api.get('/api/admin/restaurants?limit=12'),
-        api.get('/api/admin/analytics?days=30'),
+        api.get('/api/admin/platform-stats', { params: requestParams }),
+        api.get('/api/admin/restaurants', { params: { ...requestParams, limit: 12 } }),
+        api.get('/api/admin/analytics', { params: requestParams }),
         api.get('/api/admin/recent-activity?limit=20')
       ])
 
@@ -490,7 +526,13 @@ const AdminDashboard: React.FC = () => {
           totalRestaurants: Number(stats.total_restaurants || 0),
           totalRevenueToday: Number(stats.revenue_today || 0),
           totalRevenueWeek: Number(stats.revenue_week || 0),
-          totalRevenueMonth: Number(stats.revenue_month || 0)
+          totalRevenueMonth: Number(stats.revenue_month || 0),
+          selectedRevenue: Number(stats.selected_revenue || 0),
+          selectedOrderCount: Number(stats.selected_order_count || 0),
+          revenueDeltaVsPriorDay: Number(stats.revenue_delta_vs_prior_day || 0),
+          revenueDeltaVsPriorWeek: Number(stats.revenue_delta_vs_prior_week || 0),
+          orderCountDeltaVsPriorDay: Number(stats.order_count_delta_vs_prior_day || 0),
+          orderCountDeltaVsPriorWeek: Number(stats.order_count_delta_vs_prior_week || 0)
         })
       } else {
         nextWidgetErrors.platformStats = parseApiError(platformStatsResult.reason, 'Platform stats unavailable')
@@ -513,7 +555,9 @@ const AdminDashboard: React.FC = () => {
           activeOrdersNow: Number(restaurant.active_orders_now || 0),
           todayRevenue: revenueByName.get(String(restaurant.name || '')) || 0,
           staffTotal: Number(restaurant.staff_total || 0),
-          staffOnDuty: Number(restaurant.staff_on_duty || 0)
+          staffOnDuty: Number(restaurant.staff_on_duty || 0),
+          selectedOrders: Number(restaurant.selected_orders || 0),
+          selectedRevenue: Number(restaurant.selected_revenue || 0)
         })))
       } else {
         nextWidgetErrors.restaurants = parseApiError(restaurantsResult.reason, 'Restaurants unavailable')
@@ -561,7 +605,7 @@ const AdminDashboard: React.FC = () => {
     } finally {
       setLoading(false)
     }
-  }
+  }, [requestParams])
 
   useEffect(() => {
     fetchDashboardData()
@@ -569,7 +613,7 @@ const AdminDashboard: React.FC = () => {
     // Auto-refresh every 60 seconds
     const interval = setInterval(fetchDashboardData, 60000)
     return () => clearInterval(interval)
-  }, [])
+  }, [fetchDashboardData])
 
   const handleRefresh = async () => {
     setRefreshing(true)
@@ -595,7 +639,13 @@ const AdminDashboard: React.FC = () => {
     activeOrdersNow: restaurants.reduce((sum, r) => sum + r.activeOrdersNow, 0),
     totalRestaurants: restaurants.length,
     staffTotal: restaurants.reduce((sum, r) => sum + r.staffTotal, 0),
-    staffOnDuty: restaurants.reduce((sum, r) => sum + r.staffOnDuty, 0)
+    staffOnDuty: restaurants.reduce((sum, r) => sum + r.staffOnDuty, 0),
+    selectedRevenue: company?.selectedRevenue || restaurants.reduce((sum, r) => sum + r.selectedRevenue, 0),
+    selectedOrderCount: company?.selectedOrderCount || restaurants.reduce((sum, r) => sum + r.selectedOrders, 0),
+    revenueDeltaVsPriorDay: company?.revenueDeltaVsPriorDay || 0,
+    revenueDeltaVsPriorWeek: company?.revenueDeltaVsPriorWeek || 0,
+    orderCountDeltaVsPriorDay: company?.orderCountDeltaVsPriorDay || 0,
+    orderCountDeltaVsPriorWeek: company?.orderCountDeltaVsPriorWeek || 0
   }), [company, restaurants])
 
   const peakHour = useMemo(() => {
@@ -662,8 +712,70 @@ const AdminDashboard: React.FC = () => {
             onSwitchRestaurant={() => {}}
           />
 
-          {/* Refresh Button */}
-          <div className="flex justify-end mb-4">
+          {/* Date Controls + Refresh */}
+          <div className="mb-4 flex flex-col gap-3 rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800 sm:flex-row sm:items-end sm:justify-between">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-4 sm:items-end">
+              <div className="sm:col-span-1">
+                <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                  Mode
+                </label>
+                <select
+                  value={dateFilterMode}
+                  onChange={(e) => setDateFilterMode(e.target.value as 'single' | 'range')}
+                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-primary-500 focus:outline-none dark:border-gray-600 dark:bg-gray-900 dark:text-white"
+                >
+                  <option value="single">Single date</option>
+                  <option value="range">Date range</option>
+                </select>
+              </div>
+
+              {dateFilterMode === 'single' ? (
+                <div className="sm:col-span-2">
+                  <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                    Date
+                  </label>
+                  <div className="relative">
+                    <CalendarDays className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+                    <input
+                      type="date"
+                      value={selectedDate}
+                      max={todayDate}
+                      onChange={(e) => setSelectedDate(e.target.value)}
+                      className="w-full rounded-lg border border-gray-300 bg-white py-2 pl-9 pr-3 text-sm text-gray-900 focus:border-primary-500 focus:outline-none dark:border-gray-600 dark:bg-gray-900 dark:text-white"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="sm:col-span-1">
+                    <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                      Start
+                    </label>
+                    <input
+                      type="date"
+                      value={rangeStartDate}
+                      max={rangeEndDate || todayDate}
+                      onChange={(e) => setRangeStartDate(e.target.value)}
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-primary-500 focus:outline-none dark:border-gray-600 dark:bg-gray-900 dark:text-white"
+                    />
+                  </div>
+                  <div className="sm:col-span-1">
+                    <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                      End
+                    </label>
+                    <input
+                      type="date"
+                      value={rangeEndDate}
+                      min={rangeStartDate}
+                      max={todayDate}
+                      onChange={(e) => setRangeEndDate(e.target.value)}
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-primary-500 focus:outline-none dark:border-gray-600 dark:bg-gray-900 dark:text-white"
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+
             <button
               onClick={handleRefresh}
               disabled={refreshing}
@@ -698,18 +810,29 @@ const AdminDashboard: React.FC = () => {
                   </div>
                 )}
                 <StatsCard
-                  title="Today's Revenue"
-                  value={`$${summaryStats.totalRevenueToday.toLocaleString()}`}
-                  subtitle="vs yesterday"
+                  title="Selected Revenue"
+                  value={`$${summaryStats.selectedRevenue.toLocaleString()}`}
+                  subtitle={`Δ vs prior week: $${summaryStats.revenueDeltaVsPriorWeek.toLocaleString()}`}
                   icon={DollarSign}
-                  trend={{ value: 12, label: 'vs yesterday' }}
+                  trend={{
+                    value: summaryStats.selectedRevenue === 0
+                      ? 0
+                      : (summaryStats.revenueDeltaVsPriorDay / Math.max(summaryStats.selectedRevenue - summaryStats.revenueDeltaVsPriorDay, 1)) * 100,
+                    label: 'vs prior day'
+                  }}
                   color="green"
                 />
                 <StatsCard
-                  title="Active Orders Now"
-                  value={summaryStats.activeOrdersNow}
-                  subtitle={`${summaryStats.ordersToday} placed today`}
+                  title="Selected Orders"
+                  value={summaryStats.selectedOrderCount}
+                  subtitle={`Δ vs prior week: ${summaryStats.orderCountDeltaVsPriorWeek.toLocaleString()}`}
                   icon={ShoppingBag}
+                  trend={{
+                    value: summaryStats.selectedOrderCount === 0
+                      ? 0
+                      : (summaryStats.orderCountDeltaVsPriorDay / Math.max(summaryStats.selectedOrderCount - summaryStats.orderCountDeltaVsPriorDay, 1)) * 100,
+                    label: 'vs prior day'
+                  }}
                   color="blue"
                 />
                 <StatsCard
