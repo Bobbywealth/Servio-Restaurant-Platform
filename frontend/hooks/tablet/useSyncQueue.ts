@@ -158,8 +158,8 @@ export function useSyncQueue(): UseSyncQueueReturn {
       if ('serviceWorker' in navigator) {
         try {
           const registration = await navigator.serviceWorker.ready;
-          if (supportsBackgroundSync(registration)) {
-            await registration.sync.register('servio-sync');
+          if ('sync' in registration && registration.sync) {
+            await (registration.sync as { register: (tag: string) => Promise<void> }).register('servio-sync');
           }
         } catch {
           // Background Sync unavailable or registration failed
