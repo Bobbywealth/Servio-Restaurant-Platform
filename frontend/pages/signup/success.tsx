@@ -13,6 +13,8 @@ interface SessionData {
   restaurantName?: string;
   customerName?: string;
   status: string;
+  paymentStatus?: string | null;
+  state?: 'paid' | 'pending' | 'failed' | 'expired';
 }
 
 const PLAN_NAMES: Record<string, string> = {
@@ -20,6 +22,30 @@ const PLAN_NAMES: Record<string, string> = {
   operations: 'Operations',
   voice: 'Voice',
 };
+
+type SignupState = 'success' | 'pending' | 'failed';
+
+function resolveSignupState(sessionData: SessionData): SignupState {
+  const normalizedState = String(sessionData.state || '').toLowerCase();
+  const normalizedStatus = String(sessionData.status || '').toLowerCase();
+  const normalizedPaymentStatus = String(sessionData.paymentStatus || '').toLowerCase();
+
+  if (normalizedState === 'paid' || normalizedStatus === 'complete' || normalizedPaymentStatus === 'paid') {
+    return 'success';
+  }
+  if (normalizedState === 'pending' || normalizedStatus === 'open') {
+    return 'pending';
+  }
+  if (
+    normalizedState === 'failed' ||
+    normalizedState === 'expired' ||
+    normalizedStatus === 'expired' ||
+    normalizedPaymentStatus === 'unpaid'
+  ) {
+    return 'failed';
+  }
+  return 'failed';
+}
 
 export default function SignupSuccessPage() {
   const router = useRouter();
@@ -39,7 +65,9 @@ export default function SignupSuccessPage() {
         email: String(email || ''),
         restaurantName: restaurant ? String(restaurant) : undefined,
         customerName: name ? String(name) : undefined,
-        status: 'pending_payment',
+        status: 'open',
+        paymentStatus: 'unpaid',
+        state: 'pending',
       });
       setLoading(false);
       return;
@@ -189,6 +217,36 @@ export default function SignupSuccessPage() {
 
           {/* Success state */}
           {!loading && !error && sessionData && (
+            (() => {
+              const signupState = resolveSignupState(sessionData);
+              const isSuccess = signupState === 'success';
+              const isPending = signupState === 'pending';
+              const isFailed = signupState === 'failed';
+
+              const badgeLabel = isSuccess
+                ? 'Subscription Confirmed'
+                : isPending
+                  ? 'Payment Pending'
+                  : 'Payment Incomplete';
+              const statusLabel = isSuccess ? 'Active' : isPending ? 'Awaiting payment' : 'Needs recovery';
+              const statusDotClass = isSuccess
+                ? 'bg-green-400 animate-pulse'
+                : isPending
+                  ? 'bg-amber-400'
+                  : 'bg-red-400';
+              const statusTextClass = isSuccess
+                ? 'text-green-400'
+                : isPending
+                  ? 'text-amber-400'
+                  : 'text-red-400';
+              const ctaLabel = isSuccess
+                ? 'Go to Dashboard'
+                : isPending
+                  ? 'Retry Payment'
+                  : 'Recover Subscription';
+              const ctaHref = isSuccess ? '/login' : '/signup';
+
+              return (
             <motion.div
               key="success"
               initial={{ opacity: 0, scale: 0.95 }}
@@ -232,7 +290,7 @@ export default function SignupSuccessPage() {
               >
                 <div className="inline-flex items-center gap-2 bg-primary-500/15 border border-primary-500/25 text-primary-300 px-4 py-1.5 rounded-full text-sm font-semibold mb-4">
                   <Sparkles className="w-3.5 h-3.5" />
-                  {sessionData?.status === 'pending_payment' ? 'Account Created' : 'Subscription Confirmed'}
+                  {badgeLabel}
                 </div>
                 <h1 className="text-3xl sm:text-4xl font-bold text-white mb-3">
                   Welcome to Servio!
@@ -241,13 +299,19 @@ export default function SignupSuccessPage() {
                   <p className="text-xl text-gray-300 mb-1">Hey, {sessionData.customerName.split(' ')[0]}!</p>
                 )}
                   <p className="text-gray-400 leading-relaxed">
-                    {sessionData.status === 'pending_payment' ? (
-                      <>
-                        Your account is ready. Your <span className="text-white font-semibold">{sessionData.planName}</span> billing setup still needs attention.
-                      </>
-                    ) : (
+                    {isSuccess && (
                       <>
                         You&apos;re all set. Your <span className="text-white font-semibold">{sessionData.planName}</span> plan is now active.
+                      </>
+                    )}
+                    {isPending && (
+                      <>
+                        Your account is ready. Your <span className="text-white font-semibold">{sessionData.planName}</span> payment is still pending. Please retry to activate your subscription.
+                      </>
+                    )}
+                    {isFailed && (
+                      <>
+                        We couldn&apos;t activate your <span className="text-white font-semibold">{sessionData.planName}</span> subscription. Please recover billing to continue.
                       </>
                     )}
                   </p>
@@ -281,13 +345,9 @@ export default function SignupSuccessPage() {
                 )}
                 <div className="flex justify-between items-center">
                   <span className="text-gray-400 text-sm">Status</span>
-                  <span className={`text-sm font-semibold flex items-center gap-1.5 ${
-                    sessionData.status === 'pending_payment' ? 'text-amber-400' : 'text-green-400'
-                  }`}>
-                    <span className={`w-2 h-2 rounded-full inline-block ${
-                      sessionData.status === 'pending_payment' ? 'bg-amber-400' : 'bg-green-400 animate-pulse'
-                    }`} />
-                    {sessionData.status === 'pending_payment' ? 'Payment retry needed' : 'Active'}
+                  <span className={`text-sm font-semibold flex items-center gap-1.5 ${statusTextClass}`}>
+                    <span className={`w-2 h-2 rounded-full inline-block ${statusDotClass}`} />
+                    {statusLabel}
                   </span>
                 </div>
               </motion.div>
@@ -299,13 +359,13 @@ export default function SignupSuccessPage() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.7 }}
               >
-                <Link href="/login">
+                <Link href={ctaHref}>
                   <motion.span
                     className="inline-flex items-center justify-center gap-2 w-full bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700 text-white py-4 px-6 rounded-2xl font-semibold transition-all duration-200 shadow-lg shadow-primary-500/25 cursor-pointer"
                     whileHover={{ scale: 1.01 }}
                     whileTap={{ scale: 0.98 }}
                   >
-                    {sessionData.status === 'pending_payment' ? 'Log in to finish billing' : 'Go to Dashboard'}
+                    {ctaLabel}
                     <ArrowRight className="w-5 h-5" />
                   </motion.span>
                 </Link>
@@ -314,6 +374,8 @@ export default function SignupSuccessPage() {
                 </p>
               </motion.div>
             </motion.div>
+              );
+            })()
           )}
         </AnimatePresence>
 
