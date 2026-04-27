@@ -440,11 +440,15 @@ app.use(express.json({
   limit: '10mb',
   strict: true,
   type: (req) => {
-    if (req.originalUrl.startsWith(STRIPE_CHECKOUT_WEBHOOK_PATH)) {
+    if (req.url?.startsWith(STRIPE_CHECKOUT_WEBHOOK_PATH)) {
       return false;
     }
 
-    return req.is(['application/json', 'application/*+json', 'application/csp-report']) ?? false;
+    const contentType = req.headers['content-type'];
+    if (!contentType) return false;
+
+    const normalizedType = Array.isArray(contentType) ? contentType[0] : contentType;
+    return /^(application\/(json|csp-report)|application\/[^;]+\+json)(;|$)/i.test(normalizedType);
   }
 }));
 app.use(express.urlencoded({
