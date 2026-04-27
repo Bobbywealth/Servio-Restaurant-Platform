@@ -133,6 +133,7 @@ export function useOrders(options: UseOrdersOptions = {}): UseOrdersReturn {
     } catch (e: unknown) {
       console.error(e);
       setError(e instanceof Error ? e : new Error('Failed to fetch orders'));
+      throw e;
     } finally {
       setLoading(false);
     }

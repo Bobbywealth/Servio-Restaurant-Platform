@@ -87,7 +87,7 @@ export default function TabletOrdersPage() {
     setNeedsAttentionOnly,
     channels,
     refresh,
-  } = useOrders();
+  } = useOrders({ enabled: false });
   
   const {
     actionQueue,
@@ -157,7 +157,10 @@ export default function TabletOrdersPage() {
   const [autoPrintPendingId, setAutoPrintPendingId] = useState<string | null>(null);
   const [printedOrders, setPrintedOrders] = useState<Set<string>>(new Set());
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const pollTimeoutRef = useRef<number | null>(null);
   const lastRefreshAt = useRef(0);
+  const refreshInFlightRef = useRef(false);
+  const refreshFailureCountRef = useRef(0);
   const printedOrdersRef = useRef<Set<string>>(new Set());
   const hasInitializedPrintedRef = useRef(false);
   const lastAutoPromptedId = useRef<string | null>(null);
@@ -402,16 +405,78 @@ export default function TabletOrdersPage() {
     loadPrinterSettings();
   }, []);
 
-  // useEffect for initial data loading (refresh and profile are from hooks)
+  const refreshOrders = useCallback(async () => {
+    if (refreshInFlightRef.current) return;
+    refreshInFlightRef.current = true;
+    try {
+      await refresh();
+      refreshFailureCountRef.current = 0;
+      lastRefreshAt.current = Date.now();
+    } catch (error) {
+      refreshFailureCountRef.current += 1;
+      throw error;
+    } finally {
+      refreshInFlightRef.current = false;
+    }
+  }, [refresh]);
+
+  // Initial data load (polling is managed in a separate effect)
   useEffect(() => {
-    lastRefreshAt.current = Date.now();
-    refresh();
+    void refreshOrders();
     fetchRestaurantProfile();
-    const t = window.setInterval(() => {
-      refresh();
-    }, 10000);
-    return () => window.clearInterval(t);
-  }, [fetchRestaurantProfile, refresh]);
+  }, [fetchRestaurantProfile, refreshOrders]);
+
+  // Polling owner with visibility pause + exponential backoff
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const clearPollTimeout = () => {
+      if (pollTimeoutRef.current !== null) {
+        window.clearTimeout(pollTimeoutRef.current);
+        pollTimeoutRef.current = null;
+      }
+    };
+
+    const getPollDelayMs = () => {
+      const nextDelay = 10000 * Math.pow(2, Math.min(refreshFailureCountRef.current, 2));
+      return Math.min(nextDelay, 40000);
+    };
+
+    const scheduleNextPoll = () => {
+      clearPollTimeout();
+      if (document.visibilityState === 'hidden') return;
+
+      pollTimeoutRef.current = window.setTimeout(async () => {
+        if (Date.now() - lastRefreshAt.current < 5000) {
+          scheduleNextPoll();
+          return;
+        }
+        try {
+          await refreshOrders();
+        } catch {
+          // backoff state is already tracked by refreshOrders
+        } finally {
+          scheduleNextPoll();
+        }
+      }, getPollDelayMs());
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        clearPollTimeout();
+        return;
+      }
+      void refreshOrders().catch(() => undefined).finally(scheduleNextPoll);
+    };
+
+    scheduleNextPoll();
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      clearPollTimeout();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [refreshOrders]);
 
   useEffect(() => {
     processActionQueue();
@@ -426,7 +491,7 @@ export default function TabletOrdersPage() {
 
     const handleNewNotification = (data: NotificationEventPayload | null | undefined) => {
       if (shouldRefreshForNotification(data)) {
-        refresh();
+        void refreshOrders();
       }
     };
 
@@ -437,13 +502,13 @@ export default function TabletOrdersPage() {
     // Handle new orders from website/public ordering
     const handleNewOrder = async (data: { orderId: string; totalAmount?: number }) => {
       console.log('[tablet] New order received via socket:', data);
-      refresh();
+      void refreshOrders();
     };
 
     // Handle order status changes from other clients
     const handleOrderStatusChanged = async (data: { orderId: string; previousStatus?: string; status: string; timestamp?: Date }) => {
       console.log('[tablet] Order status changed via socket:', data);
-      refresh();
+      void refreshOrders();
       setSelectedOrder(prev => {
         if (prev?.id === data.orderId) {
           return { ...prev, status: data.status };
@@ -462,7 +527,7 @@ export default function TabletOrdersPage() {
       socket.off('new-order', handleNewOrder);
       socket.off('order:status_changed', handleOrderStatusChanged);
     };
-  }, [socket]);
+  }, [socket, refreshOrders, printTestReceipt]);
 
   // Local order processing (deduplicated) - renamed to avoid conflict with useOrders hook
   const localActiveOrders = useMemo(() => {
