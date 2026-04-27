@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useRef } from 'react';
 import toast from 'react-hot-toast';
 import { api } from '../../lib/api';
 import type { CartItem, MenuItem, ItemSize, SelectedModifier, CustomerInfo, CheckoutStep } from './types';
@@ -30,6 +30,7 @@ export function useCart(restaurantSlug: string | undefined) {
   });
   const [marketingConsent, setMarketingConsent] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<'pickup' | 'online'>('pickup');
+  const submitAttemptRef = useRef<string | null>(null);
 
   const cartTotal = useMemo(
     () => cart.reduce((sum, i) => sum + (i.calculatedPrice * i.quantity), 0),
@@ -169,6 +170,11 @@ export function useCart(restaurantSlug: string | undefined) {
     const total = subtotal + tax;
 
     setIsSubmitting(true);
+    const attemptKey =
+      submitAttemptRef.current ||
+      `order-${Date.now()}-${typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : Math.random().toString(36).slice(2)}`;
+    submitAttemptRef.current = attemptKey;
+
     try {
       const resp = await api.post(`/api/orders/public/${restaurantSlug}`, {
         items: cart.map(i => ({
@@ -202,7 +208,12 @@ export function useCart(restaurantSlug: string | undefined) {
         subtotal,
         tax,
         total,
-        scheduledPickupTime: customerInfo.scheduleForLater ? customerInfo.scheduledPickupTime : null
+        scheduledPickupTime: customerInfo.scheduleForLater ? customerInfo.scheduledPickupTime : null,
+        requestToken: attemptKey
+      }, {
+        headers: {
+          'Idempotency-Key': attemptKey
+        }
       });
       const checkoutUrl = resp?.data?.data?.checkoutUrl as string | undefined;
       const selectedPaymentMethod = resp?.data?.data?.paymentMethod as 'pickup' | 'online' | undefined;
@@ -221,9 +232,11 @@ export function useCart(restaurantSlug: string | undefined) {
       setCheckoutStep('cart');
       setCustomerInfo({ name: '', phone: '', email: '', orderType: 'pickup', specialInstructions: '', scheduleForLater: false, scheduledPickupTime: null });
       setMarketingConsent(false);
+      submitAttemptRef.current = null;
     } catch (error: any) {
       const errorMessage = error?.response?.data?.error?.message;
       toast.error(typeof errorMessage === 'string' ? errorMessage : 'Failed to place order');
+      submitAttemptRef.current = null;
     } finally {
       setIsSubmitting(false);
     }

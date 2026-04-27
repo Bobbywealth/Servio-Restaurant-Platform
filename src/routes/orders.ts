@@ -1,6 +1,7 @@
 import { validateItemSelections } from '../services/modifierValidation';
 import { Router, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
+import { createHash } from 'crypto';
 import { DatabaseService } from '../services/DatabaseService';
 import { asyncHandler, BadRequestError } from '../middleware/errorHandler';
 import { getEffectiveRestaurantId, requireApiKeyScopeByHttpMethod } from '../middleware/apiKeyAuth';
@@ -157,6 +158,38 @@ const getUtcForTimezoneMidnight = (dateLabel: string, timezone: string): Date =>
 };
 
 const hasOrderItems = (items: unknown): boolean => Array.isArray(items) && items.length > 0;
+
+const resolvePublicOrderIdempotencyKey = (req: Request): string | null => {
+  const headerValue = req.headers['idempotency-key'] || req.headers['x-idempotency-key'];
+  if (Array.isArray(headerValue)) {
+    const first = headerValue.find((value) => typeof value === 'string' && value.trim().length > 0);
+    return first ? first.trim() : null;
+  }
+  if (typeof headerValue === 'string' && headerValue.trim().length > 0) {
+    return headerValue.trim();
+  }
+
+  const bodyToken = req.body?.idempotencyKey || req.body?.requestToken;
+  if (typeof bodyToken === 'string' && bodyToken.trim().length > 0) {
+    return bodyToken.trim();
+  }
+
+  return null;
+};
+
+const stableStringify = (value: unknown): string => {
+  if (value === null || value === undefined) return 'null';
+  if (typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map((entry) => stableStringify(entry)).join(',')}]`;
+
+  const obj = value as Record<string, unknown>;
+  const keys = Object.keys(obj).sort();
+  return `{${keys.map((key) => `${JSON.stringify(key)}:${stableStringify(obj[key])}`).join(',')}}`;
+};
+
+const buildPublicOrderRequestHash = (payload: unknown): string => (
+  createHash('sha256').update(stableStringify(payload)).digest('hex')
+);
 
 
 const requireOrdersScopeByMethod = requireApiKeyScopeByHttpMethod('orders');
@@ -880,6 +913,7 @@ router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) =>
   } = req.body;
   const db = DatabaseService.getInstance().getDatabase();
   const requestId = getRequestId(req);
+  const idempotencyKey = resolvePublicOrderIdempotencyKey(req);
 
   let parsedItems = items;
   if (typeof items === 'string') {
@@ -897,7 +931,8 @@ router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) =>
     orderType,
     paymentMethod,
     itemsCount: Array.isArray(parsedItems) ? parsedItems.length : 0,
-    restaurantState
+    restaurantState,
+    idempotencyKey: idempotencyKey || null
   };
 
   const restaurant = await db.get('SELECT id, slug FROM restaurants WHERE slug = ?', [slug]);
@@ -993,6 +1028,7 @@ router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) =>
   }
 
   const orderId = uuidv4();
+  let idempotencyRequestHash: string | null = null;
   
   // Validate items and calculate authoritative server-side totals
   const normalizedItems: Array<{ quantity: number; price: number }> = [];
@@ -1006,6 +1042,138 @@ router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) =>
   }
 
   const { subtotal: finalSubtotal, tax: finalTax, total: finalTotal } = calculateOrderPricing(normalizedItems, taxRate);
+
+  const responseData = {
+    orderId,
+    status: 'received',
+    paymentMethod: normalizedPaymentMethod,
+    checkoutUrl: null as string | null,
+    subtotal: finalSubtotal,
+    tax: finalTax,
+    total: finalTotal,
+    restaurantState: restaurantState || null
+  };
+
+  if (idempotencyKey) {
+    const idempotencyHashPayload = {
+      items: parsedItems,
+      customerName: normalizedCustomerName,
+      customerPhone: normalizedCustomerPhone,
+      customerEmail: normalizedCustomerEmail,
+      orderType: orderType || 'pickup',
+      specialInstructions: specialInstructions || null,
+      paymentMethod: normalizedPaymentMethod,
+      marketingConsent: marketingConsent === true || marketingConsent === 'true',
+      taxRate: Number(taxRate || 0),
+      restaurantState: restaurantState || null,
+      scheduledPickupTime: normalizedScheduledPickupTime
+    };
+    idempotencyRequestHash = buildPublicOrderRequestHash(idempotencyHashPayload);
+
+    const existingIdempotency = await db.get<{
+      request_hash: string;
+      order_id: string | null;
+      response_payload: string | null;
+    }>(
+      `SELECT request_hash, order_id, response_payload
+       FROM public_order_idempotency_keys
+       WHERE restaurant_id = ? AND idempotency_key = ?`,
+      [restaurantId, idempotencyKey]
+    );
+
+    if (existingIdempotency) {
+      if (existingIdempotency.request_hash !== idempotencyRequestHash) {
+        return res.status(409).json({
+          success: false,
+          error: { message: 'Idempotency key reuse with different request payload is not allowed' }
+        });
+      }
+
+      if (!existingIdempotency.order_id) {
+        return res.status(409).json({
+          success: false,
+          error: { message: 'An order with this idempotency key is currently being processed' }
+        });
+      }
+
+      if (existingIdempotency.response_payload) {
+        const replayPayload = parseJson<Record<string, unknown> | null>(existingIdempotency.response_payload, null);
+        if (replayPayload && typeof replayPayload === 'object') {
+          return res.status(200).json({ success: true, data: replayPayload });
+        }
+      }
+
+      const existingOrder = await db.get<any>(
+        `SELECT id, status, payment_status, subtotal, tax, total_amount
+         FROM orders WHERE id = ? AND restaurant_id = ?`,
+        [existingIdempotency.order_id, restaurantId]
+      );
+
+      if (!existingOrder) {
+        return res.status(409).json({
+          success: false,
+          error: { message: 'Idempotency key is associated with a missing order record' }
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        data: {
+          orderId: existingOrder.id,
+          status: existingOrder.status || 'received',
+          paymentMethod: existingOrder.payment_status === 'unpaid' ? 'pickup' : normalizedPaymentMethod,
+          checkoutUrl: null,
+          subtotal: num(existingOrder.subtotal),
+          tax: num(existingOrder.tax),
+          total: num(existingOrder.total_amount),
+          restaurantState: restaurantState || null
+        }
+      });
+    }
+
+    try {
+      await db.run(
+        `INSERT INTO public_order_idempotency_keys (
+          id, restaurant_id, idempotency_key, request_hash, order_id, response_payload, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+        [uuidv4(), restaurantId, idempotencyKey, idempotencyRequestHash]
+      );
+    } catch (insertError) {
+      const isConflict =
+        insertError instanceof Error &&
+        (insertError.message.includes('duplicate key') || insertError.message.includes('UNIQUE constraint failed'));
+
+      if (!isConflict) {
+        throw insertError;
+      }
+
+      const concurrentRecord = await db.get<{ request_hash: string; order_id: string | null; response_payload: string | null }>(
+        `SELECT request_hash, order_id, response_payload
+         FROM public_order_idempotency_keys
+         WHERE restaurant_id = ? AND idempotency_key = ?`,
+        [restaurantId, idempotencyKey]
+      );
+
+      if (!concurrentRecord || concurrentRecord.request_hash !== idempotencyRequestHash) {
+        return res.status(409).json({
+          success: false,
+          error: { message: 'Idempotency key reuse with different request payload is not allowed' }
+        });
+      }
+
+      if (concurrentRecord.order_id && concurrentRecord.response_payload) {
+        const replayPayload = parseJson<Record<string, unknown> | null>(concurrentRecord.response_payload, null);
+        if (replayPayload && typeof replayPayload === 'object') {
+          return res.status(200).json({ success: true, data: replayPayload });
+        }
+      }
+
+      return res.status(409).json({
+        success: false,
+        error: { message: 'An order with this idempotency key is currently being processed' }
+      });
+    }
+  }
 
   try {
     // Prepare items with modifiers included directly for orders.items JSON
@@ -1079,6 +1247,12 @@ router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) =>
     }
 
   } catch (error) {
+    if (idempotencyKey) {
+      await db.run(
+        'DELETE FROM public_order_idempotency_keys WHERE restaurant_id = ? AND idempotency_key = ? AND order_id IS NULL',
+        [restaurantId, idempotencyKey]
+      );
+    }
     logger.error(
       `[orders.public] db_error ${JSON.stringify({
         requestId,
@@ -1155,6 +1329,12 @@ router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) =>
       );
 
       await db.run('UPDATE orders SET payment_status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', ['failed', orderId]);
+      if (idempotencyKey) {
+        await db.run(
+          'DELETE FROM public_order_idempotency_keys WHERE restaurant_id = ? AND idempotency_key = ? AND order_id IS NULL',
+          [restaurantId, idempotencyKey]
+        );
+      }
 
       return res.status(502).json({
         success: false,
@@ -1197,19 +1377,17 @@ router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) =>
 
   invalidateRestaurantOrderCache(restaurantId, orderId);
 
-  return res.status(201).json({
-    success: true,
-    data: {
-      orderId,
-      status: 'received',
-      paymentMethod: normalizedPaymentMethod,
-      checkoutUrl,
-      subtotal: finalSubtotal,
-      tax: finalTax,
-      total: finalTotal,
-      restaurantState: restaurantState || null
-    }
-  });
+  responseData.checkoutUrl = checkoutUrl;
+  if (idempotencyKey && idempotencyRequestHash) {
+    await db.run(
+      `UPDATE public_order_idempotency_keys
+       SET order_id = ?, response_payload = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE restaurant_id = ? AND idempotency_key = ? AND request_hash = ?`,
+      [orderId, JSON.stringify(responseData), restaurantId, idempotencyKey, idempotencyRequestHash]
+    );
+  }
+
+  return res.status(201).json({ success: true, data: responseData });
 }));
 
 /**
