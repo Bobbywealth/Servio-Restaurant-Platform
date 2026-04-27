@@ -39,7 +39,7 @@ interface UseSyncQueueReturn {
   }) => void;
 }
 
-function loadActionQueue(): PendingAction[] {
+export function loadActionQueue(): PendingAction[] {
   if (typeof window === 'undefined') return [];
   try {
     const raw = safeLocalStorage.getItem(ACTION_QUEUE_KEY);
@@ -54,7 +54,7 @@ function loadActionQueue(): PendingAction[] {
   }
 }
 
-function saveActionQueue(next: PendingAction[]) {
+export function saveActionQueue(next: PendingAction[]) {
   if (typeof window === 'undefined') return;
   safeLocalStorage.setItem(ACTION_QUEUE_KEY, JSON.stringify(next));
 }
