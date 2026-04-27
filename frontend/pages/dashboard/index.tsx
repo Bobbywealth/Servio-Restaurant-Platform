@@ -11,6 +11,8 @@ import toast from 'react-hot-toast'
 
 import DashboardLayout from '../../components/Layout/DashboardLayout'
 import LiveClock from '../../components/ui/LiveClock'
+import BusinessDatePicker from '../../components/ui/BusinessDatePicker'
+import { getDateStringInTimezone, isDateInBusinessDay, isValidDateString } from '../../utils/businessDate'
 
 // PREMIUM STAT CARD WITH GLASSMORPHISM
 const StatCard = memo(({ stat, index }: { stat: any; index: number }) => (
@@ -102,6 +104,13 @@ const DashboardIndex = memo(() => {
   const [isOpen, setIsOpen] = useState(true)
   const [restaurantName, setRestaurantName] = useState<string>('')
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null)
+  const [selectedDate, setSelectedDate] = useState<string>(() => getDateStringInTimezone('America/New_York'))
+
+  const todayInRestaurantTimezone = useMemo(
+    () => getDateStringInTimezone(restaurantTimezone),
+    [restaurantTimezone],
+  )
+  const isViewingToday = selectedDate === todayInRestaurantTimezone
 
   const getCurrentDayKey = (timezone: string) => {
     const dayName = new Intl.DateTimeFormat('en-US', {
@@ -148,19 +157,23 @@ const DashboardIndex = memo(() => {
     return nowMinutes >= openMinutes && nowMinutes < closeMinutes
   }
 
-  const fetchStats = async () => {
+  const fetchStats = async (dateToFetch: string) => {
     setIsFetching(true)
     try {
       setFetchError(false)
-      const [ordersRes, summaryRes, profileRes] = await Promise.all([
+      const [ordersRes, profileRes] = await Promise.all([
         // Get recent orders (all orders, let frontend sort by status)
-        api.get('/api/orders', { params: { limit: 10 } }),
-        api.get('/api/orders/stats/summary'),
+        api.get('/api/orders', { params: { limit: 200, date: dateToFetch } }),
         api.get('/api/restaurant/profile'),
       ])
 
+      const timezone = profileRes.data?.data?.timezone || restaurantTimezone || 'America/New_York'
+      const ordersForDate = (ordersRes.data.data.orders || []).filter((order: any) =>
+        isDateInBusinessDay(order.created_at, dateToFetch, timezone),
+      )
+
       // Sort orders: active first (received, preparing, ready), then completed
-      const orders = (ordersRes.data.data.orders || []).sort((a: any, b: any) => {
+      const orders = ordersForDate.sort((a: any, b: any) => {
         const activeStatuses = ['received', 'preparing', 'ready'];
         const aActive = activeStatuses.includes(a.status);
         const bActive = activeStatuses.includes(b.status);
@@ -169,12 +182,19 @@ const DashboardIndex = memo(() => {
         return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
       });
 
-      setRecentOrders(orders)
-      setActiveOrders(summaryRes.data.data.activeOrders || 0)
-      setTotalOrders(summaryRes.data.data.totalOrders || 0)
-      setTodaySales(summaryRes.data.data.completedTodaySales || 0)
-      setPendingOrders(summaryRes.data.data.activeOrders || summaryRes.data.data.pendingOrders || 0)
-      setTodayOrderCount(summaryRes.data.data.todayOrders || summaryRes.data.data.totalOrders || 0)
+      const activeStatuses = ['received', 'preparing', 'ready']
+      const activeOrdersCount = ordersForDate.filter((order: any) => activeStatuses.includes(order.status)).length
+      const pendingOrdersCount = ordersForDate.filter((order: any) => ['received', 'preparing'].includes(order.status)).length
+      const salesForDate = ordersForDate
+        .filter((order: any) => !['cancelled', 'refunded'].includes(order.status))
+        .reduce((sum: number, order: any) => sum + Number(order.total_amount || 0), 0)
+
+      setRecentOrders(orders.slice(0, 10))
+      setActiveOrders(activeOrdersCount)
+      setTotalOrders(ordersForDate.length)
+      setTodaySales(salesForDate)
+      setPendingOrders(pendingOrdersCount)
+      setTodayOrderCount(ordersForDate.length)
 
       // Set restaurant name and timezone from profile
       const profileData = profileRes.data?.data
@@ -219,16 +239,53 @@ const DashboardIndex = memo(() => {
   }
 
   useEffect(() => {
-    fetchStats()
+    if (!router.isReady) return
+
+    const queryDate = Array.isArray(router.query.date) ? router.query.date[0] : router.query.date
+    const localStorageDate = typeof window !== 'undefined' ? window.localStorage.getItem('servio:businessDate') : null
+    const initialDate = [queryDate, localStorageDate].find((value): value is string => Boolean(value && isValidDateString(value)))
+
+    if (initialDate) {
+      setSelectedDate(initialDate)
+      return
+    }
+
+    setSelectedDate(todayInRestaurantTimezone)
+  }, [router.isReady, router.query.date, todayInRestaurantTimezone])
+
+  useEffect(() => {
+    if (!router.isReady || !isValidDateString(selectedDate)) return
+
+    const currentQueryDate = Array.isArray(router.query.date) ? router.query.date[0] : router.query.date
+    if (currentQueryDate !== selectedDate) {
+      router.replace(
+        {
+          pathname: router.pathname,
+          query: { ...router.query, date: selectedDate },
+        },
+        undefined,
+        { shallow: true },
+      )
+    }
+
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('servio:businessDate', selectedDate)
+    }
+  }, [router, selectedDate])
+
+  useEffect(() => {
+    if (!isValidDateString(selectedDate)) return
+
+    fetchStats(selectedDate)
 
     const interval = setInterval(() => {
-      fetchStats()
+      fetchStats(selectedDate)
     }, 60000)
 
     if (socket) {
       socket.on('order:new', (order) => {
         toast.success(`New order received! Total: $${order.totalAmount}`)
-        fetchStats()
+        fetchStats(selectedDate)
       })
     }
 
@@ -236,7 +293,7 @@ const DashboardIndex = memo(() => {
       clearInterval(interval)
       if (socket) socket.off('order:new')
     }
-  }, [socket])
+  }, [socket, selectedDate])
 
   // STATS DATA WITH PREMIUM STYLING
   const stats = useMemo(() => [
@@ -444,6 +501,14 @@ const DashboardIndex = memo(() => {
               <span className="font-semibold text-sm">⚠ Could not load dashboard stats — displaying last known values. Check your connection and try refreshing.</span>
             </motion.div>
           )}
+
+          <BusinessDatePicker
+            selectedDate={selectedDate}
+            timezone={restaurantTimezone}
+            isToday={isViewingToday}
+            onDateChange={setSelectedDate}
+            onBackToToday={() => setSelectedDate(todayInRestaurantTimezone)}
+          />
 
           {/* Stats Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
