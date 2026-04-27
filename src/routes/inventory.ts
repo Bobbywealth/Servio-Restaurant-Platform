@@ -393,6 +393,21 @@ router.post('/receive', asyncHandler(async (req: Request, res: Response) => {
         [newQuantity, inventoryItem.id]
       );
 
+      await db.run(
+        `INSERT INTO inventory_transactions (
+          id, restaurant_id, inventory_item_id, type, quantity, reason, created_by, unit_cost_snapshot, created_at
+        ) VALUES (?, ?, ?, 'receive', ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+        [
+          uuidv4(),
+          restaurantId,
+          inventoryItem.id,
+          quantity,
+          'Received via inventory receive flow',
+          req.user?.id || null,
+          inventoryItem.unit_cost ?? null
+        ]
+      );
+
       await DatabaseService.getInstance().logAudit(
         restaurantId!,
         req.user?.id || 'system',
@@ -464,6 +479,21 @@ router.post('/adjust', asyncHandler(async (req: Request, res: Response) => {
   );
 
   const adjustReason = reason || (adjustmentAmount > 0 ? 'Manual addition' : 'Manual reduction');
+
+  await db.run(
+    `INSERT INTO inventory_transactions (
+      id, restaurant_id, inventory_item_id, type, quantity, reason, created_by, unit_cost_snapshot, created_at
+    ) VALUES (?, ?, ?, 'adjust', ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+    [
+      uuidv4(),
+      restaurantId,
+      itemId,
+      adjustmentAmount,
+      adjustReason,
+      req.user?.id || null,
+      item.unit_cost ?? null
+    ]
+  );
 
   await DatabaseService.getInstance().logAudit(
     restaurantId!,
@@ -694,6 +724,21 @@ router.post('/create-from-receipt', asyncHandler(async (req: Request, res: Respo
           [newQuantity, existingItem.id]
         );
 
+        await db.run(
+          `INSERT INTO inventory_transactions (
+            id, restaurant_id, inventory_item_id, type, quantity, reason, created_by, unit_cost_snapshot, created_at
+          ) VALUES (?, ?, ?, 'receive', ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+          [
+            uuidv4(),
+            restaurantId,
+            existingItem.id,
+            quantity || 1,
+            `Received from ${source || 'receipt analysis'}`,
+            req.user?.id || null,
+            existingItem.unit_cost ?? (unitCost !== undefined ? Number(unitCost) : null)
+          ]
+        );
+
         await DatabaseService.getInstance().logAudit(
           restaurantId,
           req.user?.id || 'system',
@@ -730,6 +775,21 @@ router.post('/create-from-receipt', asyncHandler(async (req: Request, res: Respo
           category?.trim() || null,
           unitCost ? Number(unitCost) : 0
         ]);
+
+        await db.run(
+          `INSERT INTO inventory_transactions (
+            id, restaurant_id, inventory_item_id, type, quantity, reason, created_by, unit_cost_snapshot, created_at
+          ) VALUES (?, ?, ?, 'receive', ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+          [
+            uuidv4(),
+            restaurantId,
+            itemId,
+            quantity || 1,
+            `Received from ${source || 'receipt analysis'}`,
+            req.user?.id || null,
+            unitCost !== undefined ? Number(unitCost) : 0
+          ]
+        );
 
         const newItem = await db.get('SELECT * FROM inventory_items WHERE id = ?', [itemId]);
 
