@@ -5,6 +5,15 @@
 ALTER TABLE users
 ADD COLUMN IF NOT EXISTS hourly_pay_rate DOUBLE PRECISION;
 
-ALTER TABLE users
-ADD CONSTRAINT IF NOT EXISTS users_hourly_pay_rate_non_negative
-CHECK (hourly_pay_rate IS NULL OR hourly_pay_rate >= 0);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'users_hourly_pay_rate_non_negative'
+  ) THEN
+    ALTER TABLE users
+    ADD CONSTRAINT users_hourly_pay_rate_non_negative
+    CHECK (hourly_pay_rate IS NULL OR hourly_pay_rate >= 0);
+  END IF;
+END $$;
