@@ -93,7 +93,6 @@ export default function TabletOrdersPage() {
     actionQueue,
     pendingActions,
     syncAttemptStatus,
-    processActionQueue,
     enqueueAction,
     processActionQueue,
     retryQueueNow,
@@ -155,8 +154,6 @@ export default function TabletOrdersPage() {
   const [prepMinutes, setPrepMinutes] = useState<number>(15);
   const [isDesktopLayout, setIsDesktopLayout] = useState(false);
   const [isTabletLayout, setIsTabletLayout] = useState(false);
-  const [prepModalOrder, setPrepModalOrder] = useState<Order | null>(null);
-  const [prepMinutes, setPrepMinutes] = useState(15);
   const [autoPrintPendingId, setAutoPrintPendingId] = useState<string | null>(null);
   const [printedOrders, setPrintedOrders] = useState<Set<string>>(new Set());
   const searchInputRef = useRef<HTMLInputElement | null>(null);
@@ -189,7 +186,7 @@ export default function TabletOrdersPage() {
 
   const handleSearchToggle = useCallback(() => {
     setIsSearchOpen(true);
-  }, [processActionQueue]);
+  }, []);
 
   const handleSearchClear = useCallback(() => {
     setSearchQuery('');
@@ -201,11 +198,6 @@ export default function TabletOrdersPage() {
       setIsSearchOpen(false);
     }
   }, [searchQuery]);
-
-  const openAcceptModal = useCallback((order: Order) => {
-    setPrepModalOrder(order);
-    setPrepMinutes(order.prep_minutes || 15);
-  }, []);
 
   const handleSearchKeyDown = useCallback((event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'Escape') {
