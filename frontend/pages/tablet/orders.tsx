@@ -30,7 +30,7 @@ async function apiGet<T>(path: string): Promise<T> {
 }
 
 // Import shared types and utilities
-import type { Order, OrderItem, OrdersResponse, PendingAction, EnqueueAction } from '../../components/tablet/orders/types';
+import type { Order, OrderItem, OrdersResponse, PendingAction } from '../../components/tablet/orders/types';
 import {
   normalizeStatus,
   formatMoney,
@@ -93,6 +93,7 @@ export default function TabletOrdersPage() {
     actionQueue,
     pendingActions,
     syncAttemptStatus,
+    processActionQueue,
     enqueueAction,
     processActionQueue,
     retryQueueNow,
@@ -150,6 +151,8 @@ export default function TabletOrdersPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [showArchivedOrders, setShowArchivedOrders] = useState(false);
   const [orderDetailsOrder, setOrderDetailsOrder] = useState<Order | null>(null);
+  const [prepModalOrder, setPrepModalOrder] = useState<Order | null>(null);
+  const [prepMinutes, setPrepMinutes] = useState<number>(15);
   const [isDesktopLayout, setIsDesktopLayout] = useState(false);
   const [isTabletLayout, setIsTabletLayout] = useState(false);
   const [prepModalOrder, setPrepModalOrder] = useState<Order | null>(null);
@@ -221,6 +224,14 @@ export default function TabletOrdersPage() {
       searchInputRef.current?.blur();
     }
   }, [searchQuery]);
+
+  const openAcceptModal = useCallback((order: Order) => {
+    setPrepModalOrder(order);
+    const initialPrepMinutes = typeof order.prep_minutes === 'number' && Number.isFinite(order.prep_minutes) && order.prep_minutes > 0
+      ? order.prep_minutes
+      : 15;
+    setPrepMinutes(initialPrepMinutes);
+  }, []);
 
   // Get unique channels for filter dropdown - renamed to avoid conflict with useOrders hook
   const localChannels = useMemo(() => {
@@ -404,8 +415,6 @@ export default function TabletOrdersPage() {
     refresh();
     fetchRestaurantProfile();
     const t = window.setInterval(() => {
-      if (Date.now() - lastRefreshAt.current < 5000) return;
-      lastRefreshAt.current = Date.now();
       refresh();
     }, 10000);
     return () => window.clearInterval(t);
@@ -435,20 +444,13 @@ export default function TabletOrdersPage() {
     // Handle new orders from website/public ordering
     const handleNewOrder = async (data: { orderId: string; totalAmount?: number }) => {
       console.log('[tablet] New order received via socket:', data);
-      try {
-        await api.get<{ success: boolean; data?: Order }>(`/api/orders/${encodeURIComponent(data.orderId)}`);
-        await refresh();
-      } catch (err) {
-        console.error('[tablet] Failed to fetch new order:', err);
-        // Fallback: just refresh all orders
-        await refresh();
-      }
+      refresh();
     };
 
     // Handle order status changes from other clients
     const handleOrderStatusChanged = async (data: { orderId: string; previousStatus?: string; status: string; timestamp?: Date }) => {
       console.log('[tablet] Order status changed via socket:', data);
-      await refresh();
+      refresh();
       setSelectedOrder(prev => {
         if (prev?.id === data.orderId) {
           return { ...prev, status: data.status };
@@ -467,7 +469,7 @@ export default function TabletOrdersPage() {
       socket.off('new-order', handleNewOrder);
       socket.off('order:status_changed', handleOrderStatusChanged);
     };
-  }, [refresh, socket]);
+  }, [socket]);
 
   // Local order processing (deduplicated) - renamed to avoid conflict with useOrders hook
   const localActiveOrders = useMemo(() => {
@@ -761,47 +763,6 @@ export default function TabletOrdersPage() {
   }, [busyId, isDesktopLayout, now, pendingActions, renderOrderActions, selectedOrder]);
 
   const { soundEnabled, toggleSound } = useOrderAlerts(receivedOrders);
-
-
-  useEffect(() => {
-    // Avoid printing everything on initial load; mark existing active orders as already-seen.
-    if (!hasInitializedPrintedRef.current) {
-      if (!loading) {
-        const initial = new Set<string>();
-        for (const o of filteredOrders) initial.add(o.id);
-        setPrintedOrders(initial);
-        printedOrdersRef.current = initial;
-        hasInitializedPrintedRef.current = true;
-      }
-      return;
-    }
-
-    if (!autoPrintEnabled) return;
-
-    const toAutoPrint = filteredOrders.filter(
-      (o) => normalizeStatus(o.status) === 'received' && !printedOrdersRef.current.has(o.id)
-    );
-
-    if (toAutoPrint.length === 0) return;
-
-    const newest = toAutoPrint[0];
-    if (autoPrintPendingId || lastAutoPromptedId.current === newest.id) return;
-    lastAutoPromptedId.current = newest.id;
-    setAutoPrintPendingId(newest.id);
-  }, [autoPrintEnabled, filteredOrders, loading, autoPrintPendingId]);
-
-  useEffect(() => {
-    if (!autoPrintPendingId) return;
-    void printOrder(autoPrintPendingId).finally(() => {
-      setPrintedOrders((prev) => {
-        const next = new Set(prev);
-        next.add(autoPrintPendingId);
-        printedOrdersRef.current = next;
-        return next;
-      });
-      setAutoPrintPendingId(null);
-    });
-  }, [autoPrintPendingId, printOrder]);
 
   const connectionText = isOnline ? (socketConnected ? 'Online' : 'Reconnecting') : 'Offline';
   const connectionDotClasses = isOnline

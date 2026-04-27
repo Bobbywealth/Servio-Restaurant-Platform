@@ -24,7 +24,7 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
   }
 
   const staff = await db.all(
-    `SELECT id, name, email, phone, role, is_active, created_at
+    `SELECT id, name, email, phone, role, hourly_pay_rate, is_active, created_at
      FROM users
      WHERE restaurant_id = ? AND is_active = TRUE
      ORDER BY name`,

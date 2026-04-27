@@ -472,7 +472,21 @@ router.get('/current-staff', asyncHandler(async (req: Request, res: Response) =>
         ELSE 0
       END as is_on_break,
       teb.break_start as current_break_start,
-      ROUND((EXTRACT(EPOCH FROM (NOW() - te.clock_in_time)) / 3600)::numeric, 2) as hours_worked
+      ROUND(
+        GREATEST(
+          0,
+          (
+            EXTRACT(EPOCH FROM (NOW() - te.clock_in_time))
+            - (COALESCE(te.break_minutes, 0) * 60)
+            - CASE
+                WHEN teb.id IS NOT NULL AND teb.break_end IS NULL
+                  THEN EXTRACT(EPOCH FROM (NOW() - teb.break_start))
+                ELSE 0
+              END
+          ) / 3600
+        )::numeric,
+        2
+      ) as hours_worked
     FROM time_entries te
     JOIN users u ON te.user_id = u.id
     LEFT JOIN time_entry_breaks teb ON te.id = teb.time_entry_id AND teb.break_end IS NULL
