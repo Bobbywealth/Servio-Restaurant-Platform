@@ -27,10 +27,10 @@ export function normalizeStatus(s: string | null | undefined): OrderStatus {
   const lower = v.toLowerCase();
   if (lower === 'new') return 'received';
   if (lower === 'preparing' || lower === 'in-progress') return 'preparing';
-  if (lower === 'ready' || lower === 'completed') return 'ready';
+  if (lower === 'ready') return 'ready';
+  if (lower === 'completed') return 'completed';
   if (lower === 'picked-up' || lower === 'picked up') return 'ready';
   if (lower === 'cancelled') return 'cancelled';
-  if (lower === 'completed') return 'completed';
   return lower as OrderStatus;
 }
 
