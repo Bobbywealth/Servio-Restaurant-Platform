@@ -20,6 +20,7 @@ type RestaurantTaskRecord = {
   type: string | null;
   assigned_to: string | null;
   assigned_to_name?: string | null;
+  assigned_role?: string | null;
   due_date: string | null;
   created_at: string;
   updated_at: string;
@@ -64,13 +65,27 @@ router.get('/today', asyncHandler(async (req: Request, res: Response) => {
  * Get all tasks with filtering
  */
 router.get('/', asyncHandler(async (req: Request, res: Response) => {
-  const { status, type, assignedTo, priority } = req.query;
+  const { status, type, assignedTo, assignedRole, priority } = req.query;
   const db = DatabaseService.getInstance().getDatabase();
   const restaurantId = req.user?.restaurantId;
+  const userId = req.user?.id;
+  const userRole = req.user?.role;
 
-  let query = 'SELECT t.id, t.scope, t.restaurant_id, t.company_id, t.title, t.description, t.status, t.priority, t.type, t.assigned_to, t.due_date, t.created_at, t.updated_at, t.completed_at, u.name as assigned_to_name FROM tasks t LEFT JOIN users u ON t.assigned_to = u.id';
+  let query = 'SELECT t.id, t.scope, t.restaurant_id, t.company_id, t.title, t.description, t.status, t.priority, t.type, t.assigned_to, t.assigned_role, t.due_date, t.created_at, t.updated_at, t.completed_at, u.name as assigned_to_name FROM tasks t LEFT JOIN users u ON t.assigned_to = u.id';
   const params: any[] = [restaurantId];
   const conditions: string[] = ['t.restaurant_id = ?'];
+  let activeShiftRole: string | null = null;
+
+  if (userRole === 'staff' && userId) {
+    const activeShift = await db.get<{ position: string | null }>(`
+      SELECT position
+      FROM time_entries
+      WHERE user_id = ? AND clock_out_time IS NULL
+      ORDER BY clock_in_time DESC
+      LIMIT 1
+    `, [userId]);
+    activeShiftRole = activeShift?.position?.trim().toLowerCase() || null;
+  }
 
   if (status) {
     conditions.push('t.status = ?');
@@ -83,13 +98,40 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
   }
 
   if (assignedTo) {
-    conditions.push('t.assigned_to = ?');
-    params.push(assignedTo);
+    if (assignedTo === 'unassigned') {
+      conditions.push('t.assigned_to IS NULL');
+    } else {
+      conditions.push('t.assigned_to = ?');
+      params.push(assignedTo);
+    }
+  }
+
+  if (assignedRole) {
+    conditions.push('LOWER(COALESCE(t.assigned_role, \'\')) = ?');
+    params.push(String(assignedRole).trim().toLowerCase());
   }
 
   if (priority) {
     conditions.push('t.priority = ?');
     params.push(priority);
+  }
+
+  if (userRole === 'staff' && userId) {
+    const roleCandidates = [activeShiftRole, userRole?.toLowerCase()].filter(Boolean) as string[];
+    const roleClause = roleCandidates.length > 0
+      ? ` OR (LOWER(COALESCE(t.assigned_role, '')) IN (${roleCandidates.map(() => '?').join(', ')}) AND EXISTS (
+          SELECT 1
+          FROM time_entries te
+          WHERE te.user_id = ?
+            AND te.clock_out_time IS NULL
+        ))`
+      : '';
+
+    conditions.push(`(t.assigned_to = ?${roleClause})`);
+    params.push(userId);
+    if (roleCandidates.length > 0) {
+      params.push(...roleCandidates, userId);
+    }
   }
 
   if (conditions.length > 0) {
@@ -289,7 +331,7 @@ router.get('/stats', asyncHandler(async (req: Request, res: Response) => {
  * Create a new task
  */
 router.post('/', asyncHandler(async (req: Request, res: Response) => {
-  const { title, description, type = 'one_time', assignedTo, dueDate, priority = 'medium', status = 'pending' } = req.body;
+  const { title, description, type = 'one_time', assignedTo, assignedRole, dueDate, priority = 'medium', status = 'pending' } = req.body;
 
   if (!title) {
     return res.status(400).json({
@@ -314,13 +356,24 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
     });
   }
 
+  if (assignedTo && assignedRole) {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'A task can be assigned to either a specific staff member or a role, not both' }
+    });
+  }
+
+  const normalizedAssignedRole = typeof assignedRole === 'string' && assignedRole.trim().length > 0
+    ? assignedRole.trim().toLowerCase()
+    : null;
+
   const db = DatabaseService.getInstance().getDatabase();
   const taskId = `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
   await db.run(`
     INSERT INTO tasks (
-      id, restaurant_id, title, description, type, assigned_to, due_date, status, priority
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      id, restaurant_id, title, description, type, assigned_to, assigned_role, due_date, status, priority
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `, [
     taskId,
     req.user?.restaurantId,
@@ -328,6 +381,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
     description || null,
     type,
     assignedTo || null,
+    normalizedAssignedRole,
     dueDate || null,
     status,
     priority
@@ -339,14 +393,14 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
     'create_task',
     'task',
     taskId,
-    { title, type, assignedTo, priority }
+    { title, type, assignedTo, assignedRole: normalizedAssignedRole, priority }
   );
 
   await eventBus.emit('task.created', {
     restaurantId: req.user?.restaurantId!,
     type: 'task.created',
     actor: { actorType: 'user', actorId: req.user?.id },
-    payload: { taskId, title, assignedTo, priority },
+    payload: { taskId, title, assignedTo, assignedRole: normalizedAssignedRole, priority },
     occurredAt: new Date().toISOString()
   });
 
@@ -371,7 +425,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
  */
 router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const { title, description, status, priority, assignedTo, dueDate } = req.body;
+  const { title, description, status, priority, assignedTo, assignedRole, dueDate } = req.body;
 
   const db = DatabaseService.getInstance().getDatabase();
 
@@ -428,6 +482,20 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
   if (assignedTo !== undefined) {
     updates.push('assigned_to = ?');
     params.push(assignedTo);
+    if (assignedTo) {
+      updates.push('assigned_role = NULL');
+    }
+  }
+
+  if (assignedRole !== undefined) {
+    const normalizedRole = typeof assignedRole === 'string' && assignedRole.trim().length > 0
+      ? assignedRole.trim().toLowerCase()
+      : null;
+    updates.push('assigned_role = ?');
+    params.push(normalizedRole);
+    if (normalizedRole) {
+      updates.push('assigned_to = NULL');
+    }
   }
 
   if (dueDate !== undefined) {
