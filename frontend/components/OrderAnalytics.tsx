@@ -35,20 +35,116 @@ interface OrderStats {
 
 type Period = 'today' | 'yesterday' | 'week' | 'month';
 
+const getDayRange = (dateStr: string) => {
+  const dayStart = new Date(`${dateStr}T00:00:00`);
+  const dayEnd = new Date(`${dateStr}T23:59:59.999`);
+  return {
+    dateFrom: dayStart.toISOString(),
+    dateTo: dayEnd.toISOString()
+  };
+};
+
+const isOrderInSelectedDay = (createdAt: string, dateStr: string) => {
+  if (!createdAt || !dateStr) return false;
+  try {
+    const orderDate = new Date(createdAt);
+    const targetDate = new Date(`${dateStr}T00:00:00`);
+    return (
+      orderDate.getFullYear() === targetDate.getFullYear() &&
+      orderDate.getMonth() === targetDate.getMonth() &&
+      orderDate.getDate() === targetDate.getDate()
+    );
+  } catch {
+    return false;
+  }
+};
+
+const mergeCustomDayAnalytics = (
+  baseStats: OrderStats,
+  customRevenue: number,
+  customOrders: number,
+  dateStr: string
+): OrderStats => {
+  const selectedOrders = (baseStats.recentOrders || []).filter((order) =>
+    isOrderInSelectedDay(order.created_at, dateStr)
+  );
+
+  const ordersByStatus = selectedOrders.reduce<Record<string, number>>((acc, order) => {
+    const key = order.status || 'unknown';
+    acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, {});
+
+  const ordersByChannel = selectedOrders.reduce<Record<string, number>>((acc, order) => {
+    const key = String(order.channel || 'unknown').toLowerCase();
+    acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, {});
+
+  const hourlyMap = selectedOrders.reduce<Record<number, number>>((acc, order) => {
+    const hour = new Date(order.created_at).getHours();
+    acc[hour] = (acc[hour] || 0) + 1;
+    return acc;
+  }, {});
+
+  const hourlyDistribution = Array.from({ length: 24 }, (_, hour) => ({
+    hour,
+    count: hourlyMap[hour] || 0
+  }));
+
+  return {
+    ...baseStats,
+    todayRevenue: customRevenue,
+    todayOrders: customOrders,
+    avgOrderValue: customOrders > 0 ? customRevenue / customOrders : 0,
+    ordersByStatus,
+    ordersByChannel,
+    hourlyDistribution,
+    recentOrders: selectedOrders
+  };
+};
+
 export function OrderAnalytics({ onRefresh }: { onRefresh?: () => void }) {
   const { user } = useUser();
   const [stats, setStats] = useState<OrderStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [period, setPeriod] = useState<Period>('today');
+  const [period, setPeriod] = useState<Period | 'custom'>('today');
+  const [selectedDate, setSelectedDate] = useState('');
+  const [selectedTimezone, setSelectedTimezone] = useState(
+    Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+  );
 
   const fetchStats = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
-      
-      const response = await api.get('/api/orders/analytics');
-      setStats(response.data?.data || null);
+
+      const analyticsParams: Record<string, string> = {
+        period,
+        tz: selectedTimezone
+      };
+      if (selectedDate) analyticsParams.date = selectedDate;
+
+      const response = await api.get('/api/orders/analytics', { params: analyticsParams });
+      let analyticsData = response.data?.data || null;
+
+      if (analyticsData && selectedDate) {
+        const { dateFrom, dateTo } = getDayRange(selectedDate);
+        const historyStatsResponse = await api.get('/api/orders/history/stats', {
+          params: { dateFrom, dateTo, tz: selectedTimezone }
+        });
+        const historyStats = historyStatsResponse.data?.data;
+
+        analyticsData = mergeCustomDayAnalytics(
+          analyticsData,
+          Number(historyStats?.totalRevenue || 0),
+          Number(historyStats?.totalOrders || 0),
+          selectedDate
+        );
+      }
+
+      setStats(analyticsData);
     } catch (err) {
       console.error('Failed to fetch order stats:', err);
       setError('Failed to load analytics');
@@ -72,7 +168,7 @@ export function OrderAnalytics({ onRefresh }: { onRefresh?: () => void }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [period, selectedDate, selectedTimezone]);
 
   useEffect(() => {
     fetchStats();
@@ -88,9 +184,32 @@ export function OrderAnalytics({ onRefresh }: { onRefresh?: () => void }) {
       case 'yesterday': return { revenue: stats.yesterdayRevenue, orders: stats.yesterdayOrders };
       case 'week': return { revenue: stats.weekRevenue, orders: stats.weekOrders };
       case 'month': return { revenue: stats.monthRevenue, orders: stats.monthOrders };
+      case 'custom': return { revenue: stats.todayRevenue, orders: stats.todayOrders };
       default: return { revenue: stats.todayRevenue, orders: stats.todayOrders };
     }
   };
+
+  const formatDateForLabel = (dateStr?: string) => {
+    if (!dateStr) return '';
+    const parsed = new Date(`${dateStr}T00:00:00`);
+    return parsed.toLocaleDateString(undefined, {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      timeZone: selectedTimezone
+    });
+  };
+
+  const metricSubLabel = period === 'custom' && selectedDate
+    ? `${formatDateForLabel(selectedDate)} (${selectedTimezone})`
+    : period === 'today'
+      ? 'Today'
+      : period === 'week'
+        ? 'This week'
+        : period === 'month'
+          ? 'This month'
+          : 'Yesterday';
 
   const { revenue, orders } = getPeriodData();
   const completedOrders = stats?.ordersByStatus?.completed || 0;
@@ -148,7 +267,10 @@ export function OrderAnalytics({ onRefresh }: { onRefresh?: () => void }) {
             {(['today', 'yesterday', 'week', 'month'] as Period[]).map((p) => (
               <button
                 key={p}
-                onClick={() => setPeriod(p)}
+                onClick={() => {
+                  setPeriod(p);
+                  setSelectedDate('');
+                }}
                 className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
                   period === p 
                     ? 'bg-white dark:bg-gray-700 text-primary-600 dark:text-primary-400 shadow-sm' 
@@ -159,6 +281,18 @@ export function OrderAnalytics({ onRefresh }: { onRefresh?: () => void }) {
               </button>
             ))}
           </div>
+
+          <input
+            type="date"
+            value={selectedDate}
+            onChange={(e) => {
+              const nextDate = e.target.value;
+              setSelectedDate(nextDate);
+              setPeriod(nextDate ? 'custom' : 'today');
+            }}
+            className="px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-surface-900 dark:text-surface-100"
+            aria-label="Filter analytics by date"
+          />
           
           <button
             onClick={() => { fetchStats(); onRefresh?.(); }}
@@ -183,14 +317,14 @@ export function OrderAnalytics({ onRefresh }: { onRefresh?: () => void }) {
           icon={<DollarSign className="w-5 h-5" />}
           label="Revenue"
           value={`$${revenue.toLocaleString()}`}
-          subValue={period === 'today' ? 'Today' : period === 'week' ? 'This week' : period === 'month' ? 'This month' : 'Yesterday'}
+          subValue={metricSubLabel}
           color="green"
         />
         <MetricCard
           icon={<ShoppingBag className="w-5 h-5" />}
           label="Orders"
           value={orders}
-          subValue={`${stats?.avgOrderValue ? '$' + stats.avgOrderValue.toFixed(2) : '$0'} avg`}
+          subValue={`${stats?.avgOrderValue ? '$' + stats.avgOrderValue.toFixed(2) : '$0'} avg · ${metricSubLabel}`}
           color="blue"
         />
         <MetricCard
@@ -281,7 +415,7 @@ export function OrderAnalytics({ onRefresh }: { onRefresh?: () => void }) {
       {/* Hourly Distribution */}
       <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-4">
         <h3 className="text-sm font-semibold text-surface-700 dark:text-surface-300 mb-4">
-          Orders by Hour (Today)
+          Orders by Hour ({period === 'custom' && selectedDate ? `${formatDateForLabel(selectedDate)} · ${selectedTimezone}` : 'Today'})
         </h3>
         <div className="flex items-end gap-1 h-32">
           {(stats?.hourlyDistribution || []).map(({ hour, count }) => {
