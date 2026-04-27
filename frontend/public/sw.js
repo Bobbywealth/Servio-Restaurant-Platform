@@ -890,12 +890,14 @@ self.addEventListener('push', (event) => {
   }
 
   let options = { ...defaultOptions }
+  let title = 'Servio'
 
   // Parse push data
   if (event.data) {
     try {
       const data = event.data.json()
       options = { ...defaultOptions, ...data }
+      title = data?.title ?? title
 
       // Ensure data object exists
       if (!options.data) {
@@ -924,7 +926,7 @@ self.addEventListener('push', (event) => {
   console.log('🔔 SW: Received push notification', { tag: options.tag, body: options.body })
 
   event.waitUntil(
-    self.registration.showNotification('Servio', options)
+    self.registration.showNotification(title, options)
   )
 })
 
