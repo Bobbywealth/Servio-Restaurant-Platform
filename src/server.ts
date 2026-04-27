@@ -41,6 +41,7 @@ if (process.env.NODE_ENV === 'production') {
 
 const app = express();
 const server = createServer(app);
+const STRIPE_CHECKOUT_WEBHOOK_PATH = '/api/checkout/webhook/stripe';
 
 // Request ID tracking for distributed tracing
 app.use(requestId);
@@ -178,6 +179,7 @@ async function initializeServer() {
 
     // API Routes
     app.use('/api/auth', authRoutes);
+    app.use(STRIPE_CHECKOUT_WEBHOOK_PATH, express.raw({ type: 'application/json' }));
     app.use('/api/checkout', checkoutRoutes);
     app.use('/api/bookings', bookingsRoutes);
     app.use('/api/public', publicRoutes);
@@ -433,13 +435,17 @@ app.use(morgan(morganFormat, {
 }));
 
 // OPTIMIZED BODY PARSING
-// Stripe webhook needs raw body for signature verification — must be registered BEFORE json parser
-app.use('/api/checkout/webhook/stripe', express.raw({ type: 'application/json' }));
-
+// Stripe webhook must bypass global JSON parsing so req.body remains a Buffer.
 app.use(express.json({
   limit: '10mb',
   strict: true,
-  type: ['application/json', 'application/*+json', 'application/csp-report']
+  type: (req) => {
+    if (req.originalUrl.startsWith(STRIPE_CHECKOUT_WEBHOOK_PATH)) {
+      return false;
+    }
+
+    return req.is(['application/json', 'application/*+json', 'application/csp-report']) ?? false;
+  }
 }));
 app.use(express.urlencoded({
   extended: true,
