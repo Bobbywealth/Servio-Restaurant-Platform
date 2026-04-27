@@ -197,6 +197,9 @@ router.post(
       params.append('metadata[restaurantId]', restaurantId);
       params.append('metadata[userId]', userId);
       params.append('metadata[planSlug]', String(planSlug));
+      params.append('subscription_data[metadata][restaurantId]', restaurantId);
+      params.append('subscription_data[metadata][userId]', userId);
+      params.append('subscription_data[metadata][planSlug]', String(planSlug));
 
       // Redirect URLs
       params.append(
@@ -318,17 +321,17 @@ router.post(
 
     const db = DatabaseService.getInstance().getDatabase();
     const { type, data } = stripeEvent;
-    const session = data.object as any;
+    const stripeObject = data.object as any;
 
     logger.info(`[checkout.webhook] event_received ${JSON.stringify({ type })}`);
 
     // --- Handle events ---
     if (type === 'checkout.session.completed') {
-      const { restaurantId, userId, planSlug } = session.metadata ?? {};
+      const { restaurantId, userId, planSlug } = stripeObject.metadata ?? {};
 
       if (!restaurantId) {
         logger.warn(
-          `[checkout.webhook] checkout.session.completed missing restaurantId in metadata ${JSON.stringify({ sessionId: session.id })}`
+          `[checkout.webhook] checkout.session.completed missing restaurantId in metadata ${JSON.stringify({ sessionId: stripeObject.id })}`
         );
         return res.status(200).json({ received: true });
       }
@@ -341,7 +344,7 @@ router.post(
           restaurantId,
           userId,
           planSlug,
-          sessionId: session.id
+          sessionId: stripeObject.id
         })}`
       );
 
@@ -353,24 +356,28 @@ router.post(
 
         if (tableExists) {
           const subscriptionId = uuidv4();
-          const priceMonthly = session.amount_total ? session.amount_total / 100 : 0;
+          const priceMonthly = stripeObject.amount_total ? stripeObject.amount_total / 100 : 0;
 
           await db.run(
             `INSERT INTO admin_billing_subscriptions
-                (id, restaurant_id, package_name, status, billing_cycle, amount, contact_email)
-              VALUES (?, ?, ?, 'active', 'monthly', ?, ?)
+                (id, restaurant_id, package_name, status, billing_cycle, amount, contact_email, stripe_customer_id, stripe_subscription_id)
+              VALUES (?, ?, ?, 'active', 'monthly', ?, ?, ?, ?)
               ON CONFLICT (restaurant_id) DO UPDATE SET
                 package_name  = excluded.package_name,
                 status        = 'active',
                 amount        = excluded.amount,
                 contact_email = excluded.contact_email,
+                stripe_customer_id = excluded.stripe_customer_id,
+                stripe_subscription_id = excluded.stripe_subscription_id,
                 updated_at    = CURRENT_TIMESTAMP`,
             [
               subscriptionId,
               restaurantId,
               planSlug ?? 'unknown',
               priceMonthly,
-              session.customer_email ?? null
+              stripeObject.customer_email ?? null,
+              stripeObject.customer ?? null,
+              stripeObject.subscription ?? null
             ]
           );
 
@@ -391,12 +398,9 @@ router.post(
         );
       }
     } else if (type === 'customer.subscription.deleted') {
-      // Stripe sends subscription objects here; we need the restaurantId from metadata.
-      // For subscriptions, metadata lives on the subscription object itself.
-      const restaurantId =
-        session.metadata?.restaurantId ??
-        // Fallback: try to look up by customer email if available on the subscription
-        null;
+      // Stripe sends subscription objects here; metadata lives on the subscription object itself.
+      // Legacy subscriptions may not have metadata, so fall back to lookup via stored Stripe IDs.
+      const restaurantId = await resolveRestaurantIdFromSubscription(db, stripeObject);
 
       if (restaurantId) {
         // Update billing subscription record if it exists
@@ -418,7 +422,8 @@ router.post(
       } else {
         logger.warn(
           `[checkout.webhook] customer.subscription.deleted no restaurantId in metadata ${JSON.stringify({
-            subscriptionId: session.id
+            subscriptionId: stripeObject.id,
+            customerId: stripeObject.customer ?? null
           })}`
         );
       }
@@ -544,6 +549,27 @@ function verifyStripeSignature(
 
   // Signature valid — parse and return the event
   return JSON.parse(rawBody.toString('utf8')) as { type: string; data: { object: any } };
+}
+
+async function resolveRestaurantIdFromSubscription(
+  db: ReturnType<ReturnType<typeof DatabaseService.getInstance>['getDatabase']>,
+  subscription: any
+): Promise<string | null> {
+  const metadataRestaurantId = subscription?.metadata?.restaurantId;
+  if (metadataRestaurantId) {
+    return String(metadataRestaurantId);
+  }
+
+  const byStripeIds = await db.get<{ restaurant_id: string }>(
+    `SELECT restaurant_id
+       FROM admin_billing_subscriptions
+      WHERE stripe_subscription_id = ?
+         OR stripe_customer_id = ?
+      LIMIT 1`,
+    [subscription?.id ?? null, subscription?.customer ?? null]
+  );
+
+  return byStripeIds?.restaurant_id ?? null;
 }
 
 export default router;
