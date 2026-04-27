@@ -30,8 +30,27 @@ interface StripeCheckoutSession {
   id: string;
   url: string;
   status: string;
+  payment_status?: string | null;
   customer_email: string | null;
   metadata: Record<string, string>;
+}
+
+type InternalCheckoutState = 'paid' | 'pending' | 'failed' | 'expired';
+
+function normalizeCheckoutState(
+  status: string | null | undefined,
+  paymentStatus: string | null | undefined
+): InternalCheckoutState {
+  const normalizedStatus = String(status ?? '').toLowerCase();
+  const normalizedPaymentStatus = String(paymentStatus ?? '').toLowerCase();
+
+  if (normalizedStatus === 'expired') return 'expired';
+  if (normalizedPaymentStatus === 'paid' || normalizedPaymentStatus === 'no_payment_required') {
+    return 'paid';
+  }
+  if (normalizedStatus === 'open') return 'pending';
+  if (normalizedPaymentStatus === 'unpaid') return 'failed';
+  return 'failed';
 }
 
 // ---------------------------------------------------------------------------
@@ -478,6 +497,8 @@ router.get(
       success: true,
       data: {
         status: session.status,
+        paymentStatus: session.payment_status ?? null,
+        state: normalizeCheckoutState(session.status, session.payment_status),
         customerEmail: session.customer_email,
         planSlug: session.metadata?.planSlug ?? null
       }
