@@ -17,6 +17,7 @@ import {
   Smartphone,
   RefreshCw
 } from 'lucide-react';
+import { api } from '../../lib/api';
 import { usePushSubscription, useNotificationPreferences } from '../../lib/hooks';
 import { showToast } from '../ui/Toast';
 
@@ -81,18 +82,8 @@ export default function NotificationSettings({ isOpen, onClose }: NotificationSe
 
   const handleTestPush = async () => {
     try {
-      const response = await fetch('/api/push/test', { method: 'POST' });
-      console.log('[Push Test] Response status:', response.status, response.statusText);
-      
-      // DEBUG: Validate response is OK before parsing JSON
-      if (!response.ok) {
-        const text = await response.text();
-        console.error('[Push Test] Request failed:', response.status, text.substring(0, 200));
-        showToast.error('Failed to send test notification');
-        return;
-      }
-      
-      const data = await response.json();
+      const response = await api.post('/api/push/test');
+      const data = response.data;
 
       if (data.success) {
         showToast.success('Test notification sent!');
