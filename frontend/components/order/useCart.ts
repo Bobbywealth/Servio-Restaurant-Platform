@@ -3,6 +3,13 @@ import toast from 'react-hot-toast';
 import { api } from '../../lib/api';
 import type { CartItem, MenuItem, ItemSize, SelectedModifier, CustomerInfo, CheckoutStep } from './types';
 
+const buildModifiersKey = (modifiers: SelectedModifier[]): string => (
+  modifiers
+    .map((mod) => `${mod.groupId}:${mod.optionId}:${mod.quantity || 1}`)
+    .sort()
+    .join('|')
+);
+
 export function useCart(restaurantSlug: string | undefined) {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
@@ -68,19 +75,20 @@ export function useCart(restaurantSlug: string | undefined) {
       selectedModifiers: allModifiers,
       calculatedPrice: basePrice + modifierPrice
     };
+    const cartItemModifiersKey = buildModifiersKey(cartItem.selectedModifiers);
 
     setCart(prev => {
       const existing = prev.find(i =>
         i.id === item.id &&
         i.selectedSize?.id === cartItem.selectedSize?.id &&
-        JSON.stringify(i.selectedModifiers.sort()) === JSON.stringify(cartItem.selectedModifiers.sort())
+        buildModifiersKey(i.selectedModifiers) === cartItemModifiersKey
       );
 
       if (existing) {
         return prev.map(i =>
           i.id === existing.id &&
           i.selectedSize?.id === existing.selectedSize?.id &&
-          JSON.stringify(i.selectedModifiers.sort()) === JSON.stringify(existing.selectedModifiers.sort())
+          buildModifiersKey(i.selectedModifiers) === cartItemModifiersKey
             ? { ...i, quantity: i.quantity + 1 }
             : i
         );
