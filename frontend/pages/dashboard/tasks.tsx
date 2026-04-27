@@ -18,6 +18,7 @@ interface Task {
   type: 'daily' | 'weekly' | 'monthly' | 'one_time'
   assignedTo?: string
   assignedToName?: string
+  assignedRole?: string
   dueDate?: string
   createdAt: string
   updatedAt: string
@@ -79,9 +80,7 @@ export default function TasksPage() {
       if (priorityFilter !== 'all') params.priority = priorityFilter
       
       // Staff can only see tasks assigned to them
-      if (isStaff) {
-        params.assignedTo = user?.id
-      } else if (assignedToFilter !== 'all') {
+      if (!isStaff && assignedToFilter !== 'all') {
         params.assignedTo = assignedToFilter
       }
 
@@ -540,6 +539,12 @@ export default function TasksPage() {
                                 <div className="flex items-center gap-1">
                                   <User className="w-3 h-3" />
                                   <span>{task.assignedToName}</span>
+                                </div>
+                              )}
+                              {!task.assignedToName && task.assignedRole && (
+                                <div className="flex items-center gap-1">
+                                  <User className="w-3 h-3" />
+                                  <span>Role: {task.assignedRole}</span>
                                 </div>
                               )}
                               {task.dueDate && (
@@ -1044,13 +1049,20 @@ function KanbanColumn({
 
 // Simple Task Form Modal Component
 function TaskFormModal({ staff, onClose, onSuccess }: { staff: StaffMember[]; onClose: () => void; onSuccess: () => void }) {
+  const availableRoles = Array.from(
+    new Set(
+      ['cashier', 'server', ...staff.map((member) => String(member.role || '').toLowerCase()).filter(Boolean)]
+    )
+  )
   const [formData, setFormData] = useState({
     title: '',
     description: '',
     status: 'pending' as Task['status'],
     priority: 'medium' as Task['priority'],
     type: 'one_time' as Task['type'],
+    assignmentMode: 'individual' as 'individual' | 'role',
     assignedTo: '',
+    assignedRole: '',
     dueDate: '',
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -1066,7 +1078,8 @@ function TaskFormModal({ staff, onClose, onSuccess }: { staff: StaffMember[]; on
     try {
       await api.post('/api/tasks', {
         ...formData,
-        assignedTo: formData.assignedTo || undefined,
+        assignedTo: formData.assignmentMode === 'individual' ? formData.assignedTo || undefined : undefined,
+        assignedRole: formData.assignmentMode === 'role' ? formData.assignedRole || undefined : undefined,
       })
       toast.success('Task created successfully')
       onSuccess()
@@ -1128,21 +1141,65 @@ function TaskFormModal({ staff, onClose, onSuccess }: { staff: StaffMember[]; on
 
             <div>
               <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-2">
-                Assign To
+                Assignment Type
               </label>
               <select
                 className="input-field w-full min-h-[44px]"
-                value={formData.assignedTo}
-                onChange={(e) => setFormData({ ...formData, assignedTo: e.target.value })}
+                value={formData.assignmentMode}
+                onChange={(e) => setFormData({
+                  ...formData,
+                  assignmentMode: e.target.value as 'individual' | 'role',
+                  assignedTo: '',
+                  assignedRole: ''
+                })}
               >
-                <option value="">Unassigned</option>
-                {staff.map((member) => (
-                  <option key={member.id} value={member.id}>
-                    {member.name} ({member.role})
-                  </option>
-                ))}
+                <option value="individual">Individual staff</option>
+                <option value="role">Staff role (auto on clock-in)</option>
               </select>
             </div>
+
+            {formData.assignmentMode === 'individual' && (
+              <div>
+                <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-2">
+                  Assign To
+                </label>
+                <select
+                  className="input-field w-full min-h-[44px]"
+                  value={formData.assignedTo}
+                  onChange={(e) => setFormData({ ...formData, assignedTo: e.target.value })}
+                >
+                  <option value="">Unassigned</option>
+                  {staff.map((member) => (
+                    <option key={member.id} value={member.id}>
+                      {member.name} ({member.role})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {formData.assignmentMode === 'role' && (
+              <div>
+                <label className="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-2">
+                  Assign Role
+                </label>
+                <select
+                  className="input-field w-full min-h-[44px]"
+                  value={formData.assignedRole}
+                  onChange={(e) => setFormData({ ...formData, assignedRole: e.target.value })}
+                >
+                  <option value="">Select role</option>
+                  {availableRoles.map((role) => (
+                    <option key={role} value={role}>
+                      {role}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-surface-500 dark:text-surface-400 mt-1">
+                  Staff clocked in under this role will see this task in their queue.
+                </p>
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-4">
               <div>
