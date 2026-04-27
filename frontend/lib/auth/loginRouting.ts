@@ -1,4 +1,4 @@
-export const ADMIN_LANDING_ROUTE = '/admin/demo-bookings';
+export const ADMIN_LANDING_ROUTE = '/admin';
 export const DEFAULT_USER_LANDING_ROUTE = '/dashboard';
 export const ONBOARDING_ROUTE = '/dashboard/onboarding';
 

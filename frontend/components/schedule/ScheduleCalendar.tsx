@@ -11,7 +11,8 @@ import {
   Copy,
   Users,
   AlertCircle,
-  CheckCircle
+  CheckCircle,
+  DollarSign
 } from 'lucide-react'
 
 interface Schedule {
@@ -30,6 +31,7 @@ interface StaffMember {
   id: string
   name: string
   role: string
+  hourly_pay_rate?: number | null
 }
 
 interface ScheduleCalendarProps {
@@ -158,6 +160,14 @@ export function ScheduleCalendar({
     return Object.values(actualHoursByUserId).reduce((sum, hours) => sum + hours, 0)
   }, [actualHoursByUserId])
 
+  const totalScheduledLaborCost = useMemo(() => {
+    return staff.reduce((sum, member) => {
+      const rate = Number(member.hourly_pay_rate || 0)
+      const hours = scheduleTotalsByUserId[member.id] || 0
+      return sum + (rate > 0 ? (rate * hours) : 0)
+    }, 0)
+  }, [staff, scheduleTotalsByUserId])
+
   const navigateWeek = (direction: 'prev' | 'next') => {
     const newDate = new Date(selectedWeekStart)
     newDate.setDate(selectedWeekStart.getDate() + (direction === 'next' ? 7 : -7))
@@ -276,6 +286,10 @@ export function ScheduleCalendar({
               {totalScheduledHours.toFixed(1)}h scheduled
             </span>
             <span className="inline-flex items-center gap-1 rounded-full bg-surface-100 dark:bg-surface-700 px-3 py-1">
+              <DollarSign className="w-3 h-3" />
+              ${totalScheduledLaborCost.toFixed(2)} labor
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-full bg-surface-100 dark:bg-surface-700 px-3 py-1">
               <Users className="w-3 h-3" />
               {staff.length} staff
             </span>
@@ -310,6 +324,8 @@ export function ScheduleCalendar({
             {staff.map((member) => {
               const scheduledHours = scheduleTotalsByUserId[member.id] || 0
               const actualHours = actualHoursByUserId?.[member.id]
+              const memberPayRate = Number(member.hourly_pay_rate || 0)
+              const scheduledLaborCost = memberPayRate > 0 ? scheduledHours * memberPayRate : 0
               const variance =
                 actualHours !== undefined ? scheduledHours - actualHours : null
               return (
@@ -324,10 +340,16 @@ export function ScheduleCalendar({
                     <p className="text-xs text-surface-500 dark:text-surface-400">
                       {member.role}
                     </p>
+                    <p className="text-xs text-surface-500 dark:text-surface-400">
+                      {memberPayRate > 0 ? `$${memberPayRate.toFixed(2)}/hr` : 'Pay rate not set'}
+                    </p>
                   </div>
                   <div className="text-right">
                     <p className="text-sm font-semibold text-surface-900 dark:text-surface-100">
                       {scheduledHours.toFixed(1)}h
+                    </p>
+                    <p className="text-xs text-surface-500 dark:text-surface-400">
+                      ${scheduledLaborCost.toFixed(2)} scheduled
                     </p>
                     <p className="text-xs text-surface-500 dark:text-surface-400">
                       {actualHours !== undefined

@@ -372,6 +372,7 @@ router.put('/settings', asyncHandler(async (req: Request, res: Response) => {
     printer_receipt_header_text,
     printer_receipt_footer_text,
     printer_font_size,
+    inventory_weekly_budget_target,
     taxRate,
     taxState
   } = req.body;
@@ -425,6 +426,16 @@ router.put('/settings', asyncHandler(async (req: Request, res: Response) => {
   }
   if (printer_font_size !== undefined) {
     (settings as any).printer_font_size = String(printer_font_size);
+  }
+  if (inventory_weekly_budget_target !== undefined) {
+    if (inventory_weekly_budget_target === null || inventory_weekly_budget_target === '') {
+      delete (settings as any).inventory_weekly_budget_target;
+    } else {
+      const budgetTarget = Number(inventory_weekly_budget_target);
+      (settings as any).inventory_weekly_budget_target = Number.isFinite(budgetTarget) && budgetTarget >= 0
+        ? budgetTarget
+        : 0;
+    }
   }
   
   // Tax settings
@@ -1106,6 +1117,7 @@ router.get('/staff', asyncHandler(async (req: Request, res: Response) => {
       email,
       phone,
       role,
+      hourly_pay_rate,
       pin,
       is_active,
       created_at,
@@ -1136,13 +1148,23 @@ router.post('/staff', asyncHandler(async (req: Request, res: Response) => {
     });
   }
 
-  const { name, email, phone, role = 'staff' } = req.body;
+  const { name, email, phone, role = 'staff', hourlyPayRate } = req.body;
 
   if (!name) {
     return res.status(400).json({
       success: false,
       error: { message: 'Name is required' }
     });
+  }
+
+  if (hourlyPayRate !== undefined && hourlyPayRate !== null && hourlyPayRate !== '') {
+    const parsedHourlyPayRate = Number(hourlyPayRate);
+    if (!Number.isFinite(parsedHourlyPayRate) || parsedHourlyPayRate < 0) {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'hourlyPayRate must be a non-negative number' }
+      });
+    }
   }
 
   // Generate unique 4-digit PIN
@@ -1176,9 +1198,10 @@ router.post('/staff', asyncHandler(async (req: Request, res: Response) => {
       phone,
       pin,
       role,
+      hourly_pay_rate,
       permissions,
       is_active
-    ) VALUES (?, ?, ?, ?, ?, ?, '[]', TRUE)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, '[]', TRUE)
   `, [
     userId,
     restaurantId,
@@ -1186,7 +1209,8 @@ router.post('/staff', asyncHandler(async (req: Request, res: Response) => {
     email || null,
     phone || null,
     pin,
-    role
+    role,
+    hourlyPayRate !== undefined && hourlyPayRate !== null ? Number(hourlyPayRate) : null
   ]);
 
   await DatabaseService.getInstance().logAudit(
@@ -1195,7 +1219,7 @@ router.post('/staff', asyncHandler(async (req: Request, res: Response) => {
     'create_staff',
     'user',
     userId,
-    { name, email, phone, role, pin }
+    { name, email, phone, role, pin, hourlyPayRate }
   );
 
   logger.info(`Staff member created: ${name} with PIN ${pin}`);
@@ -1209,6 +1233,7 @@ router.post('/staff', asyncHandler(async (req: Request, res: Response) => {
       phone,
       pin, // Return PIN only on creation
       role,
+      hourly_pay_rate: hourlyPayRate !== undefined && hourlyPayRate !== null ? Number(hourlyPayRate) : null,
       is_active: true
     }
   });
@@ -1230,7 +1255,7 @@ router.put('/staff/:id', asyncHandler(async (req: Request, res: Response) => {
     });
   }
 
-  const { name, email, phone, role, is_active, pin } = req.body;
+  const { name, email, phone, role, is_active, pin, hourlyPayRate } = req.body;
 
   // Check if staff exists and belongs to restaurant
   const existingStaff = await db.get(
@@ -1243,6 +1268,16 @@ router.put('/staff/:id', asyncHandler(async (req: Request, res: Response) => {
       success: false,
       error: { message: 'Staff member not found' }
     });
+  }
+
+  if (hourlyPayRate !== undefined && hourlyPayRate !== null && hourlyPayRate !== '') {
+    const parsedHourlyPayRate = Number(hourlyPayRate);
+    if (!Number.isFinite(parsedHourlyPayRate) || parsedHourlyPayRate < 0) {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'hourlyPayRate must be a non-negative number' }
+      });
+    }
   }
 
   const updateFields: string[] = [];
@@ -1272,6 +1307,10 @@ router.put('/staff/:id', asyncHandler(async (req: Request, res: Response) => {
     updateFields.push('pin = ?');
     updateValues.push(pin);
   }
+  if (hourlyPayRate !== undefined) {
+    updateFields.push('hourly_pay_rate = ?');
+    updateValues.push(hourlyPayRate === null || hourlyPayRate === '' ? null : Number(hourlyPayRate));
+  }
 
   if (updateFields.length > 0) {
     updateFields.push('updated_at = CURRENT_TIMESTAMP');
@@ -1290,11 +1329,11 @@ router.put('/staff/:id', asyncHandler(async (req: Request, res: Response) => {
     'update_staff',
     'user',
     id,
-    { name, email, phone, role, is_active, pin }
+    { name, email, phone, role, is_active, pin, hourlyPayRate }
   );
 
   const updatedStaff = await db.get(`
-    SELECT id, name, email, phone, role, pin, is_active, created_at, updated_at
+    SELECT id, name, email, phone, role, hourly_pay_rate, pin, is_active, created_at, updated_at
     FROM users WHERE id = ?
   `, [id]);
 

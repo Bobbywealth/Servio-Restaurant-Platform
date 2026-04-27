@@ -355,6 +355,58 @@ router.get('/search', asyncHandler(async (req: Request, res: Response) => {
 }));
 
 /**
+ * GET /api/inventory/transactions
+ * Get recent inventory transactions for the restaurant
+ */
+router.get('/transactions', asyncHandler(async (req: Request, res: Response) => {
+  const db = DatabaseService.getInstance().getDatabase();
+  const restaurantId = getEffectiveRestaurantId(req);
+  const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 50));
+  const itemId = typeof req.query.itemId === 'string' ? req.query.itemId : undefined;
+
+  if (!restaurantId) {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'Restaurant ID is required' }
+    });
+  }
+
+  const params: any[] = [restaurantId];
+  let query = `
+    SELECT
+      t.id,
+      t.inventory_item_id,
+      t.type,
+      t.quantity,
+      t.reason,
+      t.unit_cost_snapshot,
+      t.created_at,
+      i.name as item_name,
+      i.unit as item_unit,
+      u.name as created_by_name
+    FROM inventory_transactions t
+    JOIN inventory_items i ON i.id = t.inventory_item_id
+    LEFT JOIN users u ON u.id = t.created_by
+    WHERE t.restaurant_id = ?
+  `;
+
+  if (itemId) {
+    query += ' AND t.inventory_item_id = ?';
+    params.push(itemId);
+  }
+
+  query += ' ORDER BY t.created_at DESC LIMIT ?';
+  params.push(limit);
+
+  const transactions = await db.all(query, params);
+
+  res.json({
+    success: true,
+    data: transactions
+  });
+}));
+
+/**
  * POST /api/inventory/receive
  * Record inventory received
  */
