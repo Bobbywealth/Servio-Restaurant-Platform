@@ -35,25 +35,25 @@ export class NotificationService {
       this.bus.on(type, async (event: DomainEvent) => {
         const drafts = buildNotificationDraft(event);
         for (const draft of drafts) {
-          const { notificationId, createdAt } = await this.store.createNotification(
+          const { notificationId } = await this.store.createNotification(
             event.restaurantId,
             event.type,
             draft
           );
 
-          this.dispatcher.emitToRestaurant(event.restaurantId, {
-            restaurantId: event.restaurantId,
-            notification: {
+          await this.dispatcher.dispatchByPolicy(
+            event.restaurantId,
+            event.type,
+            draft,
+            {
               id: notificationId,
               type: event.type,
               severity: draft.severity,
               title: draft.title,
               message: draft.message,
               metadata: draft.metadata ?? {},
-              createdAt,
-              isRead: false
             }
-          });
+          );
         }
       });
     }

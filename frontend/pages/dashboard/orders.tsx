@@ -11,6 +11,8 @@ import { PullToRefresh } from '../../components/ui/PullToRefresh'
 import { useHaptic } from '../../lib/haptics'
 import { AnimatePresence, motion } from 'framer-motion'
 import { OrderAnalytics } from '../../components/OrderAnalytics'
+import BusinessDatePicker from '../../components/ui/BusinessDatePicker'
+import { getDateStringInTimezone, isDateInBusinessDay, isValidDateString } from '../../utils/businessDate'
 
 type OrderStatus = 'received' | 'preparing' | 'ready' | 'completed' | 'cancelled'
 
@@ -363,6 +365,8 @@ function OrderDetailModal({ order, onClose }: { order: Order | null; onClose: ()
   )
 }
 
+type DateMode = 'today' | 'custom-day' | 'range'
+
 export default function OrdersPage() {
   const router = useRouter()
   const { user, hasPermission } = useUser()
@@ -383,8 +387,51 @@ export default function OrdersPage() {
   const [showAnalytics, setShowAnalytics] = useState(false)
   const [lastRefreshedAt, setLastRefreshedAt] = useState<Date | null>(null)
   const [secondsUntilRefresh, setSecondsUntilRefresh] = useState(30)
+  const [restaurantTimezone, setRestaurantTimezone] = useState('America/New_York')
+  const [selectedDate, setSelectedDate] = useState(() => getDateStringInTimezone('America/New_York'))
+
+  const todayInRestaurantTimezone = useMemo(
+    () => getDateStringInTimezone(restaurantTimezone),
+    [restaurantTimezone],
+  )
+  const isViewingToday = selectedDate === todayInRestaurantTimezone
 
   const canUpdateOrders = hasPermission('orders', 'update')
+
+  useEffect(() => {
+    if (!router.isReady) return
+
+    const queryDate = Array.isArray(router.query.date) ? router.query.date[0] : router.query.date
+    const localStorageDate = typeof window !== 'undefined' ? window.localStorage.getItem('servio:businessDate') : null
+    const initialDate = [queryDate, localStorageDate].find((value): value is string => Boolean(value && isValidDateString(value)))
+
+    if (initialDate) {
+      setSelectedDate(initialDate)
+      return
+    }
+
+    setSelectedDate(todayInRestaurantTimezone)
+  }, [router.isReady, router.query.date, todayInRestaurantTimezone])
+
+  useEffect(() => {
+    if (!router.isReady || !isValidDateString(selectedDate)) return
+
+    const currentQueryDate = Array.isArray(router.query.date) ? router.query.date[0] : router.query.date
+    if (currentQueryDate !== selectedDate) {
+      router.replace(
+        {
+          pathname: router.pathname,
+          query: { ...router.query, date: selectedDate },
+        },
+        undefined,
+        { shallow: true },
+      )
+    }
+
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('servio:businessDate', selectedDate)
+    }
+  }, [router, selectedDate])
 
   useEffect(() => {
     const orderIdParam = router.query.orderId
@@ -398,8 +445,15 @@ export default function OrdersPage() {
     setSelectedOrder(matchingOrder)
     setStatusFilter('all')
 
-    router.replace('/dashboard/orders', undefined, { shallow: true })
-  }, [orders, router])
+    router.replace(
+      {
+        pathname: '/dashboard/orders',
+        query: selectedDate ? { date: selectedDate } : undefined,
+      },
+      undefined,
+      { shallow: true },
+    )
+  }, [orders, router, selectedDate])
 
   const createTestOrder = async () => {
     setIsLoading(true)
@@ -424,6 +478,35 @@ export default function OrdersPage() {
     }
   }
 
+  const resetListPosition = useCallback(() => {
+    setOffset(0)
+    setSelectedOrder(null)
+  }, [])
+
+  const handleSelectToday = useCallback(() => {
+    setDateMode('today')
+    setSelectedDate(getRestaurantDateString(restaurantTimezone))
+    setRangeStart(undefined)
+    setRangeEnd(undefined)
+    resetListPosition()
+  }, [restaurantTimezone, resetListPosition])
+
+  const handleSelectYesterday = useCallback(() => {
+    setDateMode('custom-day')
+    setSelectedDate(getRestaurantDateString(restaurantTimezone, -1))
+    setRangeStart(undefined)
+    setRangeEnd(undefined)
+    resetListPosition()
+  }, [restaurantTimezone, resetListPosition])
+
+  const handleCustomDateChange = useCallback((date: string) => {
+    setDateMode('custom-day')
+    setSelectedDate(date)
+    setRangeStart(undefined)
+    setRangeEnd(undefined)
+    resetListPosition()
+  }, [resetListPosition])
+
   const channels = useMemo(() => {
     const set = new Set<string>()
     orders.forEach(o => {
@@ -431,6 +514,26 @@ export default function OrdersPage() {
     })
     return Array.from(set).sort()
   }, [orders])
+
+  useEffect(() => {
+    const fetchRestaurantProfile = async () => {
+      try {
+        const profileRes = await api.get('/api/restaurant/profile')
+        const timezone = profileRes.data?.data?.timezone || 'America/New_York'
+        setRestaurantTimezone(timezone)
+      } catch (e) {
+        console.warn('Failed to load restaurant profile timezone for orders page', e)
+      }
+    }
+
+    fetchRestaurantProfile()
+  }, [])
+
+  useEffect(() => {
+    if (dateMode === 'today') {
+      setSelectedDate(getRestaurantDateString(restaurantTimezone))
+    }
+  }, [dateMode, restaurantTimezone])
 
   // Filter orders based on all filters including search
   useEffect(() => {
@@ -497,24 +600,52 @@ export default function OrdersPage() {
   const fetchData = useCallback(async () => {
     setIsLoading(true)
     setError(null)
+
     try {
-      const [ordersRes, summaryRes] = await Promise.all([
+      const [ordersRes, profileRes] = await Promise.all([
         api.get('/api/orders', {
           params: {
+            dateFrom,
+            dateTo,
             status: statusFilter === 'all' || statusFilter === 'active' ? undefined : statusFilter,
             channel: channelFilter === 'all' ? undefined : channelFilter,
-            dateFrom: dateFrom || undefined,
-            dateTo: dateTo || undefined,
+            date: selectedDate,
             limit: 100,
             offset: 0
           }
         }),
-        api.get('/api/orders/stats/summary')
+        api.get('/api/restaurant/profile')
       ])
 
-      const nextOrders: Order[] = ordersRes.data?.data?.orders || []
+      const timezone = profileRes.data?.data?.timezone || restaurantTimezone
+      setRestaurantTimezone(timezone)
+
+      const nextOrders: Order[] = (ordersRes.data?.data?.orders || []).filter((order: Order) =>
+        isDateInBusinessDay(order.created_at, selectedDate, timezone),
+      )
       setOrders(nextOrders)
-      setSummary(summaryRes.data?.data || null)
+
+      const activeStatuses: OrderStatus[] = ['received', 'preparing', 'ready']
+      const completedToday = nextOrders.filter((order) => order.status === 'completed').length
+      const revenueOrders = nextOrders.filter((order) => !['cancelled'].includes(order.status))
+      const revenueTotal = revenueOrders.reduce((sum, order) => sum + Number(order.total_amount || 0), 0)
+      const summaryForDate: OrdersSummary = {
+        totalOrders: nextOrders.length,
+        activeOrders: nextOrders.filter((order) => activeStatuses.includes(order.status)).length,
+        completedToday,
+        avgOrderValue: revenueOrders.length ? revenueTotal / revenueOrders.length : 0,
+        ordersByStatus: nextOrders.reduce<Record<string, number>>((acc, order) => {
+          acc[order.status] = (acc[order.status] || 0) + 1
+          return acc
+        }, {}),
+        ordersByChannel: nextOrders.reduce<Record<string, number>>((acc, order) => {
+          const key = order.channel || 'unknown'
+          acc[key] = (acc[key] || 0) + 1
+          return acc
+        }, {}),
+      }
+
+      setSummary(summaryForDate)
       setLastRefreshedAt(new Date())
       setSecondsUntilRefresh(30)
     } catch (e: any) {
@@ -522,7 +653,7 @@ export default function OrdersPage() {
     } finally {
       setIsLoading(false)
     }
-  }, [statusFilter, channelFilter, dateFrom, dateTo])
+  }, [statusFilter, channelFilter, selectedDate, restaurantTimezone])
 
   useEffect(() => {
     if (!hasPermission('orders', 'read')) return
@@ -544,6 +675,10 @@ export default function OrdersPage() {
 
     return () => clearInterval(interval)
   }, [hasPermission, fetchData, dateFrom, dateTo])
+
+  useEffect(() => {
+    resetListPosition()
+  }, [statusFilter, channelFilter, resetListPosition])
 
   useEffect(() => {
     if (!socket) return
@@ -640,6 +775,14 @@ export default function OrdersPage() {
             </div>
           </div>
 
+          <BusinessDatePicker
+            selectedDate={selectedDate}
+            timezone={restaurantTimezone}
+            isToday={isViewingToday}
+            onDateChange={setSelectedDate}
+            onBackToToday={() => setSelectedDate(todayInRestaurantTimezone)}
+          />
+
           <div className="text-xs text-surface-500 dark:text-surface-400">
             {lastRefreshedAt ? `Last refreshed ${lastRefreshedAt.toLocaleTimeString()}` : 'Loading orders...'}
             {!isLoading && <span className="ml-2">• Auto-refresh in {secondsUntilRefresh}s</span>}
@@ -700,6 +843,45 @@ export default function OrdersPage() {
           {/* Filters */}
           <div className="card sticky top-2 z-10 bg-white/95 dark:bg-surface-800/95 backdrop-blur sm:static">
             <div className="flex flex-col sm:flex-row sm:flex-wrap items-end gap-4">
+              <div className="w-full">
+                <label className="flex flex-col gap-2 text-sm text-surface-700 dark:text-surface-300">
+                  <span className="font-medium flex items-center gap-1">
+                    <Filter className="w-4 h-4" />
+                    Day
+                  </span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      className={`px-3 py-2 rounded-full text-sm font-medium border transition-colors ${
+                        dateMode === 'today'
+                          ? 'bg-primary-600 border-primary-600 text-white'
+                          : 'bg-white dark:bg-surface-800 border-surface-300 dark:border-surface-600 text-surface-700 dark:text-surface-300'
+                      }`}
+                      onClick={handleSelectToday}
+                    >
+                      Today
+                    </button>
+                    <button
+                      type="button"
+                      className={`px-3 py-2 rounded-full text-sm font-medium border transition-colors ${
+                        dateMode === 'custom-day' && selectedDate === getRestaurantDateString(restaurantTimezone, -1)
+                          ? 'bg-primary-600 border-primary-600 text-white'
+                          : 'bg-white dark:bg-surface-800 border-surface-300 dark:border-surface-600 text-surface-700 dark:text-surface-300'
+                      }`}
+                      onClick={handleSelectYesterday}
+                    >
+                      Yesterday
+                    </button>
+                    <input
+                      type="date"
+                      className="input-field min-h-[44px]"
+                      value={selectedDate}
+                      onChange={(e) => handleCustomDateChange(e.target.value)}
+                    />
+                  </div>
+                </label>
+              </div>
+
               {/* Search */}
               <div className="flex-1 min-w-[200px]">
                 <label className="flex flex-col gap-1.5 text-sm text-surface-700 dark:text-surface-300">

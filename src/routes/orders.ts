@@ -50,6 +50,104 @@ const parseJson = <T>(value: unknown, fallback: T): T => {
   }
 };
 
+const isValidIsoDate = (value: string): boolean => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return false;
+  }
+
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return (
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day
+  );
+};
+
+const isValidIanaTimezone = (value: string): boolean => {
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: value }).format(new Date());
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const getDatePartsInTimezone = (date: Date, timezone: string): { year: number; month: number; day: number; hour: number; minute: number; second: number } => {
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  });
+
+  const parts = formatter.formatToParts(date);
+  const getPart = (type: string) => Number(parts.find((p) => p.type === type)?.value || 0);
+
+  return {
+    year: getPart('year'),
+    month: getPart('month'),
+    day: getPart('day'),
+    hour: getPart('hour'),
+    minute: getPart('minute'),
+    second: getPart('second')
+  };
+};
+
+const getOffsetMinutes = (date: Date, timezone: string): number => {
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    timeZoneName: 'shortOffset',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  });
+
+  const tzName = formatter.formatToParts(date).find((part) => part.type === 'timeZoneName')?.value || 'GMT+0';
+  const match = tzName.match(/^GMT([+-])(\d{1,2})(?::?(\d{2}))?$/);
+  if (!match) return 0;
+
+  const sign = match[1] === '-' ? -1 : 1;
+  const hours = Number(match[2]);
+  const minutes = Number(match[3] || 0);
+  return sign * (hours * 60 + minutes);
+};
+
+const formatIsoDateInTimezone = (date: Date, timezone: string): string => {
+  const parts = getDatePartsInTimezone(date, timezone);
+  return `${parts.year.toString().padStart(4, '0')}-${parts.month.toString().padStart(2, '0')}-${parts.day.toString().padStart(2, '0')}`;
+};
+
+const addDaysToIsoDate = (dateLabel: string, days: number): string => {
+  const [year, month, day] = dateLabel.split('-').map(Number);
+  const next = new Date(Date.UTC(year, month - 1, day + days));
+  return `${next.getUTCFullYear().toString().padStart(4, '0')}-${(next.getUTCMonth() + 1).toString().padStart(2, '0')}-${next.getUTCDate().toString().padStart(2, '0')}`;
+};
+
+const getUtcForTimezoneMidnight = (dateLabel: string, timezone: string): Date => {
+  const [year, month, day] = dateLabel.split('-').map(Number);
+  let utcTimestamp = Date.UTC(year, month - 1, day, 0, 0, 0, 0);
+
+  for (let i = 0; i < 4; i++) {
+    const offsetMinutes = getOffsetMinutes(new Date(utcTimestamp), timezone);
+    const nextTimestamp = Date.UTC(year, month - 1, day, 0, 0, 0, 0) - offsetMinutes * 60 * 1000;
+    if (nextTimestamp === utcTimestamp) {
+      break;
+    }
+    utcTimestamp = nextTimestamp;
+  }
+
+  return new Date(utcTimestamp);
+};
+
 const hasOrderItems = (items: unknown): boolean => Array.isArray(items) && items.length > 0;
 
 
@@ -483,16 +581,44 @@ router.post('/:id/prep-time', asyncHandler(async (req: Request, res: Response) =
  */
 router.get('/stats/summary', asyncHandler(async (req: Request, res: Response) => {
   const db = DatabaseService.getInstance().getDatabase();
-
   const restaurantId = req.user?.restaurantId;
+  const rawDate = typeof req.query.date === 'string' ? req.query.date.trim() : '';
+  const rawTimezone = typeof req.query.tz === 'string' ? req.query.tz.trim() : '';
 
-  // Get today's date in local timezone
-  const now = new Date();
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const todayEnd = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
-  
-  const todayStartStr = todayStart.toISOString();
-  const todayEndStr = todayEnd.toISOString();
+  if (rawDate && !isValidIsoDate(rawDate)) {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'Invalid date format. Use YYYY-MM-DD.' }
+    });
+  }
+
+  if (rawTimezone && !isValidIanaTimezone(rawTimezone)) {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'Invalid timezone. Use a valid IANA timezone.' }
+    });
+  }
+
+  const restaurant = await db.get<{ timezone?: string | null; settings?: string | Record<string, any> | null }>(
+    'SELECT timezone, settings FROM restaurants WHERE id = ? LIMIT 1',
+    [restaurantId]
+  );
+
+  const settings = parseJson<Record<string, any>>(restaurant?.settings, {});
+  const restaurantTimezone = (
+    typeof settings.timezone === 'string' && isValidIanaTimezone(settings.timezone)
+      ? settings.timezone
+      : typeof restaurant?.timezone === 'string' && isValidIanaTimezone(restaurant.timezone)
+        ? restaurant.timezone
+        : 'UTC'
+  );
+
+  const timezone = rawTimezone || restaurantTimezone;
+  const label = rawDate || formatIsoDateInTimezone(new Date(), timezone);
+  const periodStart = getUtcForTimezoneMidnight(label, timezone);
+  const periodEnd = getUtcForTimezoneMidnight(addDaysToIsoDate(label, 1), timezone);
+  const periodStartStr = periodStart.toISOString();
+  const periodEndStr = periodEnd.toISOString();
 
   // Revenue = all orders that are not cancelled/refunded
   const revenueCondition = "restaurant_id = ? AND created_at >= ? AND created_at < ? AND status NOT IN ('cancelled', 'refunded')";
@@ -515,13 +641,13 @@ router.get('/stats/summary', asyncHandler(async (req: Request, res: Response) =>
     // Active orders (in progress)
     db.get('SELECT COUNT(*) as count FROM orders WHERE restaurant_id = ? AND status IN (\'received\', \'preparing\', \'ready\')', [restaurantId]),
     // Completed today
-    db.get(`SELECT COUNT(*) as count FROM orders WHERE ${completedCondition}`, [restaurantId, todayStartStr, todayEndStr]),
+    db.get(`SELECT COUNT(*) as count FROM orders WHERE ${completedCondition}`, [restaurantId, periodStartStr, periodEndStr]),
     // Revenue from all non-cancelled orders today
-    db.get(`SELECT COALESCE(SUM(total_amount), 0) as sum FROM orders WHERE ${revenueCondition}`, [restaurantId, todayStartStr, todayEndStr]),
+    db.get(`SELECT COALESCE(SUM(total_amount), 0) as sum FROM orders WHERE ${revenueCondition}`, [restaurantId, periodStartStr, periodEndStr]),
     // Average order value for completed orders today
-    db.get(`SELECT AVG(total_amount) as avg FROM orders WHERE ${completedCondition}`, [restaurantId, todayStartStr, todayEndStr]),
+    db.get(`SELECT AVG(total_amount) as avg FROM orders WHERE ${completedCondition}`, [restaurantId, periodStartStr, periodEndStr]),
     // Total orders today (all statuses)
-    db.get(`SELECT COUNT(*) as count FROM orders WHERE ${todayOrdersCondition}`, [restaurantId, todayStartStr, todayEndStr]),
+    db.get(`SELECT COUNT(*) as count FROM orders WHERE ${todayOrdersCondition}`, [restaurantId, periodStartStr, periodEndStr]),
     // Orders grouped by status
     db.all('SELECT status, COUNT(*) as count FROM orders WHERE restaurant_id = ? GROUP BY status', [restaurantId]),
     // Orders grouped by channel
@@ -547,7 +673,13 @@ router.get('/stats/summary', asyncHandler(async (req: Request, res: Response) =>
 
   res.json({
     success: true,
-    data: stats
+    data: {
+      ...stats,
+      periodStart: periodStartStr,
+      periodEnd: periodEndStr,
+      timezone,
+      label
+    }
   });
 }));
 
@@ -992,7 +1124,7 @@ router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) =>
     // Notify dashboard via Socket.IO
     const io = req.app.get('socketio');
     if (io) {
-      io.to(`restaurant-${restaurantId}`).emit('new-order', { orderId, totalAmount });
+      io.to(`restaurant-${restaurantId}`).emit('new-order', { orderId, totalAmount: finalTotal });
     }
 
     await eventBus.emit('order.created_web', {
@@ -1002,13 +1134,13 @@ router.post('/public/:slug', asyncHandler(async (req: Request, res: Response) =>
       payload: {
         orderId,
         customerName,
-        totalAmount,
+        totalAmount: finalTotal,
         channel: 'website'
       },
       occurredAt: new Date().toISOString()
     });
 
-    await DatabaseService.getInstance().logAudit(restaurantId, null, 'create_public_order', 'order', orderId, { totalAmount });
+    await DatabaseService.getInstance().logAudit(restaurantId, null, 'create_public_order', 'order', orderId, { totalAmount: finalTotal });
   } catch (error) {
     logger.warn(
       `[orders.public] post_create_warning ${JSON.stringify({

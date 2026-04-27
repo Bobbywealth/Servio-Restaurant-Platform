@@ -337,6 +337,11 @@ export class PushService {
     staffNotifications: boolean;
     inventoryNotifications: boolean;
     taskNotifications: boolean;
+    emailEnabled: boolean;
+    smsEnabled: boolean;
+    inAppEnabled: boolean;
+    taskCompletedEmail: boolean;
+    criticalAlertsEmail: boolean;
     quietHoursEnabled: boolean;
     quietHoursStart: string;
     quietHoursEnd: string;
@@ -355,6 +360,11 @@ export class PushService {
           staffNotifications: true,
           inventoryNotifications: true,
           taskNotifications: true,
+          emailEnabled: true,
+          smsEnabled: false,
+          inAppEnabled: true,
+          taskCompletedEmail: false,
+          criticalAlertsEmail: true,
           quietHoursEnabled: false,
           quietHoursStart: '22:00',
           quietHoursEnd: '07:00'
@@ -367,6 +377,11 @@ export class PushService {
         staffNotifications: prefs.staff_notifications === 1,
         inventoryNotifications: prefs.inventory_notifications === 1,
         taskNotifications: prefs.task_notifications === 1,
+        emailEnabled: prefs.email_enabled !== 0,
+        smsEnabled: prefs.sms_enabled === 1,
+        inAppEnabled: prefs.in_app_enabled !== 0,
+        taskCompletedEmail: prefs.task_completed_email === 1,
+        criticalAlertsEmail: prefs.critical_alerts_email !== 0,
         quietHoursEnabled: prefs.quiet_hours_enabled === 1,
         quietHoursStart: prefs.quiet_hours_start || '22:00',
         quietHoursEnd: prefs.quiet_hours_end || '07:00'
@@ -388,6 +403,11 @@ export class PushService {
       staffNotifications: boolean;
       inventoryNotifications: boolean;
       taskNotifications: boolean;
+      emailEnabled: boolean;
+      smsEnabled: boolean;
+      inAppEnabled: boolean;
+      taskCompletedEmail: boolean;
+      criticalAlertsEmail: boolean;
       quietHoursEnabled: boolean;
       quietHoursStart: string;
       quietHoursEnd: string;
@@ -424,6 +444,26 @@ export class PushService {
           updates.push('task_notifications = ?');
           params.push(preferences.taskNotifications ? 1 : 0);
         }
+        if (preferences.emailEnabled !== undefined) {
+          updates.push('email_enabled = ?');
+          params.push(preferences.emailEnabled ? 1 : 0);
+        }
+        if (preferences.smsEnabled !== undefined) {
+          updates.push('sms_enabled = ?');
+          params.push(preferences.smsEnabled ? 1 : 0);
+        }
+        if (preferences.inAppEnabled !== undefined) {
+          updates.push('in_app_enabled = ?');
+          params.push(preferences.inAppEnabled ? 1 : 0);
+        }
+        if (preferences.taskCompletedEmail !== undefined) {
+          updates.push('task_completed_email = ?');
+          params.push(preferences.taskCompletedEmail ? 1 : 0);
+        }
+        if (preferences.criticalAlertsEmail !== undefined) {
+          updates.push('critical_alerts_email = ?');
+          params.push(preferences.criticalAlertsEmail ? 1 : 0);
+        }
         if (preferences.quietHoursEnabled !== undefined) {
           updates.push('quiet_hours_enabled = ?');
           params.push(preferences.quietHoursEnabled ? 1 : 0);
@@ -450,9 +490,10 @@ export class PushService {
         await this.db.run(
           `INSERT INTO notification_preferences (
             id, user_id, push_enabled, order_notifications, staff_notifications,
-            inventory_notifications, task_notifications, quiet_hours_enabled,
+            inventory_notifications, task_notifications, email_enabled, sms_enabled,
+            in_app_enabled, task_completed_email, critical_alerts_email, quiet_hours_enabled,
             quiet_hours_start, quiet_hours_end
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             id,
             userId,
@@ -461,6 +502,11 @@ export class PushService {
             preferences.staffNotifications !== false ? 1 : 0,
             preferences.inventoryNotifications !== false ? 1 : 0,
             preferences.taskNotifications !== false ? 1 : 0,
+            preferences.emailEnabled !== false ? 1 : 0,
+            preferences.smsEnabled ? 1 : 0,
+            preferences.inAppEnabled !== false ? 1 : 0,
+            preferences.taskCompletedEmail ? 1 : 0,
+            preferences.criticalAlertsEmail !== false ? 1 : 0,
             preferences.quietHoursEnabled ? 1 : 0,
             preferences.quietHoursStart || '22:00',
             preferences.quietHoursEnd || '07:00'

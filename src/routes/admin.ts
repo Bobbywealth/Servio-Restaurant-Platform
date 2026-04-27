@@ -234,6 +234,105 @@ const resolveDays = (value: unknown, fallback = 30, max = 365): number => {
   return Math.min(Math.floor(parsed), max);
 };
 
+type AdminDateSelection = {
+  startDate: string;
+  endDate: string;
+  mode: 'single' | 'range';
+};
+
+const DATE_ONLY_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+
+const formatDateOnly = (date: Date): string => {
+  return date.toISOString().slice(0, 10);
+};
+
+const addDaysToDateOnly = (dateOnly: string, days: number): string => {
+  const date = new Date(`${dateOnly}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return formatDateOnly(date);
+};
+
+const parseDateOnly = (value: unknown): string | null => {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim();
+  if (!DATE_ONLY_REGEX.test(normalized)) return null;
+
+  const parsed = new Date(`${normalized}T00:00:00.000Z`);
+  if (Number.isNaN(parsed.getTime())) return null;
+  if (formatDateOnly(parsed) !== normalized) return null;
+  return normalized;
+};
+
+const resolveAdminDateSelection = (
+  query: Record<string, unknown>,
+  fallbackDays = 30
+): { selection: AdminDateSelection; error: string | null } => {
+  const selectedDate = parseDateOnly(query.date);
+  const selectedStartDate = parseDateOnly(query.startDate);
+  const selectedEndDate = parseDateOnly(query.endDate);
+
+  if (query.date !== undefined && !selectedDate) {
+    return {
+      selection: { startDate: '', endDate: '', mode: 'single' },
+      error: "Invalid 'date'. Expected YYYY-MM-DD."
+    };
+  }
+
+  if (query.startDate !== undefined && !selectedStartDate) {
+    return {
+      selection: { startDate: '', endDate: '', mode: 'range' },
+      error: "Invalid 'startDate'. Expected YYYY-MM-DD."
+    };
+  }
+
+  if (query.endDate !== undefined && !selectedEndDate) {
+    return {
+      selection: { startDate: '', endDate: '', mode: 'range' },
+      error: "Invalid 'endDate'. Expected YYYY-MM-DD."
+    };
+  }
+
+  if (selectedDate) {
+    return {
+      selection: { startDate: selectedDate, endDate: selectedDate, mode: 'single' },
+      error: null
+    };
+  }
+
+  if ((selectedStartDate && !selectedEndDate) || (!selectedStartDate && selectedEndDate)) {
+    return {
+      selection: { startDate: '', endDate: '', mode: 'range' },
+      error: "'startDate' and 'endDate' must be provided together."
+    };
+  }
+
+  if (selectedStartDate && selectedEndDate) {
+    if (selectedStartDate > selectedEndDate) {
+      return {
+        selection: { startDate: '', endDate: '', mode: 'range' },
+        error: "'startDate' cannot be later than 'endDate'."
+      };
+    }
+
+    return {
+      selection: { startDate: selectedStartDate, endDate: selectedEndDate, mode: 'range' },
+      error: null
+    };
+  }
+
+  const fallbackEnd = formatDateOnly(new Date());
+  const fallbackStart = addDaysToDateOnly(fallbackEnd, -(Math.max(fallbackDays, 1) - 1));
+
+  return {
+    selection: {
+      startDate: fallbackStart,
+      endDate: fallbackEnd,
+      mode: fallbackDays === 1 ? 'single' : 'range'
+    },
+    error: null
+  };
+};
+
 const ORDER_TIME_WINDOW_INTERVALS = {
   '24h': '24 hours',
   '7d': '7 days',
@@ -2870,6 +2969,21 @@ router.delete('/tasks/:id', async (req, res) => {
 router.get('/platform-stats', async (req, res) => {
   try {
     const db = await DatabaseService.getInstance().getDatabase();
+    const { selection, error: dateError } = resolveAdminDateSelection(req.query as Record<string, unknown>, 1);
+    if (dateError) {
+      return res.status(400).json({ error: dateError });
+    }
+
+    const rangeSpanDays =
+      Math.floor(
+        (new Date(`${selection.endDate}T00:00:00.000Z`).getTime() -
+          new Date(`${selection.startDate}T00:00:00.000Z`).getTime()) /
+          86400000
+      ) + 1;
+    const priorRangeStart = addDaysToDateOnly(selection.startDate, -rangeSpanDays);
+    const priorRangeEnd = addDaysToDateOnly(selection.endDate, -rangeSpanDays);
+    const previousWeekStart = addDaysToDateOnly(selection.startDate, -7);
+    const previousWeekEnd = addDaysToDateOnly(selection.endDate, -7);
     
     // Get platform-wide statistics
     const stats = await db.all(`
@@ -2887,10 +3001,47 @@ router.get('/platform-stats', async (req, res) => {
           JOIN restaurants r ON r.id = te.restaurant_id
           JOIN users u ON u.id = te.user_id AND u.is_active = true
           WHERE ${EXCLUDE_DEMO_RESTAURANTS_SQL} AND te.clock_out_time IS NULL) as staff_on_duty,
+        (SELECT COALESCE(SUM(o.total_amount), 0)
+          FROM orders o
+          JOIN restaurants r ON r.id = o.restaurant_id
+          WHERE ${EXCLUDE_DEMO_RESTAURANTS_SQL}
+            AND o.created_at::date BETWEEN ?::date AND ?::date) as selected_revenue,
+        (SELECT COUNT(*)
+          FROM orders o
+          JOIN restaurants r ON r.id = o.restaurant_id
+          WHERE ${EXCLUDE_DEMO_RESTAURANTS_SQL}
+            AND o.created_at::date BETWEEN ?::date AND ?::date) as selected_order_count,
+        (SELECT COALESCE(SUM(o.total_amount), 0)
+          FROM orders o
+          JOIN restaurants r ON r.id = o.restaurant_id
+          WHERE ${EXCLUDE_DEMO_RESTAURANTS_SQL}
+            AND o.created_at::date BETWEEN ?::date AND ?::date) as prior_day_revenue,
+        (SELECT COUNT(*)
+          FROM orders o
+          JOIN restaurants r ON r.id = o.restaurant_id
+          WHERE ${EXCLUDE_DEMO_RESTAURANTS_SQL}
+            AND o.created_at::date BETWEEN ?::date AND ?::date) as prior_day_order_count,
+        (SELECT COALESCE(SUM(o.total_amount), 0)
+          FROM orders o
+          JOIN restaurants r ON r.id = o.restaurant_id
+          WHERE ${EXCLUDE_DEMO_RESTAURANTS_SQL}
+            AND o.created_at::date BETWEEN ?::date AND ?::date) as prior_week_revenue,
+        (SELECT COUNT(*)
+          FROM orders o
+          JOIN restaurants r ON r.id = o.restaurant_id
+          WHERE ${EXCLUDE_DEMO_RESTAURANTS_SQL}
+            AND o.created_at::date BETWEEN ?::date AND ?::date) as prior_week_order_count,
         (SELECT COUNT(*) FROM time_entries te JOIN restaurants r ON r.id = te.restaurant_id WHERE ${EXCLUDE_DEMO_RESTAURANTS_SQL} AND te.created_at > NOW() - INTERVAL '30 days') as timeclock_entries_30d,
         (SELECT COUNT(*) FROM inventory_transactions it JOIN restaurants r ON r.id = it.restaurant_id WHERE ${EXCLUDE_DEMO_RESTAURANTS_SQL} AND it.created_at > NOW() - INTERVAL '30 days') as inventory_transactions_30d,
         (SELECT COUNT(*) FROM audit_logs al JOIN restaurants r ON r.id = al.restaurant_id WHERE ${EXCLUDE_DEMO_RESTAURANTS_SQL} AND al.created_at > NOW() - INTERVAL '24 hours') as audit_events_24h
-    `);
+    `, [
+      selection.startDate, selection.endDate,
+      selection.startDate, selection.endDate,
+      priorRangeStart, priorRangeEnd,
+      priorRangeStart, priorRangeEnd,
+      previousWeekStart, previousWeekEnd,
+      previousWeekStart, previousWeekEnd
+    ]);
 
     // Get recent activity
     const recentActivity = await db.all(`
@@ -2906,8 +3057,25 @@ router.get('/platform-stats', async (req, res) => {
       LIMIT 10
     `);
 
+    const selectedStats = stats[0] || {};
+    const selectedRevenue = Number(selectedStats.selected_revenue || 0);
+    const selectedOrderCount = Number(selectedStats.selected_order_count || 0);
+    const priorDayRevenue = Number(selectedStats.prior_day_revenue || 0);
+    const priorDayOrderCount = Number(selectedStats.prior_day_order_count || 0);
+    const priorWeekRevenue = Number(selectedStats.prior_week_revenue || 0);
+    const priorWeekOrderCount = Number(selectedStats.prior_week_order_count || 0);
+
     res.json({
-      stats: stats[0],
+      stats: {
+        ...selectedStats,
+        selected_start_date: selection.startDate,
+        selected_end_date: selection.endDate,
+        selected_mode: selection.mode,
+        revenue_delta_vs_prior_day: selectedRevenue - priorDayRevenue,
+        revenue_delta_vs_prior_week: selectedRevenue - priorWeekRevenue,
+        order_count_delta_vs_prior_day: selectedOrderCount - priorDayOrderCount,
+        order_count_delta_vs_prior_week: selectedOrderCount - priorWeekOrderCount
+      },
       recentActivity
     });
 
@@ -2999,22 +3167,45 @@ router.get('/recent-activity', async (req, res) => {
 router.get('/analytics', async (req, res) => {
   try {
     const db = await DatabaseService.getInstance().getDatabase();
-    const { days = 30 } = req.query;
-    const windowDays = resolveDays(days, 30, 365);
+    const { selection, error: dateError } = resolveAdminDateSelection(req.query as Record<string, unknown>, 30);
+    if (dateError) {
+      return res.status(400).json({ error: dateError });
+    }
+
+    const rangeSpanDays =
+      Math.floor(
+        (new Date(`${selection.endDate}T00:00:00.000Z`).getTime() -
+          new Date(`${selection.startDate}T00:00:00.000Z`).getTime()) /
+          86400000
+      ) + 1;
+    const priorRangeStart = addDaysToDateOnly(selection.startDate, -rangeSpanDays);
+    const priorRangeEnd = addDaysToDateOnly(selection.endDate, -rangeSpanDays);
+    const previousWeekStart = addDaysToDateOnly(selection.startDate, -7);
+    const previousWeekEnd = addDaysToDateOnly(selection.endDate, -7);
 
     const revenueByRestaurant = await db.all(`
       SELECT
         r.name,
-        COALESCE(SUM(o.total_amount), 0) AS revenue
+        COALESCE(SUM(o.total_amount), 0) AS revenue,
+        COALESCE(COUNT(o.id), 0) AS order_count,
+        COALESCE(SUM(CASE WHEN o.created_at::date BETWEEN ?::date AND ?::date THEN o.total_amount ELSE 0 END), 0) AS prior_day_revenue,
+        COALESCE(SUM(CASE WHEN o.created_at::date BETWEEN ?::date AND ?::date THEN o.total_amount ELSE 0 END), 0) AS prior_week_revenue
       FROM restaurants r
       LEFT JOIN orders o
        ON r.id = o.restaurant_id
-       AND o.created_at >= NOW() - INTERVAL '${windowDays} days'
+       AND o.created_at::date BETWEEN ?::date AND ?::date
       WHERE r.is_active = true AND ${EXCLUDE_DEMO_RESTAURANTS_SQL}
       GROUP BY r.id, r.name
       ORDER BY revenue DESC
       LIMIT 10
-    `);
+    `, [
+      priorRangeStart,
+      priorRangeEnd,
+      previousWeekStart,
+      previousWeekEnd,
+      selection.startDate,
+      selection.endDate
+    ]);
 
     const ordersByChannel = await db.all(`
       SELECT
@@ -3023,11 +3214,11 @@ router.get('/analytics', async (req, res) => {
       FROM orders o
       JOIN restaurants r ON r.id = o.restaurant_id
       WHERE ${EXCLUDE_DEMO_RESTAURANTS_SQL}
-        AND o.created_at >= NOW() - INTERVAL '${windowDays} days'
+        AND o.created_at::date BETWEEN ?::date AND ?::date
       GROUP BY o.channel
       ORDER BY count DESC
       LIMIT 10
-    `);
+    `, [selection.startDate, selection.endDate]);
 
     const hourlyDistribution = await db.all(`
       SELECT
@@ -3036,13 +3227,31 @@ router.get('/analytics', async (req, res) => {
       FROM orders o
       JOIN restaurants r ON r.id = o.restaurant_id
       WHERE ${EXCLUDE_DEMO_RESTAURANTS_SQL}
-        AND o.created_at >= NOW() - INTERVAL '${windowDays} days'
+        AND o.created_at::date BETWEEN ?::date AND ?::date
       GROUP BY hour
       ORDER BY hour ASC
-    `);
+    `, [selection.startDate, selection.endDate]);
 
     res.json({
-      revenueByRestaurant,
+      selectedRange: {
+        startDate: selection.startDate,
+        endDate: selection.endDate,
+        mode: selection.mode
+      },
+      revenueByRestaurant: (revenueByRestaurant || []).map((row) => {
+        const revenue = Number(row.revenue || 0);
+        const priorDayRevenue = Number(row.prior_day_revenue || 0);
+        const priorWeekRevenue = Number(row.prior_week_revenue || 0);
+        return {
+          ...row,
+          revenue,
+          order_count: Number(row.order_count || 0),
+          prior_day_revenue: priorDayRevenue,
+          prior_week_revenue: priorWeekRevenue,
+          revenue_delta_vs_prior_day: revenue - priorDayRevenue,
+          revenue_delta_vs_prior_week: revenue - priorWeekRevenue
+        };
+      }),
       ordersByChannel,
       hourlyDistribution
     });
@@ -3063,6 +3272,21 @@ router.get('/restaurants', async (req, res) => {
   try {
     const db = await DatabaseService.getInstance().getDatabase();
     const { page = 1, limit = 50, search = '', status = 'all' } = req.query;
+    const { selection, error: dateError } = resolveAdminDateSelection(req.query as Record<string, unknown>, 1);
+    if (dateError) {
+      return res.status(400).json({ error: dateError });
+    }
+
+    const rangeSpanDays =
+      Math.floor(
+        (new Date(`${selection.endDate}T00:00:00.000Z`).getTime() -
+          new Date(`${selection.startDate}T00:00:00.000Z`).getTime()) /
+          86400000
+      ) + 1;
+    const priorRangeStart = addDaysToDateOnly(selection.startDate, -rangeSpanDays);
+    const priorRangeEnd = addDaysToDateOnly(selection.endDate, -rangeSpanDays);
+    const previousWeekStart = addDaysToDateOnly(selection.startDate, -7);
+    const previousWeekEnd = addDaysToDateOnly(selection.endDate, -7);
     
     const offset = (Number(page) - 1) * Number(limit);
     
@@ -3086,6 +3310,12 @@ router.get('/restaurants', async (req, res) => {
         COUNT(DISTINCT u.id) as staff_total,
         COUNT(DISTINCT o.id) as total_orders,
         COUNT(DISTINCT CASE WHEN o.created_at::date = CURRENT_DATE THEN o.id END) as orders_today,
+        COUNT(DISTINCT CASE WHEN o.created_at::date BETWEEN ?::date AND ?::date THEN o.id END) as selected_orders,
+        COALESCE(SUM(CASE WHEN o.created_at::date BETWEEN ?::date AND ?::date THEN o.total_amount ELSE 0 END), 0) as selected_revenue,
+        COUNT(DISTINCT CASE WHEN o.created_at::date BETWEEN ?::date AND ?::date THEN o.id END) as prior_day_selected_orders,
+        COALESCE(SUM(CASE WHEN o.created_at::date BETWEEN ?::date AND ?::date THEN o.total_amount ELSE 0 END), 0) as prior_day_selected_revenue,
+        COUNT(DISTINCT CASE WHEN o.created_at::date BETWEEN ?::date AND ?::date THEN o.id END) as prior_week_selected_orders,
+        COALESCE(SUM(CASE WHEN o.created_at::date BETWEEN ?::date AND ?::date THEN o.total_amount ELSE 0 END), 0) as prior_week_selected_revenue,
         COUNT(DISTINCT CASE WHEN o.status IN (${ACTIVE_ORDER_STATUS_SQL_LIST}) THEN o.id END) as active_orders_now,
         COUNT(DISTINCT CASE WHEN te.clock_out_time IS NULL AND tu.is_active = true THEN te.user_id END) as staff_on_duty,
         MAX(o.created_at) as last_order_at,
@@ -3099,7 +3329,17 @@ router.get('/restaurants', async (req, res) => {
       GROUP BY r.id
       ORDER BY r.created_at DESC
       LIMIT ? OFFSET ?
-    `, [...params, Number(limit), offset]);
+    `, [
+      selection.startDate, selection.endDate,
+      selection.startDate, selection.endDate,
+      priorRangeStart, priorRangeEnd,
+      priorRangeStart, priorRangeEnd,
+      previousWeekStart, previousWeekEnd,
+      previousWeekStart, previousWeekEnd,
+      ...params,
+      Number(limit),
+      offset
+    ]);
 
     // Get total count for pagination
     const totalResult = await db.get(`
@@ -3109,7 +3349,29 @@ router.get('/restaurants', async (req, res) => {
     `, params);
 
     res.json({
-      restaurants,
+      selectedRange: {
+        startDate: selection.startDate,
+        endDate: selection.endDate,
+        mode: selection.mode
+      },
+      restaurants: (restaurants || []).map((restaurant: any) => {
+        const selectedOrders = Number(restaurant.selected_orders || 0);
+        const selectedRevenue = Number(restaurant.selected_revenue || 0);
+        const priorDayOrders = Number(restaurant.prior_day_selected_orders || 0);
+        const priorDayRevenue = Number(restaurant.prior_day_selected_revenue || 0);
+        const priorWeekOrders = Number(restaurant.prior_week_selected_orders || 0);
+        const priorWeekRevenue = Number(restaurant.prior_week_selected_revenue || 0);
+
+        return {
+          ...restaurant,
+          selected_orders: selectedOrders,
+          selected_revenue: selectedRevenue,
+          selected_orders_delta_vs_prior_day: selectedOrders - priorDayOrders,
+          selected_revenue_delta_vs_prior_day: selectedRevenue - priorDayRevenue,
+          selected_orders_delta_vs_prior_week: selectedOrders - priorWeekOrders,
+          selected_revenue_delta_vs_prior_week: selectedRevenue - priorWeekRevenue
+        };
+      }),
       pagination: {
         page: Number(page),
         limit: Number(limit),
@@ -3945,11 +4207,15 @@ router.get('/restaurants/:id/inventory-transactions', async (req, res) => {
     const transactions = await db.all(`
       SELECT 
         it.*,
+        it.inventory_item_id AS item_id,
+        it.created_by AS user_id,
+        it.quantity AS quantity_change,
+        COALESCE(it.unit_cost_snapshot, ii.unit_cost) AS unit_cost_snapshot,
         ii.name as item_name,
         u.name as user_name
       FROM inventory_transactions it
-      LEFT JOIN inventory_items ii ON it.item_id = ii.id
-      LEFT JOIN users u ON it.user_id = u.id
+      LEFT JOIN inventory_items ii ON it.inventory_item_id = ii.id
+      LEFT JOIN users u ON it.created_by = u.id
       WHERE it.restaurant_id = ?
         AND it.created_at >= NOW() - INTERVAL '${windowDays} days'
       ORDER BY it.created_at DESC

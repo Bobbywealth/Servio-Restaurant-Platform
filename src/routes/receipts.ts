@@ -304,15 +304,16 @@ router.post('/:id/apply', requireAuth, asyncHandler(async (req: Request, res: Re
     const transactionId = uuidv4();
     await db.run(
       `INSERT INTO inventory_transactions (
-        id, restaurant_id, inventory_item_id, type, quantity, reason, created_by, created_at
-      ) VALUES (?, ?, ?, 'receive', ?, ?, ?, CURRENT_TIMESTAMP)`,
+        id, restaurant_id, inventory_item_id, type, quantity, reason, created_by, unit_cost_snapshot, created_at
+      ) VALUES (?, ?, ?, 'receive', ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
       [
         transactionId,
         receipt.restaurant_id,
         item.inventory_item_id,
         item.quantity,
         `Received from receipt ${receipt.id}`,
-        user.id
+        user.id,
+        item.unit_cost ?? null
       ]
     );
 

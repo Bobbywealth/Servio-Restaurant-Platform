@@ -82,6 +82,7 @@ interface Transaction {
   item_name: string
   type: string
   quantity_change: number
+  unit_cost_snapshot?: number | null
   user_name: string
   created_at: string
 }
@@ -960,6 +961,9 @@ const InventoryTab: React.FC<{ transactions: Transaction[]; pagination: any }> =
                 Change
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                Unit Cost
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                 User
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
@@ -982,6 +986,11 @@ const InventoryTab: React.FC<{ transactions: Transaction[]; pagination: any }> =
                   }`}>
                     {transaction.quantity_change > 0 ? '+' : ''}{transaction.quantity_change}
                   </span>
+                </td>
+                <td className="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
+                  {transaction.unit_cost_snapshot !== null && transaction.unit_cost_snapshot !== undefined
+                    ? `$${Number(transaction.unit_cost_snapshot).toFixed(2)}`
+                    : '—'}
                 </td>
                 <td className="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
                   {transaction.user_name}
