@@ -365,6 +365,8 @@ function OrderDetailModal({ order, onClose }: { order: Order | null; onClose: ()
   )
 }
 
+type DateMode = 'today' | 'custom-day' | 'range'
+
 export default function OrdersPage() {
   const router = useRouter()
   const { user, hasPermission } = useUser()
@@ -474,6 +476,35 @@ export default function OrdersPage() {
     }
   }
 
+  const resetListPosition = useCallback(() => {
+    setOffset(0)
+    setSelectedOrder(null)
+  }, [])
+
+  const handleSelectToday = useCallback(() => {
+    setDateMode('today')
+    setSelectedDate(getRestaurantDateString(restaurantTimezone))
+    setRangeStart(undefined)
+    setRangeEnd(undefined)
+    resetListPosition()
+  }, [restaurantTimezone, resetListPosition])
+
+  const handleSelectYesterday = useCallback(() => {
+    setDateMode('custom-day')
+    setSelectedDate(getRestaurantDateString(restaurantTimezone, -1))
+    setRangeStart(undefined)
+    setRangeEnd(undefined)
+    resetListPosition()
+  }, [restaurantTimezone, resetListPosition])
+
+  const handleCustomDateChange = useCallback((date: string) => {
+    setDateMode('custom-day')
+    setSelectedDate(date)
+    setRangeStart(undefined)
+    setRangeEnd(undefined)
+    resetListPosition()
+  }, [resetListPosition])
+
   const channels = useMemo(() => {
     const set = new Set<string>()
     orders.forEach(o => {
@@ -481,6 +512,26 @@ export default function OrdersPage() {
     })
     return Array.from(set).sort()
   }, [orders])
+
+  useEffect(() => {
+    const fetchRestaurantProfile = async () => {
+      try {
+        const profileRes = await api.get('/api/restaurant/profile')
+        const timezone = profileRes.data?.data?.timezone || 'America/New_York'
+        setRestaurantTimezone(timezone)
+      } catch (e) {
+        console.warn('Failed to load restaurant profile timezone for orders page', e)
+      }
+    }
+
+    fetchRestaurantProfile()
+  }, [])
+
+  useEffect(() => {
+    if (dateMode === 'today') {
+      setSelectedDate(getRestaurantDateString(restaurantTimezone))
+    }
+  }, [dateMode, restaurantTimezone])
 
   // Filter orders based on all filters including search
   useEffect(() => {
@@ -518,10 +569,13 @@ export default function OrdersPage() {
   const fetchData = useCallback(async () => {
     setIsLoading(true)
     setError(null)
+
     try {
       const [ordersRes, profileRes] = await Promise.all([
         api.get('/api/orders', {
           params: {
+            dateFrom,
+            dateTo,
             status: statusFilter === 'all' || statusFilter === 'active' ? undefined : statusFilter,
             channel: channelFilter === 'all' ? undefined : channelFilter,
             date: selectedDate,
@@ -573,7 +627,7 @@ export default function OrdersPage() {
   useEffect(() => {
     if (!hasPermission('orders', 'read')) return
     fetchData()
-  }, [statusFilter, channelFilter, hasPermission, fetchData])
+  }, [hasPermission, fetchData])
 
   useEffect(() => {
     if (!hasPermission('orders', 'read')) return
@@ -590,6 +644,10 @@ export default function OrdersPage() {
 
     return () => clearInterval(interval)
   }, [hasPermission, fetchData])
+
+  useEffect(() => {
+    resetListPosition()
+  }, [statusFilter, channelFilter, resetListPosition])
 
   useEffect(() => {
     if (!socket) return
@@ -754,6 +812,45 @@ export default function OrdersPage() {
           {/* Filters */}
           <div className="card sticky top-2 z-10 bg-white/95 dark:bg-surface-800/95 backdrop-blur sm:static">
             <div className="flex flex-col sm:flex-row sm:flex-wrap items-end gap-4">
+              <div className="w-full">
+                <label className="flex flex-col gap-2 text-sm text-surface-700 dark:text-surface-300">
+                  <span className="font-medium flex items-center gap-1">
+                    <Filter className="w-4 h-4" />
+                    Day
+                  </span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      className={`px-3 py-2 rounded-full text-sm font-medium border transition-colors ${
+                        dateMode === 'today'
+                          ? 'bg-primary-600 border-primary-600 text-white'
+                          : 'bg-white dark:bg-surface-800 border-surface-300 dark:border-surface-600 text-surface-700 dark:text-surface-300'
+                      }`}
+                      onClick={handleSelectToday}
+                    >
+                      Today
+                    </button>
+                    <button
+                      type="button"
+                      className={`px-3 py-2 rounded-full text-sm font-medium border transition-colors ${
+                        dateMode === 'custom-day' && selectedDate === getRestaurantDateString(restaurantTimezone, -1)
+                          ? 'bg-primary-600 border-primary-600 text-white'
+                          : 'bg-white dark:bg-surface-800 border-surface-300 dark:border-surface-600 text-surface-700 dark:text-surface-300'
+                      }`}
+                      onClick={handleSelectYesterday}
+                    >
+                      Yesterday
+                    </button>
+                    <input
+                      type="date"
+                      className="input-field min-h-[44px]"
+                      value={selectedDate}
+                      onChange={(e) => handleCustomDateChange(e.target.value)}
+                    />
+                  </div>
+                </label>
+              </div>
+
               {/* Search */}
               <div className="flex-1 min-w-[200px]">
                 <label className="flex flex-col gap-1.5 text-sm text-surface-700 dark:text-surface-300">

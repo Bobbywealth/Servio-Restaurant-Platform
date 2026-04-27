@@ -3,11 +3,10 @@ import Head from 'next/head'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Mic, Bot, Shield, Zap, Clock, Users,
+  Mic, Shield, Zap, Clock, Users,
   Phone, Smartphone, RefreshCw, BarChart3,
   CheckCircle2, MessageSquare, Headphones,
   Utensils, ShoppingCart, Package,
-  Calendar, DollarSign, TrendingUp,
   ArrowRight, PlayCircle, Star, Menu, X, Sparkles
 } from 'lucide-react'
 
@@ -107,7 +106,7 @@ export default function HomePage() {
   return (
     <>
       <Head>
-        <title>Servio - Restaurant Operating System | Voice-First Operations</title>
+        <title>Servio - Restaurant Operating System for Orders, Staff, Inventory, and Growth</title>
         <meta name="description" content="Servio is a restaurant operating system that unifies orders, menu updates, marketing, inventory + receipts, staff operations, and integrations in one dashboard—with an AI assistant for fast, hands-free execution." />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta property="og:title" content="Servio - Restaurant Operating System" />
@@ -308,6 +307,14 @@ export default function HomePage() {
               >
                 Servio unifies orders, inventory, staff operations, and communications into a single, beautiful app-like system.
               </motion.p>
+              <motion.p
+                className="text-base sm:text-lg text-gray-400 max-w-3xl mx-auto -mt-4"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.45 }}
+              >
+                Add AI Phone when you need it—Servio works great even if voice is not your primary workflow.
+              </motion.p>
 
               <motion.div
                 className="flex flex-col sm:flex-row gap-4 sm:gap-6 justify-center items-center"
@@ -323,7 +330,7 @@ export default function HomePage() {
                     animate={{ scale: [1, 1.1, 1] }}
                     transition={{ duration: 2, repeat: Infinity }}
                   >
-                    <Mic className="w-6 h-6" />
+                    <ArrowRight className="w-6 h-6" />
                   </motion.div>
                   <span>Start Setup</span>
                   <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
@@ -334,7 +341,15 @@ export default function HomePage() {
                   className="inline-flex items-center gap-3 px-8 py-4 rounded-2xl font-bold text-lg text-white border-2 border-white/20 hover:border-white/40 hover:bg-white/10 transition-all duration-300"
                 >
                   <PlayCircle className="w-6 h-6" />
-                  Book Demo
+                  See Operations Demo
+                </Link>
+
+                <Link
+                  href="/book-demo?track=voice"
+                  className="inline-flex items-center gap-3 px-8 py-4 rounded-2xl font-bold text-lg text-primary-200 border-2 border-primary-500/40 hover:border-primary-500/70 hover:bg-primary-500/10 transition-all duration-300"
+                >
+                  <Mic className="w-6 h-6" />
+                  See AI Phone Demo
                 </Link>
               </motion.div>
 
@@ -386,7 +401,7 @@ export default function HomePage() {
                           <div className="w-16 h-16 bg-gradient-to-br from-primary-100 to-primary-200 rounded-2xl flex items-center justify-center mx-auto mb-3">
                             <Mic className="w-8 h-8 text-primary-600" />
                           </div>
-                          <p className="text-sm text-gray-600 font-medium">"86 the jerk chicken on all platforms"</p>
+                          <p className="text-sm text-gray-600 font-medium">&ldquo;86 the jerk chicken on all platforms&rdquo;</p>
                         </div>
                       </motion.div>
 
@@ -435,7 +450,7 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* Phone Orders Section */}
+        {/* AI Phone Add-On Section */}
         <section id="phone-orders" className="py-20 md:py-32 bg-gradient-to-b from-gray-900 to-gray-850">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 md:gap-20 items-center">
@@ -448,11 +463,11 @@ export default function HomePage() {
                 >
                   <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-blue-500/20 to-cyan-500/20 border border-blue-500/30 text-blue-200 text-sm font-medium mb-6">
                     <Phone className="w-4 h-4" />
-                    AI Phone Answering
+                    Optional AI Phone Add-On
                   </div>
                   <h2 className="text-4xl sm:text-5xl md:text-5xl font-bold text-white leading-tight">
-                    We answer every call<br />
-                    <span className="text-gradient">and take the order for you.</span>
+                    Add voice only when you need it.<br />
+                    <span className="text-gradient">Your operations platform stays the core.</span>
                   </h2>
                 </motion.div>
 
@@ -463,7 +478,7 @@ export default function HomePage() {
                   viewport={{ once: true }}
                   transition={{ delay: 0.2 }}
                 >
-                  Servio's AI voice agent picks up in two rings, speaks naturally, captures the order, respects your hours, syncs availability, and pushes tickets into your POS and delivery platforms—so no call or revenue is missed.
+                  Servio&apos;s AI voice agent is available for phone-heavy restaurants. It picks up in two rings, captures orders, respects your hours, and syncs to your workflow without changing how your core team runs daily operations.
                 </motion.p>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -500,14 +515,14 @@ export default function HomePage() {
                     href="/book-demo"
                     className="btn-primary inline-flex items-center justify-center gap-2"
                   >
-                    Book a phone demo
+                    Book AI phone demo
                     <ArrowRight className="w-4 h-4" />
                   </Link>
                   <Link
                     href="/book-demo"
                     className="btn-ghost inline-flex items-center justify-center gap-2 border border-white/20 hover:bg-white/10"
                   >
-                    See the live demo
+                    See operations demo
                   </Link>
                 </motion.div>
 
@@ -759,7 +774,7 @@ export default function HomePage() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
             >
-              <h2 className="text-4xl sm:text-5xl font-bold text-white mb-6">Trusted by restaurants</h2>
+              <h2 className="text-4xl sm:text-5xl font-bold text-white mb-6">Trusted by restaurant operators</h2>
               <p className="text-xl text-gray-400 max-w-3xl mx-auto">
                 See what restaurant owners and managers are saying about Servio
               </p>
@@ -768,21 +783,21 @@ export default function HomePage() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {[
                 {
-                  quote: "Servio's voice assistant has transformed how we handle phone orders. We've never missed a call during rush hour.",
+                  quote: "Servio cut our end-of-day cleanup in half. Orders, menu edits, and shift updates now happen in one place.",
                   author: "Maria Rodriguez",
                   role: "Owner, Taco Loco",
                   rating: 5,
                   location: "Austin, TX"
                 },
                 {
-                  quote: "The AI actually understands modifiers and dietary restrictions. It's like having a trained manager on the phone 24/7.",
+                  quote: "We finally have visibility into labor and inventory at the same time. Managers make decisions faster during peak hours.",
                   author: "James Chen",
                   role: "General Manager, Dragon Palace",
                   rating: 5,
                   location: "San Francisco, CA"
                 },
                 {
-                  quote: "Finally, a system that works as fast as we do. Menu updates, inventory alerts, staff scheduling - all in one place.",
+                  quote: "Voice is helpful, but the biggest win is operational control. Menu, receipts, and staff workflows are finally aligned.",
                   author: "Sarah Williams",
                   role: "Owner, The Burger Joint",
                   rating: 5,
@@ -802,7 +817,7 @@ export default function HomePage() {
                       <Star key={i} className="w-5 h-5 text-yellow-400 fill-yellow-400" />
                     ))}
                   </div>
-                  <p className="text-gray-300 text-lg mb-6 leading-relaxed">"{testimonial.quote}"</p>
+                  <p className="text-gray-300 text-lg mb-6 leading-relaxed">&ldquo;{testimonial.quote}&rdquo;</p>
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-white font-semibold">{testimonial.author}</p>
@@ -828,13 +843,13 @@ export default function HomePage() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
             >
-              <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4">Integrations coming soon</h2>
-              <p className="text-gray-400">We&apos;re actively building platform integrations and will announce each one as it goes live.</p>
+              <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4">Integrations roadmap</h2>
+              <p className="text-gray-400">Live support for core Servio workflows today, with new POS and data connectors rolling out in phases.</p>
             </motion.div>
 
             <div className="max-w-3xl mx-auto text-center">
               <p className="text-gray-300">
-                Want a specific integration prioritized? Reach out and we&apos;ll add your preferred platform to the roadmap.
+                Need a specific integration prioritized? Tell us your stack and we&apos;ll map what is live now, in pilot, or on the roadmap.
               </p>
             </div>
 
@@ -927,7 +942,7 @@ export default function HomePage() {
               {(pricingPlans.length > 0 ? pricingPlans : [
                 { id: 'starter', name: 'Starter', slug: 'starter', description: 'Get control of the basics: orders, visibility, and daily execution.', price_monthly: 49, is_featured: false },
                 { id: 'operations', name: 'Operations', slug: 'operations', description: 'The full dashboard: orders, menu, marketing, inventory + receipts, staff, and integrations.', price_monthly: 129, is_featured: true },
-                { id: 'voice', name: 'Voice', slug: 'voice', description: 'Hands-free workflows and the AI assistant that helps your team execute faster.', price_monthly: 179, is_featured: false }
+                { id: 'voice', name: 'AI Phone Add-On', slug: 'voice', description: 'Optional for call-heavy locations. Add AI phone coverage without changing your core operations plan.', price_monthly: 179, is_featured: false }
               ]).map((plan, idx) => (
                 <motion.div
                   key={plan.id}
@@ -958,7 +973,7 @@ export default function HomePage() {
                       : 'bg-gray-700 hover:bg-gray-600'
                     }`}
                   >
-                    Select Plan
+                    {plan.slug === 'voice' ? 'Add Voice' : 'Select Plan'}
                     <ArrowRight className="w-4 h-4" />
                   </Link>
                 </motion.div>
@@ -985,7 +1000,7 @@ export default function HomePage() {
                 { q: 'Does Servio support delivery platforms?', a: 'Servio supports integrations via the dashboard\'s Integrations area. Availability depends on your stack—tell us what you run and we\'ll map the path.' },
                 { q: 'Can staff clock in and out from mobile?', a: 'Yes—Servio is built to run from mobile, tablet, and desktop so the team can work where the work happens.' },
                 { q: 'What integrations are available?', a: 'Start with what matters most (POS, ordering channels, accounting, etc.). We\'ll confirm what\'s supported and set up a clean data sync.' },
-                { q: 'How does voice ordering work?', a: 'The Assistant understands natural language commands for orders, inventory, and operations. You tell it what to do—Servio handles the clicks.' },
+                { q: 'Do I need voice to use Servio?', a: 'No. Servio is operations-first. You can run orders, staff, menu, inventory, receipts, and marketing without voice, then add AI phone later if needed.' },
               ].map((faq, idx) => (
                 <motion.div
                   key={idx}
