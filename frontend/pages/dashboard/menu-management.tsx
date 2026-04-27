@@ -2832,6 +2832,7 @@ const MenuManagement: React.FC = () => {
             exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black/50 z-50"
             onClick={() => {
+              editorClosedByUserRef.current = true;
               setShowEditItemModal(false);
               setEditingItem(null);
               setEditItemAttachedGroups([]);
@@ -2853,6 +2854,7 @@ const MenuManagement: React.FC = () => {
                 <h2 className="text-lg font-bold text-gray-900 dark:text-white">Edit Menu Item</h2>
                 <button
                   onClick={() => {
+                    editorClosedByUserRef.current = true;
                     setShowEditItemModal(false);
                     setEditingItem(null);
                     setEditItemAttachedGroups([]);
@@ -3106,6 +3108,7 @@ const MenuManagement: React.FC = () => {
               <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-3 bg-white dark:bg-gray-800">
                 <button
                   onClick={() => {
+                    editorClosedByUserRef.current = true;
                     setShowEditItemModal(false);
                     setEditingItem(null);
                     setEditItemAttachedGroups([]);
