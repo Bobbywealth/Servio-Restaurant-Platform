@@ -8,7 +8,7 @@
     "dev:fast": "node scripts/ensure-port.js 3000 && NODE_OPTIONS='--max-old-space-size=2048' SKIP_ENV_VALIDATION=1 next dev -p 3000",
     "build": "NODE_OPTIONS='--max-old-space-size=2048' next build",
     "export": "next export",
-    "start": "npx serve out -l 10000",
+    "start": "next start -p ${PORT:-10000}",
     "lint": "ESLINT_USE_FLAT_CONFIG=false eslint . --ext .js,.jsx,.ts,.tsx && node scripts/check-api-usage.js",
     "install:ci": "NODE_OPTIONS='--max-old-space-size=1024' npm ci --legacy-peer-deps",
     "test": "npm run test:e2e",
