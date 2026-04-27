@@ -11,7 +11,8 @@ import { PullToRefresh } from '../../components/ui/PullToRefresh'
 import { useHaptic } from '../../lib/haptics'
 import { AnimatePresence, motion } from 'framer-motion'
 import { OrderAnalytics } from '../../components/OrderAnalytics'
-import { getRestaurantDateString, getUtcBoundsForRestaurantDay, getUtcBoundsForRestaurantRange } from '../../lib/dateBounds'
+import BusinessDatePicker from '../../components/ui/BusinessDatePicker'
+import { getDateStringInTimezone, isDateInBusinessDay, isValidDateString } from '../../utils/businessDate'
 
 type OrderStatus = 'received' | 'preparing' | 'ready' | 'completed' | 'cancelled'
 
@@ -385,14 +386,50 @@ export default function OrdersPage() {
   const [lastRefreshedAt, setLastRefreshedAt] = useState<Date | null>(null)
   const [secondsUntilRefresh, setSecondsUntilRefresh] = useState(30)
   const [restaurantTimezone, setRestaurantTimezone] = useState('America/New_York')
-  const [dateMode, setDateMode] = useState<DateMode>('today')
-  const [selectedDate, setSelectedDate] = useState(() => getRestaurantDateString('America/New_York'))
-  const [rangeStart, setRangeStart] = useState<string | undefined>(undefined)
-  const [rangeEnd, setRangeEnd] = useState<string | undefined>(undefined)
-  const [limit] = useState(100)
-  const [offset, setOffset] = useState(0)
+  const [selectedDate, setSelectedDate] = useState(() => getDateStringInTimezone('America/New_York'))
+
+  const todayInRestaurantTimezone = useMemo(
+    () => getDateStringInTimezone(restaurantTimezone),
+    [restaurantTimezone],
+  )
+  const isViewingToday = selectedDate === todayInRestaurantTimezone
 
   const canUpdateOrders = hasPermission('orders', 'update')
+
+  useEffect(() => {
+    if (!router.isReady) return
+
+    const queryDate = Array.isArray(router.query.date) ? router.query.date[0] : router.query.date
+    const localStorageDate = typeof window !== 'undefined' ? window.localStorage.getItem('servio:businessDate') : null
+    const initialDate = [queryDate, localStorageDate].find((value): value is string => Boolean(value && isValidDateString(value)))
+
+    if (initialDate) {
+      setSelectedDate(initialDate)
+      return
+    }
+
+    setSelectedDate(todayInRestaurantTimezone)
+  }, [router.isReady, router.query.date, todayInRestaurantTimezone])
+
+  useEffect(() => {
+    if (!router.isReady || !isValidDateString(selectedDate)) return
+
+    const currentQueryDate = Array.isArray(router.query.date) ? router.query.date[0] : router.query.date
+    if (currentQueryDate !== selectedDate) {
+      router.replace(
+        {
+          pathname: router.pathname,
+          query: { ...router.query, date: selectedDate },
+        },
+        undefined,
+        { shallow: true },
+      )
+    }
+
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('servio:businessDate', selectedDate)
+    }
+  }, [router, selectedDate])
 
   useEffect(() => {
     const orderIdParam = router.query.orderId
@@ -406,8 +443,15 @@ export default function OrdersPage() {
     setSelectedOrder(matchingOrder)
     setStatusFilter('all')
 
-    router.replace('/dashboard/orders', undefined, { shallow: true })
-  }, [orders, router])
+    router.replace(
+      {
+        pathname: '/dashboard/orders',
+        query: selectedDate ? { date: selectedDate } : undefined,
+      },
+      undefined,
+      { shallow: true },
+    )
+  }, [orders, router, selectedDate])
 
   const createTestOrder = async () => {
     setIsLoading(true)
@@ -527,33 +571,50 @@ export default function OrdersPage() {
     setError(null)
 
     try {
-      const todayInRestaurant = getRestaurantDateString(restaurantTimezone)
-      const resolvedSelectedDate = selectedDate || todayInRestaurant
-
-      const { dateFrom, dateTo } = dateMode === 'range' && rangeStart && rangeEnd
-        ? getUtcBoundsForRestaurantRange(rangeStart, rangeEnd, restaurantTimezone)
-        : getUtcBoundsForRestaurantDay(
-            dateMode === 'today' ? todayInRestaurant : resolvedSelectedDate,
-            restaurantTimezone
-          )
-
-      const [ordersRes, summaryRes] = await Promise.all([
-        api.get('/api/orders/history', {
+      const [ordersRes, profileRes] = await Promise.all([
+        api.get('/api/orders', {
           params: {
             dateFrom,
             dateTo,
             status: statusFilter === 'all' || statusFilter === 'active' ? undefined : statusFilter,
             channel: channelFilter === 'all' ? undefined : channelFilter,
-            limit,
-            offset
+            date: selectedDate,
+            limit: 100,
+            offset: 0
           }
         }),
-        api.get('/api/orders/stats/summary')
+        api.get('/api/restaurant/profile')
       ])
 
-      const nextOrders: Order[] = ordersRes.data?.data?.orders || []
+      const timezone = profileRes.data?.data?.timezone || restaurantTimezone
+      setRestaurantTimezone(timezone)
+
+      const nextOrders: Order[] = (ordersRes.data?.data?.orders || []).filter((order: Order) =>
+        isDateInBusinessDay(order.created_at, selectedDate, timezone),
+      )
       setOrders(nextOrders)
-      setSummary(summaryRes.data?.data || null)
+
+      const activeStatuses: OrderStatus[] = ['received', 'preparing', 'ready']
+      const completedToday = nextOrders.filter((order) => order.status === 'completed').length
+      const revenueOrders = nextOrders.filter((order) => !['cancelled'].includes(order.status))
+      const revenueTotal = revenueOrders.reduce((sum, order) => sum + Number(order.total_amount || 0), 0)
+      const summaryForDate: OrdersSummary = {
+        totalOrders: nextOrders.length,
+        activeOrders: nextOrders.filter((order) => activeStatuses.includes(order.status)).length,
+        completedToday,
+        avgOrderValue: revenueOrders.length ? revenueTotal / revenueOrders.length : 0,
+        ordersByStatus: nextOrders.reduce<Record<string, number>>((acc, order) => {
+          acc[order.status] = (acc[order.status] || 0) + 1
+          return acc
+        }, {}),
+        ordersByChannel: nextOrders.reduce<Record<string, number>>((acc, order) => {
+          const key = order.channel || 'unknown'
+          acc[key] = (acc[key] || 0) + 1
+          return acc
+        }, {}),
+      }
+
+      setSummary(summaryForDate)
       setLastRefreshedAt(new Date())
       setSecondsUntilRefresh(30)
     } catch (e: any) {
@@ -561,17 +622,7 @@ export default function OrdersPage() {
     } finally {
       setIsLoading(false)
     }
-  }, [
-    channelFilter,
-    dateMode,
-    limit,
-    offset,
-    rangeEnd,
-    rangeStart,
-    restaurantTimezone,
-    selectedDate,
-    statusFilter
-  ])
+  }, [statusFilter, channelFilter, selectedDate, restaurantTimezone])
 
   useEffect(() => {
     if (!hasPermission('orders', 'read')) return
@@ -692,6 +743,14 @@ export default function OrdersPage() {
               </button>
             </div>
           </div>
+
+          <BusinessDatePicker
+            selectedDate={selectedDate}
+            timezone={restaurantTimezone}
+            isToday={isViewingToday}
+            onDateChange={setSelectedDate}
+            onBackToToday={() => setSelectedDate(todayInRestaurantTimezone)}
+          />
 
           <div className="text-xs text-surface-500 dark:text-surface-400">
             {lastRefreshedAt ? `Last refreshed ${lastRefreshedAt.toLocaleTimeString()}` : 'Loading orders...'}
