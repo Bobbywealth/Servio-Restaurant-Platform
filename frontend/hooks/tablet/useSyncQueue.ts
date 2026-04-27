@@ -1,6 +1,6 @@
 /**
  * useSyncQueue Hook
- * 
+ *
  * Custom hook for managing the offline action queue.
  * Handles persistence, retry logic, and queue processing.
  */
@@ -10,6 +10,7 @@ import { safeLocalStorage } from '@/lib/utils';
 import type { PendingAction, EnqueueAction } from '@/components/tablet/orders/types';
 import { ORDER_QUEUE, STORAGE_KEYS } from '@/components/tablet/orders/constants';
 import { api } from '@/lib/api';
+import { putDurableAction } from '@/lib/offline/offlineActionQueue';
 
 const ACTION_QUEUE_KEY = STORAGE_KEYS.actionQueue;
 
@@ -19,13 +20,10 @@ async function apiPost<T>(path: string, body: unknown): Promise<T> {
 }
 
 interface UseSyncQueueReturn {
-  // State
   actionQueue: PendingAction[];
   pendingActions: Set<string>;
   syncAttemptStatus: 'idle' | 'syncing' | 'success' | 'error';
   lastSuccessfulSyncAt: number | null;
-  
-  // Actions
   enqueueAction: (action: EnqueueAction) => void;
   processActionQueue: (force?: boolean) => Promise<void>;
   retryQueueNow: () => Promise<void>;
@@ -64,7 +62,7 @@ function normalizeQueuedAction(action: unknown): PendingAction | null {
   const act = action as Record<string, unknown>;
   if (!act.id || !act.orderId || !act.type || !act.payload) return null;
   if (act.type !== 'status' && act.type !== 'prep-time') return null;
-  
+
   const idempotencyKey = (act.idempotencyKey as string)
     || (act.type === 'status'
       ? `status:${act.orderId}:${String((act.payload as Record<string, unknown>)?.status || '').toLowerCase()}`
@@ -81,13 +79,29 @@ function normalizeQueuedAction(action: unknown): PendingAction | null {
   } as PendingAction;
 }
 
+async function postMessageToServiceWorker<TResponse>(message: Record<string, unknown>): Promise<TResponse | null> {
+  if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return null;
+  const registration = await navigator.serviceWorker.ready;
+  const sw = registration.active || navigator.serviceWorker.controller;
+  if (!sw) return null;
+
+  return new Promise<TResponse | null>((resolve) => {
+    const channel = new MessageChannel();
+    const timeout = window.setTimeout(() => resolve(null), 2000);
+    channel.port1.onmessage = (event) => {
+      clearTimeout(timeout);
+      resolve((event.data || null) as TResponse | null);
+    };
+    sw.postMessage(message, [channel.port2]);
+  });
+}
+
 export function useSyncQueue(): UseSyncQueueReturn {
   const [actionQueue, setActionQueue] = useState<PendingAction[]>(() => loadActionQueue());
   const [pendingActions, setPendingActions] = useState<Set<string>>(() => new Set());
   const [syncAttemptStatus, setSyncAttemptStatus] = useState<'idle' | 'syncing' | 'success' | 'error'>('idle');
   const [lastSuccessfulSyncAt, setLastSuccessfulSyncAt] = useState<number | null>(null);
 
-  // Load queue from storage on mount
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const cachedQueue = loadActionQueue();
@@ -99,7 +113,7 @@ export function useSyncQueue(): UseSyncQueueReturn {
   const persistActionQueue = useCallback((next: PendingAction[]) => {
     saveActionQueue(next);
     setActionQueue(next);
-    setPendingActions((prev) => {
+    setPendingActions(() => {
       const updated = new Set<string>();
       next.forEach((queuedAction) => updated.add(queuedAction.orderId));
       return updated;
@@ -117,6 +131,26 @@ export function useSyncQueue(): UseSyncQueueReturn {
       : current;
     const next = [...dedupedQueue, nextAction];
     persistActionQueue(next);
+
+    void (async () => {
+      try {
+        await putDurableAction(nextAction);
+        await postMessageToServiceWorker({ type: 'ENQUEUE_OFFLINE_ACTION', payload: nextAction });
+      } catch {
+        // fall through to local queue fallback
+      }
+
+      if ('serviceWorker' in navigator) {
+        try {
+          const registration = await navigator.serviceWorker.ready;
+          if ('sync' in registration) {
+            await registration.sync.register('servio-sync');
+          }
+        } catch {
+          // Background Sync unavailable or registration failed
+        }
+      }
+    })();
   }, [persistActionQueue]);
 
   const upsertStatusSyncFailure = useCallback((params: {
@@ -143,7 +177,7 @@ export function useSyncQueue(): UseSyncQueueReturn {
       permanentFailure
     };
     const next = [
-      ...current.filter((action) => !(action.type === 'status' && action.idempotencyKey === idempotencyKey)),
+      ...current.filter((queuedAction) => !(queuedAction.type === 'status' && queuedAction.idempotencyKey === idempotencyKey)),
       failedAction
     ];
     persistActionQueue(next);
@@ -156,8 +190,7 @@ export function useSyncQueue(): UseSyncQueueReturn {
     if (queue.length === 0) return;
     setSyncAttemptStatus('syncing');
     const remaining: PendingAction[] = [];
-    let needsReload = false;
-    
+
     for (const action of queue) {
       if (!force && (action.permanentFailure || action.retryCount >= ORDER_QUEUE.maxRetryAttempts)) {
         remaining.push(action);
@@ -189,10 +222,9 @@ export function useSyncQueue(): UseSyncQueueReturn {
           lastAttemptAt: Date.now(),
           permanentFailure
         });
-        if (permanentFailure) needsReload = true;
       }
     }
-    
+
     persistActionQueue(remaining);
     if (remaining.length === queue.length) {
       setSyncAttemptStatus('error');
@@ -200,15 +232,13 @@ export function useSyncQueue(): UseSyncQueueReturn {
       setSyncAttemptStatus('success');
       setLastSuccessfulSyncAt(Date.now());
     }
-    if (needsReload) {
-      // Return a signal that reload is needed - caller handles actual reload
-    }
   }, [persistActionQueue]);
 
   const retryQueueNow = useCallback(async () => {
     if (!window.confirm('Retry all failed and queued sync actions now?')) return;
     const resetQueue = loadActionQueue().map((action) => ({ ...action, permanentFailure: false }));
     persistActionQueue(resetQueue);
+    await postMessageToServiceWorker({ type: 'TRIGGER_OFFLINE_SYNC' });
     await processActionQueue(true);
   }, [persistActionQueue, processActionQueue]);
 
@@ -229,36 +259,58 @@ export function useSyncQueue(): UseSyncQueueReturn {
     ));
 
     persistActionQueue(resetQueue);
+    await postMessageToServiceWorker({ type: 'TRIGGER_OFFLINE_SYNC' });
     await processActionQueue(true);
   }, [persistActionQueue, processActionQueue]);
 
-  // Process queue periodically and when coming online
   useEffect(() => {
     const handleOnline = () => {
       processActionQueue();
+      void postMessageToServiceWorker({ type: 'TRIGGER_OFFLINE_SYNC' });
     };
-    
+
+    const handleServiceWorkerMessage = (event: MessageEvent) => {
+      const { type, payload } = event.data || {};
+      if (type === 'OFFLINE_QUEUE_UPDATED' && Array.isArray(payload?.queue)) {
+        const normalized = payload.queue
+          .map((entry: unknown) => normalizeQueuedAction(entry))
+          .filter((entry: PendingAction | null): entry is PendingAction => Boolean(entry));
+        persistActionQueue(normalized);
+        if (payload.lastSuccessfulSyncAt) {
+          setLastSuccessfulSyncAt(Number(payload.lastSuccessfulSyncAt));
+        }
+      }
+
+      if (type === 'OFFLINE_QUEUE_PERMANENT_FAILURE' && payload) {
+        upsertStatusSyncFailure({
+          orderId: payload.orderId,
+          status: payload.status,
+          message: payload.message || 'Permanent sync failure',
+          permanentFailure: true,
+        });
+      }
+    };
+
     window.addEventListener('online', handleOnline);
-    
+    navigator.serviceWorker?.addEventListener('message', handleServiceWorkerMessage);
+
     processActionQueue();
     const t = window.setInterval(() => {
       processActionQueue();
     }, ORDER_QUEUE.processIntervalMs);
-    
+
     return () => {
       window.removeEventListener('online', handleOnline);
+      navigator.serviceWorker?.removeEventListener('message', handleServiceWorkerMessage);
       window.clearInterval(t);
     };
-  }, [processActionQueue]);
+  }, [processActionQueue, persistActionQueue, upsertStatusSyncFailure]);
 
   return {
-    // State
     actionQueue,
     pendingActions,
     syncAttemptStatus,
     lastSuccessfulSyncAt,
-    
-    // Actions
     enqueueAction,
     processActionQueue,
     retryQueueNow,
