@@ -14,6 +14,21 @@ import { putDurableAction } from '@/lib/offline/offlineActionQueue';
 
 const ACTION_QUEUE_KEY = STORAGE_KEYS.actionQueue;
 
+type BackgroundSyncServiceWorkerRegistration = ServiceWorkerRegistration & {
+  sync: {
+    register: (tag: string) => Promise<void>;
+  };
+};
+
+function supportsBackgroundSync(
+  registration: ServiceWorkerRegistration
+): registration is BackgroundSyncServiceWorkerRegistration {
+  const syncCandidate = (registration as { sync?: unknown }).sync;
+  return typeof syncCandidate === 'object'
+    && syncCandidate !== null
+    && typeof (syncCandidate as { register?: unknown }).register === 'function';
+}
+
 async function apiPost<T>(path: string, body: unknown): Promise<T> {
   const res = await api.post(path, body);
   return res.data as T;
@@ -143,7 +158,7 @@ export function useSyncQueue(): UseSyncQueueReturn {
       if ('serviceWorker' in navigator) {
         try {
           const registration = await navigator.serviceWorker.ready;
-          if ('sync' in registration) {
+          if (supportsBackgroundSync(registration)) {
             await registration.sync.register('servio-sync');
           }
         } catch {
