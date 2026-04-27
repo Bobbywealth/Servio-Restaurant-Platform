@@ -24,6 +24,7 @@ const upload = multer({
 });
 
 const router = Router();
+const ALLOWED_PAYMENT_STATUSES = new Set(['unpaid', 'due', 'paid']);
 
 const requireInventoryScopeByMethod = requireApiKeyScopeByHttpMethod('inventory');
 router.use(requireInventoryScopeByMethod);
@@ -43,13 +44,6 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
     });
   }
 
-  if (vendorPaymentDate && !/^\d{4}-\d{2}-\d{2}$/.test(String(vendorPaymentDate))) {
-    return res.status(400).json({
-      success: false,
-      error: { message: 'Vendor payment date must be in YYYY-MM-DD format' }
-    });
-  }
-
   const items = await db.all(
     'SELECT * FROM inventory_items WHERE restaurant_id = ? ORDER BY name',
     [restaurantId]
@@ -66,7 +60,21 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
  * Create a new inventory item
  */
 router.post('/', asyncHandler(async (req: Request, res: Response) => {
-  const { name, sku, unit, onHandQty, lowStockThreshold, category, unitCost, vendorName, vendorPaymentDate } = req.body;
+  const {
+    name,
+    sku,
+    unit,
+    onHandQty,
+    lowStockThreshold,
+    category,
+    unitCost,
+    vendorName,
+    vendorPaymentDate,
+    paymentStatus,
+    paidAt,
+    paymentReference,
+    paymentMethod
+  } = req.body;
   const db = DatabaseService.getInstance().getDatabase();
   const restaurantId = req.user?.restaurantId;
 
@@ -97,13 +105,26 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
       error: { message: 'Vendor payment date must be in YYYY-MM-DD format' }
     });
   }
+  if (paymentStatus && !ALLOWED_PAYMENT_STATUSES.has(String(paymentStatus))) {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'Payment status must be one of: unpaid, due, paid' }
+    });
+  }
+  if (paidAt && Number.isNaN(new Date(String(paidAt)).getTime())) {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'Paid at must be a valid date/time' }
+    });
+  }
 
   const itemId = uuidv4();
 
   await db.run(`
     INSERT INTO inventory_items (
-      id, restaurant_id, name, sku, unit, on_hand_qty, low_stock_threshold, category, unit_cost, vendor_name, vendor_payment_date, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      id, restaurant_id, name, sku, unit, on_hand_qty, low_stock_threshold, category, unit_cost, vendor_name, vendor_payment_date,
+      payment_status, paid_at, payment_reference, payment_method, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
   `, [
     itemId,
     restaurantId,
@@ -115,7 +136,11 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
     category?.trim() || null,
     unitCost ? Number(unitCost) : 0,
     vendorName?.trim() || null,
-    vendorPaymentDate?.trim() || null
+    vendorPaymentDate?.trim() || null,
+    paymentStatus || 'unpaid',
+    paidAt || null,
+    paymentReference?.trim() || null,
+    paymentMethod?.trim() || null
   ]);
 
   const newItem = await db.get('SELECT * FROM inventory_items WHERE id = ?', [itemId]);
@@ -126,7 +151,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
     'create_inventory_item',
     'inventory',
     itemId,
-    { name, sku, unit, onHandQty, lowStockThreshold, category, vendorName, vendorPaymentDate }
+    { name, sku, unit, onHandQty, lowStockThreshold, category, vendorName, vendorPaymentDate, paymentStatus, paidAt, paymentReference, paymentMethod }
   );
 
   logger.info(`Inventory item created: ${name}`);
@@ -143,7 +168,21 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
  */
 router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const { name, sku, unit, onHandQty, lowStockThreshold, category, unitCost, vendorName, vendorPaymentDate } = req.body;
+  const {
+    name,
+    sku,
+    unit,
+    onHandQty,
+    lowStockThreshold,
+    category,
+    unitCost,
+    vendorName,
+    vendorPaymentDate,
+    paymentStatus,
+    paidAt,
+    paymentReference,
+    paymentMethod
+  } = req.body;
   const db = DatabaseService.getInstance().getDatabase();
   const restaurantId = req.user?.restaurantId;
 
@@ -163,6 +202,18 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
     return res.status(400).json({
       success: false,
       error: { message: 'Vendor payment date must be in YYYY-MM-DD format' }
+    });
+  }
+  if (paymentStatus !== undefined && paymentStatus && !ALLOWED_PAYMENT_STATUSES.has(String(paymentStatus))) {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'Payment status must be one of: unpaid, due, paid' }
+    });
+  }
+  if (paidAt !== undefined && paidAt && Number.isNaN(new Date(String(paidAt)).getTime())) {
+    return res.status(400).json({
+      success: false,
+      error: { message: 'Paid at must be a valid date/time' }
     });
   }
 
@@ -205,6 +256,22 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
     updateFields.push('vendor_payment_date = ?');
     updateValues.push(vendorPaymentDate?.trim() || null);
   }
+  if (paymentStatus !== undefined) {
+    updateFields.push('payment_status = ?');
+    updateValues.push(paymentStatus || 'unpaid');
+  }
+  if (paidAt !== undefined) {
+    updateFields.push('paid_at = ?');
+    updateValues.push(paidAt || null);
+  }
+  if (paymentReference !== undefined) {
+    updateFields.push('payment_reference = ?');
+    updateValues.push(paymentReference?.trim() || null);
+  }
+  if (paymentMethod !== undefined) {
+    updateFields.push('payment_method = ?');
+    updateValues.push(paymentMethod?.trim() || null);
+  }
 
   if (updateFields.length > 0) {
     updateFields.push('updated_at = CURRENT_TIMESTAMP');
@@ -225,7 +292,7 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
     'update_inventory_item',
     'inventory',
     id,
-    { name, sku, unit, onHandQty, lowStockThreshold, category, vendorName, vendorPaymentDate }
+    { name, sku, unit, onHandQty, lowStockThreshold, category, vendorName, vendorPaymentDate, paymentStatus, paidAt, paymentReference, paymentMethod }
   );
 
   logger.info(`Inventory item updated: ${updatedItem.name}`);
@@ -241,7 +308,7 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
  * Search inventory items
  */
 router.get('/search', asyncHandler(async (req: Request, res: Response) => {
-  const { q, category, lowStock } = req.query;
+  const { q, category, lowStock, paymentStatus } = req.query;
   const db = DatabaseService.getInstance().getDatabase();
   const restaurantId = req.user?.restaurantId;
 
@@ -257,6 +324,16 @@ router.get('/search', asyncHandler(async (req: Request, res: Response) => {
   if (category) {
     conditions.push('category = ?');
     params.push(category);
+  }
+  if (paymentStatus) {
+    if (!ALLOWED_PAYMENT_STATUSES.has(String(paymentStatus))) {
+      return res.status(400).json({
+        success: false,
+        error: { message: 'Payment status filter must be one of: unpaid, due, paid' }
+      });
+    }
+    conditions.push('payment_status = ?');
+    params.push(paymentStatus);
   }
 
   if (lowStock === 'true') {
