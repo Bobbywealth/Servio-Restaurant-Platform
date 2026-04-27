@@ -3945,11 +3945,15 @@ router.get('/restaurants/:id/inventory-transactions', async (req, res) => {
     const transactions = await db.all(`
       SELECT 
         it.*,
+        it.inventory_item_id AS item_id,
+        it.created_by AS user_id,
+        it.quantity AS quantity_change,
+        COALESCE(it.unit_cost_snapshot, ii.unit_cost) AS unit_cost_snapshot,
         ii.name as item_name,
         u.name as user_name
       FROM inventory_transactions it
-      LEFT JOIN inventory_items ii ON it.item_id = ii.id
-      LEFT JOIN users u ON it.user_id = u.id
+      LEFT JOIN inventory_items ii ON it.inventory_item_id = ii.id
+      LEFT JOIN users u ON it.created_by = u.id
       WHERE it.restaurant_id = ?
         AND it.created_at >= NOW() - INTERVAL '${windowDays} days'
       ORDER BY it.created_at DESC
