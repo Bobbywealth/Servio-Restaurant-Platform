@@ -43,6 +43,7 @@ import {
   shortId,
   formatPrepTimeRemaining,
   getStatusLabel,
+  LiveOrderCard,
   STATUS_STYLES,
   URGENCY_CONFIG,
   STALE_ORDER_THRESHOLD_MINUTES,
@@ -1077,24 +1078,16 @@ export default function TabletOrdersPage() {
                 ) : (
                   <div className="flex min-w-max gap-5">
                     {filteredOrders.map((order) => (
-                      <KDSOrderCard
+                      <LiveOrderCard
                         key={order.id}
                         order={order}
                         now={now}
-                        busyId={busyId}
-                        onAccept={() => openAcceptModal(order)}
-                        onDecline={() => declineOrder(order)}
-                        onMarkReady={() => setStatus(order.id, ORDER_STATUS.READY)}
-                        onMarkPickedUp={() => setStatus(order.id, ORDER_STATUS.COMPLETED)}
-                        onPrint={() => printOrder(order.id)}
-                        formatMoney={formatMoney}
-                        onExpire={(orderId) => {
-                          console.log(`Order ${orderId} timer expired - keeping visible as missed`);
-                          // Don't auto-decline - keep the order visible so staff can still accept it if they want
-                        }}
-                        onViewDetails={() => {
-                          setOrderDetailsOrder(order);
-                        }}
+                        isActionBusy={busyId === order.id}
+                        onAccept={openAcceptModal}
+                        onReject={declineOrder}
+                        onMarkReady={(liveOrder) => setStatus(liveOrder.id, ORDER_STATUS.READY)}
+                        onPickedUp={(liveOrder) => setStatus(liveOrder.id, ORDER_STATUS.COMPLETED)}
+                        onViewDetails={setOrderDetailsOrder}
                       />
                     ))}
                   </div>
