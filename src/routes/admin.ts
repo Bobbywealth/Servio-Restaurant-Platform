@@ -8,6 +8,11 @@ import { CampaignModerationAction, isPlatformAdminOnly, resolveCampaignTransitio
 import { buildSystemHealthPayload } from './systemHealth';
 import { resolveBookingTable } from './bookings';
 import { TASK_SCOPES, TaskScope } from '../types/taskScope';
+import {
+  ORDER_ACTIVE_STATUSES,
+  ORDER_CANCELLABLE_STATUSES,
+  ORDER_REOPEN_TARGET_STATUS
+} from '../lib/orderStatusMachine';
 
 const router = express.Router();
 
@@ -37,7 +42,7 @@ const DEFAULT_PLATFORM_SETTINGS: PlatformSettings = {
   alertEmail: 'ops@servio.solutions'
 };
 
-const ACTIVE_ORDER_STATUSES = ['pending', 'accepted', 'received', 'preparing', 'ready'] as const;
+const ACTIVE_ORDER_STATUSES = ORDER_ACTIVE_STATUSES;
 const ACTIVE_ORDER_STATUS_SQL_LIST = ACTIVE_ORDER_STATUSES.map((status) => `'${status}'`).join(', ');
 const EXCLUDE_DEMO_RESTAURANTS_SQL = "COALESCE(r.slug, '') <> 'demo-restaurant' AND r.id <> 'demo-restaurant-1'";
 
@@ -641,7 +646,6 @@ const writeOverrideAuditLog = async (
   });
 };
 
-const ORDER_CANCELLABLE_STATUSES = new Set(['pending', 'accepted', 'preparing', 'ready']);
 const ORDER_REOPENABLE_STATUSES = new Set(['cancelled']);
 const ADMIN_INTERVENTION_ACTION_PREFIX = 'admin_order_';
 
@@ -2183,7 +2187,7 @@ router.post('/orders/:id/reopen', async (req, res) => {
     const db = await DatabaseService.getInstance().getDatabase();
     const existing = await findIdempotentIntervention(db, id, `${ADMIN_INTERVENTION_ACTION_PREFIX}reopened`, idempotencyKey);
     if (existing) {
-      return res.json({ success: true, idempotentReplay: true, orderId: id, status: 'pending' });
+      return res.json({ success: true, idempotentReplay: true, orderId: id, status: ORDER_REOPEN_TARGET_STATUS });
     }
 
     const order = await readOrder(db, id);
@@ -2192,7 +2196,7 @@ router.post('/orders/:id/reopen', async (req, res) => {
       return res.status(409).json({ error: `Cannot reopen order in status '${order.status}'` });
     }
 
-    await db.run('UPDATE orders SET status = ?, updated_at = NOW() WHERE id = ?', ['pending', id]);
+    await db.run('UPDATE orders SET status = ?, updated_at = NOW() WHERE id = ?', [ORDER_REOPEN_TARGET_STATUS, id]);
     await insertOrderAuditLog(db, {
       restaurantId: order.restaurant_id,
       userId: req.user?.id ?? null,
@@ -2202,11 +2206,11 @@ router.post('/orders/:id/reopen', async (req, res) => {
         idempotencyKey,
         reason,
         previousStatus: order.status,
-        nextStatus: 'pending'
+        nextStatus: ORDER_REOPEN_TARGET_STATUS
       }
     });
 
-    return res.json({ success: true, orderId: id, previousStatus: order.status, status: 'pending' });
+    return res.json({ success: true, orderId: id, previousStatus: order.status, status: ORDER_REOPEN_TARGET_STATUS });
   } catch (error) {
     logger.error('Failed to reopen admin order:', error);
     return res.status(500).json({

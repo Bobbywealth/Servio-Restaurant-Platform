@@ -9,8 +9,16 @@ import { v4 as uuidv4 } from 'uuid';
 import { eventBus } from '../events/bus';
 import { invalidateRestaurantOrderCache } from '../utils/serverCache';
 import { calculateOrderPricing } from '../utils/orderPricing';
+import {
+  canTransitionOrderStatus,
+  getAllowedNextOrderStatuses,
+  isOrderStatus,
+  ORDER_ACTIVE_STATUSES,
+  ORDER_STATUS_VALUES
+} from '../lib/orderStatusMachine';
 
 const router = Router();
+const ACTIVE_ORDER_STATUS_SQL_LIST = ORDER_ACTIVE_STATUSES.map((status) => `'${status}'`).join(', ');
 const num = (v: any) => (typeof v === 'number' ? v : Number(v ?? 0));
 const getRequestId = (req: Request) => {
   const headerId =
@@ -433,13 +441,11 @@ router.post('/:id/status', asyncHandler(async (req: Request, res: Response) => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const { status } = req.body;
 
-  const validStatuses = ['received', 'preparing', 'ready', 'completed', 'cancelled'];
-
-  if (!status || !validStatuses.includes(status)) {
+  if (!isOrderStatus(status)) {
     return res.status(400).json({
       success: false,
       error: {
-        message: 'Invalid status. Must be one of: ' + validStatuses.join(', ')
+        message: 'Invalid status. Must be one of: ' + ORDER_STATUS_VALUES.join(', ')
       }
     });
   }
@@ -455,6 +461,43 @@ router.post('/:id/status', asyncHandler(async (req: Request, res: Response) => {
     return res.status(404).json({
       success: false,
       error: { message: 'Order not found' }
+    });
+  }
+
+  if (!isOrderStatus(order.status)) {
+    return res.status(409).json({
+      success: false,
+      error: {
+        message: `Cannot transition from unsupported current status '${order.status}'`
+      }
+    });
+  }
+
+  if (order.status === status) {
+    return res.json({
+      success: true,
+      data: {
+        orderId: id,
+        previousStatus: order.status,
+        newStatus: status,
+        updatedAt: order.updated_at ?? new Date().toISOString(),
+        noop: true
+      }
+    });
+  }
+
+  if (!canTransitionOrderStatus(order.status, status)) {
+    const allowedTransitions = getAllowedNextOrderStatuses(order.status);
+    return res.status(409).json({
+      success: false,
+      error: {
+        message: `Cannot move order to ${status} from ${order.status}`,
+        details: {
+          currentStatus: order.status,
+          requestedStatus: status,
+          allowedNextStatuses: allowedTransitions
+        }
+      }
     });
   }
 
@@ -639,7 +682,7 @@ router.get('/stats/summary', asyncHandler(async (req: Request, res: Response) =>
     // Total orders (all time)
     db.get('SELECT COUNT(*) as count FROM orders WHERE restaurant_id = ?', [restaurantId]),
     // Active orders (in progress)
-    db.get('SELECT COUNT(*) as count FROM orders WHERE restaurant_id = ? AND status IN (\'received\', \'preparing\', \'ready\')', [restaurantId]),
+    db.get(`SELECT COUNT(*) as count FROM orders WHERE restaurant_id = ? AND status IN (${ACTIVE_ORDER_STATUS_SQL_LIST})`, [restaurantId]),
     // Completed today
     db.get(`SELECT COUNT(*) as count FROM orders WHERE ${completedCondition}`, [restaurantId, periodStartStr, periodEndStr]),
     // Revenue from all non-cancelled orders today
@@ -1203,7 +1246,7 @@ router.get('/waiting-times', asyncHandler(async (req: Request, res: Response) =>
       created_at,
       ROUND(EXTRACT(EPOCH FROM (NOW() - created_at)) / 60) as waiting_minutes
     FROM orders
-    WHERE status IN ('received', 'preparing', 'ready')
+    WHERE status IN (${ACTIVE_ORDER_STATUS_SQL_LIST})
     ORDER BY waiting_minutes DESC
   `);
 
