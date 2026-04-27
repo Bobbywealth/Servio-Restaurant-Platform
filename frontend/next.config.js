@@ -2,11 +2,10 @@
 const nextConfig = {
   reactStrictMode: true,
   trailingSlash: false,
-  output: 'export',
 
-  // AGGRESSIVE IMAGE OPTIMIZATION
+  // IMAGE OPTIMIZATION
   images: {
-    unoptimized: true, // Required for static export builds
+    // Remote patterns configured for backend upload origin
     // Approved remote image hosts are intentionally strict (backend upload origin + local dev only)
     // to reduce SSRF/XSS risk from arbitrary third-party image and SVG sources.
     remotePatterns: [
