@@ -1,16 +1,12 @@
 import type { AxiosInstance } from 'axios';
+import { ORDER_STATUS } from '../../lib/tablet/orderStatusMachine';
+import type { OrderStatus } from '../../lib/tablet/orderStatusMachine';
 
-export const ORDER_STATUS = {
-  RECEIVED: 'received',
-  PREPARING: 'preparing',
-  READY: 'ready',
-  COMPLETED: 'completed',
-  CANCELLED: 'cancelled'
-} as const;
-
-export type OrderStatus = (typeof ORDER_STATUS)[keyof typeof ORDER_STATUS];
+export { ORDER_STATUS };
+export type { OrderStatus };
 
 export const TABLET_STATUS_ACTION = {
+  ACCEPTED: 'accepted',
   PICKED_UP: 'picked_up',
   DECLINED: 'declined'
 } as const;
@@ -18,6 +14,7 @@ export const TABLET_STATUS_ACTION = {
 export type TabletStatusAction = (typeof TABLET_STATUS_ACTION)[keyof typeof TABLET_STATUS_ACTION];
 
 const TABLET_STATUS_TO_ORDER_STATUS: Record<TabletStatusAction, OrderStatus> = {
+  [TABLET_STATUS_ACTION.ACCEPTED]: ORDER_STATUS.PREPARING,
   [TABLET_STATUS_ACTION.PICKED_UP]: ORDER_STATUS.COMPLETED,
   [TABLET_STATUS_ACTION.DECLINED]: ORDER_STATUS.CANCELLED
 };

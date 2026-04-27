@@ -9,7 +9,9 @@
 // Core Types
 // ============================================================================
 
-export type OrderStatus = 'received' | 'preparing' | 'ready' | 'completed' | 'cancelled';
+import type { OrderStatus } from '../../../lib/tablet/orderStatusMachine';
+
+export type { OrderStatus };
 
 export type UrgencyLevel = 'normal' | 'warning' | 'critical';
 
