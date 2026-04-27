@@ -389,6 +389,7 @@ export default function OrdersPage() {
   const [secondsUntilRefresh, setSecondsUntilRefresh] = useState(30)
   const [restaurantTimezone, setRestaurantTimezone] = useState('America/New_York')
   const [selectedDate, setSelectedDate] = useState(() => getDateStringInTimezone('America/New_York'))
+  const [dateMode, setDateMode] = useState<DateMode>('today')
 
   const todayInRestaurantTimezone = useMemo(
     () => getDateStringInTimezone(restaurantTimezone),
@@ -407,9 +408,11 @@ export default function OrdersPage() {
 
     if (initialDate) {
       setSelectedDate(initialDate)
+      setDateMode(initialDate === todayInRestaurantTimezone ? 'today' : 'custom-day')
       return
     }
 
+    setDateMode('today')
     setSelectedDate(todayInRestaurantTimezone)
   }, [router.isReady, router.query.date, todayInRestaurantTimezone])
 
@@ -479,31 +482,24 @@ export default function OrdersPage() {
   }
 
   const resetListPosition = useCallback(() => {
-    setOffset(0)
     setSelectedOrder(null)
   }, [])
 
   const handleSelectToday = useCallback(() => {
     setDateMode('today')
-    setSelectedDate(getRestaurantDateString(restaurantTimezone))
-    setRangeStart(undefined)
-    setRangeEnd(undefined)
+    setSelectedDate(getDateStringInTimezone(restaurantTimezone))
     resetListPosition()
   }, [restaurantTimezone, resetListPosition])
 
   const handleSelectYesterday = useCallback(() => {
     setDateMode('custom-day')
-    setSelectedDate(getRestaurantDateString(restaurantTimezone, -1))
-    setRangeStart(undefined)
-    setRangeEnd(undefined)
+    setSelectedDate(getDateStringInTimezone(restaurantTimezone, new Date(Date.now() - 24 * 60 * 60 * 1000)))
     resetListPosition()
   }, [restaurantTimezone, resetListPosition])
 
   const handleCustomDateChange = useCallback((date: string) => {
     setDateMode('custom-day')
     setSelectedDate(date)
-    setRangeStart(undefined)
-    setRangeEnd(undefined)
     resetListPosition()
   }, [resetListPosition])
 
@@ -531,7 +527,7 @@ export default function OrdersPage() {
 
   useEffect(() => {
     if (dateMode === 'today') {
-      setSelectedDate(getRestaurantDateString(restaurantTimezone))
+      setSelectedDate(getDateStringInTimezone(restaurantTimezone))
     }
   }, [dateMode, restaurantTimezone])
 
@@ -864,7 +860,7 @@ export default function OrdersPage() {
                     <button
                       type="button"
                       className={`px-3 py-2 rounded-full text-sm font-medium border transition-colors ${
-                        dateMode === 'custom-day' && selectedDate === getRestaurantDateString(restaurantTimezone, -1)
+                        dateMode === 'custom-day' && selectedDate === getDateStringInTimezone(restaurantTimezone, new Date(Date.now() - 24 * 60 * 60 * 1000))
                           ? 'bg-primary-600 border-primary-600 text-white'
                           : 'bg-white dark:bg-surface-800 border-surface-300 dark:border-surface-600 text-surface-700 dark:text-surface-300'
                       }`}
