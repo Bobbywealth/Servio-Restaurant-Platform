@@ -96,6 +96,16 @@ function buildCalendarGrid(month: Date) {
   return cells
 }
 
+function formatTimeLabel(time24: string) {
+  const [rawHour = '0', rawMinute = '00'] = time24.split(':')
+  const hour = Number(rawHour)
+  const minute = Number(rawMinute)
+  if (Number.isNaN(hour) || Number.isNaN(minute)) return time24
+  const suffix = hour >= 12 ? 'PM' : 'AM'
+  const hour12 = hour % 12 === 0 ? 12 : hour % 12
+  return `${hour12}:${pad2(minute)} ${suffix}`
+}
+
 export default function AdminDemoBookingsPage() {
   const [month, setMonth] = useState(() => startOfMonth(new Date()))
   const [selectedDate, setSelectedDate] = useState<Date | null>(new Date())
@@ -108,6 +118,7 @@ export default function AdminDemoBookingsPage() {
   const [filterOwnerId, setFilterOwnerId] = useState('all')
   const [filterStatus, setFilterStatus] = useState('all')
   const [filterStage, setFilterStage] = useState('all')
+  const [onlyUnassigned, setOnlyUnassigned] = useState(false)
   const [draftById, setDraftById] = useState<Record<string, BookingDraft>>({})
 
   const range = useMemo(() => {
@@ -134,7 +145,12 @@ export default function AdminDemoBookingsPage() {
   }, [bookings])
 
   const selectedYmd = selectedDate ? toYmd(selectedDate) : ''
-  const selectedBookings = selectedYmd ? bookingsByDay.get(selectedYmd) || [] : []
+  const selectedBookings = useMemo(() => {
+    if (!selectedYmd) return []
+    const dayBookings = bookingsByDay.get(selectedYmd) || []
+    if (!onlyUnassigned) return dayBookings
+    return dayBookings.filter((booking) => !booking.owner_user_id)
+  }, [selectedYmd, bookingsByDay, onlyUnassigned])
 
   const summary = useMemo(() => {
     const today = toYmd(new Date())
@@ -256,6 +272,21 @@ export default function AdminDemoBookingsPage() {
     }
   }
 
+  const jumpSelectedDay = (deltaDays: number) => {
+    if (!selectedDate) return
+    const next = new Date(selectedDate)
+    next.setDate(next.getDate() + deltaDays)
+    setSelectedDate(next)
+    setMonth(startOfMonth(next))
+  }
+
+  const resetFilters = () => {
+    setFilterOwnerId('all')
+    setFilterStatus('all')
+    setFilterStage('all')
+    setOnlyUnassigned(false)
+  }
+
   useEffect(() => {
     fetchOwners()
   }, [])
@@ -306,6 +337,30 @@ export default function AdminDemoBookingsPage() {
             {CONVERSION_STAGE_OPTIONS.map((stage) => <option key={stage} value={stage}>{stage}</option>)}
           </select>
         </div>
+        <div className="mb-6 flex flex-wrap items-center gap-2">
+          <label className="inline-flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+            <input
+              type="checkbox"
+              checked={onlyUnassigned}
+              onChange={(e) => setOnlyUnassigned(e.target.checked)}
+              className="rounded border-gray-300 dark:border-gray-600"
+            />
+            Show only unassigned on selected day
+          </label>
+          <button onClick={resetFilters} className="px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm">
+            Reset filters
+          </button>
+          <button
+            onClick={() => {
+              const today = new Date()
+              setSelectedDate(today)
+              setMonth(startOfMonth(today))
+            }}
+            className="px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm"
+          >
+            Jump to today
+          </button>
+        </div>
 
         <div className="mb-6 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3">
           {[
@@ -352,7 +407,11 @@ export default function AdminDemoBookingsPage() {
 
           <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4 sm:p-6">
             <div className="text-sm text-gray-500 dark:text-gray-400 mb-2">Selected day</div>
-            <div className="text-lg font-semibold text-gray-900 dark:text-white mb-4">{selectedDate ? selectedDate.toLocaleDateString() : '—'}</div>
+            <div className="text-lg font-semibold text-gray-900 dark:text-white mb-2">{selectedDate ? selectedDate.toLocaleDateString() : '—'}</div>
+            <div className="mb-4 flex items-center gap-2">
+              <button onClick={() => jumpSelectedDay(-1)} className="px-2 py-1 rounded border border-gray-200 dark:border-gray-700 text-xs">Previous day</button>
+              <button onClick={() => jumpSelectedDay(1)} className="px-2 py-1 rounded border border-gray-200 dark:border-gray-700 text-xs">Next day</button>
+            </div>
 
             {selectedBookings.length === 0 ? <div className="text-sm text-gray-500 dark:text-gray-400">No demo bookings for this day.</div> : (
               <div className="space-y-3">
@@ -360,7 +419,7 @@ export default function AdminDemoBookingsPage() {
                   const draft = draftById[b.id]
                   return (
                     <div key={b.id} className="rounded-xl border border-gray-200 dark:border-gray-700 p-3 space-y-2">
-                      <div className="font-semibold text-gray-900 dark:text-white">{b.booking_time} — {b.name}</div>
+                      <div className="font-semibold text-gray-900 dark:text-white">{formatTimeLabel(b.booking_time)} — {b.name}</div>
                       <div className="text-sm text-gray-600 dark:text-gray-300 break-all">{b.email}</div>
                       <div className="grid grid-cols-1 gap-1 text-xs text-gray-500 dark:text-gray-400">
                         {b.phone ? <div><span className="font-medium">Phone:</span> {b.phone}</div> : null}
