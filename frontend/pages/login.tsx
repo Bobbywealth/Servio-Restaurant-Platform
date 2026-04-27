@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import Head from 'next/head';
+import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Lock, Mail, AlertCircle, Loader2, ArrowRight, Eye, EyeOff } from 'lucide-react';
@@ -112,6 +113,11 @@ export default function LoginPage() {
               <a href="/#features" className="text-gray-300 hover:text-white font-medium transition-colors">Features</a>
               <a href="/#pricing" className="text-gray-300 hover:text-white font-medium transition-colors">Pricing</a>
               <a href="/#faq" className="text-gray-300 hover:text-white font-medium transition-colors">FAQ</a>
+            </div>
+            <div className="md:hidden">
+              <Link href="/" className="text-teal-100 hover:text-white font-semibold transition-colors border border-teal-500/40 bg-teal-500/10 px-3 py-1.5 rounded-full">
+                Home
+              </Link>
             </div>
           </div>
         </div>
