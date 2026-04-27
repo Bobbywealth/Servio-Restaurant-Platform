@@ -34,6 +34,11 @@ const CACHE_CONFIG = {
   STALE_THRESHOLD: 5 * 60 * 1000             // 5 minutes for stale-while-revalidate
 }
 
+const SAFE_API_GET_ENDPOINTS = [
+  '/api/orders',
+  '/api/restaurant/profile'
+]
+
 // ULTRA FAST INSTALL - Pre-cache critical assets
 self.addEventListener('install', (event) => {
   console.log('⚡ Servio SW v3.0.0: ULTRA TURBO Installing...')
@@ -105,19 +110,19 @@ self.addEventListener('fetch', (event) => {
   const { request } = event
   const url = new URL(request.url)
 
-  // Skip non-GET requests (except for API mutations we want to handle)
-  if (request.method !== 'GET') {
-    return
-  }
-
   // Skip chrome-extension and other non-http requests
   if (!url.protocol.startsWith('http')) {
     return
   }
 
-  // STRATEGY 1: API REQUESTS - Network first, fast timeout
+  // STRATEGY 1: API REQUESTS - Split strategy by method and endpoint safety
   if (url.pathname.startsWith('/api/')) {
     event.respondWith(handleAPIRequest(request))
+    return
+  }
+
+  // Skip non-GET requests for non-API routes
+  if (request.method !== 'GET') {
     return
   }
 
@@ -162,10 +167,60 @@ async function handleAPIRequest(request) {
     }
   }
 
-  // Clone request to add auth header
+  const authRequest = await createAuthenticatedRequest(request)
+
+  const isSafeGetRequest = request.method === 'GET' && isSafeAPIGetEndpoint(url.pathname)
+
+  // Safe API GETs: stale-while-revalidate with TTL
+  if (isSafeGetRequest) {
+    const cache = await caches.open(API_CACHE_NAME)
+    const cachedResponse = await cache.match(request)
+    const hasFreshCache = cachedResponse && await isFreshAPICacheEntry(cache, request)
+
+    const networkPromise = fetchWithTimeout(authRequest, 10000)
+      .then(async (response) => {
+        if (response && response.ok) {
+          await cache.put(request, response.clone())
+          await setAPICacheTimestamp(cache, request)
+          trimCache(API_CACHE_NAME, CACHE_CONFIG.MAX_CACHE_SIZE)
+        }
+        return response
+      })
+
+    if (hasFreshCache) {
+      networkPromise.catch(() => {}) // Background refresh
+      return cachedResponse
+    }
+
+    try {
+      return await networkPromise
+    } catch (error) {
+      if (cachedResponse) {
+        return cachedResponse
+      }
+      return createOfflineResponse()
+    }
+  }
+
+  // Mutating API requests (and non-safe GETs): network-first, uncached
+  try {
+    return await fetchWithTimeout(authRequest, 10000)
+  } catch (error) {
+    if (request.method === 'GET') {
+      const cache = await caches.open(API_CACHE_NAME)
+      const cachedResponse = await cache.match(request)
+      if (cachedResponse) {
+        return cachedResponse
+      }
+    }
+    return createOfflineResponse()
+  }
+}
+
+async function createAuthenticatedRequest(request) {
   let authRequest = request
   const authToken = await getAuthToken()
-  
+
   if (authToken) {
     const headers = new Headers(request.headers)
     headers.set('Authorization', `Bearer ${authToken}`)
@@ -182,17 +237,51 @@ async function handleAPIRequest(request) {
     })
   }
 
-  // Use network with reasonable timeout for mobile networks
+  return authRequest
+}
+
+function isSafeAPIGetEndpoint(pathname) {
+  return SAFE_API_GET_ENDPOINTS.some(endpoint => pathname === endpoint || pathname.startsWith(`${endpoint}/`))
+}
+
+function getAPICacheMetaRequest(request) {
+  const metaUrl = new URL(request.url)
+  metaUrl.searchParams.set('__sw_cache_meta', '1')
+  return new Request(metaUrl.toString(), { method: 'GET' })
+}
+
+async function setAPICacheTimestamp(cache, request) {
+  const metaRequest = getAPICacheMetaRequest(request)
+  const metaResponse = new Response('', {
+    headers: {
+      'sw-cached-at': Date.now().toString()
+    }
+  })
+  await cache.put(metaRequest, metaResponse)
+}
+
+async function isFreshAPICacheEntry(cache, request) {
+  const metaRequest = getAPICacheMetaRequest(request)
+  const metaResponse = await cache.match(metaRequest)
+  if (!metaResponse) return false
+
+  const cachedAt = Number(metaResponse.headers.get('sw-cached-at'))
+  if (!Number.isFinite(cachedAt)) return false
+
+  return Date.now() - cachedAt < CACHE_CONFIG.API_TTL
+}
+
+async function fetchWithTimeout(request, timeoutMs) {
   const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), 10000) // 10s timeout for slow mobile connections
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
 
   try {
-    const response = await fetch(authRequest, { signal: controller.signal })
+    const response = await fetch(request, { signal: controller.signal })
     clearTimeout(timeoutId)
     return response
   } catch (error) {
     clearTimeout(timeoutId)
-    return createOfflineResponse()
+    throw error
   }
 }
 
