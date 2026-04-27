@@ -46,9 +46,6 @@ export default function Document() {
         <link rel="icon" type="image/png" sizes="16x16" href="/icons/servio-icon-192.svg" />
         <link rel="apple-touch-icon" sizes="180x180" href="/icons/servio-icon-192.svg" />
         
-        {/* Manifest files */}
-        <link rel="manifest" href="/manifest.json" />
-        
         {/* Critical CSS for above-the-fold content - inlined to prevent layout shift */}
         <style
           dangerouslySetInnerHTML={{

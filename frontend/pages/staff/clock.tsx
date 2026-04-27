@@ -1184,7 +1184,6 @@ export default function StaffClockPage() {
           <meta name="apple-mobile-web-app-capable" content="yes" />
           <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
           <meta name="theme-color" content="#0f172a" />
-          <link rel="manifest" href="/manifest-staff.json" />
         </Head>
         <PINEntry
           onLogin={handleLogin}
@@ -1208,7 +1207,6 @@ export default function StaffClockPage() {
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="theme-color" content="#0f172a" />
-        <link rel="manifest" href="/manifest-staff.json" />
       </Head>
 
       <div className="h-screen bg-slate-900 flex flex-col overflow-hidden">

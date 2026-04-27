@@ -913,7 +913,6 @@ export default function TabletOrdersPage() {
       <Head>
         <title>Orders • Servio</title>
         <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=yes" />
-        <link rel="manifest" href="/manifest-tablet.webmanifest" />
       </Head>
 
       {/* Print-only receipt (duplicate copies) */}
