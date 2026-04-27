@@ -68,6 +68,16 @@ function buildTimeSlots() {
   return slots
 }
 
+function formatTimeLabel(time24: string) {
+  const [rawHour = '0', rawMinute = '00'] = time24.split(':')
+  const hour = Number(rawHour)
+  const minute = Number(rawMinute)
+  if (Number.isNaN(hour) || Number.isNaN(minute)) return time24
+  const suffix = hour >= 12 ? 'PM' : 'AM'
+  const hour12 = hour % 12 === 0 ? 12 : hour % 12
+  return `${hour12}:${pad2(minute)} ${suffix}`
+}
+
 export default function BookDemoPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [month, setMonth] = useState(() => startOfMonth(new Date()))
@@ -443,7 +453,7 @@ export default function BookDemoPage() {
                               active ? 'ring-2 ring-teal-400 border-teal-400 bg-teal-500/30' : ''
                             ].join(' ')}
                           >
-                            {t}
+                            {formatTimeLabel(t)}
                           </button>
                         )
                       })}
@@ -460,7 +470,7 @@ export default function BookDemoPage() {
                 {selectedDate && selectedTime ? (
                   <>
                     Booking for <span className="text-teal-400 font-semibold">{selectedYmd}</span> at{' '}
-                    <span className="text-teal-400 font-semibold">{selectedTime}</span> ({tz})
+                    <span className="text-teal-400 font-semibold">{formatTimeLabel(selectedTime)}</span> ({tz})
                   </>
                 ) : (
                   'Pick a date and time to continue.'
