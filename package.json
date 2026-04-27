@@ -10,7 +10,7 @@
     "dev": "tsx watch src/server.ts",
     "dev:worker": "tsx watch src/worker.ts",
     "build": "tsc && mkdir -p dist/database && cp -r src/database/migrations dist/database/",
-    "start": "node dist/server.js",
+    "start": "next start",
     "start:worker": "node dist/worker.js",
     "typecheck": "tsc --noEmit",
     "lint": "ESLINT_USE_FLAT_CONFIG=false eslint src --ext .ts,.js",
