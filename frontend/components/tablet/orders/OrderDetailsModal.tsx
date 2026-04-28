@@ -4,6 +4,7 @@ import type { Order } from '../../../hooks/tablet/ordersTypes';
 import type { OrderStatus } from '../../../hooks/tablet/orderStatus';
 import { ORDER_STATUS } from '../../../hooks/tablet/orderStatus';
 import { CountdownTimer } from './CountdownTimer';
+import { getModifierLines } from './utils';
 
 type Props = {
   order: Order | null;
@@ -68,23 +69,11 @@ export function OrderDetailsModal({
   const totalItems = (order.items || []).reduce((sum, item) => sum + (item.quantity || item.qty || 1), 0);
 
   const renderModifiers = (modifiers: Record<string, unknown> | string[] | undefined) => {
-    if (!modifiers) return null;
-
-    if (Array.isArray(modifiers) && modifiers.length > 0) {
-      return modifiers.map((modifier, idx) => (
-        <div key={`mod-array-${idx}`}>• {String(modifier)}</div>
-      ));
-    }
-
-    if (typeof modifiers === 'object') {
-      const entries = Object.entries(modifiers);
-      if (entries.length === 0) return null;
-      return entries.map(([group, value]) => (
-        <div key={group}>• {group}: {Array.isArray(value) ? value.join(', ') : String(value)}</div>
-      ));
-    }
-
-    return null;
+    const lines = getModifierLines(modifiers);
+    if (!lines.length) return null;
+    return lines.map((line, idx) => (
+      <div key={`mod-line-${idx}`}>• {line}</div>
+    ));
   };
 
   return (

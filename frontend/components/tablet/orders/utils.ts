@@ -237,6 +237,62 @@ export function normalizeOrderItems(items: unknown): OrderItem[] {
   });
 }
 
+function extractModifierText(value: unknown): string[] {
+  if (value == null) return [];
+
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    const text = String(value).trim();
+    return text ? [text] : [];
+  }
+
+  if (Array.isArray(value)) {
+    return value.flatMap((entry) => extractModifierText(entry));
+  }
+
+  if (typeof value === 'object') {
+    const obj = value as Record<string, unknown>;
+    const preferredValue =
+      obj.optionName ??
+      obj.option_name ??
+      obj.name ??
+      obj.label ??
+      obj.value ??
+      obj.choiceName ??
+      obj.choice_name;
+
+    if (preferredValue != null) {
+      const base = extractModifierText(preferredValue)[0];
+      if (!base) return [];
+      const qty = typeof obj.quantity === 'number' && obj.quantity > 1 ? `${obj.quantity}x ` : '';
+      return [`${qty}${base}`];
+    }
+
+    return Object.values(obj).flatMap((entry) => extractModifierText(entry));
+  }
+
+  return [];
+}
+
+export function getModifierLines(modifiers: unknown): string[] {
+  if (!modifiers) return [];
+
+  if (Array.isArray(modifiers)) {
+    return modifiers.flatMap((entry) => extractModifierText(entry));
+  }
+
+  if (typeof modifiers === 'object') {
+    const entries = Object.entries(modifiers as Record<string, unknown>);
+    const lines = entries.flatMap(([group, value]) => {
+      const labels = extractModifierText(value);
+      if (!labels.length) return [];
+      return `${group}: ${labels.join(', ')}`;
+    });
+    return lines;
+  }
+
+  return extractModifierText(modifiers);
+}
+
 /**
  * Gets total item count from an order
  */
