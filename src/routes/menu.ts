@@ -1213,8 +1213,29 @@ router.put('/items/:id', upload.array('images', 5), asyncHandler(async (req: Req
   }
 
   // Handle image updates
-  const previousImages: string[] = JSON.parse(existingItem.images || '[]');
-  let images = existingImages ? JSON.parse(existingImages) : [];
+  const parseImageList = (value: unknown): string[] => {
+    if (Array.isArray(value)) {
+      return value.map((item) => String(item)).filter(Boolean);
+    }
+
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (!trimmed) return [];
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) {
+          return parsed.map((item) => String(item)).filter(Boolean);
+        }
+      } catch {
+        return [trimmed];
+      }
+    }
+
+    return [];
+  };
+
+  const previousImages: string[] = parseImageList(existingItem.images);
+  let images = parseImageList(existingImages);
 
   if (req.files && Array.isArray(req.files)) {
     const uploadsPath = await ensureUploadsDir('menu');
@@ -1257,7 +1278,13 @@ router.put('/items/:id', upload.array('images', 5), asyncHandler(async (req: Req
   }
   if (description !== undefined) {
     updateFields.push('description = ?');
-    updateValues.push(description?.trim() || null);
+    if (typeof description === 'string') {
+      updateValues.push(description.trim() || null);
+    } else if (description === null) {
+      updateValues.push(null);
+    } else {
+      throw new BadRequestError('description must be a string when provided');
+    }
   }
   if (price !== undefined) {
     updateFields.push('price = ?');
