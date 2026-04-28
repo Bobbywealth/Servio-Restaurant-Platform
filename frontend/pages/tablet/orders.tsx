@@ -420,6 +420,21 @@ export default function TabletOrdersPage() {
     }
   }, [refresh]);
 
+  const handleSetStatus = useCallback(async (orderId: string, nextStatus: OrderStatus) => {
+    await setStatus(orderId, nextStatus);
+    await refreshOrders();
+  }, [refreshOrders, setStatus]);
+
+  const handleDeclineOrder = useCallback(async (order: Order) => {
+    await declineOrder(order);
+    await refreshOrders();
+  }, [declineOrder, refreshOrders]);
+
+  const handleAcceptOrder = useCallback(async (order: Order, minutes: number) => {
+    await acceptOrder(order, minutes);
+    await refreshOrders();
+  }, [acceptOrder, refreshOrders]);
+
   // Initial data load (polling is managed in a separate effect)
   useEffect(() => {
     void refreshOrders();
@@ -700,7 +715,7 @@ export default function TabletOrdersPage() {
               disabled={isActionBusy}
               onClick={(event) => {
                 stopIfNeeded(event);
-                declineOrder(order);
+                handleDeclineOrder(order);
               }}
               className="flex-1 min-h-[44px] rounded-lg px-3 py-2 text-sm font-semibold border border-[var(--tablet-danger)] text-[var(--tablet-danger)] transition active:bg-[var(--tablet-danger)]/10 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
             >
@@ -715,7 +730,7 @@ export default function TabletOrdersPage() {
             disabled={isActionBusy}
             onClick={(event) => {
               stopIfNeeded(event);
-              setStatus(order.id, 'ready');
+              handleSetStatus(order.id, 'ready');
             }}
             className="w-full min-h-[44px] rounded-lg px-3 py-2 text-sm font-semibold text-[var(--tablet-accent-contrast)] bg-[var(--tablet-success)] transition active:brightness-95 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:saturate-50"
           >
@@ -730,7 +745,7 @@ export default function TabletOrdersPage() {
               disabled={isActionBusy}
               onClick={(event) => {
                 stopIfNeeded(event);
-                setStatus(order.id, 'completed');
+                handleSetStatus(order.id, 'completed');
               }}
               className="flex-1 min-h-[44px] rounded-lg px-3 py-2 text-sm font-semibold text-[var(--tablet-success-action-contrast)] bg-[var(--tablet-success-action)] transition active:bg-[var(--tablet-success-action-active)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tablet-success-action)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--tablet-card)] disabled:opacity-50 disabled:cursor-not-allowed disabled:saturate-50 disabled:active:scale-100"
             >
@@ -742,7 +757,7 @@ export default function TabletOrdersPage() {
                 disabled={isActionBusy}
                 onClick={(event) => {
                   stopIfNeeded(event);
-                  setStatus(order.id, mapTabletStatusActionToOrderStatus(TABLET_STATUS_ACTION.PICKED_UP));
+                  handleSetStatus(order.id, mapTabletStatusActionToOrderStatus(TABLET_STATUS_ACTION.PICKED_UP));
                 }}
                 className="flex-1 min-h-[44px] rounded-lg px-3 py-2 text-sm font-semibold border border-[var(--tablet-border-strong)] text-[var(--tablet-text)] transition active:bg-[color-mix(in_srgb,var(--tablet-surface-alt)_65%,var(--tablet-border-strong)_35%)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tablet-border-strong)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--tablet-card)] disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100"
               >
@@ -1020,9 +1035,9 @@ export default function TabletOrdersPage() {
                         now={now}
                         isActionBusy={busyId === order.id}
                         onAccept={openAcceptModal}
-                        onReject={declineOrder}
-                        onMarkReady={(liveOrder) => setStatus(liveOrder.id, ORDER_STATUS.READY)}
-                        onPickedUp={(liveOrder) => setStatus(liveOrder.id, ORDER_STATUS.COMPLETED)}
+                        onReject={handleDeclineOrder}
+                        onMarkReady={(liveOrder) => handleSetStatus(liveOrder.id, ORDER_STATUS.READY)}
+                        onPickedUp={(liveOrder) => handleSetStatus(liveOrder.id, ORDER_STATUS.COMPLETED)}
                         onViewDetails={setOrderDetailsOrder}
                       />
                     ))}
@@ -1043,11 +1058,11 @@ export default function TabletOrdersPage() {
           setOrderDetailsOrder(null);
         }}
         onDeclineOrder={(order) => {
-          declineOrder(order);
+          handleDeclineOrder(order);
           setOrderDetailsOrder(null);
         }}
         onSetStatus={(orderId, status) => {
-          setStatus(orderId, status);
+          handleSetStatus(orderId, status);
           if (status === ORDER_STATUS.COMPLETED) {
             setOrderDetailsOrder(null);
           }
@@ -1118,7 +1133,7 @@ export default function TabletOrdersPage() {
                   if (!prepModalOrder) return;
                   const orderToAccept = prepModalOrder;
                   const boundedMinutes = Math.min(180, Math.max(1, Number(prepMinutes) || 15));
-                  await acceptOrder(orderToAccept, boundedMinutes);
+                  await handleAcceptOrder(orderToAccept, boundedMinutes);
 
                   if (autoPrintEnabled) {
                     void printOrder(orderToAccept.id);
