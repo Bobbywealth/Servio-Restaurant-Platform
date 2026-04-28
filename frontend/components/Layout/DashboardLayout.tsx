@@ -8,6 +8,7 @@ import { useUser } from '../../contexts/UserContext';
 import ThemeToggle from '../ui/ThemeToggle';
 import NotificationCenter from '../ui/NotificationCenter';
 import AccountSwitcher from '../ui/AccountSwitcher';
+import SupportChatWidget from '../support/SupportChatWidget';
 import {
   Bot,
   Home,
@@ -622,6 +623,8 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           {children}
         </motion.main>
       </div>
+
+      <SupportChatWidget />
 
       {/* Mobile bottom navigation */}
       <div className="fixed bottom-0 left-0 right-0 z-40 w-full bg-white/95 dark:bg-gray-900/95 border-t border-gray-200 dark:border-gray-700 backdrop-blur-md lg:hidden safe-area-inset-bottom gpu-accelerated will-change-transform">

@@ -186,6 +186,7 @@ async function initializeServer() {
     const { default: bulkRoutes } = await import('./routes/bulk');
     const { default: v2Routes } = await import('./routes/v2');
     const { default: checkoutRoutes } = await import('./routes/checkout');
+    const { default: supportChatRoutes } = await import('./routes/support-chat');
 
     // API Routes
     app.use('/api/auth', authRoutes);
@@ -216,6 +217,7 @@ async function initializeServer() {
     app.use('/api', apiVersioning);
     app.use('/api/voice-conversations', requireAuth, voiceConversationsRoutes);
     app.use('/api/conversations', requireAuth, conversationsRoutes);
+    app.use('/api/support-chat', requireAuth, supportChatRoutes);
     
     // Protected routes
     app.use('/api/assistant', requireAuth, assistantRoutes);
