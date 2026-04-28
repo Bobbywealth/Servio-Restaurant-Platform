@@ -1303,9 +1303,7 @@ const MenuManagement: React.FC = () => {
       formData.append('isAvailable', newItem.isAvailable ? '1' : '');
       newItemImages.forEach((file) => formData.append('images', file));
 
-      const resp = await api.post('/api/menu/items', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
+      const resp = await api.post('/api/menu/items', formData);
       const created = resp.data?.data;
       const createdId = created?.id as string | undefined;
       if (createdId && newItemAttachedGroups.length > 0) {
@@ -1475,9 +1473,7 @@ const MenuManagement: React.FC = () => {
       formData.append('existingImages', JSON.stringify(editItemExistingImages));
       editItemImages.forEach((file) => formData.append('images', file));
 
-      const updateResp = await api.put(`/api/menu/items/${editItem.id}`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
+      const updateResp = await api.put(`/api/menu/items/${editItem.id}`, formData);
       await syncItemModifierGroups(editItem.id, editItemAttachedGroups, editItemExistingAttachedGroups);
       toast.success('Menu item updated');
       setBasicsDirty(false);
