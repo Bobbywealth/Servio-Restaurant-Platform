@@ -3,18 +3,23 @@ import { safeLocalStorage as SLS } from './utils'
 import { syncTokenToServiceWorker } from './serviceWorkerAuth'
 export { syncTokenToServiceWorker }
 
-const BACKEND_URL =
+const configuredBackendUrl =
   process.env.NEXT_PUBLIC_API_URL ||
-  process.env.NEXT_PUBLIC_BACKEND_URL
+  process.env.NEXT_PUBLIC_BACKEND_URL ||
+  process.env.BACKEND_URL
 
-if (!BACKEND_URL) {
+const browserDefaultBaseUrl = typeof window !== 'undefined' ? '' : undefined
+const resolvedBaseUrl = configuredBackendUrl || browserDefaultBaseUrl
+
+if (!resolvedBaseUrl) {
   throw new Error('NEXT_PUBLIC_API_URL or NEXT_PUBLIC_BACKEND_URL environment variable is required')
 }
 
-// Ensure URL has protocol
-const baseURL = BACKEND_URL.startsWith('http')
-  ? BACKEND_URL
-  : `https://${BACKEND_URL}`
+// Ensure URL has protocol when using an absolute backend URL.
+// For browser clients, prefer same-origin requests so Next.js rewrites can avoid CORS/mixed-content issues.
+const baseURL = resolvedBaseUrl === ''
+  ? ''
+  : (resolvedBaseUrl.startsWith('http') ? resolvedBaseUrl : `https://${resolvedBaseUrl}`)
 
 export const api = axios.create({
   baseURL,
