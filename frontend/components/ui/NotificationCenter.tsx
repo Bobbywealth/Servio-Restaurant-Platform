@@ -58,8 +58,17 @@ export default function NotificationCenter({ className = '' }: NotificationCente
   const [unreadCount, setUnreadCount] = useState(0)
   const [isLoading, setIsLoading] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
+  const [fetchStatus, setFetchStatus] = useState<{
+    state: 'idle' | 'retrying' | 'offline' | 'error'
+    message: string
+  }>({ state: 'idle', message: '' })
   const socket = useSocket()
   const [alertAudio, setAlertAudio] = useState<HTMLAudioElement | null>(null)
+  const fetchPromiseRef = React.useRef<Promise<void> | null>(null)
+  const pendingOnlineRetryRef = React.useRef(false)
+  const scheduledFetchRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+  const nextFetchAtRef = React.useRef(0)
+  const logThrottleRef = React.useRef<Record<string, number>>({})
 
   // Detect mobile viewport
   useEffect(() => {
@@ -79,29 +88,124 @@ export default function NotificationCenter({ className = '' }: NotificationCente
     return new Date()
   }
 
+  const logErrorThrottled = useCallback((key: string, message: string, error: unknown) => {
+    const now = Date.now()
+    const last = logThrottleRef.current[key] || 0
+    if (now - last < 30000) return
+    logThrottleRef.current[key] = now
+    console.warn(message, error)
+  }, [])
+
+  const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
+
+  const isRetryableFetchError = (error: any) => {
+    const status = error?.response?.status
+    if (!status) return true
+    return status === 502 || status === 503 || status === 504 || status === 429
+  }
+
   // Fetch notifications from database API
   const fetchNotifications = useCallback(async () => {
-    try {
-      setIsLoading(true)
-            const response = await api.get('/api/notifications?limit=100')
-      if (response.data.success) {
-        const normalized = response.data.data.items.map((item: any) => ({
-          ...item,
-          timestamp: normalizeTimestamp(item.created_at),
-          read: item.is_read
-        }))
-        setNotifications(normalized)
-        setUnreadCount(response.data.data.unreadCount)
-      }
-    } catch (error: any) {
-      if (error?.response?.status === 401) {
-        return
-      }
-      console.error('Failed to fetch notifications:', error)
-    } finally {
-      setIsLoading(false)
+    if (fetchPromiseRef.current) {
+      await fetchPromiseRef.current
+      return
     }
-  }, [])
+
+    const request = (async () => {
+      const maxRetries = 5
+      const baseDelayMs = 600
+      let attempt = 0
+
+      setIsLoading(true)
+
+      while (attempt <= maxRetries) {
+        if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+          pendingOnlineRetryRef.current = true
+          setFetchStatus({
+            state: 'offline',
+            message: 'Offline — waiting to reconnect'
+          })
+          break
+        }
+
+        try {
+          const response = await api.get('/api/notifications?limit=100')
+          if (response.data.success) {
+            const normalized = response.data.data.items.map((item: any) => ({
+              ...item,
+              timestamp: normalizeTimestamp(item.created_at),
+              read: item.is_read
+            }))
+            setNotifications(normalized)
+            setUnreadCount(response.data.data.unreadCount)
+          }
+          setFetchStatus({ state: 'idle', message: '' })
+          pendingOnlineRetryRef.current = false
+          break
+        } catch (error: any) {
+          if (error?.response?.status === 401) {
+            break
+          }
+
+          if (!isRetryableFetchError(error) || attempt === maxRetries) {
+            setFetchStatus({
+              state: 'error',
+              message: 'Unable to refresh notifications right now'
+            })
+            logErrorThrottled('notifications-fetch-failed', 'Failed to fetch notifications', error)
+            break
+          }
+
+          attempt += 1
+          const backoff = baseDelayMs * (2 ** (attempt - 1))
+          const jitter = Math.floor(Math.random() * 300)
+          const delay = Math.min(backoff + jitter, 15000)
+          setFetchStatus({
+            state: 'retrying',
+            message: `Reconnecting notifications… (retry ${attempt}/${maxRetries})`
+          })
+          await wait(delay)
+        }
+      }
+
+      setIsLoading(false)
+    })()
+
+    fetchPromiseRef.current = request
+    await request
+    fetchPromiseRef.current = null
+  }, [logErrorThrottled])
+
+  const requestNotificationRefresh = useCallback((options?: { immediate?: boolean }) => {
+    const immediate = options?.immediate ?? false
+
+    if (scheduledFetchRef.current && immediate) {
+      clearTimeout(scheduledFetchRef.current)
+      scheduledFetchRef.current = null
+    }
+
+    if (immediate) {
+      nextFetchAtRef.current = Date.now() + 1500
+      void fetchNotifications()
+      return
+    }
+
+    const now = Date.now()
+    if (now >= nextFetchAtRef.current) {
+      nextFetchAtRef.current = now + 1500
+      void fetchNotifications()
+      return
+    }
+
+    if (scheduledFetchRef.current) return
+
+    const delay = Math.max(0, nextFetchAtRef.current - now)
+    scheduledFetchRef.current = setTimeout(() => {
+      scheduledFetchRef.current = null
+      nextFetchAtRef.current = Date.now() + 1500
+      void fetchNotifications()
+    }, delay)
+  }, [fetchNotifications])
 
   // Mark notification as read
   const markAsRead = useCallback(async (id: string) => {
@@ -112,9 +216,9 @@ export default function NotificationCenter({ className = '' }: NotificationCente
       )
       setUnreadCount(prev => Math.max(0, prev - 1))
     } catch (error) {
-      console.error('Failed to mark notification as read:', error)
+      logErrorThrottled('notifications-mark-read', 'Failed to mark notification as read', error)
     }
-  }, [])
+  }, [logErrorThrottled])
 
   // Mark all as read
   const markAllAsRead = useCallback(async () => {
@@ -123,9 +227,9 @@ export default function NotificationCenter({ className = '' }: NotificationCente
       setNotifications(prev => prev.map(n => ({ ...n, read: true })))
       setUnreadCount(0)
     } catch (error) {
-      console.error('Failed to mark all as read:', error)
+      logErrorThrottled('notifications-mark-all-read', 'Failed to mark all as read', error)
     }
-  }, [])
+  }, [logErrorThrottled])
 
   // Clear all notifications
   const clearAll = useCallback(async () => {
@@ -134,9 +238,9 @@ export default function NotificationCenter({ className = '' }: NotificationCente
       setNotifications([])
       setUnreadCount(0)
     } catch (error) {
-      console.error('Failed to clear notifications:', error)
+      logErrorThrottled('notifications-clear-all', 'Failed to clear notifications', error)
     }
-  }, [])
+  }, [logErrorThrottled])
 
   // Remove single notification
   const removeNotification = useCallback(async (id: string) => {
@@ -150,9 +254,9 @@ export default function NotificationCenter({ className = '' }: NotificationCente
         return prev.filter(n => n.id !== id)
       })
     } catch (error) {
-      console.error('Failed to remove notification:', error)
+      logErrorThrottled('notifications-remove', 'Failed to remove notification', error)
     }
-  }, [])
+  }, [logErrorThrottled])
 
   const getNotificationDestination = useCallback((notification: Notification): string | null => {
     const payload = notification.data && typeof notification.data === 'object' ? notification.data : {}
@@ -205,7 +309,7 @@ export default function NotificationCenter({ className = '' }: NotificationCente
       return
     }
 
-    fetchNotifications()
+    requestNotificationRefresh({ immediate: true })
 
     const audio = new Audio('/sounds/order-alert.mp3')
     audio.preload = 'auto'
@@ -248,10 +352,10 @@ export default function NotificationCenter({ className = '' }: NotificationCente
       setUnreadCount(data.unreadCount)
     }
 
-    const handleOrderEvent = async () => {
+    const handleOrderEvent = () => {
       // Always refetch from API so notifications keep their real DB IDs.
       // Synthetic IDs break mark-as-read/delete endpoints and cause "read" actions to fail.
-      await fetchNotifications()
+      requestNotificationRefresh()
       if (audio) {
         audio.currentTime = 0
         audio.play().catch(() => {})
@@ -268,8 +372,25 @@ export default function NotificationCenter({ className = '' }: NotificationCente
       socket.off('notifications.unread_count.updated', handleUnreadCountUpdate)
       socket.off('order:new', handleOrderEvent)
       socket.off('new-order', handleOrderEvent)
+      if (scheduledFetchRef.current) {
+        clearTimeout(scheduledFetchRef.current)
+        scheduledFetchRef.current = null
+      }
     }
-  }, [socket, fetchNotifications])
+  }, [socket, requestNotificationRefresh])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const handleOnline = () => {
+      if (!pendingOnlineRetryRef.current) return
+      pendingOnlineRetryRef.current = false
+      requestNotificationRefresh({ immediate: true })
+    }
+
+    window.addEventListener('online', handleOnline)
+    return () => window.removeEventListener('online', handleOnline)
+  }, [requestNotificationRefresh])
 
   const getNotificationIcon = (type: Notification['type']) => {
     const iconMap = {
@@ -400,8 +521,13 @@ export default function NotificationCenter({ className = '' }: NotificationCente
                     )}
                   </div>
                   
-                  <div className="flex items-center gap-1 ml-auto">
-                    {unreadCount > 0 && (
+                <div className="flex items-center gap-1 ml-auto">
+                  {fetchStatus.state !== 'idle' && (
+                    <span className="px-2 py-0.5 text-[11px] rounded-full bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-300">
+                      {fetchStatus.message}
+                    </span>
+                  )}
+                  {unreadCount > 0 && (
                       <button
                         onClick={markAllAsRead}
                         className="p-1.5 text-xs text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg transition-colors"
