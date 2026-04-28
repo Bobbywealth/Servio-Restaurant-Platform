@@ -140,7 +140,9 @@ self.addEventListener('fetch', (event) => {
 
   // STRATEGY 3: STATIC ASSETS - Cache first with background update
   if (isStaticAsset(url)) {
-    event.respondWith(handleStaticAsset(request))
+    event.respondWith(
+      handleStaticAsset(request).catch(() => createStaticAssetUnavailableResponse())
+    )
     return
   }
 
@@ -487,7 +489,7 @@ async function handleStaticAsset(request) {
 
   if (cached) {
     // Background update for stale assets
-    updateInBackground(request, STATIC_CACHE_NAME)
+    updateInBackground(request, STATIC_CACHE_NAME).catch(() => {})
     return cached
   }
 
@@ -498,7 +500,12 @@ async function handleStaticAsset(request) {
     }
     return response
   } catch (error) {
-    throw error
+    const cacheBustedVariant = await cache.match(request, { ignoreSearch: true })
+    if (cacheBustedVariant) {
+      return cacheBustedVariant
+    }
+
+    return createStaticAssetUnavailableResponse()
   }
 }
 
@@ -603,11 +610,23 @@ async function updateInBackground(request, cacheName) {
     const response = await fetch(request)
     if (isCacheableResponse(response)) {
       const cache = await caches.open(cacheName)
-      cache.put(request, response)
+      await cache.put(request, response)
     }
   } catch (error) {
     // Silently fail background updates
   }
+}
+
+function createStaticAssetUnavailableResponse() {
+  return new Response('Static asset unavailable', {
+    status: 503,
+    headers: {
+      'Content-Type': 'text/plain; charset=utf-8',
+      'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+      Pragma: 'no-cache',
+      Expires: '0'
+    }
+  })
 }
 
 async function trimCache(cacheName, maxSize) {
