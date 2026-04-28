@@ -74,7 +74,6 @@ export default function TabletOrdersPage() {
     receivedOrders,
     preparingOrders,
     readyOrders,
-    attentionOrdersCount,
     statusFilter,
     setStatusFilter,
     channelFilter,
@@ -952,7 +951,6 @@ export default function TabletOrdersPage() {
                         { key: 'all' as const, label: 'All', count: localActiveOrders.length },
                         { key: 'received' as const, label: 'Needs action', count: receivedOrders.length },
                         { key: 'preparing' as const, label: 'In progress', count: preparingOrders.length },
-                        { key: 'ready' as const, label: 'Ready', count: readyOrders.length },
                       ].map((segment) => {
                         const isActive = statusFilter === segment.key;
                         return (
@@ -974,21 +972,6 @@ export default function TabletOrdersPage() {
                           </button>
                         );
                       })}
-                      <button
-                        type="button"
-                        onClick={() => setNeedsAttentionOnly(!needsAttentionOnly)}
-                        className={clsx(
-                          'rounded-lg border px-4 py-2 text-sm font-medium transition whitespace-nowrap',
-                          needsAttentionOnly
-                            ? 'border-amber-300 bg-amber-50 text-amber-700'
-                            : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-100'
-                        )}
-                      >
-                        Needs attention
-                        <span className="ml-2 rounded-md bg-slate-100 px-2 py-0.5 text-xs">
-                          {attentionOrdersCount}
-                        </span>
-                      </button>
                     </div>
                   </div>
 
