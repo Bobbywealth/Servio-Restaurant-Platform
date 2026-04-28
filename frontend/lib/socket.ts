@@ -149,7 +149,14 @@ class SocketManager {
       return
     }
 
-    if (this.socket?.connected) {
+    if (this.socket) {
+      // Prevent creating multiple socket instances while an existing one is
+      // already connected or actively trying to reconnect.
+      if (this.socket.connected || this.socket.active) {
+        return
+      }
+
+      this.socket.connect()
       return
     }
 
