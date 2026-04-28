@@ -141,14 +141,14 @@ export default function LoginPage() {
               <div className="flex justify-between items-center ml-1"><label htmlFor="login-email" className="text-sm font-bold text-gray-300">Email</label></div>
               <div className="relative group">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Mail className="w-5 h-5 text-gray-400 group-focus-within:text-teal-400 transition-colors" /></div>
-                <input id="login-email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="w-full bg-gray-700/50 border border-gray-600 focus:bg-gray-700 focus:ring-2 focus:ring-teal-500/30 focus:border-teal-400 rounded-xl pl-12 pr-4 py-3 text-white font-medium transition-all outline-none placeholder-gray-400" placeholder="name@restaurant.com" />
+                <input id="login-email" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="w-full bg-gray-700/50 border border-gray-600 focus:bg-gray-700 focus:ring-2 focus:ring-teal-500/30 focus:border-teal-400 rounded-xl pl-12 pr-4 py-3 text-white font-medium transition-all outline-none placeholder-gray-400" placeholder="name@restaurant.com" />
               </div>
             </div>
             <div className="space-y-2">
               <div className="flex justify-between items-center ml-1"><label htmlFor="login-password" className="text-sm font-bold text-gray-300">Password</label></div>
               <div className="relative group">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none"><Lock className="w-5 h-5 text-gray-400 group-focus-within:text-teal-400 transition-colors" /></div>
-                <input id="login-password" type={showPassword ? 'text' : 'password'} required value={password} onChange={(e) => setPassword(e.target.value)} className="w-full bg-gray-700/50 border border-gray-600 focus:bg-gray-700 focus:ring-2 focus:ring-teal-500/30 focus:border-teal-400 rounded-xl pl-12 pr-12 py-3 text-white font-medium transition-all outline-none placeholder-gray-400" placeholder="Enter your password" />
+                <input id="login-password" type={showPassword ? 'text' : 'password'} autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} className="w-full bg-gray-700/50 border border-gray-600 focus:bg-gray-700 focus:ring-2 focus:ring-teal-500/30 focus:border-teal-400 rounded-xl pl-12 pr-12 py-3 text-white font-medium transition-all outline-none placeholder-gray-400" placeholder="Enter your password" />
                 <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute inset-y-0 right-0 pr-4 flex items-center text-gray-400 hover:text-white transition-colors">{showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}</button>
               </div>
             </div>
