@@ -21,8 +21,8 @@ function unlockAudio() {
   try {
     const AudioContext = (window as any).AudioContext || (window as any).webkitAudioContext;
     if (AudioContext) {
-      alertAudioContext = alertAudioContext ?? new AudioContext();
-      const ctx = alertAudioContext;
+      const ctx = alertAudioContext ?? new AudioContext();
+      alertAudioContext = ctx;
       const buffer = ctx.createBuffer(1, 1, 22050);
       const source = ctx.createBufferSource();
       source.buffer = buffer;
@@ -40,8 +40,8 @@ function beep() {
   try {
     const AudioContext = (window as any).AudioContext || (window as any).webkitAudioContext;
     if (!AudioContext) return;
-    alertAudioContext = alertAudioContext ?? new AudioContext();
-    const ctx = alertAudioContext;
+    const ctx = alertAudioContext ?? new AudioContext();
+    alertAudioContext = ctx;
     if (ctx.state === 'suspended') {
       void ctx.resume();
     }
