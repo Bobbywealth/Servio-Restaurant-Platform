@@ -27,6 +27,20 @@ function _getAuditUserId(req: Request): string | null {
 
 const router = Router();
 
+function parseStoredJson(value: unknown, fallback: Record<string, any> = {}): Record<string, any> {
+  if (value === null || value === undefined || value === '') return fallback;
+  if (typeof value === 'object') return value as Record<string, any>;
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      if (parsed && typeof parsed === 'object') return parsed as Record<string, any>;
+    } catch {
+      return fallback;
+    }
+  }
+  return fallback;
+}
+
 // Configure multer for image uploads
 const storage = multer.memoryStorage();
 const upload = multer({ 
@@ -71,24 +85,13 @@ router.get('/profile', asyncHandler(async (req: Request, res: Response) => {
     });
   }
 
-  // Safe JSON parsing helper
-  const safeJsonParse = (str: string, fallback: any = {}) => {
-    if (!str) return fallback;
-    try {
-      return JSON.parse(str);
-    } catch {
-      logger.warn(`Failed to parse JSON`);
-      return fallback;
-    }
-  };
-
   // Parse JSON fields
   const formattedRestaurant = {
     ...restaurant,
-    address: safeJsonParse(restaurant.address, {}),
-    social_links: safeJsonParse(restaurant.social_links, {}),
-    operating_hours: safeJsonParse(restaurant.operating_hours, {}),
-    settings: safeJsonParse(restaurant.settings, {}),
+    address: parseStoredJson(restaurant.address, {}),
+    social_links: parseStoredJson(restaurant.social_links, {}),
+    operating_hours: parseStoredJson(restaurant.operating_hours, {}),
+    settings: parseStoredJson(restaurant.settings, {}),
     online_ordering_enabled: Boolean(restaurant.online_ordering_enabled),
     delivery_enabled: Boolean(restaurant.delivery_enabled),
     pickup_enabled: Boolean(restaurant.pickup_enabled),
@@ -330,24 +333,14 @@ router.put('/profile', upload.fields([
 
   logger.info(`Restaurant profile updated: ${name || existingRestaurant.name}`);
 
-  // Safe JSON parsing helper
-  const safeJsonParse = (str: string, fallback: any = {}) => {
-    if (!str) return fallback;
-    try {
-      return JSON.parse(str);
-    } catch {
-      return fallback;
-    }
-  };
-
   return res.json({
     success: true,
     data: {
       ...updatedRestaurant,
-      address: safeJsonParse(updatedRestaurant.address, {}),
-      social_links: safeJsonParse(updatedRestaurant.social_links, {}),
-      operating_hours: safeJsonParse(updatedRestaurant.operating_hours, {}),
-      settings: safeJsonParse(updatedRestaurant.settings, {})
+      address: parseStoredJson(updatedRestaurant.address, {}),
+      social_links: parseStoredJson(updatedRestaurant.social_links, {}),
+      operating_hours: parseStoredJson(updatedRestaurant.operating_hours, {}),
+      settings: parseStoredJson(updatedRestaurant.settings, {})
     }
   });
 }));
@@ -394,12 +387,7 @@ router.put('/settings', asyncHandler(async (req: Request, res: Response) => {
   }
 
   // Parse existing settings
-  let settings = {};
-  try {
-    settings = restaurant.settings ? JSON.parse(restaurant.settings) : {};
-  } catch {
-    settings = {};
-  }
+  const settings = parseStoredJson((restaurant as any).settings, {});
 
   // Update settings
   if (online_payments_enabled !== undefined) {
@@ -1032,12 +1020,7 @@ router.get('/onboarding-status', asyncHandler(async (req: Request, res: Response
     return res.status(404).json({ success: false, error: { message: 'Restaurant not found' } });
   }
 
-  let settings: any = {};
-  try {
-    settings = restaurant.settings ? JSON.parse(restaurant.settings) : {};
-  } catch {
-    settings = {};
-  }
+  const settings: any = parseStoredJson(restaurant.settings, {});
 
   return res.json({
     success: true,
@@ -1066,12 +1049,7 @@ router.post('/onboarding-complete', asyncHandler(async (req: Request, res: Respo
     return res.status(404).json({ success: false, error: { message: 'Restaurant not found' } });
   }
 
-  let settings: any = {};
-  try {
-    settings = restaurant.settings ? JSON.parse(restaurant.settings) : {};
-  } catch {
-    settings = {};
-  }
+  const settings: any = parseStoredJson(restaurant.settings, {});
 
   settings.onboarding_completed = true;
   settings.onboarding_completed_at = new Date().toISOString();
