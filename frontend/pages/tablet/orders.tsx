@@ -1114,10 +1114,21 @@ export default function TabletOrdersPage() {
               <button
                 type="button"
                 className="flex-1 rounded-lg bg-blue-600 px-3 py-2 font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
-                onClick={() => {
+                onClick={async () => {
                   if (!prepModalOrder) return;
+                  const orderToAccept = prepModalOrder;
                   const boundedMinutes = Math.min(180, Math.max(1, Number(prepMinutes) || 15));
-                  void acceptOrder(prepModalOrder, boundedMinutes);
+                  await acceptOrder(orderToAccept, boundedMinutes);
+
+                  if (autoPrintEnabled) {
+                    void printOrder(orderToAccept.id);
+                  } else if (typeof window !== 'undefined') {
+                    const shouldPrintNow = window.confirm('Order accepted. Print this order now?');
+                    if (shouldPrintNow) {
+                      void printOrder(orderToAccept.id);
+                    }
+                  }
+
                   setPrepModalOrder(null);
                 }}
                 disabled={busyId === prepModalOrder.id}
