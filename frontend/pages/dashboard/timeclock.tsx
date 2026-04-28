@@ -34,7 +34,7 @@ interface TimeEntry {
   clock_in_time: string
   clock_out_time?: string
   break_minutes: number
-  total_hours?: number
+  total_hours?: number | string | null
   position?: string
   notes?: string
 }
@@ -201,8 +201,21 @@ export default function TimeClockPage() {
     })
   }
 
-  const formatHours = (hours: number) => {
-    return hours.toFixed(1)
+  const toSafeNumber = (value: unknown, fallback = 0) => {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value
+    }
+    if (typeof value === 'string' && value.trim() !== '') {
+      const parsed = Number(value)
+      if (Number.isFinite(parsed)) {
+        return parsed
+      }
+    }
+    return fallback
+  }
+
+  const formatHours = (hours: unknown) => {
+    return toSafeNumber(hours).toFixed(1)
   }
 
   const addDigit = (digit: string) => {
@@ -508,7 +521,7 @@ export default function TimeClockPage() {
                       {entry.break_minutes > 0 ? `${entry.break_minutes} min` : '-'}
                     </td>
                     <td className="py-3 px-4 text-gray-900">
-                      {entry.total_hours ? `${formatHours(entry.total_hours)} hrs` : '-'}
+                      {entry.total_hours !== null && entry.total_hours !== undefined ? `${formatHours(entry.total_hours)} hrs` : '-'}
                     </td>
                     <td className="py-3 px-4 text-gray-600">
                       {entry.position || '-'}
@@ -540,7 +553,7 @@ export default function TimeClockPage() {
                   <div className="flex justify-between"><span className="text-gray-500">Clock In</span><span className="text-gray-900">{formatTime(entry.clock_in_time)}</span></div>
                   <div className="flex justify-between"><span className="text-gray-500">Clock Out</span><span className="text-gray-900">{entry.clock_out_time ? formatTime(entry.clock_out_time) : '—'}</span></div>
                   <div className="flex justify-between"><span className="text-gray-500">Break</span><span className="text-gray-900">{entry.break_minutes > 0 ? `${entry.break_minutes} min` : '-'}</span></div>
-                  <div className="flex justify-between"><span className="text-gray-500">Hours</span><span className="text-gray-900">{entry.total_hours ? `${formatHours(entry.total_hours)} hrs` : '-'}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-500">Hours</span><span className="text-gray-900">{entry.total_hours !== null && entry.total_hours !== undefined ? `${formatHours(entry.total_hours)} hrs` : '-'}</span></div>
                   <div className="flex justify-between"><span className="text-gray-500">Position</span><span className="text-gray-900">{entry.position || '-'}</span></div>
                 </div>
               </div>
