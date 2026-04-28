@@ -141,7 +141,7 @@ export default function TabletOrdersPage() {
   // Local UI state (kept for modal and UI-specific state)
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [isOnline, setIsOnline] = useState<boolean>(true);
-  const [socketConnected, setSocketConnected] = useState<boolean>(false);
+  const [socketConnected, setSocketConnected] = useState<boolean>(socket.connected);
   const [showUpdateBanner, setShowUpdateBanner] = useState(false);
   
   // New feature toggles
@@ -274,6 +274,7 @@ export default function TabletOrdersPage() {
 
   useEffect(() => {
     if (!socket) return;
+    setSocketConnected(socket.connected);
     const cleanup = socket.onConnectionChange((status) => {
       setSocketConnected(status);
     });
