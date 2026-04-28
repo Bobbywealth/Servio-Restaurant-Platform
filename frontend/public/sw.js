@@ -45,6 +45,14 @@ const SAFE_API_GET_ENDPOINTS = [
   '/api/restaurant/profile'
 ]
 
+const API_ENDPOINTS_WITHOUT_SYNTHETIC_OFFLINE = [
+  '/api/push/vapid-key',
+  '/api/notifications',
+  '/api/auth',
+  '/api/realtime',
+  '/api/socket'
+]
+
 // ULTRA FAST INSTALL - Pre-cache critical assets
 self.addEventListener('install', (event) => {
   console.log('⚡ Servio SW v3.0.0: ULTRA TURBO Installing...')
@@ -165,17 +173,17 @@ self.addEventListener('fetch', (event) => {
 // API HANDLER - Network first with fast timeout for real-time data
 async function handleAPIRequest(request) {
   const url = new URL(request.url)
+  const authRequest = await createAuthenticatedRequest(request)
+  const shouldBypassSyntheticOffline = isRealtimeOrAuthDependentEndpoint(url.pathname)
 
-  // Never cache auth endpoints
-  if (url.pathname.includes('/auth/')) {
+  // Never cache auth/realtime endpoints and avoid masking with synthetic offline responses.
+  if (shouldBypassSyntheticOffline) {
     try {
-      return await fetch(request)
+      return await fetchWithTimeout(authRequest, 10000)
     } catch (error) {
-      return createOfflineResponse()
+      return Response.error()
     }
   }
-
-  const authRequest = await createAuthenticatedRequest(request)
 
   const isSafeGetRequest = request.method === 'GET' && isSafeAPIGetEndpoint(url.pathname)
 
@@ -210,7 +218,8 @@ async function handleAPIRequest(request) {
     }
   }
 
-  // Mutating API requests (and non-safe GETs): network-first, uncached
+  // Mutating API requests (and non-safe GETs): network-first, uncached.
+  // Do not synthesize JSON errors unless endpoint is explicitly allowlisted.
   try {
     return await fetchWithTimeout(authRequest, 10000)
   } catch (error) {
@@ -221,7 +230,10 @@ async function handleAPIRequest(request) {
         return cachedResponse
       }
     }
-    return createOfflineResponse()
+
+    return shouldCreateOfflineAPIResponse(request.method, url.pathname)
+      ? createOfflineResponse()
+      : Response.error()
   }
 }
 
@@ -260,6 +272,15 @@ async function createAuthenticatedRequest(request) {
 
 function isSafeAPIGetEndpoint(pathname) {
   return SAFE_API_GET_ENDPOINTS.some(endpoint => pathname === endpoint || pathname.startsWith(`${endpoint}/`))
+}
+
+
+function shouldCreateOfflineAPIResponse(method, pathname) {
+  return method === 'GET' && isSafeAPIGetEndpoint(pathname)
+}
+
+function isRealtimeOrAuthDependentEndpoint(pathname) {
+  return API_ENDPOINTS_WITHOUT_SYNTHETIC_OFFLINE.some(endpoint => pathname === endpoint || pathname.startsWith(`${endpoint}/`))
 }
 
 function getAPICacheMetaRequest(request) {
