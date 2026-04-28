@@ -409,14 +409,13 @@ const MenuManagement: React.FC = () => {
 
     if (pending.type === 'category') {
       setSelectedCategory(pending.id);
-      const nextCat = categories.find((c) => c.id === pending.id);
-      const first = nextCat?.items?.[0];
-      if (first) {
-        await openEditItemModal(first);
-      } else {
-        setSelectedItemId(null);
-        setEditingItem(null);
-      }
+      setShowEditItemModal(false);
+      setSelectedItemId(null);
+      setEditingItem(null);
+      setEditItemAttachedGroups([]);
+      setEditItemExistingAttachedGroups([]);
+      setEditItemSizes([]);
+      setEditItemInheritedGroups([]);
       return;
     }
 
@@ -435,16 +434,15 @@ const MenuManagement: React.FC = () => {
         return;
       }
       setSelectedCategory(categoryId);
-      const cat = categories.find((c) => c.id === categoryId);
-      const first = cat?.items?.[0];
-      if (first) {
-        await openEditItemModal(first);
-      } else {
-        setSelectedItemId(null);
-        setEditingItem(null);
-      }
+      setShowEditItemModal(false);
+      setSelectedItemId(null);
+      setEditingItem(null);
+      setEditItemAttachedGroups([]);
+      setEditItemExistingAttachedGroups([]);
+      setEditItemSizes([]);
+      setEditItemInheritedGroups([]);
     },
-    [basicsDirty, categories]
+    [basicsDirty]
   );
 
   const requestSelectItem = useCallback(
@@ -483,15 +481,14 @@ const MenuManagement: React.FC = () => {
     loadMenuData(true);
   }, [loadMenuData]);
 
-  // Selection behavior: keep editor selection valid and auto-select first item when category changes.
+  // Selection behavior: keep editor selection valid without auto-opening the editor.
   useEffect(() => {
-    const previousCategoryId = previousActiveCategoryIdRef.current;
-    const categoryChanged = previousCategoryId !== activeCategoryId;
     previousActiveCategoryIdRef.current = activeCategoryId ?? null;
     
     if (loading) return;
     if (basicsDirty) return;
     if (!activeCategoryId) {
+      setShowEditItemModal(false);
       setSelectedItemId(null);
       setEditingItem(null);
       return;
@@ -499,6 +496,7 @@ const MenuManagement: React.FC = () => {
     const cat = categories.find((c) => c.id === activeCategoryId);
     const items = cat?.items || [];
     if (!items.length) {
+      setShowEditItemModal(false);
       setSelectedItemId(null);
       setEditingItem(null);
       return;
@@ -512,20 +510,20 @@ const MenuManagement: React.FC = () => {
       setEditingItem(stillExists);
       return;
     }
-    // Update ref when selectedItemId changes
-    selectedItemIdRef.current = selectedItemId;
-    if (!categoryChanged) {
-      return;
-    }
-    // Skip auto-select if user explicitly closed the editor
-    if (editorClosedByUserRef.current) {
-      editorClosedByUserRef.current = false;
-      return;
-    }
-    // Auto-select first item in category
-    void openEditItemModal(items[0]);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
+    // If the current selection no longer exists, clear it and keep the drawer closed
+    setShowEditItemModal(false);
+    setSelectedItemId(null);
+    setEditingItem(null);
+    setEditItemAttachedGroups([]);
+    setEditItemExistingAttachedGroups([]);
+    setEditItemSizes([]);
+    setEditItemInheritedGroups([]);
   }, [activeCategoryId, categories, loading, basicsDirty]);
+
+  useEffect(() => {
+    selectedItemIdRef.current = selectedItemId;
+  }, [selectedItemId]);
 
 
   useEffect(() => {
