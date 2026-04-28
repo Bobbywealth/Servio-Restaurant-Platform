@@ -1188,19 +1188,17 @@ router.post('/items', upload.array('images', 5), asyncHandler(async (req: Reques
  */
 router.put('/items/:id', upload.array('images', 5), asyncHandler(async (req: Request, res: Response) => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const {
-    name,
-    description,
-    price,
-    cost,
-    categoryId,
-    allergens,
-    preparationTime,
-    nutritionalInfo,
-    sortOrder,
-    isAvailable,
-    existingImages
-  } = req.body;
+  const name = req.body.name;
+  const description = req.body.description;
+  const price = req.body.price;
+  const cost = req.body.cost;
+  const categoryId = req.body.categoryId ?? req.body.category_id;
+  const allergens = req.body.allergens;
+  const preparationTime = req.body.preparationTime ?? req.body.preparation_time;
+  const nutritionalInfo = req.body.nutritionalInfo ?? req.body.nutritional_info;
+  const sortOrder = req.body.sortOrder ?? req.body.sort_order;
+  const isAvailable = req.body.isAvailable ?? req.body.is_available;
+  const existingImages = req.body.existingImages ?? req.body.existing_images;
 
   const db = DatabaseService.getInstance().getDatabase();
 
@@ -1231,6 +1229,21 @@ router.put('/items/:id', upload.array('images', 5), asyncHandler(async (req: Req
       }
     }
 
+    return [];
+  };
+
+  const parseJsonList = (value: unknown): unknown[] => {
+    if (Array.isArray(value)) return value;
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (!trimmed) return [];
+      try {
+        const parsed = JSON.parse(trimmed);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch {
+        return [];
+      }
+    }
     return [];
   };
 
@@ -1300,7 +1313,7 @@ router.put('/items/:id', upload.array('images', 5), asyncHandler(async (req: Req
   }
   if (allergens !== undefined) {
     updateFields.push('allergens = ?');
-    updateValues.push(JSON.stringify(allergens));
+    updateValues.push(JSON.stringify(parseJsonList(allergens)));
   }
   if (preparationTime !== undefined) {
     updateFields.push('preparation_time = ?');
