@@ -178,6 +178,7 @@ export interface PushSubscriptionState {
   permission: NotificationPermission;
   subscription: PushSubscription | null;
   vapidKey: string | null;
+  isConfigUnavailable: boolean;
   isLoading: boolean;
   error: string | null;
 }
@@ -193,9 +194,11 @@ export function usePushSubscription(options: UsePushSubscriptionOptions = {}) {
     permission: 'default',
     subscription: null,
     vapidKey: null,
+    isConfigUnavailable: false,
     isLoading: true,
     error: null,
   });
+  const hasLoggedConfigUnavailable = useRef(false);
 
   // Check if push notifications are supported
   useEffect(() => {
@@ -210,6 +213,7 @@ export function usePushSubscription(options: UsePushSubscriptionOptions = {}) {
         permission: typeof Notification !== 'undefined' ? Notification.permission : 'default',
         subscription: null,
         vapidKey: null,
+        isConfigUnavailable: false,
         isLoading: false,
         error: null,
       });
@@ -239,22 +243,42 @@ export function usePushSubscription(options: UsePushSubscriptionOptions = {}) {
       try {
         // Get VAPID key from server
         const response = await fetch('/api/push/vapid-key');
-        console.log('[Push] VAPID key response status:', response.status, response.statusText);
-        
-        // DEBUG: Validate response is OK before parsing JSON
-        if (!response.ok) {
-          const text = await response.text();
-          console.error('[Push] VAPID key request failed:', response.status, text.substring(0, 200));
-          throw new Error(`HTTP error! status: ${response.status}`);
+        let data: any = null;
+        try {
+          data = await response.json();
+        } catch {
+          data = null;
         }
-        
-        const data = await response.json();
+
+        if (response.status === 503 && data?.code === 'PUSH_NOT_CONFIGURED') {
+          if (!hasLoggedConfigUnavailable.current) {
+            hasLoggedConfigUnavailable.current = true;
+            console.warn('[Push] Push notifications are not configured on the server. Suppressing further subscribe attempts until refresh.');
+          }
+          setState(prev => ({
+            ...prev,
+            vapidKey: null,
+            subscription: null,
+            isConfigUnavailable: true,
+            isLoading: false,
+            error: 'Push notifications are not available right now. Please contact your administrator and refresh after server configuration is updated.'
+          }));
+          return;
+        }
+
+        if (!response.ok) {
+          throw new Error(data?.error || `HTTP error! status: ${response.status}`);
+        }
 
         if (!data.success) {
           throw new Error(data.error || 'Failed to get VAPID key');
         }
 
-        setState(prev => ({ ...prev, vapidKey: data.publicKey }));
+        setState(prev => ({
+          ...prev,
+          vapidKey: data.publicKey,
+          isConfigUnavailable: false,
+        }));
 
         // Get existing subscription
         const registration = await navigator.serviceWorker.ready;
@@ -265,9 +289,10 @@ export function usePushSubscription(options: UsePushSubscriptionOptions = {}) {
           subscription,
           permission: Notification.permission,
           isLoading: false,
+          error: null,
         }));
       } catch (error) {
-        console.error('Failed to initialize push:', error);
+        console.error('[Push] Failed to initialize push:', error);
         setState(prev => ({
           ...prev,
           isLoading: false,
@@ -281,6 +306,14 @@ export function usePushSubscription(options: UsePushSubscriptionOptions = {}) {
 
   // Subscribe to push notifications
   const subscribe = React.useCallback(async (): Promise<PushSubscription | null> => {
+    if (state.isConfigUnavailable) {
+      setState(prev => ({
+        ...prev,
+        error: 'Push notifications are not configured on the server yet. Refresh after configuration is updated.'
+      }));
+      return null;
+    }
+
     if (!state.isSupported || !state.vapidKey) {
       setState(prev => ({ ...prev, error: 'Push not supported or no VAPID key' }));
       return null;
@@ -336,7 +369,7 @@ export function usePushSubscription(options: UsePushSubscriptionOptions = {}) {
       }));
       return null;
     }
-  }, [state.isSupported, state.vapidKey]);
+  }, [state.isConfigUnavailable, state.isSupported, state.vapidKey]);
 
   // Unsubscribe from push notifications
   const unsubscribe = React.useCallback(async (): Promise<boolean> => {
