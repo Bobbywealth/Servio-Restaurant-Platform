@@ -108,7 +108,13 @@ export function generatePlainTextReceipt(data: ReceiptData, paperWidth: '80mm' |
   }
   if (data.pickupTime) {
     const pickupDate = new Date(data.pickupTime);
-    receipt += `Pickup: ${pickupDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}\n`;
+    if (!Number.isNaN(pickupDate.getTime())) {
+      const pickupDatePart = pickupDate.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+      const pickupTimePart = pickupDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      receipt += `Pickup: ${pickupDatePart} ${pickupTimePart}\n`;
+    } else {
+      receipt += `Pickup: ${data.pickupTime}\n`;
+    }
   }
   
   receipt += divider + '\n';
