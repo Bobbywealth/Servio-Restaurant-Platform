@@ -5,8 +5,10 @@ import { ArrowLeft, Bluetooth, CheckCircle2, Printer, XCircle, Loader2, Moon, Su
 import { TabletSidebar } from '../../components/tablet/TabletSidebar';
 import { useTheme } from '../../contexts/ThemeContext';
 import { safeLocalStorage } from '../../lib/utils';
+import { api } from '../../lib/api';
 
 type PrintMode = 'bluetooth' | 'system' | 'bridge' | 'rawbt';
+type FontSize = 'small' | 'medium' | 'large' | 'xlarge';
 type PrintResult = { status: 'success' | 'error'; message?: string } | null;
 type BluetoothConnectionStatus = 'connected' | 'connecting' | 'disconnected' | 'error';
 
@@ -21,6 +23,7 @@ export default function TabletSettings() {
   const [autoPrintEnabled, setAutoPrintEnabled] = useState(false);
   const [printMode, setPrintMode] = useState<PrintMode>('system');
   const [paperWidth, setPaperWidth] = useState<'80mm' | '58mm'>('80mm');
+  const [fontSize, setFontSize] = useState<FontSize>('medium');
   const [lastPrintResult, setLastPrintResult] = useState<PrintResult>(null);
   const [bleSupported, setBleSupported] = useState(false);
   const [bluetoothStatus, setBluetoothStatus] = useState<BluetoothConnectionStatus>('disconnected');
@@ -42,6 +45,11 @@ export default function TabletSettings() {
 
     const storedPaper = safeLocalStorage.getItem('servio_thermal_paper_width');
     setPaperWidth(storedPaper === '58mm' ? '58mm' : '80mm');
+
+    const storedFontSize = safeLocalStorage.getItem('servio_font_size');
+    if (storedFontSize === 'small' || storedFontSize === 'medium' || storedFontSize === 'large' || storedFontSize === 'xlarge') {
+      setFontSize(storedFontSize);
+    }
 
     const storedResult = safeLocalStorage.getItem('servio_last_print_result');
     if (storedResult) {
@@ -65,6 +73,53 @@ export default function TabletSettings() {
     setBleSupported(Boolean((navigator as any).bluetooth));
   }, []);
 
+  useEffect(() => {
+    const loadServerPrinterSettings = async () => {
+      try {
+        const response = await api.get('/api/restaurant/profile');
+        const settings = response.data?.data?.settings || {};
+
+        if (settings.printer_auto_print_enabled !== undefined) {
+          const nextAuto = Boolean(settings.printer_auto_print_enabled);
+          setAutoPrintEnabled(nextAuto);
+          safeLocalStorage.setItem('servio_auto_print_enabled', String(nextAuto));
+        }
+
+        if (settings.printer_mode === 'bluetooth' || settings.printer_mode === 'system' || settings.printer_mode === 'bridge' || settings.printer_mode === 'rawbt') {
+          setPrintMode(settings.printer_mode);
+          safeLocalStorage.setItem('servio_print_mode', settings.printer_mode);
+        }
+
+        if (settings.printer_paper_width === '58mm' || settings.printer_paper_width === '80mm') {
+          setPaperWidth(settings.printer_paper_width);
+          safeLocalStorage.setItem('servio_thermal_paper_width', settings.printer_paper_width);
+        }
+
+        if (settings.printer_font_size === 'small' || settings.printer_font_size === 'medium' || settings.printer_font_size === 'large' || settings.printer_font_size === 'xlarge') {
+          setFontSize(settings.printer_font_size);
+          safeLocalStorage.setItem('servio_font_size', settings.printer_font_size);
+        }
+      } catch {
+        // keep local fallback values
+      }
+    };
+
+    loadServerPrinterSettings();
+  }, []);
+
+  const savePrinterSettingsToServer = async (nextSettings: Partial<{
+    printer_auto_print_enabled: boolean;
+    printer_mode: PrintMode;
+    printer_paper_width: '80mm' | '58mm';
+    printer_font_size: FontSize;
+  }>) => {
+    try {
+      await api.put('/api/restaurant/settings', nextSettings);
+    } catch {
+      // preserve local-first behavior if network/server fails
+    }
+  };
+
   const bluetoothHelp = useMemo(() => {
     if (!bleSupported) {
       return 'This printer appears to be Classic Bluetooth. WebBluetooth requires BLE. Use System Print or Print Bridge.';
@@ -75,16 +130,25 @@ export default function TabletSettings() {
   const saveAutoPrint = (next: boolean) => {
     setAutoPrintEnabled(next);
     safeLocalStorage.setItem('servio_auto_print_enabled', String(next));
+    void savePrinterSettingsToServer({ printer_auto_print_enabled: next });
   };
 
   const savePrintMode = (next: PrintMode) => {
     setPrintMode(next);
     safeLocalStorage.setItem('servio_print_mode', next);
+    void savePrinterSettingsToServer({ printer_mode: next });
   };
 
   const savePaperWidth = (next: '80mm' | '58mm') => {
     setPaperWidth(next);
     safeLocalStorage.setItem('servio_thermal_paper_width', next);
+    void savePrinterSettingsToServer({ printer_paper_width: next });
+  };
+
+  const saveFontSize = (next: FontSize) => {
+    setFontSize(next);
+    safeLocalStorage.setItem('servio_font_size', next);
+    void savePrinterSettingsToServer({ printer_font_size: next });
   };
 
   const handlePairBluetooth = async () => {
@@ -302,6 +366,32 @@ export default function TabletSettings() {
             </section>
 
             <section className="bg-[var(--tablet-surface)] border border-[var(--tablet-border)] rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.3)] p-6 space-y-4">
+              <h2 className="text-lg font-black">Receipt Font Size</h2>
+              <p className="text-sm text-[var(--tablet-muted)]">Applies to system print receipts. RawBT text size depends on RawBT/printer settings.</p>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {[
+                  { key: 'small' as const, label: 'Small' },
+                  { key: 'medium' as const, label: 'Medium' },
+                  { key: 'large' as const, label: 'Large' },
+                  { key: 'xlarge' as const, label: 'Extra Large' },
+                ].map((option) => (
+                  <button
+                    key={option.key}
+                    type="button"
+                    onClick={() => saveFontSize(option.key)}
+                    className={`px-4 py-2 rounded-xl font-black ${
+                      fontSize === option.key
+                        ? 'bg-[var(--tablet-text)] text-[var(--tablet-bg)]'
+                        : 'bg-[var(--tablet-border)] text-[var(--tablet-text)]'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </section>
+
+            <section className="bg-[var(--tablet-surface)] border border-[var(--tablet-border)] rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.3)] p-6 space-y-4">
               <h2 className="text-lg font-black">Printer Status</h2>
 
               {savedPrinter && printMode === 'bluetooth' && (
@@ -432,4 +522,3 @@ export default function TabletSettings() {
     </div>
   );
 }
-
