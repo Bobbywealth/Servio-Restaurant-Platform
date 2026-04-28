@@ -248,19 +248,10 @@ export default function NotificationCenter({ className = '' }: NotificationCente
       setUnreadCount(data.unreadCount)
     }
 
-    const handleOrderEvent = (data: any) => {
-      const notif: Notification = {
-        id: `order_${Date.now()}`,
-        type: 'order',
-        priority: 'medium',
-        title: 'New Order',
-        message: `Order #${data.id || data.orderId || 'Unknown'} received`,
-        timestamp: new Date(),
-        read: false,
-        data
-      }
-      setNotifications(prev => [notif, ...prev])
-      setUnreadCount(prev => prev + 1)
+    const handleOrderEvent = async () => {
+      // Always refetch from API so notifications keep their real DB IDs.
+      // Synthetic IDs break mark-as-read/delete endpoints and cause "read" actions to fail.
+      await fetchNotifications()
       if (audio) {
         audio.currentTime = 0
         audio.play().catch(() => {})
