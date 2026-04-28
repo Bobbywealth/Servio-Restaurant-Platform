@@ -199,27 +199,34 @@ router.post('/clock-in', asyncHandler(async (req: Request, res: Response) => {
     ) VALUES (?, ?, ?, ?, ?, ?)
   `, [entryId, user.restaurant_id, user.id, clockInTime, position || null, 0]);
 
-  await DatabaseService.getInstance().logAudit(
-    user.restaurant_id,
-    user.id,
-    'clock_in',
-    'time_entry',
-    entryId,
-    { position, clockInTime }
-  );
+  // Non-critical side effects should not fail a successful clock-in response.
+  try {
+    await DatabaseService.getInstance().logAudit(
+      user.restaurant_id,
+      user.id,
+      'clock_in',
+      'time_entry',
+      entryId,
+      { position, clockInTime }
+    );
 
-  await eventBus.emit('staff.clock_in', {
-    restaurantId: user.restaurant_id,
-    type: 'staff.clock_in',
-    actor: { actorType: 'user', actorId: user.id },
-    payload: {
-      staffId: user.id,
-      staffName: user.name,
-      timeEntryId: entryId,
-      position
-    },
-    occurredAt: clockInTime
-  });
+    await eventBus.emit('staff.clock_in', {
+      restaurantId: user.restaurant_id,
+      type: 'staff.clock_in',
+      actor: { actorType: 'user', actorId: user.id },
+      payload: {
+        staffId: user.id,
+        staffName: user.name,
+        timeEntryId: entryId,
+        position
+      },
+      occurredAt: clockInTime
+    });
+  } catch (sideEffectError: any) {
+    logger.warn(
+      `[staff-clock] clock-in side effects failed for user ${user.id}: ${sideEffectError?.message || sideEffectError}`
+    );
+  }
 
   logger.info(`User ${user.name} clocked in at ${clockInTime}`);
 
