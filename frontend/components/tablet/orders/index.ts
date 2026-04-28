@@ -68,6 +68,7 @@ export {
   // Item utilities
   normalizeOrderItems,
   getTotalItemCount,
+  getModifierLines,
   
   // Search utilities
   matchesSearchQuery,

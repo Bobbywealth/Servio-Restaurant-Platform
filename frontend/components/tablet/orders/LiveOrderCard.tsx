@@ -8,6 +8,7 @@ import {
   getOrderUrgencyLevel,
   normalizeStatus,
   getChannelIcon,
+  getModifierLines,
   STATUS_BADGE_CONFIG,
   URGENCY_CONFIG,
 } from './index';
@@ -283,12 +284,8 @@ export function LiveOrderCard({
             const qty = item.quantity || item.qty || 1;
             let modifiersText = '';
             if (item.modifiers) {
-              if (Array.isArray(item.modifiers) && item.modifiers.length > 0) {
-                modifiersText = ' • ' + item.modifiers.slice(0, 2).join(', ');
-              } else if (typeof item.modifiers === 'object') {
-                const modEntries = Object.entries(item.modifiers).slice(0, 2);
-                modifiersText = ' • ' + modEntries.map(([k, v]) => Array.isArray(v) ? v.slice(0, 2).join(', ') : v).join(', ');
-              }
+              const lines = getModifierLines(item.modifiers).slice(0, 2);
+              if (lines.length > 0) modifiersText = ` • ${lines.join(', ')}`;
             }
             return (
               <div key={idx} className="truncate">
