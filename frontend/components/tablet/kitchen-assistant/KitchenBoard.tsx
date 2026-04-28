@@ -9,7 +9,7 @@ import { OrderDetailsModal } from '../orders/OrderDetailsModal';
 
 const ORDER_CACHE_KEY = 'servio_cached_orders';
 
-type TabType = 'all' | 'needs-action' | 'in-progress' | 'ready' | 'scheduled';
+type TabType = 'all' | 'needs-action' | 'in-progress';
 
 interface Tab {
   name: string;
@@ -21,8 +21,6 @@ const TABS: Tab[] = [
   { name: 'All', id: 'all' },
   { name: 'Needs action', id: 'needs-action', status: ORDER_STATUS.RECEIVED },
   { name: 'In progress', id: 'in-progress', status: ORDER_STATUS.PREPARING },
-  { name: 'Ready', id: 'ready', status: ORDER_STATUS.READY },
-  { name: 'Scheduled', id: 'scheduled' },
 ];
 
 const statusStyles = {
@@ -85,8 +83,6 @@ export function KitchenBoard({
       all: orders.length,
       'needs-action': 0,
       'in-progress': 0,
-      ready: 0,
-      scheduled: 0,
     };
 
     const filtered = orders.filter((order) => {
@@ -96,35 +92,15 @@ export function KitchenBoard({
         counts['needs-action']++;
       } else if (status === ORDER_STATUS.PREPARING) {
         counts['in-progress']++;
-      } else if (status === ORDER_STATUS.READY) {
-        counts.ready++;
-      } else if (status === ORDER_STATUS.COMPLETED) {
-        counts.ready++;
       } else if (status === ORDER_STATUS.CANCELLED) {
         // Don't show cancelled orders
         return false;
-      }
-
-      // Check if scheduled (has future pickup time)
-      if (order.pickup_time) {
-        const pickupDate = new Date(order.pickup_time);
-        const now = new Date();
-        if (pickupDate > now) {
-          counts.scheduled++;
-        }
       }
 
       // Filter by tab
       if (activeTab === 'all') return true;
       if (activeTab === 'needs-action') return status === ORDER_STATUS.RECEIVED;
       if (activeTab === 'in-progress') return status === ORDER_STATUS.PREPARING;
-      if (activeTab === 'ready') return status === ORDER_STATUS.READY || status === ORDER_STATUS.COMPLETED;
-      if (activeTab === 'scheduled') {
-        if (!order.pickup_time) return false;
-        const pickupDate = new Date(order.pickup_time);
-        const now = new Date();
-        return pickupDate > now && status !== ORDER_STATUS.READY && status !== ORDER_STATUS.COMPLETED;
-      }
       return true;
     });
 
