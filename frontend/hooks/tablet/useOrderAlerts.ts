@@ -5,6 +5,7 @@ let audioUnlocked = false;
 let notificationAudio: HTMLAudioElement | null = null;
 let alertAudioContext: AudioContext | null = null;
 let nextBeepAt = 0;
+let nextAlarmPlayAtMs = 0;
 
 function initAudio() {
   if (typeof window === 'undefined') return;
@@ -62,6 +63,10 @@ function beep() {
 }
 
 function playAlarmTone() {
+  const now = Date.now();
+  if (now < nextAlarmPlayAtMs) return;
+  nextAlarmPlayAtMs = now + 900;
+
   if (notificationAudio) {
     notificationAudio.currentTime = 0;
     notificationAudio.play().catch(() => {
@@ -86,6 +91,11 @@ function stopAlarmTone() {
 
 export function useOrderAlerts(receivedOrders: Array<{ id?: string | null; created_at?: string | null }>) {
   const receivedOrdersCount = receivedOrders.length;
+  const orderIdsKey = receivedOrders
+    .map(order => (typeof order.id === 'string' ? order.id : ''))
+    .filter(Boolean)
+    .sort()
+    .join('|');
   const [soundEnabled, setSoundEnabled] = useState(() => {
     if (typeof window === 'undefined') return true;
     const storedSound = safeLocalStorage.getItem('servio_sound_enabled');
@@ -114,11 +124,7 @@ export function useOrderAlerts(receivedOrders: Array<{ id?: string | null; creat
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    const currentOrderIds = new Set(
-      receivedOrders
-        .map(order => order.id)
-        .filter((id): id is string => typeof id === 'string' && id.length > 0)
-    );
+    const currentOrderIds = new Set(orderIdsKey ? orderIdsKey.split('|') : []);
     const hasNewReceivedOrders = [...currentOrderIds].some(orderId => !previousReceivedOrderIdsRef.current.has(orderId))
       || receivedOrdersCount > previousReceivedOrdersCountRef.current;
 
@@ -152,6 +158,9 @@ export function useOrderAlerts(receivedOrders: Array<{ id?: string | null; creat
       stopAlarmTone();
     }
 
+  }, [receivedOrdersCount, soundEnabled, orderIdsKey]);
+
+  useEffect(() => {
     return () => {
       if (alarmIntervalRef.current !== null) {
         window.clearInterval(alarmIntervalRef.current);
@@ -159,7 +168,7 @@ export function useOrderAlerts(receivedOrders: Array<{ id?: string | null; creat
       }
       stopAlarmTone();
     };
-  }, [receivedOrdersCount, soundEnabled, receivedOrders]);
+  }, []);
 
   const toggleSound = () => {
     const nextValue = !soundEnabled;
