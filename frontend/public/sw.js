@@ -230,17 +230,27 @@ async function createAuthenticatedRequest(request) {
   if (authToken) {
     const headers = new Headers(request.headers)
     headers.set('Authorization', `Bearer ${authToken}`)
-    authRequest = new Request(request.url, {
+
+    const shouldIncludeBody = !['GET', 'HEAD'].includes(request.method)
+    const init = {
       method: request.method,
       headers,
-      body: request.body,
       mode: request.mode,
       credentials: request.credentials,
       cache: request.cache,
       redirect: request.redirect,
       referrer: request.referrer,
       integrity: request.integrity
-    })
+    }
+
+    if (shouldIncludeBody) {
+      // Chromium requires `duplex: 'half'` when constructing a Request with a streamed body.
+      // Clone first so we never consume the original request body.
+      init.body = await request.clone().arrayBuffer()
+      init.duplex = 'half'
+    }
+
+    authRequest = new Request(request.url, init)
   }
 
   return authRequest
