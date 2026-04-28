@@ -1138,11 +1138,8 @@ export default function TabletOrdersPage() {
 
                   if (autoPrintEnabled) {
                     void printOrder(orderToAccept.id);
-                  } else if (typeof window !== 'undefined') {
-                    const shouldPrintNow = window.confirm('Order accepted. Print this order now?');
-                    if (shouldPrintNow) {
-                      void printOrder(orderToAccept.id);
-                    }
+                  } else {
+                    setAutoPrintPendingId(orderToAccept.id);
                   }
 
                   setPrepModalOrder(null);
@@ -1150,6 +1147,35 @@ export default function TabletOrdersPage() {
                 disabled={busyId === prepModalOrder.id}
               >
                 Accept & Start
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {autoPrintPendingId && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-5 shadow-lg">
+            <h3 className="text-lg font-semibold text-slate-800">Order accepted</h3>
+            <p className="mt-2 text-sm text-slate-500">Would you like to print this order now?</p>
+
+            <div className="mt-5 flex items-center gap-2">
+              <button
+                type="button"
+                className="flex-1 rounded-lg border border-slate-300 px-3 py-2 font-semibold text-slate-700 hover:bg-slate-50"
+                onClick={() => setAutoPrintPendingId(null)}
+              >
+                Not now
+              </button>
+              <button
+                type="button"
+                className="flex-1 rounded-lg bg-blue-600 px-3 py-2 font-semibold text-white hover:bg-blue-700"
+                onClick={() => {
+                  void printOrder(autoPrintPendingId);
+                  setAutoPrintPendingId(null);
+                }}
+              >
+                Print now
               </button>
             </div>
           </div>
