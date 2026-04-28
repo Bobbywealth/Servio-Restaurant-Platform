@@ -3,6 +3,8 @@ import { safeLocalStorage } from '../../lib/utils';
 
 let audioUnlocked = false;
 let notificationAudio: HTMLAudioElement | null = null;
+let alertAudioContext: AudioContext | null = null;
+let nextBeepAt = 0;
 
 function initAudio() {
   if (typeof window === 'undefined') return;
@@ -19,7 +21,8 @@ function unlockAudio() {
   try {
     const AudioContext = (window as any).AudioContext || (window as any).webkitAudioContext;
     if (AudioContext) {
-      const ctx = new AudioContext();
+      alertAudioContext = alertAudioContext ?? new AudioContext();
+      const ctx = alertAudioContext;
       const buffer = ctx.createBuffer(1, 1, 22050);
       const source = ctx.createBufferSource();
       source.buffer = buffer;
@@ -37,7 +40,15 @@ function beep() {
   try {
     const AudioContext = (window as any).AudioContext || (window as any).webkitAudioContext;
     if (!AudioContext) return;
-    const ctx = new AudioContext();
+    alertAudioContext = alertAudioContext ?? new AudioContext();
+    const ctx = alertAudioContext;
+    if (ctx.state === 'suspended') {
+      void ctx.resume();
+    }
+
+    const startAt = Math.max(ctx.currentTime + 0.01, nextBeepAt);
+    nextBeepAt = startAt + 0.2;
+
     const o = ctx.createOscillator();
     const g = ctx.createGain();
     o.type = 'square';
@@ -45,11 +56,8 @@ function beep() {
     g.gain.value = 0.5;
     o.connect(g);
     g.connect(ctx.destination);
-    o.start();
-    window.setTimeout(() => {
-      o.stop();
-      ctx.close?.().catch(() => {});
-    }, 200);
+    o.start(startAt);
+    o.stop(startAt + 0.2);
   } catch {}
 }
 
@@ -76,7 +84,7 @@ function stopAlarmTone() {
   } catch {}
 }
 
-export function useOrderAlerts(receivedOrders: Array<{ created_at?: string | null }>) {
+export function useOrderAlerts(receivedOrders: Array<{ id?: string | null; created_at?: string | null }>) {
   const receivedOrdersCount = receivedOrders.length;
   const [soundEnabled, setSoundEnabled] = useState(() => {
     if (typeof window === 'undefined') return true;
@@ -86,6 +94,7 @@ export function useOrderAlerts(receivedOrders: Array<{ created_at?: string | nul
   const alarmIntervalRef = useRef<number | null>(null);
   const hasSeenInitialCountRef = useRef(false);
   const previousReceivedOrdersCountRef = useRef(0);
+  const previousReceivedOrderIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     initAudio();
@@ -105,21 +114,18 @@ export function useOrderAlerts(receivedOrders: Array<{ created_at?: string | nul
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    // Check if there's a genuinely NEW order (created within last 5 seconds)
-    // This prevents sounds from playing on page load or when existing orders change status
-    const hasNewIncomingOrder = receivedOrders.some(order => {
-      const createdAtStr = order.created_at;
-      if (!createdAtStr) return false;
-      const createdAt = new Date(createdAtStr).getTime();
-      const now = Date.now();
-      return (now - createdAt) < 5000; // Order created in last 5 seconds
-    });
-
-    const hasNewReceivedOrders = receivedOrdersCount > previousReceivedOrdersCountRef.current;
+    const currentOrderIds = new Set(
+      receivedOrders
+        .map(order => order.id)
+        .filter((id): id is string => typeof id === 'string' && id.length > 0)
+    );
+    const hasNewReceivedOrders = [...currentOrderIds].some(orderId => !previousReceivedOrderIdsRef.current.has(orderId))
+      || receivedOrdersCount > previousReceivedOrdersCountRef.current;
 
     if (!hasSeenInitialCountRef.current) {
       hasSeenInitialCountRef.current = true;
       previousReceivedOrdersCountRef.current = receivedOrdersCount;
+      previousReceivedOrderIdsRef.current = currentOrderIds;
 
       if (!soundEnabled || receivedOrdersCount === 0) {
         stopAlarmTone();
@@ -130,12 +136,10 @@ export function useOrderAlerts(receivedOrders: Array<{ created_at?: string | nul
     }
 
     previousReceivedOrdersCountRef.current = receivedOrdersCount;
+    previousReceivedOrderIdsRef.current = currentOrderIds;
 
-    // Play sound if:
-    // 1. Sound is enabled AND
-    // 2. There's either a new incoming order OR there are received orders that haven't been accepted yet
-    // The sound should continue until someone accepts the order (moves it from 'received' status)
-    if (soundEnabled && (hasNewIncomingOrder || receivedOrdersCount > 0)) {
+    // Keep alert ringing while there are unaccepted orders; trigger immediately when new IDs appear.
+    if (soundEnabled && (hasNewReceivedOrders || receivedOrdersCount > 0)) {
       if (alarmIntervalRef.current === null) {
         playAlarmTone();
         alarmIntervalRef.current = window.setInterval(playAlarmTone, 2500);
