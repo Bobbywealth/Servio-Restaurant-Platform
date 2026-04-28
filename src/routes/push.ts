@@ -28,6 +28,7 @@ router.get('/vapid-key', asyncHandler(async (req: Request, res: Response) => {
   if (!publicKey) {
     return res.status(503).json({
       success: false,
+      code: 'PUSH_NOT_CONFIGURED',
       error: 'Push notifications not configured',
       message: 'VAPID keys are not set on the server'
     });

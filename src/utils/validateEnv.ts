@@ -10,7 +10,56 @@ export interface EnvStatus {
     auth: 'secure' | 'insecure';
     uploads: 'configured' | 'default';
     email: 'configured' | 'missing' | 'partial';
+    push: 'configured' | 'missing' | 'invalid';
   };
+}
+
+function isValidVapidPublicKey(key: string): boolean {
+  try {
+    return Buffer.from(key, 'base64url').length === 65;
+  } catch {
+    return false;
+  }
+}
+
+function isLikelyEmailOrMailto(value: string): boolean {
+  const normalized = value.startsWith('mailto:') ? value.slice(7) : value;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized);
+}
+
+function validatePushConfiguration(warnings: string[]): 'configured' | 'missing' | 'invalid' {
+  const publicKey = process.env.VAPID_PUBLIC_KEY;
+  const privateKey = process.env.VAPID_PRIVATE_KEY;
+  const email = process.env.VAPID_EMAIL;
+
+  const issues: string[] = [];
+
+  if ((publicKey && !privateKey) || (!publicKey && privateKey)) {
+    issues.push('VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY must both be set');
+  }
+
+  if (publicKey && !isValidVapidPublicKey(publicKey)) {
+    issues.push('VAPID_PUBLIC_KEY is invalid (expected 65-byte base64url key)');
+  }
+
+  if (email && !isLikelyEmailOrMailto(email)) {
+    issues.push('VAPID_EMAIL must be a valid email (or mailto:email)');
+  }
+
+  if (issues.length > 0) {
+    warnings.push(`Push notifications disabled: ${issues.join('; ')}`);
+    logger.warn('🚨 PUSH CONFIGURATION INVALID - Push notifications are disabled until configuration is fixed.');
+    logger.warn(`🚨 ${issues.join(' | ')}`);
+    return 'invalid';
+  }
+
+  if (!publicKey || !privateKey) {
+    warnings.push('Push notifications disabled: VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY are not configured');
+    logger.warn('🚨 PUSH NOT CONFIGURED - Set VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY to enable push notifications.');
+    return 'missing';
+  }
+
+  return 'configured';
 }
 
 /**
@@ -84,6 +133,9 @@ export function validateEnvironment(): EnvStatus {
     warnings.push('UPLOADS_DIR not set - using default. For Render, set to persistent disk path (e.g., /var/data/uploads)');
   }
 
+  // === PUSH (optional but required for browser push notifications) ===
+  const pushStatus = validatePushConfiguration(warnings);
+
   // === Log Results ===
   logger.info('========================================');
   logger.info('       ENVIRONMENT VALIDATION');
@@ -96,6 +148,7 @@ export function validateEnvironment(): EnvStatus {
   logger.info(`OPENAI_API_KEY:  ${hasOpenAI ? '[CONFIGURED]' : '[NOT SET]'}`);
   logger.info(`UPLOADS_DIR:     ${uploadsDir || '[DEFAULT: ./uploads]'}`);
   logger.info(`EMAIL:           ${hasFullEmail ? '[CONFIGURED]' : hasAnyEmail ? '[PARTIAL]' : '[NOT SET]'}`);
+  logger.info(`PUSH:            ${pushStatus === 'configured' ? '[CONFIGURED]' : pushStatus === 'invalid' ? '[INVALID]' : '[NOT SET]'}`);
   logger.info('----------------------------------------');
 
   if (errors.length > 0) {
@@ -133,6 +186,7 @@ export function validateEnvironment(): EnvStatus {
       auth: isInsecureJwt ? 'insecure' : 'secure',
       uploads: uploadsDir ? 'configured' : 'default',
       email: hasFullEmail ? 'configured' : hasAnyEmail ? 'partial' : 'missing',
+      push: pushStatus,
     }
   };
 }

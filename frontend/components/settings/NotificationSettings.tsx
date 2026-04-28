@@ -198,6 +198,15 @@ export default function NotificationSettings({ isOpen, onClose }: NotificationSe
                     </div>
                   )}
 
+                  {push.isConfigUnavailable && (
+                    <div className="mt-3 flex items-start space-x-2 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg">
+                      <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                      <p className="text-sm text-amber-700 dark:text-amber-300">
+                        Push is not configured on the server. Ask your administrator to set VAPID keys, then refresh this page.
+                      </p>
+                    </div>
+                  )}
+
                   {push.subscription && (
                     <button
                       onClick={handleTestPush}
