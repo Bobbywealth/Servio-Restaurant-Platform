@@ -11,6 +11,107 @@ import KitchenAssistantService from '../services/KitchenAssistantService';
 
 const router = Router();
 
+type ValidationResult = { valid: true } | { valid: false; message: string };
+
+function isPositiveNumber(value: unknown): boolean {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0;
+}
+
+function validateRecipePayload(body: any, options: { allowPartialRecipeCore?: boolean } = {}): ValidationResult {
+  const { allowPartialRecipeCore = false } = options;
+  const requiredCoreFields = ['dish_name', 'servings'];
+  const optionalCoreFields = ['description', 'category_id', 'batch_size', 'prep_time_minutes', 'cook_time_minutes', 'difficulty', 'cuisine_type', 'image_url'];
+  const coreFields = [...requiredCoreFields, ...optionalCoreFields];
+
+  if (!body || typeof body !== 'object') {
+    return { valid: false, message: 'Request body is required' };
+  }
+
+  if (!allowPartialRecipeCore) {
+    for (const field of requiredCoreFields) {
+      if (body[field] === undefined || body[field] === null || body[field] === '') {
+        return { valid: false, message: `Missing required recipe field: ${field}` };
+      }
+    }
+  } else {
+    const hasAnyCoreField = coreFields.some((field) => body[field] !== undefined);
+    if (!hasAnyCoreField && body.ingredients === undefined && body.steps === undefined) {
+      return { valid: false, message: 'At least one recipe field, ingredients, or steps must be provided' };
+    }
+  }
+
+  if (body.dish_name !== undefined && (typeof body.dish_name !== 'string' || !body.dish_name.trim())) {
+    return { valid: false, message: 'dish_name must be a non-empty string' };
+  }
+
+  if (body.servings !== undefined && !isPositiveNumber(body.servings)) {
+    return { valid: false, message: 'servings must be a positive number' };
+  }
+
+  if (body.batch_size !== undefined && !isPositiveNumber(body.batch_size)) {
+    return { valid: false, message: 'batch_size must be a positive number' };
+  }
+
+  if (body.ingredients !== undefined) {
+    if (!Array.isArray(body.ingredients) || body.ingredients.length === 0) {
+      return { valid: false, message: 'ingredients must be a non-empty array' };
+    }
+
+    for (let i = 0; i < body.ingredients.length; i++) {
+      const ingredient = body.ingredients[i];
+      if (!ingredient || typeof ingredient !== 'object') {
+        return { valid: false, message: `ingredients[${i}] must be an object` };
+      }
+      if (typeof ingredient.name !== 'string' || !ingredient.name.trim()) {
+        return { valid: false, message: `ingredients[${i}].name is required` };
+      }
+      if (ingredient.amount !== undefined && ingredient.amount !== null && !Number.isFinite(Number(ingredient.amount))) {
+        return { valid: false, message: `ingredients[${i}].amount must be a valid number` };
+      }
+      if (ingredient.unit !== undefined && ingredient.unit !== null && typeof ingredient.unit !== 'string') {
+        return { valid: false, message: `ingredients[${i}].unit must be a string` };
+      }
+      if (ingredient.notes !== undefined && ingredient.notes !== null && typeof ingredient.notes !== 'string') {
+        return { valid: false, message: `ingredients[${i}].notes must be a string` };
+      }
+    }
+  }
+
+  if (body.steps !== undefined) {
+    if (!Array.isArray(body.steps) || body.steps.length === 0) {
+      return { valid: false, message: 'steps must be a non-empty array' };
+    }
+
+    for (let i = 0; i < body.steps.length; i++) {
+      const step = body.steps[i];
+      if (!step || typeof step !== 'object') {
+        return { valid: false, message: `steps[${i}] must be an object` };
+      }
+      const expectedStepNumber = i + 1;
+      if (step.step_number !== expectedStepNumber) {
+        return { valid: false, message: `steps[${i}].step_number must be ${expectedStepNumber}` };
+      }
+      if (typeof step.instruction !== 'string' || !step.instruction.trim()) {
+        return { valid: false, message: `steps[${i}].instruction is required` };
+      }
+      if (step.timer_seconds !== undefined && step.timer_seconds !== null && !Number.isInteger(step.timer_seconds)) {
+        return { valid: false, message: `steps[${i}].timer_seconds must be an integer` };
+      }
+      if (step.halfway_reminder !== undefined && typeof step.halfway_reminder !== 'boolean') {
+        return { valid: false, message: `steps[${i}].halfway_reminder must be a boolean` };
+      }
+      if (step.temperature !== undefined && step.temperature !== null && typeof step.temperature !== 'string') {
+        return { valid: false, message: `steps[${i}].temperature must be a string` };
+      }
+      if (step.notes !== undefined && step.notes !== null && typeof step.notes !== 'string') {
+        return { valid: false, message: `steps[${i}].notes must be a string` };
+      }
+    }
+  }
+
+  return { valid: true };
+}
+
 // Helper to get company ID with fallback
 async function getCompanyId(req: Request): Promise<number> {
   const queryCompanyId = req.query.companyId ? parseInt(req.query.companyId as string) : null;
@@ -60,6 +161,121 @@ router.get('/recipes/:id', asyncHandler(async (req: Request, res: Response) => {
   }
   
   res.json({ recipe });
+}));
+
+// Create recipe
+router.post('/recipes', asyncHandler(async (req: Request, res: Response) => {
+  const companyId = await getCompanyId(req);
+  const validation = validateRecipePayload(req.body);
+
+  if (!validation.valid) {
+    return res.status(400).json({ error: validation.message });
+  }
+
+  try {
+    const recipeId = await RecipeService.createRecipe(
+      {
+        dish_name: req.body.dish_name,
+        description: req.body.description,
+        category_id: req.body.category_id,
+        company_id: companyId,
+        batch_size: req.body.batch_size,
+        prep_time_minutes: req.body.prep_time_minutes,
+        cook_time_minutes: req.body.cook_time_minutes,
+        servings: req.body.servings,
+        difficulty: req.body.difficulty,
+        cuisine_type: req.body.cuisine_type,
+        image_url: req.body.image_url
+      },
+      req.body.ingredients,
+      req.body.steps
+    );
+
+    const recipe = await RecipeService.getRecipeById(recipeId);
+    return res.status(201).json({
+      message: 'Recipe created successfully',
+      recipe
+    });
+  } catch (error) {
+    return res.status(500).json({
+      error: 'Failed to create recipe',
+      details: error instanceof Error ? error.message : String(error)
+    });
+  }
+}));
+
+// Update recipe
+router.put('/recipes/:id', asyncHandler(async (req: Request, res: Response) => {
+  const recipeId = parseInt(req.params.id as string);
+  if (isNaN(recipeId)) {
+    return res.status(400).json({ error: 'Invalid recipe ID' });
+  }
+
+  const validation = validateRecipePayload(req.body, { allowPartialRecipeCore: true });
+  if (!validation.valid) {
+    return res.status(400).json({ error: validation.message });
+  }
+
+  const existingRecipe = await RecipeService.getRecipeById(recipeId);
+  if (!existingRecipe || !existingRecipe.is_active) {
+    return res.status(404).json({ error: 'Recipe not found' });
+  }
+
+  try {
+    await RecipeService.updateRecipe(
+      recipeId,
+      {
+        dish_name: req.body.dish_name,
+        description: req.body.description,
+        category_id: req.body.category_id,
+        batch_size: req.body.batch_size,
+        prep_time_minutes: req.body.prep_time_minutes,
+        cook_time_minutes: req.body.cook_time_minutes,
+        servings: req.body.servings,
+        difficulty: req.body.difficulty,
+        cuisine_type: req.body.cuisine_type,
+        image_url: req.body.image_url
+      },
+      req.body.ingredients,
+      req.body.steps
+    );
+
+    const updatedRecipe = await RecipeService.getRecipeById(recipeId);
+    return res.json({
+      message: 'Recipe updated successfully',
+      recipe: updatedRecipe
+    });
+  } catch (error) {
+    return res.status(500).json({
+      error: 'Failed to update recipe',
+      details: error instanceof Error ? error.message : String(error)
+    });
+  }
+}));
+
+// Delete recipe (soft delete)
+router.delete('/recipes/:id', asyncHandler(async (req: Request, res: Response) => {
+  const recipeId = parseInt(req.params.id as string);
+  if (isNaN(recipeId)) {
+    return res.status(400).json({ error: 'Invalid recipe ID' });
+  }
+
+  const existingRecipe = await RecipeService.getRecipeById(recipeId);
+  if (!existingRecipe || !existingRecipe.is_active) {
+    return res.status(404).json({ error: 'Recipe not found' });
+  }
+
+  try {
+    await RecipeService.deleteRecipe(recipeId);
+    return res.json({
+      message: 'Recipe deleted successfully'
+    });
+  } catch (error) {
+    return res.status(500).json({
+      error: 'Failed to delete recipe',
+      details: error instanceof Error ? error.message : String(error)
+    });
+  }
 }));
 
 // Get recipe categories
