@@ -8,6 +8,7 @@ import {
   CheckCircle2, Building2, User, Mail, Lock, X
 } from 'lucide-react';
 import { api } from '../../lib/api';
+import { OFFICIAL_SERVIO_LOGO } from '../../lib/branding';
 
 const PLANS = [
   {
@@ -172,7 +173,7 @@ export default function SignupPage() {
           <div className="flex justify-between items-center h-16">
             <Link href="/" className="flex items-center gap-2">
               <img
-                src="/images/servio_icon_tight.png"
+                src={OFFICIAL_SERVIO_LOGO}
                 alt="Servio Logo"
                 className="h-8 w-auto"
               />
