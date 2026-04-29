@@ -114,10 +114,10 @@ function validateRecipePayload(body: any, options: { allowPartialRecipeCore?: bo
 
 // Helper to get company ID with fallback
 async function getCompanyId(req: Request): Promise<number> {
-  const queryCompanyId = req.query.companyId ? parseInt(req.query.companyId as string) : null;
-  if (queryCompanyId) return queryCompanyId;
   const restaurantId = await getEffectiveRestaurantId(req);
   if (restaurantId) return restaurantId as unknown as number;
+  const queryCompanyId = req.query.companyId ? parseInt(req.query.companyId as string) : null;
+  if (queryCompanyId) return queryCompanyId;
   throw new Error('Company ID not found');
 }
 
@@ -148,13 +148,14 @@ router.get('/recipes/search', asyncHandler(async (req: Request, res: Response) =
 
 // Get single recipe with all details
 router.get('/recipes/:id', asyncHandler(async (req: Request, res: Response) => {
+  const companyId = await getCompanyId(req);
   const recipeId = parseInt(req.params.id as string);
   
   if (isNaN(recipeId)) {
     return res.status(400).json({ error: 'Invalid recipe ID' });
   }
   
-  const recipe = await RecipeService.getRecipeById(recipeId);
+  const recipe = await RecipeService.getRecipeById(recipeId, companyId);
   
   if (!recipe) {
     return res.status(404).json({ error: 'Recipe not found' });
@@ -303,7 +304,10 @@ router.post('/sessions', asyncHandler(async (req: Request, res: Response) => {
   );
   
   // Get recipe details for response
-  const recipe = await RecipeService.getRecipeById(recipeId as number);
+  const recipe = await RecipeService.getRecipeById(recipeId as number, companyId);
+  if (!recipe) {
+    return res.status(404).json({ error: 'Recipe not found' });
+  }
   const response = await KitchenAssistantService.generateStartResponse(recipe!, scaledServings);
   
   res.json({ 
@@ -360,7 +364,7 @@ router.post('/command', asyncHandler(async (req: Request, res: Response) => {
         });
       }
       
-      const recipe = await RecipeService.getRecipeById(recipes[0].id);
+      const recipe = await RecipeService.getRecipeById(recipes[0].id, effectiveCompanyId as number);
       const session = await KitchenAssistantService.startCookingSession(
         recipes[0].id,
         effectiveCompanyId as number,
@@ -388,7 +392,7 @@ router.post('/command', asyncHandler(async (req: Request, res: Response) => {
         });
       }
       
-      const recipe = await RecipeService.getRecipeById(recipes[0].id);
+      const recipe = await RecipeService.getRecipeById(recipes[0].id, effectiveCompanyId as number);
       const session = await KitchenAssistantService.startCookingSession(
         recipes[0].id,
         effectiveCompanyId as number,
@@ -468,7 +472,7 @@ router.post('/command', asyncHandler(async (req: Request, res: Response) => {
         });
       }
       
-      const recipe = await RecipeService.getRecipeById(recipeId as number);
+      const recipe = await RecipeService.getRecipeById(recipeId as number, effectiveCompanyId as number);
       if (!recipe) {
         return res.json({
           command,
