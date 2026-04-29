@@ -140,10 +140,13 @@ class RecipeService {
     return result.rows;
   }
 
-  // Get recipe by ID with all details
-  async getRecipeById(recipeId: number): Promise<RecipeWithDetails | null> {
-    const recipeQuery = `SELECT * FROM recipes WHERE id = $1`;
-    const recipeResult = await pool.query(recipeQuery, [recipeId]);
+  // Get recipe by ID with all details in company scope
+  async getRecipeByIdForCompany(recipeId: number, companyId: number): Promise<RecipeWithDetails | null> {
+    const recipeQuery = `
+      SELECT * FROM recipes
+      WHERE id = $1 AND company_id = $2 AND is_active = true
+    `;
+    const recipeResult = await pool.query(recipeQuery, [recipeId, companyId]);
     
     if (recipeResult.rows.length === 0) {
       return null;
@@ -167,6 +170,39 @@ class RecipeService {
     `;
     const stepsResult = await pool.query(stepsQuery, [recipeId]);
     
+    return {
+      ...recipe,
+      ingredients: ingredientsResult.rows,
+      steps: stepsResult.rows
+    };
+  }
+
+  // Backward-compatible recipe lookup (prefer getRecipeByIdForCompany for tenant-safe access)
+  async getRecipeById(recipeId: number, companyId?: number): Promise<RecipeWithDetails | null> {
+    if (companyId !== undefined) {
+      return this.getRecipeByIdForCompany(recipeId, companyId);
+    }
+
+    const recipeQuery = `
+      SELECT * FROM recipes
+      WHERE id = $1 AND is_active = true
+    `;
+    const recipeResult = await pool.query(recipeQuery, [recipeId]);
+
+    if (recipeResult.rows.length === 0) {
+      return null;
+    }
+
+    const recipe = recipeResult.rows[0];
+    const ingredientsResult = await pool.query(
+      `SELECT * FROM recipe_ingredients WHERE recipe_id = $1 ORDER BY order_index ASC`,
+      [recipeId]
+    );
+    const stepsResult = await pool.query(
+      `SELECT * FROM recipe_steps WHERE recipe_id = $1 ORDER BY step_number ASC`,
+      [recipeId]
+    );
+
     return {
       ...recipe,
       ingredients: ingredientsResult.rows,
@@ -259,7 +295,13 @@ class RecipeService {
   }
 
   // Update an existing recipe
-  async updateRecipe(recipeId: number, recipe: Partial<Recipe>, ingredients?: Partial<RecipeIngredient>[], steps?: Partial<RecipeStep>[]): Promise<void> {
+  async updateRecipe(
+    recipeId: number,
+    companyId: number,
+    recipe: Partial<Recipe>,
+    ingredients?: Partial<RecipeIngredient>[],
+    steps?: Partial<RecipeStep>[]
+  ): Promise<boolean> {
     const client = await pool.connect();
     
     try {
@@ -280,10 +322,10 @@ class RecipeService {
           image_url = COALESCE($10, image_url),
           version = version + 1,
           updated_at = CURRENT_TIMESTAMP
-        WHERE id = $11
+        WHERE id = $11 AND company_id = $12 AND is_active = true
       `;
       
-      await client.query(updateQuery, [
+      const updateResult = await client.query(updateQuery, [
         recipe.dish_name,
         recipe.description,
         recipe.category_id,
@@ -294,8 +336,14 @@ class RecipeService {
         recipe.difficulty,
         recipe.cuisine_type,
         recipe.image_url,
-        recipeId
+        recipeId,
+        companyId
       ]);
+
+      if (updateResult.rowCount === 0) {
+        await client.query('ROLLBACK');
+        return false;
+      }
       
       // Update ingredients if provided
       if (ingredients) {
@@ -324,6 +372,7 @@ class RecipeService {
       }
       
       await client.query('COMMIT');
+      return true;
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
@@ -333,8 +382,15 @@ class RecipeService {
   }
 
   // Delete (deactivate) a recipe
-  async deleteRecipe(recipeId: number): Promise<void> {
-    await pool.query('UPDATE recipes SET is_active = false, updated_at = CURRENT_TIMESTAMP WHERE id = $1', [recipeId]);
+  async deleteRecipe(recipeId: number, companyId: number): Promise<boolean> {
+    const result = await pool.query(
+      `UPDATE recipes
+       SET is_active = false, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $1 AND company_id = $2 AND is_active = true`,
+      [recipeId, companyId]
+    );
+
+    return result.rowCount > 0;
   }
 
   // Get recipe categories
