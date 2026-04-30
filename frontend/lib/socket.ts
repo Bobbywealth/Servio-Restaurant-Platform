@@ -47,6 +47,13 @@ export interface SocketEvents {
   'task:overdue': (data: { taskId: string; dueDate: Date }) => void
   'task:updated': (data: { taskId: string; task?: any; action: string }) => void
 
+
+  // Team communication events
+  'team:message:created': (data: { channelId: string; message: any }) => void
+  'team:message:updated': (data: { channelId: string; message: any }) => void
+  'team:message:deleted': (data: { channelId: string; messageId: string; revision?: number }) => void
+  'team:unread:updated': (data: { unreadCount: number }) => void
+
   // Voice/Assistant events
   'voice:command_received': (data: { transcript: string; confidence: number }) => void
   'voice:action_completed': (data: { action: string; result: any }) => void
@@ -341,6 +348,14 @@ class SocketManager {
 
   leaveRestaurantRoom(restaurantId: string): void {
     this.emit('leave:restaurant', { restaurantId })
+  }
+
+  subscribeToTeamChannel(channelId: string): void {
+    this.emit('team:channel:subscribe', { channelId })
+  }
+
+  unsubscribeFromTeamChannel(channelId: string): void {
+    this.emit('team:channel:unsubscribe', { channelId })
   }
 
   // Disconnect

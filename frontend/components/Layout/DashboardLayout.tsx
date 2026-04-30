@@ -8,6 +8,7 @@ import { useUser } from '../../contexts/UserContext';
 import ThemeToggle from '../ui/ThemeToggle';
 import NotificationCenter from '../ui/NotificationCenter';
 import AccountSwitcher from '../ui/AccountSwitcher';
+import { useTeamUnreadSummary } from '../../hooks/useTeamCommunication'
 import {
   Bot,
   Home,
@@ -28,7 +29,8 @@ import {
   Wifi,
   Key,
   FileText,
-  CheckCircle
+  CheckCircle,
+  MessageSquare
 } from 'lucide-react';
 
 interface DashboardLayoutProps {
@@ -44,6 +46,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isDesktop, setIsDesktop] = useState(false);
   const router = useRouter();
+  const { unreadCount: teamUnreadCount } = useTeamUnreadSummary()
 
   // Detect desktop screen size (lg breakpoint = 1024px)
   React.useEffect(() => {
@@ -259,6 +262,15 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       roles: ['staff', 'manager', 'owner'],
       section: 'team'
     },
+    {
+      name: 'Team Chat',
+      href: '/dashboard/team-communication',
+      icon: MessageSquare,
+      description: 'Channels and real-time chat',
+      color: 'text-indigo-500',
+      roles: ['staff', 'manager', 'owner'],
+      section: 'team'
+    },
     
     // AI & COMMUNICATION SECTION
     {
@@ -349,6 +361,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     { name: 'Home', href: '/dashboard', icon: Home, roles: ['staff', 'manager', 'owner'] },
     { name: 'Orders', href: '/dashboard/orders', icon: ClipboardList, roles: ['manager', 'owner'] },
     { name: 'Tasks', href: '/dashboard/tasks', icon: CheckCircle, roles: ['staff', 'manager', 'owner'] },
+    { name: 'Chat', href: '/dashboard/team-communication', icon: MessageSquare, roles: ['staff', 'manager', 'owner'] },
     { name: 'Menu', href: '/dashboard/menu-management', icon: UtensilsCrossed, roles: ['manager', 'owner'] },
     { name: 'Servio', href: '/dashboard/assistant', icon: Mic, roles: ['staff', 'manager', 'owner'] },
     { name: 'More', href: '#', icon: Menu, isMenuButton: true, roles: ['staff', 'manager', 'owner'] }
@@ -464,7 +477,14 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center justify-between">
-                              <span className="font-medium">{item.name}</span>
+                              <span className="font-medium flex items-center gap-2">
+                                {item.name}
+                                {item.href === '/dashboard/team-communication' && teamUnreadCount > 0 && (
+                                  <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-primary-600 text-white text-[10px] font-semibold">
+                                    {teamUnreadCount > 99 ? '99+' : teamUnreadCount}
+                                  </span>
+                                )}
+                              </span>
                               {item.highlight && (
                                 <motion.div
                                   className="ml-2"
@@ -615,7 +635,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
       {/* Mobile bottom navigation */}
       <div className="fixed bottom-0 left-0 right-0 z-40 w-full bg-white/95 dark:bg-gray-900/95 border-t border-gray-200 dark:border-gray-700 backdrop-blur-md lg:hidden safe-area-inset-bottom gpu-accelerated will-change-transform">
-        <div className="grid grid-cols-5 px-2 py-2">
+        <div className="grid grid-cols-6 px-2 py-2">
           {mobileNav.map((item) => {
             const isActive = !item.isMenuButton && currentPath === normalizePath(item.href);
             if (item.isMenuButton) {
@@ -643,7 +663,14 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                   isActive ? 'text-primary-700 dark:text-primary-300' : 'text-gray-500 dark:text-surface-400'
                 }`}
               >
-                <item.icon className="w-6 h-6" />
+                <div className="relative">
+                  <item.icon className="w-6 h-6" />
+                  {item.href === '/dashboard/team-communication' && teamUnreadCount > 0 && (
+                    <span className="absolute -top-1.5 -right-2 min-w-[16px] h-4 px-1 rounded-full bg-primary-600 text-white text-[9px] font-semibold flex items-center justify-center">
+                      {teamUnreadCount > 99 ? '99+' : teamUnreadCount}
+                    </span>
+                  )}
+                </div>
                 <span className="mt-1">{item.name}</span>
               </Link>
             );

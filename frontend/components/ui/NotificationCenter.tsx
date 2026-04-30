@@ -13,6 +13,7 @@ import {
   Package,
   Users,
   Mic,
+  MessageSquare,
   Settings,
   Check,
   Trash2,
@@ -32,7 +33,7 @@ const NotificationSettings = dynamic(
 
 export interface Notification {
   id: string
-  type: 'order' | 'inventory' | 'staff' | 'voice' | 'system' | 'task'
+  type: 'order' | 'inventory' | 'staff' | 'voice' | 'system' | 'task' | 'team'
   priority: 'low' | 'medium' | 'high'
   title: string
   message: string
@@ -280,6 +281,13 @@ export default function NotificationCenter({ className = '' }: NotificationCente
         : '/dashboard/inventory/receipts'
     }
 
+    if (eventType.startsWith('team.') || eventType === 'team') {
+      const channelId = payload.channelId || payload.teamChannelId
+      return channelId
+        ? `/dashboard/team-communication?channelId=${encodeURIComponent(channelId)}`
+        : '/dashboard/team-communication'
+    }
+
     if (eventType.startsWith('inventory.')) return '/dashboard/inventory'
     if (eventType.startsWith('task.')) return '/dashboard/tasks'
     if (eventType.startsWith('staff.')) return '/dashboard/timeclock'
@@ -399,7 +407,8 @@ export default function NotificationCenter({ className = '' }: NotificationCente
       staff: Users,
       voice: Mic,
       system: Settings,
-      task: CheckCircle2
+      task: CheckCircle2,
+      team: MessageSquare
     }
     return iconMap[type] || Info
   }
