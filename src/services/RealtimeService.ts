@@ -1,5 +1,6 @@
 import { Server as SocketIOServer, Socket } from 'socket.io';
 import { logger } from '../utils/logger';
+import { buildRestaurantRoom, buildUserRoom, ROOM_NAMING_CONVENTION } from '../constants/realtimeRooms';
 
 export type EventType = 
   | 'order:created'
@@ -27,6 +28,12 @@ export interface RoomSubscription {
   userId: string;
   rooms: string[];
   socketId: string;
+}
+
+interface AuthenticatePayload {
+  userId: string;
+  restaurantId?: string;
+  restaurantIds?: string[];
 }
 
 /**
@@ -71,7 +78,7 @@ export class RealtimeService {
       logger.info(`[Socket] Client connected: ${socket.id}`);
       
       // Handle authentication
-      socket.on('authenticate', (data: { userId: string; restaurantId?: string }) => {
+      socket.on('authenticate', (data: AuthenticatePayload) => {
         this.handleAuthentication(socket, data);
       });
       
@@ -86,13 +93,28 @@ export class RealtimeService {
       });
       
       // Handle restaurant-specific events
+      socket.on('join:restaurant', (data: { restaurantId: string }) => {
+        this.handleRestaurantJoin(socket, data.restaurantId);
+      });
+
+      // Backwards compatibility with legacy event name.
       socket.on('join_restaurant', (data: { restaurantId: string }) => {
-        socket.join(`restaurant:${data.restaurantId}`);
-        logger.info(`[Socket] ${socket.id} joined restaurant:${data.restaurantId}`);
+        this.handleRestaurantJoin(socket, data.restaurantId);
       });
       
+      socket.on('leave:restaurant', (data: { restaurantId: string }) => {
+        socket.leave(buildRestaurantRoom(data.restaurantId));
+      });
+
+      socket.on('join:user', (data: { userId: string; restaurantId?: string }) => {
+        this.handleAuthentication(socket, {
+          userId: data.userId,
+          restaurantId: data.restaurantId
+        });
+      });
+
       socket.on('leave_restaurant', (data: { restaurantId: string }) => {
-        socket.leave(`restaurant:${data.restaurantId}`);
+        socket.leave(buildRestaurantRoom(data.restaurantId));
       });
       
       // Handle disconnection
@@ -110,26 +132,32 @@ export class RealtimeService {
   /**
    * Handle client authentication
    */
-  private handleAuthentication(socket: Socket, data: { userId: string; restaurantId?: string }): void {
+  private handleAuthentication(socket: Socket, data: AuthenticatePayload): void {
     const { userId, restaurantId } = data;
+    const allowedRestaurantIds = new Set(data.restaurantIds || []);
+    if (restaurantId) {
+      allowedRestaurantIds.add(restaurantId);
+    }
     
     // Store with user association socket
     socket.data.userId = userId;
     socket.data.restaurantId = restaurantId;
     
     // Join user's personal room
-    socket.join(`user:${userId}`);
+    socket.join(buildUserRoom(userId));
     
     // Join restaurant room if provided
     if (restaurantId) {
-      socket.join(`restaurant:${restaurantId}`);
+      socket.join(buildRestaurantRoom(restaurantId));
     }
+
+    socket.data.allowedRestaurantIds = allowedRestaurantIds;
     
     // Store subscription
-    const userSubs = this.subscriptions.get(userId) || [];
+    const userSubs = (this.subscriptions.get(userId) || []).filter(sub => sub.socketId !== socket.id);
     userSubs.push({
       userId,
-      rooms: [`user:${userId}`, ...(restaurantId ? [`restaurant:${restaurantId}`] : [])],
+      rooms: [buildUserRoom(userId), ...(restaurantId ? [buildRestaurantRoom(restaurantId)] : [])],
       socketId: socket.id
     });
     this.subscriptions.set(userId, userSubs);
@@ -137,7 +165,25 @@ export class RealtimeService {
     // Confirm authentication
     socket.emit('authenticated', { userId, socketId: socket.id });
     
-    logger.info(`[Socket] Client authenticated: ${socket.id}, user: ${userId}`);
+    logger.info(`[Socket] Client authenticated: ${socket.id}, user: ${userId}, roomConvention: ${ROOM_NAMING_CONVENTION}`);
+  }
+
+  private handleRestaurantJoin(socket: Socket, restaurantId: string): void {
+    const allowedRestaurantIds = socket.data.allowedRestaurantIds as Set<string> | undefined;
+    const isAllowed = !allowedRestaurantIds || allowedRestaurantIds.has(restaurantId);
+    const roomName = buildRestaurantRoom(restaurantId);
+
+    if (!isAllowed) {
+      socket.emit('room:join_denied', {
+        room: roomName,
+        reason: 'forbidden'
+      });
+      logger.warn(`[Socket] ${socket.id} denied join for ${roomName}`);
+      return;
+    }
+
+    socket.join(roomName);
+    logger.info(`[Socket] ${socket.id} joined ${roomName}`);
   }
   
   /**
@@ -189,7 +235,7 @@ export class RealtimeService {
     
     // Emit to restaurant room if specified
     if (restaurantId) {
-      this.io.to(`restaurant:${restaurantId}`).emit(type, {
+      this.io.to(buildRestaurantRoom(restaurantId)).emit(type, {
         ...payload,
         _meta: { type, timestamp, restaurantId }
       });
@@ -197,17 +243,11 @@ export class RealtimeService {
     
     // Emit to user room if specified
     if (userId) {
-      this.io.to(`user:${userId}`).emit(type, {
+      this.io.to(buildUserRoom(userId)).emit(type, {
         ...payload,
         _meta: { type, timestamp, userId }
       });
     }
-    
-    // Broadcast globally (for admin dashboards)
-    this.io.emit(type, {
-      ...payload,
-      _meta: { type, timestamp, restaurantId, userId }
-    });
     
     logger.debug(`[Realtime] Emitted event: ${type}`, { restaurantId, userId });
   }
@@ -225,7 +265,7 @@ export class RealtimeService {
    */
   emitToUser(userId: string, event: string, data: any): void {
     if (!this.io) return;
-    this.io.to(`user:${userId}`).emit(event, data);
+    this.io.to(buildUserRoom(userId)).emit(event, data);
   }
   
   /**
@@ -233,7 +273,7 @@ export class RealtimeService {
    */
   emitToRestaurant(restaurantId: string, event: string, data: any): void {
     if (!this.io) return;
-    this.io.to(`restaurant:${restaurantId}`).emit(event, data);
+    this.io.to(buildRestaurantRoom(restaurantId)).emit(event, data);
   }
   
   /**
@@ -314,6 +354,11 @@ export class RealtimeService {
    */
   getUserConnections(userId: string): number {
     return this.subscriptions.get(userId)?.length || 0;
+  }
+
+  resetForTests(): void {
+    this.subscriptions.clear();
+    this.io = null;
   }
 }
 

@@ -622,33 +622,9 @@ const cleanupInterval = setInterval(() => {
   }
 }, 5 * 60 * 1000); // Clean every 5 minutes
 
-// Socket.IO connection handling
-io.on('connection', (socket) => {
-  logger.info(`Client connected: ${socket.id}`);
-
-  socket.on('join:restaurant', (data: { restaurantId: string }) => {
-    const { restaurantId } = data;
-    socket.join(`restaurant-${restaurantId}`);
-    logger.info(`Socket ${socket.id} joined restaurant-${restaurantId}`);
-  });
-
-  socket.on('join:user', (data: { userId: string, restaurantId?: string }) => {
-    const { userId, restaurantId } = data;
-    socket.join(`user-${userId}`);
-    if (restaurantId) {
-      socket.join(`restaurant-${restaurantId}`);
-    }
-    logger.info(`Socket ${socket.id} joined user-${userId} and restaurant-${restaurantId}`);
-  });
-
-  socket.on('disconnect', () => {
-    logger.info(`Client disconnected: ${socket.id}`);
-  });
-});
-
 SocketService.setIO(io);
 
-// Initialize the enhanced Realtime Service for real-time subscriptions
+// Initialize the authoritative Realtime Service for all connection and room lifecycle handling.
 realtimeService.initialize(io);
 
 // Make io available to routes
