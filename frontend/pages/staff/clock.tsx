@@ -18,6 +18,7 @@ import {
   Briefcase,
   X
 } from 'lucide-react';
+import { OFFICIAL_SERVIO_LOGO } from '../../lib/branding';
 
 // Safe localStorage helpers - prevent crashes in private browsing mode
 const safeGetItem = (key: string): string | null => {
@@ -190,7 +191,7 @@ function PINEntry({ onLogin, error, lockedUntil, onLockoutExpired }: PINEntryPro
         <div className="max-w-md md:max-w-xl lg:max-w-2xl mx-auto flex items-center justify-center">
           <div className="flex items-center gap-3 md:gap-4">
             <img
-              src="/images/servio_icon_tight.png"
+              src={OFFICIAL_SERVIO_LOGO}
               alt="Servio Logo"
               className="h-10 md:h-14 lg:h-16 w-auto"
             />
@@ -1218,7 +1219,7 @@ export default function StaffClockPage() {
           <div className="max-w-lg md:max-w-2xl lg:max-w-3xl mx-auto px-4 md:px-6 py-3 md:py-4 flex items-center justify-between">
             <div className="flex items-center gap-3 md:gap-4">
               <img
-                src="/images/servio_icon_tight.png"
+                src={OFFICIAL_SERVIO_LOGO}
                 alt="Servio Logo"
                 className="h-8 md:h-10 lg:h-12 w-auto"
               />

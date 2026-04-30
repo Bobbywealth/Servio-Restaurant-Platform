@@ -330,7 +330,7 @@ export default function App({ Component, pageProps }: AppProps) {
               : '/manifest.json'
           }
         />
-        <link rel="apple-touch-icon" href="/images/servio_logo_transparent_tight.png" />
+        <link rel="apple-touch-icon" href="/icons/servio-icon-192.svg" />
 
         {/* PERFORMANCE HINTS - CRITICAL */}
         <meta httpEquiv="x-dns-prefetch-control" content="on" />

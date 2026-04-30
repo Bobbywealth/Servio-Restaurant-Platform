@@ -10,6 +10,7 @@ import { useUser } from '../contexts/UserContext';
 import { api } from '../lib/api';
 import { safeLocalStorage } from '../lib/utils';
 import { ADMIN_LANDING_ROUTE, DEFAULT_USER_LANDING_ROUTE, getPostLoginRoute, isAdminRole } from '../lib/auth/loginRouting';
+import { OFFICIAL_SERVIO_LOGO } from '../lib/branding';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -100,7 +101,7 @@ export default function LoginPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center">
-              <img src="/images/servio_icon_tight.png" alt="Servio Logo" className="h-8 w-auto" />
+              <img src={OFFICIAL_SERVIO_LOGO} alt="Servio Logo" className="h-8 w-auto" />
               <span className="ml-2 text-xl font-bold text-white">Servio</span>
             </div>
             <div className="hidden md:flex items-center space-x-8">

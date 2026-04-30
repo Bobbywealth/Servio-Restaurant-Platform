@@ -27,7 +27,8 @@ import {
   BarChart3,
   Store,
   ListTodo,
-  Bot
+  Bot,
+  MessageCircle
 } from 'lucide-react'
 import { useUser } from '../../contexts/UserContext'
 import NotificationCenter from '../ui/NotificationCenter'
@@ -57,6 +58,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({
     { name: 'Admin Users', href: '/admin/users', icon: Users, section: 'restaurants' },
     { name: 'All Orders', href: '/admin/orders', icon: ClipboardList, section: 'restaurants' },
     { name: 'Tasks', href: '/admin/tasks', icon: ListTodo, section: 'restaurants' },
+    { name: 'Support Chats', href: '/admin/support-chats', icon: MessageCircle, section: 'restaurants' },
     
     // MARKETING & ENGAGEMENT
     { name: 'Campaigns', href: '/admin/campaigns', icon: Megaphone, section: 'marketing' },

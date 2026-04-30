@@ -6,6 +6,7 @@ import { useRouter } from 'next/router';
 import { motion } from 'framer-motion';
 import { ArrowRight, Loader2, Lock, Mail } from 'lucide-react';
 import { useUser } from '../../contexts/UserContext';
+import { OFFICIAL_SERVIO_LOGO } from '../../lib/branding';
 
 // Animated skeleton loader for tablet login
 function TabletLoginSkeleton() {
@@ -179,7 +180,7 @@ export default function TabletLoginPage() {
 
       <div className="w-full max-w-md bg-gray-800/90 rounded-2xl border border-gray-700 p-8 shadow-xl backdrop-blur relative z-10">
         <div className="flex items-center gap-3 mb-8">
-          <img src="/images/servio_icon_tight.png" alt="Servio" className="h-9 w-auto" />
+          <img src={OFFICIAL_SERVIO_LOGO} alt="Servio Logo" className="h-9 w-auto" />
           <div>
             <p className="text-xs uppercase tracking-[0.2em] text-teal-300">Tablet Mode</p>
             <h1 className="text-2xl font-bold text-white">Sign in</h1>
@@ -245,4 +246,3 @@ export default function TabletLoginPage() {
     </div>
   );
 }
-

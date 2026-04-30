@@ -180,7 +180,7 @@ export function generateReceiptHtml(args: {
   const customerEmail = (order.customer_email || '').toString();
   const channel = (order.channel || 'POS').toString().toLowerCase();
   const orderType = (order.order_type || 'pickup').toString().toLowerCase();
-  const pickupTime = (order.pickup_time || '').toString();
+  const pickupTime = formatReceiptDate(order.pickup_time || '');
   const instructions = (order.special_instructions || '').toString();
 
   const orderNumber =
