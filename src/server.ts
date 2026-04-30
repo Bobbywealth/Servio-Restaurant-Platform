@@ -166,6 +166,7 @@ async function initializeServer() {
     const { default: voiceHubRoutes } = await import('./routes/voice-hub');
     const { default: eightySixCheckRoutes } = await import('./routes/eightySixCheck');
     const { default: notificationsRoutes } = await import('./routes/notifications');
+    const { default: teamCommunicationRoutes } = await import('./routes/team-communication');
     const { default: pushRoutes } = await import('./routes/push');
     const { default: deliveryPlatformsRoutes } = await import('./routes/delivery-platforms');
     const { default: deliveryPlatformsSessionsRoutes } = await import('./routes/delivery-platforms-sessions');
@@ -296,6 +297,7 @@ async function initializeServer() {
     }, restaurantsRoutes);
     app.use('/api/integrations', requireAuth, integrationsRoutes);
     app.use('/api/notifications', requireAuth, notificationsRoutes);
+    app.use('/api/team', requireAuth, teamCommunicationRoutes);
     // Push routes: /vapid-key is public (needed for push subscription setup), others require auth
     app.use('/api/push', (req, res, next) => {
       // VAPID public key is public - it's meant to be shared with clients
