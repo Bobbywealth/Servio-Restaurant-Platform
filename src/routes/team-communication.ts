@@ -29,6 +29,11 @@ type TeamAttachment = {
   sizeBytes?: number;
 };
 
+const getRouteParam = (value: string | string[] | undefined): string => {
+  if (Array.isArray(value)) return value[0] ?? '';
+  return value ?? '';
+};
+
 const success = (res: Response, data: unknown, status = 200) => {
   return res.status(status).json({ success: true, data, error: null });
 };
@@ -237,7 +242,7 @@ router.post('/channels', asyncHandler(async (req: Request, res: Response) => {
  */
 router.post('/channels/:id/members', asyncHandler(async (req: Request, res: Response) => {
   const user = req.user;
-  const channelId = req.params.id;
+  const channelId = getRouteParam(req.params.id);
 
   if (!user?.id || !user.restaurantId) {
     return failure(res, 401, 'Not authenticated');
@@ -288,7 +293,7 @@ router.post('/channels/:id/members', asyncHandler(async (req: Request, res: Resp
  */
 router.get('/channels/:id/messages', asyncHandler(async (req: Request, res: Response) => {
   const user = req.user;
-  const channelId = req.params.id;
+  const channelId = getRouteParam(req.params.id);
 
   if (!user?.id || !user.restaurantId) {
     return failure(res, 401, 'Not authenticated');
@@ -336,7 +341,7 @@ router.get('/channels/:id/messages', asyncHandler(async (req: Request, res: Resp
  */
 router.post('/channels/:id/messages', asyncHandler(async (req: Request, res: Response) => {
   const user = req.user;
-  const channelId = req.params.id;
+  const channelId = getRouteParam(req.params.id);
 
   if (!user?.id || !user.restaurantId) {
     return failure(res, 401, 'Not authenticated');
@@ -498,7 +503,7 @@ router.delete('/messages/:id', asyncHandler(async (req: Request, res: Response) 
  */
 router.post('/channels/:id/read', asyncHandler(async (req: Request, res: Response) => {
   const user = req.user;
-  const channelId = req.params.id;
+  const channelId = getRouteParam(req.params.id);
 
   if (!user?.id || !user.restaurantId) {
     return failure(res, 401, 'Not authenticated');

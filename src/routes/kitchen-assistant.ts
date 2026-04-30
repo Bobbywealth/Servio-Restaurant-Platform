@@ -207,6 +207,7 @@ router.post('/recipes', asyncHandler(async (req: Request, res: Response) => {
 
 // Update recipe
 router.put('/recipes/:id', asyncHandler(async (req: Request, res: Response) => {
+  const companyId = await getCompanyId(req);
   const recipeId = parseInt(req.params.id as string);
   if (isNaN(recipeId)) {
     return res.status(400).json({ error: 'Invalid recipe ID' });
@@ -217,7 +218,7 @@ router.put('/recipes/:id', asyncHandler(async (req: Request, res: Response) => {
     return res.status(400).json({ error: validation.message });
   }
 
-  const existingRecipe = await RecipeService.getRecipeById(recipeId);
+  const existingRecipe = await RecipeService.getRecipeById(recipeId, companyId);
   if (!existingRecipe || !existingRecipe.is_active) {
     return res.status(404).json({ error: 'Recipe not found' });
   }
@@ -225,6 +226,7 @@ router.put('/recipes/:id', asyncHandler(async (req: Request, res: Response) => {
   try {
     await RecipeService.updateRecipe(
       recipeId,
+      companyId,
       {
         dish_name: req.body.dish_name,
         description: req.body.description,
@@ -241,7 +243,7 @@ router.put('/recipes/:id', asyncHandler(async (req: Request, res: Response) => {
       req.body.steps
     );
 
-    const updatedRecipe = await RecipeService.getRecipeById(recipeId);
+    const updatedRecipe = await RecipeService.getRecipeById(recipeId, companyId);
     return res.json({
       message: 'Recipe updated successfully',
       recipe: updatedRecipe
@@ -256,18 +258,19 @@ router.put('/recipes/:id', asyncHandler(async (req: Request, res: Response) => {
 
 // Delete recipe (soft delete)
 router.delete('/recipes/:id', asyncHandler(async (req: Request, res: Response) => {
+  const companyId = await getCompanyId(req);
   const recipeId = parseInt(req.params.id as string);
   if (isNaN(recipeId)) {
     return res.status(400).json({ error: 'Invalid recipe ID' });
   }
 
-  const existingRecipe = await RecipeService.getRecipeById(recipeId);
+  const existingRecipe = await RecipeService.getRecipeById(recipeId, companyId);
   if (!existingRecipe || !existingRecipe.is_active) {
     return res.status(404).json({ error: 'Recipe not found' });
   }
 
   try {
-    await RecipeService.deleteRecipe(recipeId);
+    await RecipeService.deleteRecipe(recipeId, companyId);
     return res.json({
       message: 'Recipe deleted successfully'
     });
