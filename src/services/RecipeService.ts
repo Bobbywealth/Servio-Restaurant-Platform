@@ -390,7 +390,7 @@ class RecipeService {
       [recipeId, companyId]
     );
 
-    return result.rowCount > 0;
+    return (result.rowCount ?? 0) > 0;
   }
 
   // Get recipe categories
