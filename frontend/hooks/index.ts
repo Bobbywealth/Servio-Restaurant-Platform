@@ -51,3 +51,5 @@ export type {
   UseBulkOperationsOptions,
   UseBulkOperationsReturn
 } from './useBulkOperations';
+
+export { useTeamCommunication, useTeamUnreadSummary } from './useTeamCommunication'
