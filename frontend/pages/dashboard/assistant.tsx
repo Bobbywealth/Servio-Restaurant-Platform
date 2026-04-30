@@ -75,6 +75,7 @@ export default function AssistantPage() {
 
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null)
   const audioChunksRef = useRef<Blob[]>([])
+  const chatInputRef = useRef<HTMLTextAreaElement | null>(null)
   const [talkIntensity, setTalkIntensity] = useState(0)
   const hasConversationMessages = state.messages.length > 0
 
@@ -169,6 +170,22 @@ export default function AssistantPage() {
       audioRef.current = null
     }
   }, [])
+
+  const handleAudioFallback = useCallback((failureType: 'recorder_init' | 'playback' | 'stt', details?: string) => {
+    stopAudio()
+    setState(prev => ({ ...prev, isRecording: false, isProcessing: false, isSpeaking: false, currentAudioUrl: null }))
+    const actionMessages = {
+      recorder_init: 'Microphone access failed. Check browser microphone permissions, then continue with text input.',
+      playback: 'Audio playback failed. Check your audio output settings, then continue in text.',
+      stt: 'Voice transcription failed. Try speaking again with less background noise, or continue in text.'
+    }
+    addMessageRef.current?.({
+      type: 'system',
+      content: actionMessages[failureType],
+      metadata: { action: { type: 'audio_fallback', status: 'error', details }, failure_type: failureType, fallback_used: true }
+    })
+    chatInputRef.current?.focus()
+  }, [stopAudio])
 
   const playAudio = useCallback(async (audioUrl: string) => {
     stopAudio()
@@ -272,9 +289,15 @@ export default function AssistantPage() {
       }
     }
 
-    await audio.play()
+    try {
+      await audio.play()
+    } catch (error) {
+      const details = error instanceof Error ? error.message : 'Unknown playback error'
+      handleAudioFallback('playback', details)
+      throw error
+    }
     rafRef.current = requestAnimationFrame(tick)
-  }, [resolveAudioUrl, stopAudio])
+  }, [handleAudioFallback, resolveAudioUrl, stopAudio])
 
   const runProcessTextDebug = useCallback(
     async (text: string, label: string) => {
@@ -512,17 +535,7 @@ export default function AssistantPage() {
       console.error('Failed to process recording:', error)
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
       
-      addMessage({
-        type: 'system',
-        content: `🎤 Failed to process audio: ${errorMessage}. Try speaking more clearly or use text input instead.`,
-        metadata: {
-          action: {
-            type: 'error',
-            status: 'error',
-            details: errorMessage
-          }
-        }
-      })
+      handleAudioFallback('stt', errorMessage)
     } finally {
       setState(prev => ({
         ...prev,
@@ -620,11 +633,8 @@ export default function AssistantPage() {
         setMediaRecorder(recorder)
       } catch (error) {
         console.error('Failed to initialize media recorder:', error)
-        addMessage({
-          type: 'system',
-          content: 'Failed to access microphone. Please check permissions.',
-          metadata: { action: { type: 'error', status: 'error' } }
-        })
+        const details = error instanceof Error ? error.message : 'Unknown recorder init error'
+        handleAudioFallback('recorder_init', details)
       } finally {
         isInitializingMediaRecorderRef.current = false;
       }
@@ -639,7 +649,7 @@ export default function AssistantPage() {
         stream.getTracks().forEach(track => track.stop())
       }
     }
-  }, [processRecording, getSupportedMimeType, addMessage]) // Removed mediaRecorder from dependencies to avoid loop/premature cleanup
+  }, [processRecording, getSupportedMimeType, handleAudioFallback]) // Removed mediaRecorder from dependencies to avoid loop/premature cleanup
 
   useEffect(() => {
     return () => {
@@ -824,7 +834,7 @@ export default function AssistantPage() {
         }, 800);
       }
     }
-  }, [user?.id, addMessage, playAudio])
+  }, [user?.id, addMessage, playAudio, handleAudioFallback])
 
   // Update handleQuickCommandRef
   useEffect(() => {
@@ -1347,6 +1357,7 @@ export default function AssistantPage() {
               {/* Chat Input */}
               <div className="relative bg-white/80 dark:bg-surface-800/80 backdrop-blur-xl rounded-3xl p-4 md:p-5 shadow-xl border border-white/50 dark:border-surface-700/50 mt-auto">
                 <ChatInput
+                  inputRef={chatInputRef as React.RefObject<HTMLTextAreaElement>}
                   onSendMessage={handleQuickCommand}
                   onSendVoice={async (audioBlob) => {
                     // Add user message that voice is being processed
@@ -1403,11 +1414,7 @@ export default function AssistantPage() {
                     } catch (error) {
                       console.error('Failed to process voice:', error)
                       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-                      addMessage({
-                        type: 'system',
-                        content: `🎤 Voice processing failed: ${errorMessage}`,
-                        metadata: { action: { type: 'error', status: 'error', details: errorMessage } }
-                      })
+                      handleAudioFallback('stt', errorMessage)
                     }
                   }}
                   disabled={state.isProcessing || state.isRecording}

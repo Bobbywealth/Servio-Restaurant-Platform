@@ -24,6 +24,8 @@ interface AssistantResponse {
   audioUrl?: string;
   confidence?: number;
   processingTime: number;
+  failure_type?: 'stt' | 'audio_processing';
+  fallback_used?: boolean;
 }
 
 interface StreamChunk {
@@ -277,7 +279,12 @@ export class AssistantService {
       };
 
     } catch (error) {
-      logger.error('Failed to process audio:', error);
+      logger.error('Failed to process audio', {
+        error,
+        failure_type: 'stt',
+        fallback_used: true,
+        text_path_available: true
+      });
       return {
         response: "I'm having trouble processing your request right now. Please try again.",
         actions: [{
@@ -286,7 +293,9 @@ export class AssistantService {
           description: 'Audio processing failed',
           error: error instanceof Error ? error.message : 'Unknown error'
         }],
-        processingTime: Date.now() - startTime
+        processingTime: Date.now() - startTime,
+        failure_type: 'stt',
+        fallback_used: true
       };
     }
   }
