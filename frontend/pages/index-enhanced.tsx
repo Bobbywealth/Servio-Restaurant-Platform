@@ -21,6 +21,7 @@ import {
   ExitIntentPopup 
 } from '../components/CRO'
 import { HomepageSchemas, EnhancedSEO } from '../components/SEO'
+import { OFFICIAL_SERVIO_LOGO } from '../lib/branding'
 
 // ============================================================================
 // Animation Variants (with reduced motion support)
@@ -198,8 +199,8 @@ export default function HomePage() {
                     transition={{ type: "spring", stiffness: 400 }}
                   >
                     <Image
-                      src="/images/servio_icon_tight.png"
-                      alt=""
+                      src={OFFICIAL_SERVIO_LOGO}
+                      alt="Servio Logo"
                       width={36}
                       height={36}
                       className="h-9 w-auto"
@@ -786,8 +787,8 @@ export default function HomePage() {
               <div>
                 <div className="flex items-center mb-4">
                   <Image
-                    src="/images/servio_icon_tight.png"
-                    alt=""
+                    src={OFFICIAL_SERVIO_LOGO}
+                    alt="Servio Logo"
                     width={32}
                     height={32}
                     className="h-8 w-auto"
