@@ -8,7 +8,8 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import compression from 'compression';
 import { createServer } from 'http';
-import { Server as SocketIOServer } from 'socket.io';
+import { Server as SocketIOServer, Socket } from 'socket.io';
+import jwt, { JsonWebTokenError, TokenExpiredError } from 'jsonwebtoken';
 
 // Middleware
 import { requestId } from './middleware/requestId';
@@ -27,6 +28,7 @@ import { realtimeService } from './services/RealtimeService';
 import type { ApiKeyScope } from './types/apiKey';
 import { getCacheUrl, registerCacheInvalidator } from './utils/serverCache';
 import { cloneAllDailyChecklists } from './routes/tasks';
+import type { AccessTokenPayload } from './types/auth';
 
 const FRONTEND_ORIGIN = 'https://servio.solutions';
 
@@ -131,6 +133,91 @@ io.engine.on('connection_error', (err) => {
     message: err.message,
     context: err.context
   });
+});
+
+const getSocketToken = (socket: Socket): string | null => {
+  const authToken = socket.handshake?.auth?.token;
+  if (typeof authToken === 'string' && authToken.trim()) {
+    return authToken.replace(/^Bearer\s+/i, '').trim();
+  }
+
+  const headerToken = socket.handshake?.headers?.authorization;
+  if (typeof headerToken === 'string' && headerToken.startsWith('Bearer ')) {
+    return headerToken.slice('Bearer '.length).trim();
+  }
+
+  return null;
+};
+
+const getSocketJwtSecret = () => {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    throw new Error('JWT_SECRET environment variable is not set.');
+  }
+  return secret;
+};
+
+const toTeamChannelRoom = (channelId: string) => `team:channel:${channelId}`;
+
+const hasTeamChannelAccess = async (userId: string, restaurantId: string, channelId: string): Promise<boolean> => {
+  const db = DatabaseService.getInstance().getDatabase();
+  try {
+    const membership = await db.get(
+      `SELECT 1
+       FROM team_channel_members
+       WHERE channel_id = ?
+         AND user_id = ?
+         AND (restaurant_id = ? OR restaurant_id IS NULL)
+       LIMIT 1`,
+      [channelId, userId, restaurantId]
+    );
+    return Boolean(membership);
+  } catch (error) {
+    logger.warn('[socket.io] team channel membership lookup failed', { channelId, userId, error });
+    return false;
+  }
+};
+
+io.use(async (socket, next) => {
+  try {
+    const token = getSocketToken(socket);
+    if (!token) {
+      return next(new Error('Socket auth token required'));
+    }
+
+    let decoded: AccessTokenPayload;
+    try {
+      decoded = jwt.verify(token, getSocketJwtSecret()) as AccessTokenPayload;
+    } catch (error) {
+      if (error instanceof TokenExpiredError) return next(new Error('Socket token expired'));
+      if (error instanceof JsonWebTokenError) return next(new Error('Socket token invalid'));
+      throw error;
+    }
+
+    const userId = decoded?.sub;
+    const restaurantId = decoded?.restaurantId;
+    if (!userId || !restaurantId) {
+      return next(new Error('Socket token payload invalid'));
+    }
+
+    const db = DatabaseService.getInstance().getDatabase();
+    const user = await db.get(
+      'SELECT id, restaurant_id FROM users WHERE id = ? AND is_active = TRUE LIMIT 1',
+      [userId]
+    );
+    if (!user || String(user.restaurant_id) !== String(restaurantId)) {
+      return next(new Error('Socket user validation failed'));
+    }
+
+    socket.data.auth = {
+      userId: String(userId),
+      restaurantId: String(restaurantId),
+    };
+    return next();
+  } catch (error) {
+    logger.warn('[socket.io] auth middleware failed', { error });
+    return next(new Error('Socket authentication failed'));
+  }
 });
 
 const PORT = process.env.PORT || 3002;
@@ -626,24 +713,97 @@ const cleanupInterval = setInterval(() => {
 
 // Socket.IO connection handling
 io.on('connection', (socket) => {
-  logger.info(`Client connected: ${socket.id}`);
+  const auth = socket.data.auth as { userId: string; restaurantId: string };
+  logger.info(`Client connected: ${socket.id}`, auth);
 
   socket.on('join:restaurant', (data: { restaurantId: string }) => {
-    const { restaurantId } = data;
-    socket.join(`restaurant-${restaurantId}`);
-    logger.info(`Socket ${socket.id} joined restaurant-${restaurantId}`);
+    const requestedRestaurantId = String(data?.restaurantId || '');
+    if (requestedRestaurantId !== auth.restaurantId) {
+      logger.warn('[socket.io] blocked join:restaurant mismatch', { socketId: socket.id, requestedRestaurantId, auth });
+      return;
+    }
+
+    socket.join(`restaurant-${auth.restaurantId}`);
+    logger.info(`Socket ${socket.id} joined restaurant-${auth.restaurantId}`);
   });
 
   socket.on('join:user', (data: { userId: string, restaurantId?: string }) => {
-    const { userId, restaurantId } = data;
-    socket.join(`user-${userId}`);
-    if (restaurantId) {
-      socket.join(`restaurant-${restaurantId}`);
+    const requestedUserId = String(data?.userId || '');
+    const requestedRestaurantId = data?.restaurantId ? String(data.restaurantId) : auth.restaurantId;
+    if (requestedUserId !== auth.userId || requestedRestaurantId !== auth.restaurantId) {
+      logger.warn('[socket.io] blocked join:user mismatch', { socketId: socket.id, requestedUserId, requestedRestaurantId, auth });
+      return;
     }
-    logger.info(`Socket ${socket.id} joined user-${userId} and restaurant-${restaurantId}`);
+
+    socket.join(`user-${auth.userId}`);
+    socket.join(`restaurant-${auth.restaurantId}`);
+    logger.info(`Socket ${socket.id} joined user-${auth.userId} and restaurant-${auth.restaurantId}`);
+  });
+
+  socket.on('join:team:channel', async (data: { channelId: string }) => {
+    const channelId = String(data?.channelId || '').trim();
+    if (!channelId) return;
+
+    const hasAccess = await hasTeamChannelAccess(auth.userId, auth.restaurantId, channelId);
+    if (!hasAccess) {
+      logger.warn('[socket.io] blocked join:team:channel access denied', { socketId: socket.id, channelId, auth });
+      return;
+    }
+
+    const room = toTeamChannelRoom(channelId);
+    socket.join(room);
+    io.to(room).emit('team.presence.updated', {
+      channelId,
+      userId: auth.userId,
+      restaurantId: auth.restaurantId,
+      status: 'online',
+      socketId: socket.id,
+      at: new Date().toISOString()
+    });
+  });
+
+  const emitTeamMessage = async (
+    eventName: 'team.message.created' | 'team.message.updated' | 'team.message.deleted',
+    payload: { channelId?: string; [key: string]: unknown }
+  ) => {
+    const channelId = String(payload?.channelId || '').trim();
+    if (!channelId) return;
+
+    const hasAccess = await hasTeamChannelAccess(auth.userId, auth.restaurantId, channelId);
+    if (!hasAccess) {
+      logger.warn('[socket.io] blocked team event access denied', { socketId: socket.id, eventName, channelId, auth });
+      return;
+    }
+
+    io.to(toTeamChannelRoom(channelId)).emit(eventName, {
+      ...payload,
+      channelId,
+      userId: auth.userId,
+      restaurantId: auth.restaurantId,
+      emittedAt: new Date().toISOString()
+    });
+  };
+
+  socket.on('team.message.created', async (payload: { channelId?: string; [key: string]: unknown }) => {
+    await emitTeamMessage('team.message.created', payload);
+  });
+
+  socket.on('team.message.updated', async (payload: { channelId?: string; [key: string]: unknown }) => {
+    await emitTeamMessage('team.message.updated', payload);
+  });
+
+  socket.on('team.message.deleted', async (payload: { channelId?: string; [key: string]: unknown }) => {
+    await emitTeamMessage('team.message.deleted', payload);
   });
 
   socket.on('disconnect', () => {
+    io.emit('team.presence.updated', {
+      userId: auth.userId,
+      restaurantId: auth.restaurantId,
+      status: 'offline',
+      socketId: socket.id,
+      at: new Date().toISOString()
+    });
     logger.info(`Client disconnected: ${socket.id}`);
   });
 });
