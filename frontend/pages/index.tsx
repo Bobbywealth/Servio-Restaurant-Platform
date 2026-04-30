@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import Head from 'next/head'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
+import { OFFICIAL_SERVIO_LOGO } from '../lib/branding'
 import {
   Mic, Shield, Zap, Clock, Users,
   Phone, Smartphone, RefreshCw, BarChart3,
@@ -146,7 +147,7 @@ export default function HomePage() {
                     transition={{ type: "spring", stiffness: 400 }}
                   >
                     <img
-                      src="/images/servio_icon_tight.png"
+                      src={OFFICIAL_SERVIO_LOGO}
                       alt="Servio Logo"
                       className="h-9 w-auto"
                     />
@@ -1040,7 +1041,7 @@ export default function HomePage() {
             <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-12">
               <div>
                 <div className="flex items-center mb-4">
-                  <img src="/images/servio_icon_tight.png" alt="Servio Logo" className="h-9 w-auto" />
+                  <img src={OFFICIAL_SERVIO_LOGO} alt="Servio Logo" className="h-9 w-auto" />
                   <span className="ml-3 text-xl font-bold text-white">Servio</span>
                 </div>
                 <p className="text-gray-400 mb-4">

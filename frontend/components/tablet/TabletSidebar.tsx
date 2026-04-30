@@ -1,6 +1,7 @@
 import { useRouter } from 'next/router';
 import clsx from 'clsx';
 import { Archive, BookOpen, Clock, Home, Info, Settings2, UtensilsCrossed } from 'lucide-react';
+import { OFFICIAL_SERVIO_LOGO } from '../../lib/branding';
 
 type NavItem = {
   label: string;
@@ -31,7 +32,7 @@ export function TabletSidebar({ statusDotClassName }: TabletSidebarProps) {
         className="relative w-12 h-12 flex items-center justify-center rounded-xl bg-[var(--tablet-surface-alt)] hover:brightness-110 transition-colors touch-manipulation z-10"
         aria-label="Servio home"
       >
-        <img src="/images/servio_icon_tight.png" alt="Servio" className="h-9 w-9 object-contain" />
+        <img src={OFFICIAL_SERVIO_LOGO} alt="Servio Logo" className="h-9 w-9 object-contain" />
         {statusDotClassName ? (
           <span className={clsx('absolute top-1.5 right-1.5 h-2 w-2 rounded-full', statusDotClassName)} />
         ) : null}

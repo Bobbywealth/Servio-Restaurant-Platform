@@ -8,6 +8,7 @@ import { useUser } from '../../contexts/UserContext';
 import ThemeToggle from '../ui/ThemeToggle';
 import NotificationCenter from '../ui/NotificationCenter';
 import AccountSwitcher from '../ui/AccountSwitcher';
+import SupportChatWidget from '../support/SupportChatWidget';
 import {
   Bot,
   Home,
@@ -231,6 +232,15 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       section: 'operations'
     },
     {
+      name: 'Recipes',
+      href: '/dashboard/recipes',
+      icon: FileText,
+      description: 'Recipe management',
+      color: 'text-indigo-500',
+      roles: ['manager', 'owner'],
+      section: 'operations'
+    },
+    {
       name: 'Hours & Info',
       href: '/dashboard/restaurant-profile',
       icon: Store,
@@ -350,6 +360,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     { name: 'Orders', href: '/dashboard/orders', icon: ClipboardList, roles: ['manager', 'owner'] },
     { name: 'Tasks', href: '/dashboard/tasks', icon: CheckCircle, roles: ['staff', 'manager', 'owner'] },
     { name: 'Menu', href: '/dashboard/menu-management', icon: UtensilsCrossed, roles: ['manager', 'owner'] },
+    { name: 'Recipes', href: '/dashboard/recipes', icon: FileText, roles: ['manager', 'owner'] },
     { name: 'Servio', href: '/dashboard/assistant', icon: Mic, roles: ['staff', 'manager', 'owner'] },
     { name: 'More', href: '#', icon: Menu, isMenuButton: true, roles: ['staff', 'manager', 'owner'] }
   ];
@@ -613,9 +624,14 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         </motion.main>
       </div>
 
+      <SupportChatWidget />
+
       {/* Mobile bottom navigation */}
       <div className="fixed bottom-0 left-0 right-0 z-40 w-full bg-white/95 dark:bg-gray-900/95 border-t border-gray-200 dark:border-gray-700 backdrop-blur-md lg:hidden safe-area-inset-bottom gpu-accelerated will-change-transform">
-        <div className="grid grid-cols-5 px-2 py-2">
+        <div
+          className="grid px-2 py-2"
+          style={{ gridTemplateColumns: `repeat(${Math.max(mobileNav.length, 1)}, minmax(0, 1fr))` }}
+        >
           {mobileNav.map((item) => {
             const isActive = !item.isMenuButton && currentPath === normalizePath(item.href);
             if (item.isMenuButton) {

@@ -1,6 +1,7 @@
 import React from 'react'
 import Head from 'next/head'
 import { StructuredData, RestaurantSchema, FAQPageSchema, BreadcrumbSchema } from './StructuredData'
+import { OFFICIAL_SERVIO_LOGO } from '../../lib/branding'
 
 export interface EnhancedSEOProps {
   title: string
@@ -139,7 +140,7 @@ export function HomepageSchemas() {
     name: 'Servio',
     description: 'The premium, voice-first platform for restaurant teams. Servio unifies orders, inventory, staff operations, and communications into a single, beautiful app-like system.',
     url: baseUrl,
-    logo: `${baseUrl}/images/servio_icon_tight.png`,
+    logo: `${baseUrl}${OFFICIAL_SERVIO_LOGO}`,
     image: `${baseUrl}/images/og-default.png`,
     telephone: '+1-555-123-4567',
     email: 'hello@servio.app',
