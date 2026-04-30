@@ -126,12 +126,19 @@ router.post('/process-audio', highCostEndpointRateLimits.processAudio, upload.si
       data: result
     });
   } catch (error) {
-    logger.error('Audio processing error:', error);
+    logger.error('Audio processing error', {
+      error,
+      failure_type: 'audio_processing',
+      fallback_used: true,
+      text_path_available: true
+    });
     res.status(500).json({
       success: false,
       error: {
         message: 'Failed to process audio',
-        details: error instanceof Error ? error.message : 'Unknown error'
+        details: error instanceof Error ? error.message : 'Unknown error',
+        failure_type: 'audio_processing',
+        fallback_used: true
       }
     });
   }
@@ -166,7 +173,11 @@ router.post('/process-text', highCostEndpointRateLimits.processText, asyncHandle
       data: result
     });
   } catch (error) {
-    logger.error('Text processing error:', error);
+    logger.error('Text processing error', {
+      error,
+      failure_type: 'text_processing',
+      fallback_used: false
+    });
     res.status(500).json({
       success: false,
       error: {

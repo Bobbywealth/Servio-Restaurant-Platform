@@ -9,6 +9,7 @@ interface ChatInputProps {
   disabled?: boolean
   placeholder?: string
   className?: string
+  inputRef?: React.RefObject<HTMLTextAreaElement>
 }
 
 export default function ChatInput({
@@ -16,7 +17,8 @@ export default function ChatInput({
   onSendVoice,
   disabled = false,
   placeholder = "Type your command here... (e.g., 'no more jerk chicken')",
-  className = ''
+  className = '',
+  inputRef
 }: ChatInputProps) {
   const [message, setMessage] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -68,7 +70,12 @@ export default function ChatInput({
 
       <div className="flex-1 relative">
         <textarea
-          ref={textareaRef}
+          ref={(node) => {
+            textareaRef.current = node
+            if (inputRef) {
+              inputRef.current = node
+            }
+          }}
           value={message}
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
