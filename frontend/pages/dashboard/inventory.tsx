@@ -310,6 +310,39 @@ export default function InventoryPage() {
     }
   }
 
+
+  const handleArchiveItem = async (item: InventoryItem) => {
+    const confirmed = window.confirm(`Archive ${item.name}? This will hide it from active inventory views.`)
+    if (!confirmed) return
+
+    const previousItems = items
+    setItems(prev => prev.filter(i => i.id !== item.id))
+    try {
+      await api.patch(`/api/inventory/${item.id}/archive`)
+      toast.success('Item archived')
+      await fetchTransactions()
+    } catch (e: any) {
+      setItems(previousItems)
+      toast.error(e?.response?.data?.error?.message || 'Failed to archive item')
+    }
+  }
+
+  const handleDeleteItem = async (item: InventoryItem) => {
+    const confirmed = window.confirm(`Delete ${item.name}? This performs a soft delete and removes it from active inventory.`)
+    if (!confirmed) return
+
+    const previousItems = items
+    setItems(prev => prev.filter(i => i.id !== item.id))
+    try {
+      await api.delete(`/api/inventory/${item.id}`)
+      toast.success('Item deleted')
+      await fetchTransactions()
+    } catch (e: any) {
+      setItems(previousItems)
+      toast.error(e?.response?.data?.error?.message || 'Failed to delete item')
+    }
+  }
+
   const handleAdjustQuantity = async (itemId: string, delta: number) => {
     try {
       await api.post('/api/inventory/adjust', {
@@ -960,6 +993,20 @@ export default function InventoryPage() {
                           >
                             <TrendingDown className="w-4 h-4" />
                           </button>
+                          <button
+                            className="btn-icon text-amber-600 hover:text-amber-700"
+                            onClick={() => handleArchiveItem(item)}
+                            title="Archive item"
+                          >
+                            <MoreVertical className="w-4 h-4" />
+                          </button>
+                          <button
+                            className="btn-icon text-red-700 hover:text-red-800"
+                            onClick={() => handleDeleteItem(item)}
+                            title="Delete item"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         </div>
                       </td>
                     </motion.tr>
@@ -1048,6 +1095,10 @@ export default function InventoryPage() {
                       <div className="text-sm font-medium text-surface-900 dark:text-surface-100">
                         {item.payment_reference || 'Not set'}
                       </div>
+                    </div>
+                    <div className="mt-3 grid grid-cols-2 gap-2">
+                      <button onClick={() => handleArchiveItem(item)} className="btn-secondary min-h-[44px]">Archive</button>
+                      <button onClick={() => handleDeleteItem(item)} className="btn-secondary min-h-[44px] text-red-600">Delete</button>
                     </div>
                   </div>
 
