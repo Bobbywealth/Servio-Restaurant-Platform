@@ -151,8 +151,8 @@ self.addEventListener('push', (event) => {
     event.waitUntil(
       self.registration.showNotification(data.title || 'Servio Staff', {
         body: data.body || 'Clock action completed',
-        icon: '/icons/clock-in-192.png',
-        badge: '/icons/clock-in-72.png',
+        icon: '/icons/servio-icon-192.svg',
+        badge: '/icons/servio-icon-192.svg',
         data: data.url || '/staff/clock'
       })
     );
