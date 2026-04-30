@@ -1,5 +1,6 @@
 import { io, Socket, ManagerOptions } from 'socket.io-client'
 import { showToast } from '../components/ui/Toast'
+import { ROOM_NAMING_CONVENTION } from './realtimeRooms'
 
 // Extend ManagerOptions to include ping properties
 interface ManagerOptionsWithPing extends ManagerOptions {
@@ -336,6 +337,8 @@ class SocketManager {
   }
 
   joinRestaurantRoom(restaurantId: string): void {
+    // Room naming is backend-authoritative; this documents the expected convention.
+    console.debug('Joining restaurant room convention', ROOM_NAMING_CONVENTION)
     this.emit('join:restaurant', { restaurantId })
   }
 

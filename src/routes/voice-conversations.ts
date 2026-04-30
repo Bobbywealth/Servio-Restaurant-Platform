@@ -18,6 +18,7 @@ const asRestaurantId = (value: unknown): string => {
 
 const router = Router();
 const voiceConversationService = VoiceConversationService.getInstance();
+const VOICE_CONVERSATION_STATUSES = ['active', 'completed', 'abandoned'] as const;
 
 const getRequestId = (req: Request) => {
   const headerId =
@@ -265,7 +266,7 @@ router.patch('/:id/status', asyncHandler(async (req: Request, res: Response) => 
     throw new BadRequestError('Missing conversation ID');
   }
 
-  if (!status || !['active', 'completed', 'abandoned'].includes(status)) {
+  if (!status || !VOICE_CONVERSATION_STATUSES.includes(status)) {
     throw new BadRequestError('Invalid status. Must be: active, completed, or abandoned');
   }
 

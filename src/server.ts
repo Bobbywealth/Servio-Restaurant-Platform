@@ -810,7 +810,7 @@ io.on('connection', (socket) => {
 
 SocketService.setIO(io);
 
-// Initialize the enhanced Realtime Service for real-time subscriptions
+// Initialize the authoritative Realtime Service for all connection and room lifecycle handling.
 realtimeService.initialize(io);
 
 // Make io available to routes
