@@ -17,6 +17,7 @@ import { apiVersioning } from './middleware/apiVersioning';
 
 // Services
 import { DatabaseService } from './services/DatabaseService';
+import { InventoryLowStockNotifierService } from './services/InventoryLowStockNotifierService';
 import { logger } from './utils/logger';
 import { errorHandler } from './middleware/errorHandler';
 import { requireAuth } from './middleware/auth';
@@ -913,6 +914,7 @@ app.get('/api', (req, res) => {
 // Cleanup expired auth sessions periodically (every hour)
 const SESSION_CLEANUP_INTERVAL = 60 * 60 * 1000; // 1 hour
 let sessionCleanupTimer: ReturnType<typeof setInterval> | null = null;
+const lowStockNotifier = new InventoryLowStockNotifierService();
 
 async function cleanupExpiredSessions() {
   try {
@@ -951,6 +953,8 @@ initializeServer().then(() => {
     runChecklistClone(); // Run once on startup
     setInterval(runChecklistClone, CHECKLIST_CLONE_INTERVAL);
     logger.info('📋 Daily checklist clone cron started (runs every hour)');
+
+    lowStockNotifier.start();
   });
 }).catch((error) => {
   logger.error('Failed to start server:', error);
@@ -961,6 +965,7 @@ initializeServer().then(() => {
 process.on('SIGTERM', () => {
   logger.info('SIGTERM signal received: closing HTTP server');
   if (sessionCleanupTimer) clearInterval(sessionCleanupTimer);
+  lowStockNotifier.stop();
   server.close(() => {
     logger.info('HTTP server closed');
     DatabaseService.close();
@@ -971,6 +976,7 @@ process.on('SIGTERM', () => {
 process.on('SIGINT', () => {
   logger.info('SIGINT signal received: closing HTTP server');
   if (sessionCleanupTimer) clearInterval(sessionCleanupTimer);
+  lowStockNotifier.stop();
   server.close(() => {
     logger.info('HTTP server closed');
     DatabaseService.close();

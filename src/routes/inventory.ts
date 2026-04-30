@@ -45,7 +45,7 @@ router.get('/', asyncHandler(async (req: Request, res: Response) => {
   }
 
   const items = await db.all(
-    'SELECT * FROM inventory_items WHERE restaurant_id = ? ORDER BY name',
+    'SELECT * FROM inventory_items WHERE restaurant_id = ? AND is_active = TRUE AND deleted_at IS NULL ORDER BY name',
     [restaurantId]
   );
 
@@ -187,7 +187,7 @@ router.put('/:id', asyncHandler(async (req: Request, res: Response) => {
   const restaurantId = req.user?.restaurantId;
 
   const existingItem = await db.get(
-    'SELECT * FROM inventory_items WHERE id = ? AND restaurant_id = ?',
+    'SELECT * FROM inventory_items WHERE id = ? AND restaurant_id = ? AND is_active = TRUE AND deleted_at IS NULL',
     [id, restaurantId]
   );
 
@@ -314,7 +314,7 @@ router.get('/search', asyncHandler(async (req: Request, res: Response) => {
 
   let query = 'SELECT * FROM inventory_items';
   const params: any[] = [restaurantId];
-  const conditions: string[] = ['restaurant_id = ?'];
+  const conditions: string[] = ['restaurant_id = ?', 'is_active = TRUE', 'deleted_at IS NULL'];
 
   if (q) {
     conditions.push('(name LIKE ? OR sku LIKE ?)');
@@ -352,6 +352,63 @@ router.get('/search', asyncHandler(async (req: Request, res: Response) => {
     success: true,
     data: items
   });
+}));
+
+
+/**
+ * PATCH /api/inventory/:id/archive
+ * Soft archive an inventory item
+ */
+router.patch('/:id/archive', asyncHandler(async (req: Request, res: Response) => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const db = DatabaseService.getInstance().getDatabase();
+  const restaurantId = req.user?.restaurantId;
+
+  const existingItem = await db.get(
+    'SELECT * FROM inventory_items WHERE id = ? AND restaurant_id = ? AND deleted_at IS NULL',
+    [id, restaurantId]
+  );
+
+  if (!existingItem) {
+    return res.status(404).json({ success: false, error: { message: 'Inventory item not found' } });
+  }
+
+  await db.run(
+    `UPDATE inventory_items SET is_active = FALSE, deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+    [id]
+  );
+
+  await DatabaseService.getInstance().logAudit(restaurantId!, req.user?.id || 'system', 'archive_inventory_item', 'inventory', id, { name: existingItem.name });
+
+  return res.json({ success: true, data: { id, archived: true } });
+}));
+
+/**
+ * DELETE /api/inventory/:id
+ * Soft delete inventory item
+ */
+router.delete('/:id', asyncHandler(async (req: Request, res: Response) => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const db = DatabaseService.getInstance().getDatabase();
+  const restaurantId = req.user?.restaurantId;
+
+  const existingItem = await db.get(
+    'SELECT * FROM inventory_items WHERE id = ? AND restaurant_id = ? AND deleted_at IS NULL',
+    [id, restaurantId]
+  );
+
+  if (!existingItem) {
+    return res.status(404).json({ success: false, error: { message: 'Inventory item not found' } });
+  }
+
+  await db.run(
+    `UPDATE inventory_items SET is_active = FALSE, deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+    [id]
+  );
+
+  await DatabaseService.getInstance().logAudit(restaurantId!, req.user?.id || 'system', 'delete_inventory_item', 'inventory', id, { name: existingItem.name, softDeleted: true });
+
+  return res.json({ success: true, data: { id, deleted: true } });
 }));
 
 /**
@@ -433,7 +490,7 @@ router.post('/receive', asyncHandler(async (req: Request, res: Response) => {
 
     // Find the inventory item
     const inventoryItem = await db.get(
-      'SELECT * FROM inventory_items WHERE name LIKE ? AND restaurant_id = ?',
+      'SELECT * FROM inventory_items WHERE name LIKE ? AND restaurant_id = ? AND is_active = TRUE AND deleted_at IS NULL',
       [`%${name}%`, restaurantId]
     );
 
@@ -506,7 +563,7 @@ router.post('/adjust', asyncHandler(async (req: Request, res: Response) => {
   const db = DatabaseService.getInstance().getDatabase();
   const restaurantId = req.user?.restaurantId;
 
-  const item = await db.get('SELECT * FROM inventory_items WHERE id = ? AND restaurant_id = ?', [itemId, restaurantId]);
+  const item = await db.get('SELECT * FROM inventory_items WHERE id = ? AND restaurant_id = ? AND is_active = TRUE AND deleted_at IS NULL', [itemId, restaurantId]);
   if (!item) {
     return res.status(404).json({
       success: false,
@@ -762,7 +819,7 @@ router.post('/create-from-receipt', asyncHandler(async (req: Request, res: Respo
 
       // Check if item already exists
       const existingItem = await db.get(
-        'SELECT * FROM inventory_items WHERE name LIKE ? AND restaurant_id = ?',
+        'SELECT * FROM inventory_items WHERE name LIKE ? AND restaurant_id = ? AND is_active = TRUE AND deleted_at IS NULL',
         [`%${name.trim()}%`, restaurantId]
       );
 
